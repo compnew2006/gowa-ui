@@ -150,7 +150,6 @@ func TestLogin_RecordsAuditEvent_Failure(t *testing.T) {
 	assert.Equal(t, "invalid_credentials", evt.Reason)
 }
 
-
 func TestLogin_Failure_RefreshTokenStorageUnavailable(t *testing.T) {
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)

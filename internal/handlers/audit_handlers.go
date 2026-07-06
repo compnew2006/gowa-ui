@@ -23,8 +23,10 @@ const (
 // events. Non-admins are rejected by requirePermission before reaching the body.
 //
 // Filters: category, action, source, actor_user_id, target_id, target_type,
-//          success, q (text on actor_email/reason), date_from, date_to,
-//          organization_id (super-admin only)
+//
+//	success, q (text on actor_email/reason), date_from, date_to,
+//	organization_id (super-admin only)
+//
 // Pagination: page (1-based), per_page (default 50, max 200)
 // Sort: created_at DESC (newest first)
 func (a *App) ListAuditEvents(r *fastglue.Request) error {

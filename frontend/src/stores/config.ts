@@ -1,11 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '@/services/api'
-import {
-    modulesService,
-    type ManagedModule,
-} from '@/services/modules'
-import { unwrapResponse } from '@/lib/api-utils'
 
 export interface FeatureFlags {
     templates: boolean
@@ -27,8 +22,6 @@ export interface AppConfig {
     features: FeatureFlags
     tenant?: TenantConfig
 }
-
-export type EffectiveModule = ManagedModule
 
 const CHAT_SHOW_PRINT_BUTTONS_KEY = 'chat.showPrintButtons'
 const CHAT_SHOW_DOWNLOAD_BUTTONS_KEY = 'chat.showDownloadButtons'
@@ -61,8 +54,6 @@ function writeStoredBoolean(key: string, value: boolean): void {
  */
 export const useConfigStore = defineStore('config', () => {
     const config = ref<AppConfig | null>(null)
-    const modules = ref<EffectiveModule[]>([])
-    const modulesLoaded = ref(false)
     const loading = ref(false)
     const error = ref<string | null>(null)
     const showPrintButtons = ref<boolean>(
@@ -101,34 +92,13 @@ export const useConfigStore = defineStore('config', () => {
         )
     }
 
-    function isModuleEnabled(key: string): boolean {
-        if (!modulesLoaded.value) return true
-        return modules.value.some(
-            module => module.key === key && module.effective_enabled,
-        )
-    }
-
-    async function fetchModules(force = false) {
-        if (modulesLoaded.value && !force) return
-        try {
-            const resp = await modulesService.listEffective()
-            modules.value = unwrapResponse<ManagedModule[]>(resp)
-            modulesLoaded.value = true
-        } catch {
-            // Preserve the pre-module behavior when the catalog is unavailable.
-            modulesLoaded.value = false
-        }
-    }
-
     async function fetchConfig() {
-        if (config.value && modulesLoaded.value) return
+        if (config.value) return
         loading.value = true
         error.value = null
         try {
-            if (!config.value) {
-                const resp = await api.get('/config')
-                config.value = resp.data?.data ?? resp.data
-            }
+            const resp = await api.get('/config')
+            config.value = resp.data?.data ?? resp.data
         } catch (e: any) {
             error.value = e?.message ?? 'Failed to load config'
             // Fallback to meta defaults so the UI isn't broken
@@ -147,15 +117,12 @@ export const useConfigStore = defineStore('config', () => {
                 },
             }
         } finally {
-            await fetchModules()
             loading.value = false
         }
     }
 
     return {
         config,
-        modules,
-        modulesLoaded,
         loading,
         error,
         provider,
@@ -167,8 +134,6 @@ export const useConfigStore = defineStore('config', () => {
         showDownloadButtons,
         setShowPrintButtons,
         setShowDownloadButtons,
-        isModuleEnabled,
-        fetchModules,
         fetchConfig,
     }
 })

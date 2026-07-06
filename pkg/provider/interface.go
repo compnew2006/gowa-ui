@@ -51,6 +51,25 @@ type ReplyProvider interface {
 	SendTextReply(ctx context.Context, instanceID string, to string, text string, replyToMsgID string) (string, error)
 }
 
+// MediaUploader is an optional extension to MessageProvider for adapters that
+// can upload media bytes directly (multipart/form-data) instead of requiring a
+// publicly fetchable URL. Only the GOWA adapter implements this today; the
+// whatsmeow and Meta adapters still go through their own upload APIs.
+//
+// When a caller has the raw bytes AND the active provider implements this
+// interface, the caller should prefer these methods over the URL-based
+// SendImage/SendDocument/etc. — this avoids the save-locally-then-serve-URL
+// round trip that would otherwise duplicate the file on disk.
+//
+// Callers should type-assert MessageProvider to MediaUploader to check support,
+// the same way they do for ReplyProvider.
+type MediaUploader interface {
+	SendImageBytes(ctx context.Context, instanceID, to string, data []byte, filename, mimeType, caption string) (string, error)
+	SendDocumentBytes(ctx context.Context, instanceID, to string, data []byte, filename, mimeType, caption string) (string, error)
+	SendVideoBytes(ctx context.Context, instanceID, to string, data []byte, filename, mimeType, caption string) (string, error)
+	SendAudioBytes(ctx context.Context, instanceID, to string, data []byte, filename, mimeType string) (string, error)
+}
+
 // PollProvider is an optional extension to MessageProvider for adapters that
 // support sending native WhatsApp polls. Only whatsmeow implements this;
 // Meta Cloud API does not. Callers should type-assert to check support.

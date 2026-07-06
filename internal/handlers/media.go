@@ -13,6 +13,7 @@ import (
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/internal/queue"
 	"github.com/compnew2006/whatomate/internal/storage"
+	"github.com/compnew2006/whatomate/pkg/gowa"
 	"github.com/compnew2006/whatomate/pkg/whatsapp"
 	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
@@ -410,8 +411,57 @@ func (a *App) RetryMediaDownload(r *fastglue.Request) error {
 		dlCtx, dlCancel := context.WithTimeout(ctx, 30*time.Second)
 		defer dlCancel()
 		deviceID := gowaDeviceID(&instance)
-		phone := message.ConversationID
+		// Resolve the chat JID the same way ServeMedia does — handles 1:1,
+		// status@broadcast, and group chats uniformly. Using bare
+		// conversation_id here was the source of "phone: cannot be blank"
+		// for status messages (whose conversation_id is empty).
+		retryContactPhone := ""
+		if message.ContactID != uuid.Nil {
+			var rc models.Contact
+			if err := requestDB.WithContext(ctx).Select("phone_number").
+				Where("id = ?", message.ContactID).First(&rc).Error; err == nil {
+				retryContactPhone = rc.PhoneNumber
+			}
+		}
+		phone := resolveGowaChatJID(message.ConversationID, retryContactPhone)
+		if phone == "" {
+			if instance.JID != "" {
+				phone = instance.JID
+			} else if instance.PhoneNumber != "" {
+				phone = instance.PhoneNumber + "@s.whatsapp.net"
+			}
+		}
 		dlResp, dlErr := a.GowaClient.DownloadMedia(dlCtx, deviceID, message.WhatsAppMessageID, phone)
+		// Legacy rows (created before conversation_id was persisted on the
+		// GOWA path) can resolve to a chat JID that disagrees with what GOWA
+		// stored the message under. GOWA's /message/:id/download rejects that
+		// with "<wamid> does not belong to chat <jid>" (OpenAPI: only a
+		// free-form message string surfaces this — no dedicated error code).
+		// When that specific mismatch occurs, retry once with the connected
+		// device's own identity JID, which is GOWA's canonical scoping key for
+		// 1:1 chats and matches how serveGowaMedia falls back (see media.go
+		// serveGowaMedia). The retry uses a fresh context because dlCancel()
+		// below releases the original deadline.
+		if dlErr != nil {
+			var ge *gowa.Error
+			if errors.As(dlErr, &ge) && strings.Contains(ge.Message, "does not belong to chat") {
+				altPhone := ""
+				if instance.JID != "" {
+					altPhone = instance.JID
+				} else if instance.PhoneNumber != "" {
+					altPhone = instance.PhoneNumber + "@s.whatsapp.net"
+				}
+				if altPhone != "" && altPhone != phone {
+					dlCancel()
+					retryCtx, retryCancel := context.WithTimeout(ctx, 30*time.Second)
+					defer retryCancel()
+					a.Log.Info("GOWA media retry: ownership mismatch, retrying with instance JID",
+						"msg_id", message.WhatsAppMessageID,
+						"first_jid", phone, "instance_jid", altPhone)
+					dlResp, dlErr = a.GowaClient.DownloadMedia(retryCtx, deviceID, message.WhatsAppMessageID, altPhone)
+				}
+			}
+		}
 		dlCancel()
 		if dlErr != nil {
 			a.Log.Warn("GOWA media retry-download failed", "error", dlErr, "msg_id", message.WhatsAppMessageID)
@@ -631,6 +681,125 @@ func (a *App) serveLocalMediaFile(r *fastglue.Request, relativePath, mimeHint st
 	return nil
 }
 
+// waitForGowaMessageID polls the message row for up to timeout, returning
+// the whats_app_message_id once it is populated by finalizeMessageSend. Used
+// to bridge the race window where the frontend requests media for a freshly
+// sent message before the asynchronous send goroutine has filled in the
+// wamid. Returns the wamid and true on success, or "" and false on timeout.
+//
+// The poll is bounded and cheap (single indexed SELECT every 250ms), and the
+// wait only happens for outgoing messages whose wamid is genuinely pending —
+// incoming messages always carry a wamid on insert, so they skip this path.
+func waitForGowaMessageID(db *gorm.DB, messageID uuid.UUID, timeout time.Duration) (string, bool) {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		var wamid string
+		if err := db.Model(&models.Message{}).
+			Where("id = ?", messageID).
+			Select("whats_app_message_id").
+			Row().Scan(&wamid); err == nil && wamid != "" {
+			return wamid, true
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	return "", false
+}
+
+// resolveGowaChatJID builds the WhatsApp chat JID that GOWA's
+// /message/:id/download requires to scope the action. GOWA rejects requests
+// where the phone doesn't match the message's chat_jid, so we must produce
+// the exact JID GOWA stored the message under:
+//
+//   - regular 1:1 chat  → "<phone>@s.whatsapp.net" (from conversation_id,
+//     contact.phone_number, or a JID already carrying "@")
+//   - status broadcast  → "status@broadcast" (when contact.phone_number is
+//     "status" — these are WhatsApp Status/story messages routed through a
+//     synthetic contact)
+//   - group chat        → "<gid>@g.us" — group IDs are 18+ digit numbers
+//     that don't fit the phone-number shape; WhatsApp addresses them as
+//     "<gid>@g.us". whatomate stores the group ID in contact.phone_number
+//     for group contacts, so we detect that case here.
+//
+// Returns "" only when no signal is available. Callers should surface a
+// clear error in that case rather than passing an empty phone to GOWA.
+func resolveGowaChatJID(conversationID, contactPhone string) string {
+	// Prefer conversation_id when it already looks like a JID.
+	if conversationID != "" {
+		if strings.Contains(conversationID, "@") {
+			return conversationID
+		}
+	}
+	phone := strings.TrimSpace(contactPhone)
+	if phone == "" {
+		phone = strings.TrimSpace(conversationID)
+	}
+	if phone == "" {
+		return ""
+	}
+	// Status broadcast: GOWA stored the message under chat_jid "status@broadcast".
+	if phone == "status" || strings.HasPrefix(phone, "status@") {
+		return "status@broadcast"
+	}
+	// Already a JID (group, newsletter, etc.).
+	if strings.Contains(phone, "@") {
+		return phone
+	}
+	// Group chat: WhatsApp group IDs are long numeric strings (typically
+	// 18+ digits, e.g. "120363409653921458"). They are not phone numbers —
+	// the JID suffix is "@g.us", not "@s.whatsapp.net". Phone numbers are
+	// at most 15 digits (E.164), so anything longer is a group ID.
+	if isLikelyGroupID(phone) {
+		return phone + "@g.us"
+	}
+	// Regular 1:1: bare phone digits → individual JID.
+	return phone + "@s.whatsapp.net"
+}
+
+// isLikelyGroupID reports whether the bare string looks like a WhatsApp
+// group ID rather than a phone number. WhatsApp group IDs come in two
+// shapes:
+//
+//  1. "<phone>-<deviceId>" (e.g. "966555359601-1437241952") — the legacy
+//     per-account group format. Always contains a hyphen.
+//  2. "<long-numeric>" (e.g. "120363409653921458") — the newer global
+//     group ID format, 18-24 digits.
+//
+// E.164 phone numbers are at most 15 digits, contain only digits, and never
+// contain a hyphen. We treat a string as a group ID when it either contains
+// a hyphen between digit-runs (case 1) or is all digits and longer than 15
+// (case 2).
+func isLikelyGroupID(s string) bool {
+	if s == "" {
+		return false
+	}
+	// Case 1: phone-device format "966555359601-1437241952".
+	if dash := strings.IndexByte(s, '-'); dash > 0 && dash < len(s)-1 {
+		left := s[:dash]
+		right := s[dash+1:]
+		if isAllDigits(left) && isAllDigits(right) && len(left) >= 6 {
+			return true
+		}
+	}
+	// Case 2: long all-numeric global group ID.
+	if len(s) > 15 && isAllDigits(s) {
+		return true
+	}
+	return false
+}
+
+// isAllDigits reports whether s is non-empty and contains only ASCII digits.
+func isAllDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 // serveGowaMedia handles media requests in gowa provider mode. The message
 // ID from the URL is the whatomate UUID; we resolve it to the WhatsApp
 // message ID, call GOWA's /message/:id/download to decrypt the media, then
@@ -654,8 +823,20 @@ func (a *App) serveGowaMedia(r *fastglue.Request, requestDB *gorm.DB, ctx contex
 		First(&message).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Message not found", nil, "")
 	}
+	// Outgoing messages are sent asynchronously: the DB row is created first
+	// (with an empty whats_app_message_id) and the wamid is filled in by
+	// finalizeMessageSend once GOWA returns it (~1s later). When the
+	// frontend immediately tries to render the just-sent media, it can beat
+	// the wamid update and hit this branch. Rather than 404ing instantly
+	// (which the frontend's media-prefetch cache treats as a permanent
+	// "missing" — forcing a manual Retry), poll the row briefly so the
+	// wamid lands before we give up.
 	if message.WhatsAppMessageID == "" {
-		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Message has no WhatsApp message ID for GOWA download", nil, "")
+		if refreshed, ok := waitForGowaMessageID(requestDB, messageID, 4*time.Second); ok {
+			message.WhatsAppMessageID = refreshed
+		} else {
+			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Message has no WhatsApp message ID for GOWA download", nil, "")
+		}
 	}
 	if message.InstanceID == nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Message has no associated instance", nil, "")
@@ -667,18 +848,27 @@ func (a *App) serveGowaMedia(r *fastglue.Request, requestDB *gorm.DB, ctx contex
 	}
 	deviceID := gowaDeviceID(&instance)
 
-	// GOWA's /message/:id/download requires a phone query param to scope the
-	// action. Resolve it from the contact's phone_number (most reliable), the
-	// message's conversation_id, or the JID embedded in the media metadata.
-	phone := ""
-	if message.ConversationID != "" {
-		phone = message.ConversationID
-	}
-	if phone == "" && message.ContactID != uuid.Nil {
+	// GOWA's /message/:id/download requires the chat JID the message belongs
+	// to (it rejects requests where the phone doesn't match the message's
+	// stored chat_jid). For 1:1 chats this is "<phone>@s.whatsapp.net"; for
+	// status broadcasts it's "status@broadcast"; for groups it's "<gid>@g.us".
+	// resolveGowaChatJID encodes all three cases from the message's
+	// conversation_id and the contact's phone_number.
+	contactPhone := ""
+	if message.ContactID != uuid.Nil {
 		var contact models.Contact
 		if err := requestDB.WithContext(ctx).Select("phone_number").
 			Where("id = ?", message.ContactID).First(&contact).Error; err == nil {
-			phone = contact.PhoneNumber
+			contactPhone = contact.PhoneNumber
+		}
+	}
+	phone := resolveGowaChatJID(message.ConversationID, contactPhone)
+	if phone == "" {
+		// Last resort: fall back to the device's own JID. Better than empty.
+		if instance.JID != "" {
+			phone = instance.JID
+		} else if instance.PhoneNumber != "" {
+			phone = instance.PhoneNumber + "@s.whatsapp.net"
 		}
 	}
 
@@ -696,7 +886,7 @@ func (a *App) serveGowaMedia(r *fastglue.Request, requestDB *gorm.DB, ctx contex
 	// Fetch the decrypted bytes from GOWA's static server.
 	bytesCtx, bytesCancel := context.WithTimeout(ctx, 60*time.Second)
 	defer bytesCancel()
-	data, err := a.GowaClient.FetchBytes(bytesCtx, resp.FileURL)
+	data, err := a.GowaClient.FetchBytes(bytesCtx, resp.FileURL, deviceID)
 	if err != nil {
 		a.Log.Warn("GOWA media fetch failed", "error", err, "url", resp.FileURL)
 		return gowaSendError(r, err, "Failed to fetch decrypted media from GOWA")

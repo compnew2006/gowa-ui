@@ -551,8 +551,6 @@ func (a *App) CreateAgentTransfer(r *fastglue.Request) error {
 	}
 	// Otherwise, agentID remains nil (goes to queue)
 
-
-
 	// Determine source
 	source := req.Source
 	if source == "" {
@@ -1438,7 +1436,6 @@ func (a *App) ReturnAgentTransfersToQueue(userID, orgID uuid.UUID) int {
 
 	return len(transfers)
 }
-
 
 // errAgentNotFound is returned when an agent lookup fails or does not belong to the org.
 var errAgentNotFound = errors.New("agent not found")

@@ -232,7 +232,25 @@ export const useInstancesStore = defineStore("instances", () => {
 
   async function connectInstance(id: string) {
     try {
-      await instancesService.connect(id);
+      const response = await instancesService.connect(id);
+      const payload = (response.data?.data || response.data) as {
+        already_connected?: boolean;
+        status?: string;
+        jid?: string;
+        state?: string;
+      } | undefined;
+      // Backend short-circuit: GOWA reports the device is already paired.
+      // Promote the row to connected immediately rather than showing a
+      // pointless QR modal. Phone is derived from JID when available.
+      if (payload?.already_connected === true || payload?.status === "already_connected") {
+        let phone: string | undefined;
+        if (payload?.jid && payload.jid.includes("@")) {
+          phone = payload.jid.split("@")[0];
+        }
+        updateInstanceStatus(id, "connected", phone);
+        toast.success(t("instances.toast.connected") || "Connected");
+        return true;
+      }
       updateInstanceStatus(id, "connecting");
       toast.info(t("instances.toast.connectInitiated"));
       return true;

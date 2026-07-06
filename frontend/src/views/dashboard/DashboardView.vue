@@ -66,7 +66,6 @@ import {
   FileText,
   X,
   GripVertical,
-  Megaphone,
   Settings,
   Contact,
   Workflow,
@@ -154,11 +153,6 @@ const SHORTCUT_REGISTRY = computed(() => ({
     label: t("dashboard.startChat"),
     to: "/chat",
     icon: MessageSquare,
-  },
-  campaigns: {
-    label: t("nav.campaigns"),
-    to: "/whatsapp/campaigns",
-    icon: Megaphone,
   },
   templates: {
     label: t("nav.templates"),

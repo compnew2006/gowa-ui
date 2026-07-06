@@ -18,7 +18,6 @@ test.describe('Dashboard', () => {
     await expect(page.getByText('Total Messages', { exact: true })).toBeVisible({ timeout: 15000 })
     await expect(page.getByText('Active Contacts', { exact: true })).toBeVisible()
     await expect(page.getByText('Chatbot Sessions', { exact: true })).toBeVisible()
-    await expect(page.getByText('Total Campaigns', { exact: true })).toBeVisible()
   })
 
   test('should display time range filter', async ({ page }) => {
@@ -54,8 +53,8 @@ test.describe('Dashboard', () => {
 
     // Quick actions should only render links this user can actually open.
     await expect(main.locator('a[href="/chat"]')).toBeVisible()
-    await expect(main.locator('a[href="/campaigns"]')).toBeVisible()
     await expect(main.locator('a[href="/chatbot"]')).toBeVisible()
+    await expect(main.locator('a[href="/campaigns"]')).toHaveCount(0)
     await expect(main.locator('a[href="/templates"]')).toHaveCount(0)
   })
 
@@ -65,12 +64,8 @@ test.describe('Dashboard', () => {
     await expect(page).toHaveURL(/\/chat/)
   })
 
-  test('should navigate to campaigns from quick actions', async ({ page }) => {
-    await page.locator('main a[href="/campaigns"]').click()
-    await expect(page).toHaveURL(/\/campaigns/)
-  })
-
   test('should not render inaccessible quick actions', async ({ page }) => {
+    await expect(page.locator('main a[href="/campaigns"]')).toHaveCount(0)
     await expect(page.locator('main a[href="/templates"]')).toHaveCount(0)
   })
 

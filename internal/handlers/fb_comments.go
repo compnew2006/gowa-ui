@@ -17,9 +17,9 @@ import (
 	"time"
 
 	appcrypto "github.com/compnew2006/whatomate/internal/crypto"
-	"github.com/compnew2006/whatomate/plugin/facebook-comments/commentdata"
 	"github.com/compnew2006/whatomate/internal/models"
 	"github.com/compnew2006/whatomate/internal/websocket"
+	"github.com/compnew2006/whatomate/plugin/facebook-comments/commentdata"
 	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
@@ -206,17 +206,9 @@ type facebookCommentParentRef struct {
 	ID string `json:"id"`
 }
 
-
-
-
-
 // GetPageCommentSettings returns auto-reply settings for a specific Facebook page.
 
-
 // UpdatePageCommentSettings updates auto-reply settings for a specific Facebook page.
-
-
-
 
 // getOrCreatePageCommentSettings returns page-level settings, creating defaults if not found.
 func (a *App) getOrCreatePageCommentSettings(db *gorm.DB, orgID uuid.UUID, pageID string) (*models.FacebookPageCommentSettings, error) {
@@ -257,10 +249,10 @@ func (a *App) getOrCreatePageCommentSettings(db *gorm.DB, orgID uuid.UUID, pageI
 		Metadata:                models.JSONB{},
 	}
 	if err := db.Create(&settings).Error; err != nil {
-			return nil, err
-		}
-		return &settings, nil
+		return nil, err
 	}
+	return &settings, nil
+}
 
 // pickRandomReplyText picks a random text from a JSONB array of strings.
 func pickRandomReplyText(texts models.JSONB, defaultText string) string {
@@ -583,7 +575,7 @@ func (a *App) UpdateFacebookCommentStatus(r *fastglue.Request) error {
 		a.Log.Error("Failed to update Facebook comment status", "error", err, "comment_id", commentRef)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update Facebook comment", nil, "")
 	}
-		if a.WSHub != nil {
+	if a.WSHub != nil {
 		updated := models.FacebookComment{}
 		if err := commentQuery.First(&updated).Error; err != nil {
 			a.Log.Error("Failed to reload comment after status update for WS broadcast", "error", err, "comment_ref", commentRef)
@@ -875,10 +867,6 @@ func (a *App) upsertFacebookWebhookComment(db *gorm.DB, account *models.Facebook
 	return &saved, created, nil
 }
 
-
-
-
-
 func normalizeFacebookCommentForSave(comment *models.FacebookComment) {
 	comment.PageID = truncateFacebookCommentField(comment.PageID, 255)
 	comment.PageName = truncateFacebookCommentField(comment.PageName, 255)
@@ -1055,7 +1043,7 @@ func (a *App) syncFacebookPageComments(db *gorm.DB, orgID uuid.UUID, account mod
 			}
 			result.Synced++
 			if tx.RowsAffected > 0 {
-								var saved models.FacebookComment
+				var saved models.FacebookComment
 				if err := db.Session(&gorm.Session{NewDB: true}).
 					Table("facebook_comments").
 					Where("organization_id = ? AND external_id = ?", orgID, edge.ID).
@@ -1070,24 +1058,24 @@ func (a *App) syncFacebookPageComments(db *gorm.DB, orgID uuid.UUID, account mod
 						Payload: facebookCommentToResponse(saved),
 					})
 				}
-								if runAutoReply && shouldAutoReplyFacebookComment(db, settings, saved) {
-						pageSettings, _ := a.getOrCreatePageCommentSettings(db, orgID, pageID)
-						commentText := settings.AutoCommentReplyText
-						privateText := settings.AutoPrivateMessageText
-						commentEnabled := settings.AutoCommentReplyEnabled
-						privateEnabled := settings.AutoPrivateReplyEnabled
-						if pageSettings != nil && pageSettings.AutoReplyEnabled {
-							commentEnabled = pageSettings.AutoCommentReplyEnabled
-							privateEnabled = pageSettings.AutoPrivateReplyEnabled
-							commentText = pickRandomReplyText(pageSettings.AutoCommentReplyTexts, settings.AutoCommentReplyText)
-							privateText = pickRandomReplyText(pageSettings.AutoPrivateMessageTexts, settings.AutoPrivateMessageText)
-						}
-						if _, err := a.sendAndStoreFacebookCommentReply(db, &account, &saved, userID, commentText, privateText, commentEnabled, privateEnabled, true, pageToken); err == nil {
-							result.AutoReplies++
-						} else {
-							result.Failures = append(result.Failures, fmt.Sprintf("%s: auto reply failed for %s", pageNameOrID(pageName, pageID), edge.ID))
-						}
+				if runAutoReply && shouldAutoReplyFacebookComment(db, settings, saved) {
+					pageSettings, _ := a.getOrCreatePageCommentSettings(db, orgID, pageID)
+					commentText := settings.AutoCommentReplyText
+					privateText := settings.AutoPrivateMessageText
+					commentEnabled := settings.AutoCommentReplyEnabled
+					privateEnabled := settings.AutoPrivateReplyEnabled
+					if pageSettings != nil && pageSettings.AutoReplyEnabled {
+						commentEnabled = pageSettings.AutoCommentReplyEnabled
+						privateEnabled = pageSettings.AutoPrivateReplyEnabled
+						commentText = pickRandomReplyText(pageSettings.AutoCommentReplyTexts, settings.AutoCommentReplyText)
+						privateText = pickRandomReplyText(pageSettings.AutoPrivateMessageTexts, settings.AutoPrivateMessageText)
 					}
+					if _, err := a.sendAndStoreFacebookCommentReply(db, &account, &saved, userID, commentText, privateText, commentEnabled, privateEnabled, true, pageToken); err == nil {
+						result.AutoReplies++
+					} else {
+						result.Failures = append(result.Failures, fmt.Sprintf("%s: auto reply failed for %s", pageNameOrID(pageName, pageID), edge.ID))
+					}
+				}
 			}
 		}
 	}
@@ -1337,7 +1325,7 @@ func (a *App) sendAndStoreFacebookCommentReply(db *gorm.DB, account *models.Face
 	if isAuto {
 		updates["auto_replied_at"] = &now
 	}
-		updateDB := db.Session(&gorm.Session{NewDB: true})
+	updateDB := db.Session(&gorm.Session{NewDB: true})
 	if err := updateDB.Model(&models.FacebookComment{}).Where("id = ?", comment.ID).Updates(updates).Error; err != nil {
 		a.Log.Error("Failed to update comment after reply", "error", err, "comment_id", comment.ID)
 	}

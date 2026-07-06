@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -189,32 +190,150 @@ func (c *Client) SendText(ctx context.Context, deviceID string, req SendTextRequ
 }
 
 // SendImage calls POST /send/image.
-func (c *Client) SendImage(ctx context.Context, deviceID string, req SendMediaRequest) (string, error) {
-	return c.sendMedia(ctx, deviceID, "/send/image", req)
-}
-
-// SendFile calls POST /send/file.
-func (c *Client) SendFile(ctx context.Context, deviceID string, req SendMediaRequest) (string, error) {
-	return c.sendMedia(ctx, deviceID, "/send/file", req)
-}
-
-// SendVideo calls POST /send/video.
-func (c *Client) SendVideo(ctx context.Context, deviceID string, req SendMediaRequest) (string, error) {
-	return c.sendMedia(ctx, deviceID, "/send/video", req)
-}
-
-// SendAudio calls POST /send/audio. Audio has no caption in GOWA's API.
-func (c *Client) SendAudio(ctx context.Context, deviceID, phone, audioURL string) (string, error) {
-	req := SendMediaRequest{Phone: phone, URL: audioURL}
-	return c.sendMedia(ctx, deviceID, "/send/audio", req)
-}
-
-func (c *Client) sendMedia(ctx context.Context, deviceID, endpoint string, req SendMediaRequest) (string, error) {
+func (c *Client) SendImage(ctx context.Context, deviceID string, req SendImageRequest) (string, error) {
 	var env Envelope[MessageActionResponse]
-	if err := c.do(ctx, http.MethodPost, endpoint, deviceID, req, &env); err != nil {
+	if err := c.do(ctx, http.MethodPost, "/send/image", deviceID, req, &env); err != nil {
 		return "", err
 	}
 	return env.Results.MessageID, nil
+}
+
+// SendFile calls POST /send/file.
+func (c *Client) SendFile(ctx context.Context, deviceID string, req SendFileRequest) (string, error) {
+	var env Envelope[MessageActionResponse]
+	if err := c.do(ctx, http.MethodPost, "/send/file", deviceID, req, &env); err != nil {
+		return "", err
+	}
+	return env.Results.MessageID, nil
+}
+
+// SendVideo calls POST /send/video.
+func (c *Client) SendVideo(ctx context.Context, deviceID string, req SendVideoRequest) (string, error) {
+	var env Envelope[MessageActionResponse]
+	if err := c.do(ctx, http.MethodPost, "/send/video", deviceID, req, &env); err != nil {
+		return "", err
+	}
+	return env.Results.MessageID, nil
+}
+
+// SendAudio calls POST /send/audio.
+func (c *Client) SendAudio(ctx context.Context, deviceID string, req SendAudioRequest) (string, error) {
+	var env Envelope[MessageActionResponse]
+	if err := c.do(ctx, http.MethodPost, "/send/audio", deviceID, req, &env); err != nil {
+		return "", err
+	}
+	return env.Results.MessageID, nil
+}
+
+// ----- Multipart uploads (binary file field) -----
+//
+// GOWA's /send/{image,file,video,audio} endpoints accept either a `*_url`
+// field (JSON body, server fetches the URL) or a binary file field
+// (`image`/`file`/`video`/`audio`) sent as multipart/form-data. The binary
+// path is preferred when the caller already has the bytes because it avoids
+// a localhost URL round-trip and means whatomate never has to persist the
+// outgoing file to its own disk — GOWA becomes the single source of truth,
+// mirroring how incoming media already works.
+
+// mediaPart is the per-endpoint descriptor used by sendMediaMultipart.
+type mediaPart struct {
+	endpoint  string // /send/image, /send/file, /send/video, /send/audio
+	fileField string // image | file | video | audio
+}
+
+var (
+	partImage    = mediaPart{endpoint: "/send/image", fileField: "image"}
+	partDocument = mediaPart{endpoint: "/send/file", fileField: "file"}
+	partVideo    = mediaPart{endpoint: "/send/video", fileField: "video"}
+	partAudio    = mediaPart{endpoint: "/send/audio", fileField: "audio"}
+)
+
+// sendMediaMultipart posts the raw bytes as multipart/form-data to the given
+// GOWA /send/* endpoint. caption is optional (ignored for audio). phone is
+// required by GOWA. filename/mimeType describe the bytes for the file part
+// header; if mimeType is empty, GOWA will sniff it.
+func (c *Client) sendMediaMultipart(ctx context.Context, deviceID, endpoint, fileField, phone, caption, filename, mimeType string, data []byte) (string, error) {
+	fullURL := c.baseURL + "/" + strings.TrimPrefix(endpoint, "/")
+
+	// Build the multipart body. We don't use mime/multipart.NewWriter on a
+	// pipe because the bytes are already fully in memory (the upload handler
+	// read them into a []byte); a bytes.Buffer is simpler and lets us set
+	// Content-Type + Content-Length up front so GOWA can stream efficiently.
+	var body bytes.Buffer
+	w := multipart.NewWriter(&body)
+
+	// phone (required)
+	if err := w.WriteField("phone", phone); err != nil {
+		return "", fmt.Errorf("gowa: multipart write phone: %w", err)
+	}
+	// caption (optional; audio has no caption in GOWA's API)
+	if caption != "" && fileField != "audio" {
+		if err := w.WriteField("caption", caption); err != nil {
+			return "", fmt.Errorf("gowa: multipart write caption: %w", err)
+		}
+	}
+	// file part
+	part, err := w.CreateFormFile(fileField, filename)
+	if err != nil {
+		return "", fmt.Errorf("gowa: multipart create file field: %w", err)
+	}
+	if _, err := part.Write(data); err != nil {
+		return "", fmt.Errorf("gowa: multipart write file bytes: %w", err)
+	}
+	if err := w.Close(); err != nil {
+		return "", fmt.Errorf("gowa: multipart close: %w", err)
+	}
+
+	req, err := newHTTPRequest(ctx, http.MethodPost, fullURL, &body)
+	if err != nil {
+		return "", err
+	}
+	// Content-Type MUST be the multipart boundary the writer generated.
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	req.Header.Set("Accept", "application/json")
+	if c.authHeader != "" {
+		req.Header.Set("Authorization", c.authHeader)
+	}
+	if deviceID != "" {
+		req.Header.Set("X-Device-Id", deviceID)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", &Error{Cause: err, Message: "transport error talking to GOWA"}
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode >= 400 {
+		return "", parseGowaError(resp.StatusCode, respBody)
+	}
+
+	var env Envelope[MessageActionResponse]
+	if err := json.Unmarshal(respBody, &env); err != nil {
+		return "", fmt.Errorf("gowa: decode multipart send response: %w (body=%q)", err, truncate(string(respBody), 200))
+	}
+	return env.Results.MessageID, nil
+}
+
+// SendImageMultipart uploads image bytes directly to /send/image.
+func (c *Client) SendImageMultipart(ctx context.Context, deviceID, phone, caption, filename, mimeType string, data []byte) (string, error) {
+	return c.sendMediaMultipart(ctx, deviceID, partImage.endpoint, partImage.fileField, phone, caption, filename, mimeType, data)
+}
+
+// SendFileMultipart uploads document bytes directly to /send/file.
+func (c *Client) SendFileMultipart(ctx context.Context, deviceID, phone, caption, filename, mimeType string, data []byte) (string, error) {
+	return c.sendMediaMultipart(ctx, deviceID, partDocument.endpoint, partDocument.fileField, phone, caption, filename, mimeType, data)
+}
+
+// SendVideoMultipart uploads video bytes directly to /send/video.
+func (c *Client) SendVideoMultipart(ctx context.Context, deviceID, phone, caption, filename, mimeType string, data []byte) (string, error) {
+	return c.sendMediaMultipart(ctx, deviceID, partVideo.endpoint, partVideo.fileField, phone, caption, filename, mimeType, data)
+}
+
+// SendAudioMultipart uploads audio bytes directly to /send/audio.
+func (c *Client) SendAudioMultipart(ctx context.Context, deviceID, phone, filename, mimeType string, data []byte) (string, error) {
+	return c.sendMediaMultipart(ctx, deviceID, partAudio.endpoint, partAudio.fileField, phone, "", filename, mimeType, data)
 }
 
 // ReactMessage calls POST /message/:message_id/reaction.
@@ -249,12 +368,30 @@ func (c *Client) DownloadMedia(ctx context.Context, deviceID, messageID, phone s
 }
 
 // FetchBytes performs a plain HTTP GET against an absolute URL (typically the
-// FileURL returned by DownloadMedia) and returns the body bytes. It reuses
-// the client's connection pool and timeout.
-func (c *Client) FetchBytes(ctx context.Context, absoluteURL string) ([]byte, error) {
+// FileURL returned by DownloadMedia or the qr_link from /app/login) and returns
+// the body bytes. It reuses the client's connection pool and timeout.
+//
+// deviceID is sent as the X-Device-Id header when non-empty AND the URL is on
+// the GOWA host (same scheme+host as BaseURL). This is required for GOWA-served
+// static assets in v8 builds — the device-scoping middleware enforces
+// X-Device-Id on every request, including /statics/qrcode/*.png, and replies
+// with HTTP 200 + a JSON error body (e.g. DEVICE_ID_REQUIRED) when it's
+// missing. Without this header, callers receive the JSON error bytes instead
+// of the real PNG and end up base64-encoding garbage into a data: URL.
+//
+// To fail loudly instead of returning JSON error bodies as raw bytes, this
+// method also inspects the response Content-Type: a JSON reply on a request
+// that expected binary bytes is treated as an error.
+func (c *Client) FetchBytes(ctx context.Context, absoluteURL, deviceID string) ([]byte, error) {
 	req, err := newHTTPRequest(ctx, http.MethodGet, absoluteURL, nil)
 	if err != nil {
 		return nil, err
+	}
+	if c.authHeader != "" && sameGowaOrigin(c.baseURL, absoluteURL) {
+		req.Header.Set("Authorization", c.authHeader)
+		if deviceID != "" {
+			req.Header.Set("X-Device-Id", deviceID)
+		}
 	}
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -268,7 +405,49 @@ func (c *Client) FetchBytes(ctx context.Context, absoluteURL string) ([]byte, er
 	if err != nil {
 		return nil, fmt.Errorf("gowa: read media body: %w", err)
 	}
+	// Detect JSON error bodies returned with HTTP 200. GOWA's device-scoping
+	// middleware replies 200 + {"code":"DEVICE_ID_REQUIRED",...} when the
+	// X-Device-Id header is missing, even for static asset URLs. Without this
+	// guard the caller would treat the JSON error text as the file bytes (the
+	// source of the "fake QR" — the JSON was base64-encoded into a data: URL).
+	if ct := resp.Header.Get("Content-Type"); strings.HasPrefix(ct, "application/json") {
+		// Best-effort parse to surface the GOWA code/message; fall back to raw snippet.
+		var env Envelope[json.RawMessage]
+		code, message := "", string(body)
+		if json.Unmarshal(body, &env) == nil {
+			code, message = env.Code, env.Message
+		}
+		if code != "" || strings.Contains(message, "DEVICE_ID_REQUIRED") || strings.Contains(message, "not found") {
+			return nil, &Error{
+				StatusCode: resp.StatusCode,
+				Code:       code,
+				Message:    fmt.Sprintf("gowa: fetching %s returned a JSON error (status=%d, content-type=%s): %s — missing X-Device-Id header or stale URL", absoluteURL, resp.StatusCode, ct, message),
+			}
+		}
+	}
 	return body, nil
+}
+
+// sameGowaOrigin reports whether absoluteURL shares scheme+host with baseURL.
+// Used to scope Authorization and X-Device-Id headers to GOWA-served URLs only
+// (so FetchBytes on a third-party URL doesn't leak credentials).
+func sameGowaOrigin(baseURL, absoluteURL string) bool {
+	if baseURL == "" || absoluteURL == "" {
+		return false
+	}
+	if !strings.HasPrefix(absoluteURL, "http://") && !strings.HasPrefix(absoluteURL, "https://") {
+		return false
+	}
+	// Strip scheme from both, compare host[:port].
+	bp := strings.TrimPrefix(strings.TrimPrefix(baseURL, "https://"), "http://")
+	ap := strings.TrimPrefix(strings.TrimPrefix(absoluteURL, "https://"), "http://")
+	if i := strings.IndexByte(bp, '/'); i >= 0 {
+		bp = bp[:i]
+	}
+	if i := strings.IndexByte(ap, '/'); i >= 0 {
+		ap = ap[:i]
+	}
+	return bp != "" && bp == ap
 }
 
 // ----- Internal HTTP plumbing -----
@@ -319,19 +498,7 @@ func (c *Client) do(ctx context.Context, method, path, deviceID string, body any
 	respBody, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode >= 400 {
-		ge := &Error{StatusCode: resp.StatusCode}
-		// Try to unwrap the GOWA envelope for a friendlier message/code.
-		var env Envelope[json.RawMessage]
-		if json.Unmarshal(respBody, &env) == nil {
-			ge.Code = env.Code
-			ge.Message = env.Message
-		} else {
-			ge.Message = fmt.Sprintf("HTTP %d", resp.StatusCode)
-		}
-		if ge.Message == "" {
-			ge.Message = string(respBody)
-		}
-		return ge
+		return parseGowaError(resp.StatusCode, respBody)
 	}
 
 	if out == nil {
@@ -360,6 +527,25 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n] + "..."
+}
+
+// parseGowaError converts a non-2xx GOWA response body into a typed *Error.
+// GOWA always returns its standard envelope {status,code,message,results}
+// even on failure, so we unwrap code/message for friendlier upstream errors.
+// Falls back to a plain HTTP status string if the body isn't valid JSON.
+func parseGowaError(statusCode int, body []byte) *Error {
+	ge := &Error{StatusCode: statusCode}
+	var env Envelope[json.RawMessage]
+	if json.Unmarshal(body, &env) == nil {
+		ge.Code = env.Code
+		ge.Message = env.Message
+	} else {
+		ge.Message = fmt.Sprintf("HTTP %d", statusCode)
+	}
+	if ge.Message == "" {
+		ge.Message = string(body)
+	}
+	return ge
 }
 
 func buildQuery(vals map[string]string) string {

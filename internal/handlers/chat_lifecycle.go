@@ -236,8 +236,6 @@ func closeChatUpdates(closedByUserID uuid.UUID, currentAssignee *uuid.UUID, clea
 	}
 }
 
-
-
 // reopenChatUpdates returns the pending-state assignments used both for reopening
 // closed chats and for clearing assignment (unclaim). Delegates to chatAssignmentUpdates(nil).
 func reopenChatUpdates() map[string]any {

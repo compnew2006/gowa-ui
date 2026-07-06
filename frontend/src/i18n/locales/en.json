@@ -344,6 +344,7 @@
     "typeMessage": "Type a message",
     "send": "Send",
     "sending": "Sending",
+    "messageLoading": "Loading message…",
     "sent": "Sent",
     "delivered": "Delivered",
     "read": "Read",

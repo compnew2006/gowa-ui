@@ -486,8 +486,40 @@ func (a *App) sendViaProvider(ctx context.Context, req OutgoingMessageRequest, m
 		to = canonicalTo
 	}
 
-	// For GOWA, convert relative local paths in MediaURL to public URLs
-	if a.isGowaProvider() && req.MediaURL != "" {
+	// For GOWA, normalise the recipient to a proper WhatsApp JID. Bare
+	// phone numbers need "@s.whatsapp.net", group IDs need "@g.us", and
+	// "status" must become "status@broadcast". Without this, GOWA rejects
+	// the send with "Phone status@s.whatsapp.net is not on whatsapp" or
+	// "phone: cannot be blank" — and the outgoing message is left dangling
+	// with no wamid, so the UI shows "File no longer available" forever.
+	if a.isGowaProvider() {
+		to = resolveGowaChatJID("", to)
+	}
+
+	// For GOWA, if the provider supports direct multipart upload AND we have
+	// the raw bytes, prefer the multipart path — this skips the local
+	// save-then-serve-URL round trip entirely and means whatomate never
+	// persists the outgoing file to disk. GOWA becomes the single source of
+	// truth, mirroring how incoming media already works.
+	if uploader, ok := a.MessageProvider.(provider.MediaUploader); ok && len(req.MediaData) > 0 {
+		switch req.Type {
+		case models.MessageTypeImage:
+			return uploader.SendImageBytes(ctx, instanceID, to, req.MediaData, req.MediaFilename, req.MediaMimeType, req.Caption)
+		case models.MessageTypeDocument:
+			return uploader.SendDocumentBytes(ctx, instanceID, to, req.MediaData, req.MediaFilename, req.MediaMimeType, req.Caption)
+		case models.MessageTypeVideo:
+			return uploader.SendVideoBytes(ctx, instanceID, to, req.MediaData, req.MediaFilename, req.MediaMimeType, req.Caption)
+		case models.MessageTypeAudio:
+			return uploader.SendAudioBytes(ctx, instanceID, to, req.MediaData, req.MediaFilename, req.MediaMimeType)
+		}
+	}
+
+	// Legacy URL-based path: for GOWA, convert relative local paths in
+	// MediaURL to public URLs so GOWA can fetch them. Still used by callers
+	// that don't have raw bytes (e.g. canned-response media that lives on
+	// disk) and as a fallback for providers that don't implement
+	// MediaUploader (whatsmeow, Meta).
+	if a.isGowaProvider() && req.MediaURL != "" && len(req.MediaData) == 0 {
 		originalPath := req.MediaURL
 		req.MediaURL = a.localMediaToPublicURL(msg.OrganizationID, req.MediaURL)
 		a.Log.Info("GOWA media URL resolved", "original", originalPath, "public_url", req.MediaURL, "msg_type", req.Type)
@@ -798,6 +830,23 @@ func (a *App) finalizeMessageSend(msg *models.Message, req OutgoingMessageReques
 				"wamid":      wamid,
 			},
 		})
+		// For outgoing media in GOWA mode, the wamid arriving means the
+		// message is now downloadable through GOWA's /message/:id/download.
+		// Emit a media_updated event so any client that already tried (and
+		// cached a 404 from the brief race window before the wamid landed)
+		// clears its missing-media cache and retries the load. Without this,
+		// the user sees "File no longer available" until a manual refresh.
+		if wamid != "" && msg.MessageType != models.MessageTypeText && msg.MediaURL != "" {
+			a.WSHub.BroadcastToOrg(req.Contact.OrganizationID, websocket.WSMessage{
+				Type: websocket.TypeMessageMediaUpdated,
+				Payload: map[string]any{
+					"id":         msg.ID.String(),
+					"contact_id": req.Contact.ID,
+					"media_url":  msg.MediaURL,
+					"wamid":      wamid,
+				},
+			})
+		}
 	}
 }
 

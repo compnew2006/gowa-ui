@@ -100,15 +100,50 @@ func (a *GowaAdapter) SendText(ctx context.Context, instanceID, to, text string)
 	})
 }
 
+// SendTextReply sends a text message as a quoted reply to a specific message.
+// Implements provider.ReplyProvider so sendViaProvider routes replies through
+// this method when the GOWA backend is active — without it, the type assertion
+// in sendViaProvider fails and replies silently degrade to plain SendText.
+//
+// GOWA builds the WhatsApp ContextInfo (StanzaID/Participant/QuotedMessage)
+// server-side from the reply_message_id we pass here; the value must be the
+// WhatsApp message ID (wamid) of the message being quoted, not the whatomate
+// row UUID. The caller (sendViaProvider) already resolves this for us.
+func (a *GowaAdapter) SendTextReply(ctx context.Context, instanceID, to, text, replyToMsgID string) (string, error) {
+	if strings.TrimSpace(replyToMsgID) == "" {
+		// No quote target — degrade to a normal send instead of erroring, so
+		// the message still goes out. This matches the whatsmeow adapter's
+		// behaviour when reply context can't be resolved.
+		return a.SendText(ctx, instanceID, to, text)
+	}
+	deviceID := a.resolveDeviceID(ctx, instanceID)
+	replyID := replyToMsgID
+	req := SendTextRequest{Phone: to, Message: text, ReplyMessageID: &replyID}
+	return a.withRetry(ctx, func(ctx context.Context) (string, error) {
+		return a.client.SendText(ctx, deviceID, req)
+	})
+}
+
+// Compile-time guard: GowaAdapter satisfies provider.ReplyProvider. Without
+// this, sendViaProvider's MessageProvider.(ReplyProvider) assertion silently
+// fails for GOWA and replies are sent as plain text (the bug we just fixed).
+var _ provider.ReplyProvider = (*GowaAdapter)(nil)
+
 // SendImage sends an image message via GOWA POST /send/image. imageURL must be
 // publicly fetchable by GOWA. If whatomate stored the file locally, the
+// caller is responsible for producing a public URL first.
+// SendImage sends an image via GOWA POST /send/image.
+// GOWA does not support binary uploads on this endpoint; the
 // caller is responsible for producing a public URL first.
 func (a *GowaAdapter) SendImage(ctx context.Context, instanceID, to, imageURL, caption string) (string, error) {
 	if !strings.HasPrefix(imageURL, "http://") && !strings.HasPrefix(imageURL, "https://") {
 		return "", fmt.Errorf("gowa: SendImage requires a publicly accessible URL starting with http:// or https://, got: %q", imageURL)
 	}
+	if !strings.Contains(to, "@") {
+		to = to + "@s.whatsapp.net"
+	}
 	deviceID := a.resolveDeviceID(ctx, instanceID)
-	req := SendMediaRequest{Phone: to, URL: imageURL, Caption: caption}
+	req := SendImageRequest{Phone: to, ImageURL: imageURL, Caption: caption}
 	return a.withRetry(ctx, func(ctx context.Context) (string, error) {
 		return a.client.SendImage(ctx, deviceID, req)
 	})
@@ -119,8 +154,11 @@ func (a *GowaAdapter) SendDocument(ctx context.Context, instanceID, to, docURL, 
 	if !strings.HasPrefix(docURL, "http://") && !strings.HasPrefix(docURL, "https://") {
 		return "", fmt.Errorf("gowa: SendDocument requires a publicly accessible URL starting with http:// or https://, got: %q", docURL)
 	}
+	if !strings.Contains(to, "@") {
+		to = to + "@s.whatsapp.net"
+	}
 	deviceID := a.resolveDeviceID(ctx, instanceID)
-	req := SendMediaRequest{Phone: to, URL: docURL, Filename: filename, Caption: caption}
+	req := SendFileRequest{Phone: to, FileURL: docURL, Filename: filename, Caption: caption}
 	return a.withRetry(ctx, func(ctx context.Context) (string, error) {
 		return a.client.SendFile(ctx, deviceID, req)
 	})
@@ -131,23 +169,101 @@ func (a *GowaAdapter) SendVideo(ctx context.Context, instanceID, to, videoURL, c
 	if !strings.HasPrefix(videoURL, "http://") && !strings.HasPrefix(videoURL, "https://") {
 		return "", fmt.Errorf("gowa: SendVideo requires a publicly accessible URL starting with http:// or https://, got: %q", videoURL)
 	}
+	if !strings.Contains(to, "@") {
+		to = to + "@s.whatsapp.net"
+	}
 	deviceID := a.resolveDeviceID(ctx, instanceID)
-	req := SendMediaRequest{Phone: to, URL: videoURL, Caption: caption}
+	req := SendVideoRequest{Phone: to, VideoURL: videoURL, Caption: caption}
 	return a.withRetry(ctx, func(ctx context.Context) (string, error) {
 		return a.client.SendVideo(ctx, deviceID, req)
 	})
 }
 
-// SendAudio sends an audio via GOWA POST /send/audio. Audio takes no caption
-// in GOWA's API; the audioURL argument replaces the unused caption slot.
+// SendAudio sends an audio via GOWA POST /send/audio.
 func (a *GowaAdapter) SendAudio(ctx context.Context, instanceID, to, audioURL string) (string, error) {
 	if !strings.HasPrefix(audioURL, "http://") && !strings.HasPrefix(audioURL, "https://") {
 		return "", fmt.Errorf("gowa: SendAudio requires a publicly accessible URL starting with http:// or https://, got: %q", audioURL)
 	}
+	if !strings.Contains(to, "@") {
+		to = to + "@s.whatsapp.net"
+	}
 	deviceID := a.resolveDeviceID(ctx, instanceID)
+	req := SendAudioRequest{Phone: to, AudioURL: audioURL}
 	return a.withRetry(ctx, func(ctx context.Context) (string, error) {
-		return a.client.SendAudio(ctx, deviceID, to, audioURL)
+		return a.client.SendAudio(ctx, deviceID, req)
 	})
+}
+
+// ----- provider.MediaUploader (multipart direct upload) -----
+//
+// These methods upload the raw bytes directly to GOWA as multipart/form-data,
+// bypassing the URL round-trip used by SendImage/SendDocument/etc. This is the
+// preferred path for outgoing media in GOWA mode because it means whatomate
+// never has to persist the outgoing file to disk — GOWA is the single source
+// of truth, mirroring how incoming media already works.
+//
+// All four methods resolve the device_id from instanceID, normalise the
+// recipient to a JID, and delegate to the corresponding Client.*Multipart
+// helper. Empty MIME types are passed through; GOWA sniffs them when needed.
+
+// compile-time guard: GowaAdapter satisfies provider.MediaUploader.
+var _ provider.MediaUploader = (*GowaAdapter)(nil)
+
+// SendImageBytes uploads image bytes directly to GOWA's /send/image.
+func (a *GowaAdapter) SendImageBytes(ctx context.Context, instanceID, to string, data []byte, filename, mimeType, caption string) (string, error) {
+	if len(data) == 0 {
+		return "", fmt.Errorf("gowa: SendImageBytes received empty data")
+	}
+	deviceID := a.resolveDeviceID(ctx, instanceID)
+	recipient := normaliseGowaRecipient(to)
+	return a.withRetry(ctx, func(ctx context.Context) (string, error) {
+		return a.client.SendImageMultipart(ctx, deviceID, recipient, caption, filename, mimeType, data)
+	})
+}
+
+// SendDocumentBytes uploads document bytes directly to GOWA's /send/file.
+func (a *GowaAdapter) SendDocumentBytes(ctx context.Context, instanceID, to string, data []byte, filename, mimeType, caption string) (string, error) {
+	if len(data) == 0 {
+		return "", fmt.Errorf("gowa: SendDocumentBytes received empty data")
+	}
+	deviceID := a.resolveDeviceID(ctx, instanceID)
+	recipient := normaliseGowaRecipient(to)
+	return a.withRetry(ctx, func(ctx context.Context) (string, error) {
+		return a.client.SendFileMultipart(ctx, deviceID, recipient, caption, filename, mimeType, data)
+	})
+}
+
+// SendVideoBytes uploads video bytes directly to GOWA's /send/video.
+func (a *GowaAdapter) SendVideoBytes(ctx context.Context, instanceID, to string, data []byte, filename, mimeType, caption string) (string, error) {
+	if len(data) == 0 {
+		return "", fmt.Errorf("gowa: SendVideoBytes received empty data")
+	}
+	deviceID := a.resolveDeviceID(ctx, instanceID)
+	recipient := normaliseGowaRecipient(to)
+	return a.withRetry(ctx, func(ctx context.Context) (string, error) {
+		return a.client.SendVideoMultipart(ctx, deviceID, recipient, caption, filename, mimeType, data)
+	})
+}
+
+// SendAudioBytes uploads audio bytes directly to GOWA's /send/audio.
+func (a *GowaAdapter) SendAudioBytes(ctx context.Context, instanceID, to string, data []byte, filename, mimeType string) (string, error) {
+	if len(data) == 0 {
+		return "", fmt.Errorf("gowa: SendAudioBytes received empty data")
+	}
+	deviceID := a.resolveDeviceID(ctx, instanceID)
+	recipient := normaliseGowaRecipient(to)
+	return a.withRetry(ctx, func(ctx context.Context) (string, error) {
+		return a.client.SendAudioMultipart(ctx, deviceID, recipient, filename, mimeType, data)
+	})
+}
+
+// normaliseGowaRecipient turns a bare phone number into a WhatsApp JID. JIDs
+// are passed through unchanged. This mirrors the heuristic in SendAudio.
+func normaliseGowaRecipient(to string) string {
+	if strings.Contains(to, "@") {
+		return to
+	}
+	return to + "@s.whatsapp.net"
 }
 
 // MarkRead marks a message as read via GOWA POST /message/:id/read.
@@ -212,7 +328,9 @@ func (a *GowaAdapter) GetMediaURL(ctx context.Context, instanceID, mediaID strin
 func (a *GowaAdapter) DownloadMedia(ctx context.Context, instanceID, mediaURL string) ([]byte, error) {
 	// Treat mediaURL as an absolute URL first; fall back to GOWA message_id.
 	if isAbsoluteHTTPURL(mediaURL) {
-		return a.client.FetchBytes(ctx, mediaURL)
+		// Pass the resolved device ID so FetchBytes can attach X-Device-Id for
+		// GOWA-hosted URLs (required by the device-scoping middleware in v8).
+		return a.client.FetchBytes(ctx, mediaURL, a.resolveDeviceID(ctx, instanceID))
 	}
 	deviceID := a.resolveDeviceID(ctx, instanceID)
 	resp, err := a.client.DownloadMedia(ctx, deviceID, mediaURL, "")
@@ -222,7 +340,7 @@ func (a *GowaAdapter) DownloadMedia(ctx context.Context, instanceID, mediaURL st
 	if resp.FileURL == "" {
 		return nil, fmt.Errorf("gowa: GOWA returned no file_url for message_id=%s", mediaURL)
 	}
-	return a.client.FetchBytes(ctx, resp.FileURL)
+	return a.client.FetchBytes(ctx, resp.FileURL, deviceID)
 }
 
 // UploadMedia uploads media bytes. GOWA's send endpoints expect a public URL,

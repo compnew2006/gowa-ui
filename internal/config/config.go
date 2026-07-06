@@ -14,6 +14,7 @@ var envTopLevelSections = []string{
 	"rate_limit",
 	"whatsmeow",
 	"whatsapp",
+	"gowa",
 	"observability",
 	"license",
 	"facebook_oauth",
@@ -36,6 +37,7 @@ type Config struct {
 	JWT           JWTConfig           `koanf:"jwt"`
 	WhatsApp      WhatsAppConfig      `koanf:"whatsapp"`
 	Whatsmeow     WhatsmeowConfig     `koanf:"whatsmeow"`
+	Gowa          GowaConfig          `koanf:"gowa"`
 	Observability ObservabilityConfig `koanf:"observability"`
 	AI            AIConfig            `koanf:"ai"`
 	Storage       StorageConfig       `koanf:"storage"`
@@ -104,7 +106,61 @@ type WhatsAppConfig struct {
 	WebhookVerifyToken string `koanf:"webhook_verify_token"`
 	APIVersion         string `koanf:"api_version"`
 	BaseURL            string `koanf:"base_url"` // Meta Graph API base URL
-	Provider           string `koanf:"provider"` // meta, whatsmeow
+	Provider           string `koanf:"provider"` // meta, whatsmeow, gowa
+}
+
+// GowaConfig configures the GOWA HTTP backend provider.
+//
+// When cfg.WhatsApp.Provider == "gowa", whatomate forwards all messaging and
+// device-lifecycle operations to an external GOWA server (see
+// https://github.com/aldinokemal/go-whatsapp-web-multidevice) instead of
+// driving Meta Cloud API or whatsmeow directly.
+//
+// All fields are required for the gowa provider to function; whatomate will
+// refuse to boot if Provider=="gowa" and BaseURL is empty (see ValidateGowa).
+type GowaConfig struct {
+	// BaseURL is the root URL of the GOWA REST API, e.g. "http://gowa:3000".
+	// Any configured AppBasePath on the GOWA side must be included here.
+	BaseURL string `koanf:"base_url"`
+
+	// BasicAuthUser and BasicAuthPassword are sent as HTTP Basic credentials on
+	// every request when GOWA's WHATSAPP_APP_BASIC_AUTH is configured.
+	// Leave both empty only if GOWA is deployed without basic auth.
+	BasicAuthUser     string `koanf:"basic_auth_user"`
+	BasicAuthPassword string `koanf:"basic_auth_password"`
+
+	// WebhookSecret is the HMAC-SHA256 shared secret used to:
+	//   (a) verify the X-Hub-Signature-256 header on inbound events received at
+	//       WebhookCallbackURL, and
+	//   (b) sign the per-device webhook_url configured on each GOWA device so
+	//       GOWA can optionally authenticate whatomate's listener (GOWA itself
+	//       does not sign outbound webhooks; this secret is stored in GOWA's
+	//       per-device webhook_secret field for symmetry/future use).
+	// Must be >= 16 bytes; reject the default of "secret" at boot.
+	WebhookSecret string `koanf:"webhook_secret"`
+
+	// WebhookCallbackURL is the public base URL whatomate exposes to receive
+	// inbound GOWA events, e.g. "https://whatomate.example.com". The receiver
+	// endpoint /api/gowa/webhook is appended automatically by the adapter.
+	WebhookCallbackURL string `koanf:"webhook_callback_url"`
+
+	// RequestTimeoutSeconds is the per-HTTP-call timeout used by the GOWA
+	// client. Default 30s. Increase for slow GOWA deployments.
+	RequestTimeoutSeconds int `koanf:"request_timeout_seconds"`
+
+	// MaxRetries is the number of retry attempts for retryable failures
+	// (HTTP 429 and 5xx). 0 = no retries. Default 3.
+	MaxRetries int `koanf:"max_retries"`
+
+	// PollingEnabled toggles the background reconciler that pulls chats and
+	// messages from GOWA on an interval to recover events missed by the
+	// webhook channel. Default true.
+	PollingEnabled bool `koanf:"polling_enabled"`
+
+	// PollingIntervalSeconds is the delay between reconciliation sweeps per
+	// active instance. Default 30. Lower values reduce latency at the cost of
+	// GOWA load.
+	PollingIntervalSeconds int `koanf:"polling_interval_seconds"`
 }
 
 type WhatsmeowConfig struct {
@@ -339,6 +395,19 @@ func setDefaults(cfg *Config) {
 	}
 	if cfg.WhatsApp.Provider == "" {
 		cfg.WhatsApp.Provider = "meta"
+	}
+	// GOWA backend defaults. BaseURL is intentionally left empty — the gowa
+	// provider refuses to boot without an explicit endpoint (see ValidateGowa).
+	if cfg.Gowa.RequestTimeoutSeconds == 0 {
+		cfg.Gowa.RequestTimeoutSeconds = 30
+	}
+	if cfg.Gowa.MaxRetries == 0 {
+		cfg.Gowa.MaxRetries = 3
+	}
+	// Polling defaults to enabled so the reconciler acts as a safety net for
+	// missed webhook events. Operators can disable it via polling_enabled=false.
+	if cfg.Gowa.PollingIntervalSeconds == 0 {
+		cfg.Gowa.PollingIntervalSeconds = 30
 	}
 	if cfg.FacebookOAuth.APIVersion == "" {
 		cfg.FacebookOAuth.APIVersion = "v20.0"

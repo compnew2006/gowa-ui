@@ -12,7 +12,6 @@ import { getErrorMessage } from "@/lib/api-utils";
 import {
   Bot,
   Key,
-  Workflow,
   Sparkles,
   Power,
   Settings,
@@ -40,7 +39,6 @@ interface Stats {
   ai_responses: number;
   agent_transfers: number;
   keywords_count: number;
-  flows_count: number;
   ai_contexts_count: number;
 }
 
@@ -60,7 +58,6 @@ const stats = ref<Stats>({
   ai_responses: 0,
   agent_transfers: 0,
   keywords_count: 0,
-  flows_count: 0,
   ai_contexts_count: 0,
 });
 
@@ -270,36 +267,6 @@ const statCards = computed(() => [
             <div class="px-6 pb-6">
               <p class="text-sm text-muted-foreground">
                 {{ $t("chatbot.keywordRulesDesc") }}
-              </p>
-            </div>
-          </RouterLink>
-
-          <RouterLink
-            to="/chatbot/flows"
-            class="card-interactive h-full rounded-[calc(var(--radius)+0.25rem)] border border-border bg-card/95 shadow-sm"
-          >
-            <div class="p-6">
-              <div class="flex items-center gap-3">
-                <div
-                  class="h-10 w-10 rounded-lg bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center shadow-lg shadow-purple-500/20"
-                >
-                  <Workflow class="h-5 w-5 text-white" />
-                </div>
-                <div>
-                  <h3 class="text-lg font-semibold text-foreground">
-                    {{ $t("chatbot.conversationFlows") }}
-                  </h3>
-                  <p class="text-sm text-muted-foreground">
-                    {{
-                      $t("chatbot.flowsCreated", { count: stats.flows_count })
-                    }}
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div class="px-6 pb-6">
-              <p class="text-sm text-muted-foreground">
-                {{ $t("chatbot.flowsDesc") }}
               </p>
             </div>
           </RouterLink>

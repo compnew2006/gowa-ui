@@ -129,6 +129,16 @@ import {
 } from "@/lib/chat-export";
 import { getMessageSenderPhone, isGroupContact } from "@/lib/group-chat";
 import {
+  getContentBody,
+  getMessageContentRaw,
+  getReplyPreviewMediaURL,
+  shouldShowReplyPreviewThumbnail,
+  getLocationData,
+  getContactsData,
+  getGoogleMapsUrl,
+  getPollData,
+} from "@/lib/messageContent";
+import {
   downloadMessageMedia,
   resolveMediaFilename,
 } from "@/lib/media-actions";
@@ -1066,6 +1076,14 @@ const isCurrentGroupChat = computed(() =>
 const isCurrentChatClosed = computed(
   () => contactsStore.currentContact?.status === "closed",
 );
+// Inbound typing indicator: true when the contact (1:1 chat) is composing on
+// WhatsApp. Groups/channels never deliver chat presence, so this is always
+// false there.
+const isCurrentContactTyping = computed(() => {
+  const contact = contactsStore.currentContact;
+  if (!contact || isCurrentGroupChat.value) return false;
+  return contactsStore.isContactTyping(contact.id);
+});
 
 const currentUserUnclaimedAccess = computed(() => {
   const restrictions = authStore.user?.settings?.send_restrictions || {};
@@ -2455,17 +2473,6 @@ function resetTextareaHeight() {
   textarea.style.height = "auto";
 }
 
-function getContentBody(content: unknown): string {
-  if (typeof content === "string") {
-    return content;
-  }
-  if (content && typeof content === "object" && "body" in content) {
-    const body = (content as { body?: unknown }).body;
-    return typeof body === "string" ? body : "";
-  }
-  return "";
-}
-
 function getReplyPreviewContent(message: Message): string {
   if (!message.reply_to_message) return "";
   const reply = message.reply_to_message;
@@ -2514,32 +2521,6 @@ function getReplyPreviewContent(message: Message): string {
   if (reply.message_type === "sticker") return "[Sticker]";
   if (reply.message_type === "poll") return "[Poll]";
   return "[Message]";
-}
-
-function getReplyPreviewMediaURL(message: Message): string {
-  const rawURL =
-    typeof message.reply_to_message?.media_url === "string"
-      ? message.reply_to_message.media_url.trim()
-      : "";
-  if (!rawURL) return "";
-
-  const lower = rawURL.toLowerCase();
-  if (
-    lower.startsWith("http://") ||
-    lower.startsWith("https://") ||
-    lower.startsWith("data:") ||
-    rawURL.startsWith("/")
-  ) {
-    return rawURL;
-  }
-  return "";
-}
-
-function shouldShowReplyPreviewThumbnail(message: Message): boolean {
-  return (
-    message.reply_to_message?.message_type === "image" &&
-    getReplyPreviewMediaURL(message) !== ""
-  );
 }
 
 function resolveReplyPreviewMediaType(message: Message): ChatMediaViewerType {
@@ -3195,257 +3176,10 @@ function shouldShowDateSeparator(index: number): boolean {
   return currentDate.toDateString() !== prevDate.toDateString();
 }
 
-function getMessageContentRaw(message: Message): string {
-  if (message.message_type === "text") {
-    return getContentBody(message.content);
-  }
-  if (message.message_type === "button_reply") {
-    // Button reply stores the selected button title in content
-    return getContentBody(message.content);
-  }
-  if (message.message_type === "interactive") {
-    // Interactive messages store body text in content (string) or content.body or interactive_data.body
-    const body = getContentBody(message.content);
-    if (body) return body;
-    if (message.interactive_data?.body) {
-      return message.interactive_data.body;
-    }
-    return "[Interactive Message]";
-  }
-  // For media messages, return caption if available (media is displayed inline)
-  if (
-    message.message_type === "image" ||
-    message.message_type === "video" ||
-    message.message_type === "sticker"
-  ) {
-    return getContentBody(message.content);
-  }
-  if (message.message_type === "audio") {
-    return ""; // Audio doesn't have captions
-  }
-  if (message.message_type === "document") {
-    return getContentBody(message.content);
-  }
-  if (message.message_type === "template") {
-    // Show actual content if available (campaign messages), otherwise fallback
-    return getContentBody(message.content) || "[Template Message]";
-  }
-  if (message.message_type === "location") {
-    return ""; // Location is displayed as a map/card, not text
-  }
-  if (
-    message.message_type === "contacts" ||
-    message.message_type === "contact"
-  ) {
-    return ""; // Contacts are displayed as a card, not text
-  }
-  if (message.message_type === "unsupported") {
-    return ""; // Displayed as a visual card, not text
-  }
-  if (message.message_type === "poll") {
-    return getContentBody(message.content) || "";
-  }
-  return "[Message]";
-}
-
 function getMessageContent(message: Message): string {
   const rawContent = getMessageContentRaw(message);
   const normalizedContent = normalizeDeletedMessageText(rawContent);
   return applyMentionDisplayNames(normalizedContent);
-}
-
-interface LocationData {
-  latitude: number;
-  longitude: number;
-  name?: string;
-  address?: string;
-}
-
-interface ContactData {
-  name: string;
-  phones?: string[];
-}
-
-function getLocationData(message: Message): LocationData | null {
-  if (message.message_type !== "location") return null;
-  try {
-    // Content is stored as JSON string in body
-    const body = getContentBody(message.content) || message.content;
-    if (typeof body === "string") {
-      return JSON.parse(body);
-    }
-    return body as LocationData;
-  } catch {
-    return null;
-  }
-}
-
-function getContactsData(message: Message): ContactData[] {
-  if (message.message_type !== "contacts" && message.message_type !== "contact")
-    return [];
-  try {
-    // Content is stored as JSON string in body
-    const body = getContentBody(message.content) || message.content;
-    if (typeof body === "string") {
-      return JSON.parse(body);
-    }
-    return body as ContactData[];
-  } catch {
-    return [];
-  }
-}
-
-function getGoogleMapsUrl(location: LocationData): string {
-  return `https://www.google.com/maps?q=${location.latitude},${location.longitude}`;
-}
-
-interface PollData {
-  question: string;
-  options: string[];
-  max_selections: number;
-  votes: Record<string, number>;
-  total_votes: number;
-  selected_options: string[];
-}
-
-function normalizePollOption(raw: unknown): string {
-  if (typeof raw === "string") return raw.trim();
-  if (!raw || typeof raw !== "object") return "";
-
-  const option = raw as Record<string, unknown>;
-  for (const key of ["option_name", "name", "title", "text", "label"]) {
-    const value = option[key];
-    if (typeof value === "string" && value.trim() !== "") {
-      return value.trim();
-    }
-  }
-
-  const nestedReply = option.reply;
-  if (nestedReply && typeof nestedReply === "object") {
-    return normalizePollOption(nestedReply);
-  }
-
-  return "";
-}
-
-function normalizePollOptions(raw: unknown): string[] {
-  if (!Array.isArray(raw)) return [];
-  const seen = new Set<string>();
-  const options: string[] = [];
-
-  for (const item of raw) {
-    const option = normalizePollOption(item);
-    if (!option || seen.has(option)) continue;
-    seen.add(option);
-    options.push(option);
-  }
-
-  return options;
-}
-
-function normalizePollMaxSelections(raw: unknown): number {
-  if (typeof raw === "number" && Number.isFinite(raw)) return raw;
-  if (typeof raw === "string") {
-    const parsed = Number.parseInt(raw, 10);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-  return 0;
-}
-
-function normalizePollVotes(raw: unknown): Record<string, number> {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
-  const votes: Record<string, number> = {};
-  for (const [option, count] of Object.entries(raw as Record<string, unknown>)) {
-    const normalizedOption = option.trim();
-    const normalizedCount =
-      typeof count === "number" ? count : Number.parseInt(String(count), 10);
-    if (normalizedOption && Number.isFinite(normalizedCount)) {
-      votes[normalizedOption] = Math.max(0, normalizedCount);
-    }
-  }
-  return votes;
-}
-
-function normalizePollSelectedOptions(raw: unknown): string[] {
-  if (!Array.isArray(raw)) return [];
-  return raw
-    .filter((value): value is string => typeof value === "string")
-    .map((value) => value.trim())
-    .filter(Boolean);
-}
-
-function parsePollContentData(content: unknown): Record<string, unknown> | null {
-  if (!content || typeof content !== "object") {
-    if (typeof content !== "string") return null;
-    const trimmed = content.trim();
-    if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return null;
-    try {
-      const parsed = JSON.parse(trimmed);
-      return parsed && typeof parsed === "object"
-        ? (parsed as Record<string, unknown>)
-        : null;
-    } catch {
-      return null;
-    }
-  }
-
-  if ("body" in content) {
-    return parsePollContentData((content as Record<string, unknown>).body);
-  }
-
-  return content as Record<string, unknown>;
-}
-
-function getPollData(message: Message): PollData | null {
-  if (message.message_type !== "poll") return null;
-
-  const interactive = (message.interactive_data || {}) as Record<string, unknown>;
-  if (interactive.type === "poll_vote") return null;
-
-  const nestedPoll = interactive.poll;
-  const d =
-    nestedPoll && typeof nestedPoll === "object"
-      ? (nestedPoll as Record<string, unknown>)
-      : interactive;
-  const contentData = parsePollContentData(message.content);
-
-  const options = normalizePollOptions(
-    d.options || d.poll_options || contentData?.options || contentData?.poll_options,
-  );
-
-  if (interactive.type && interactive.type !== "poll" && options.length === 0) {
-    return null;
-  }
-
-  const rawQuestion =
-    d.question || d.name || d.title || contentData?.question || contentData?.name;
-  const question =
-    typeof rawQuestion === "string" && rawQuestion.trim() !== ""
-      ? rawQuestion.trim()
-      : getContentBody(message.content) || "Poll";
-
-  const votes = normalizePollVotes(d.votes || d.vote_counts || contentData?.votes);
-  const selectedOptions = normalizePollSelectedOptions(
-    d.selected_options || d.last_selected_options || contentData?.selected_options,
-  );
-  const totalVotes =
-    normalizePollMaxSelections(d.total_votes || d.totalVotes || contentData?.total_votes) ||
-    Object.values(votes).reduce((sum, count) => sum + count, 0);
-
-  return {
-    question,
-    options,
-    max_selections: normalizePollMaxSelections(
-      d.max_selections ||
-        d.maxSelections ||
-        d.selectable_options_count ||
-        contentData?.max_selections ||
-        contentData?.selectable_options_count,
-    ),
-    votes,
-    total_votes: totalVotes,
-    selected_options: selectedOptions,
-  };
 }
 
 const pollVoteSending = ref<Map<string, boolean>>(new Map())
@@ -5005,7 +4739,19 @@ async function sendMediaMessage() {
                   {{ $t("chat.pausedStatus") }}
                 </Badge>
               </div>
-              <p class="text-[11px] text-muted-foreground">
+              <p
+                v-if="isCurrentContactTyping"
+                class="text-[11px] text-primary/90 flex items-center gap-1"
+                :aria-label="$t('chat.typing')"
+              >
+                {{ $t("chat.typing") }}
+                <span class="inline-flex items-center gap-[2px]">
+                  <span class="typing-dot"></span>
+                  <span class="typing-dot"></span>
+                  <span class="typing-dot"></span>
+                </span>
+              </p>
+              <p v-else class="text-[11px] text-muted-foreground">
                 {{ contactsStore.currentContact.phone_number }}
               </p>
             </div>
@@ -5938,6 +5684,28 @@ async function sendMediaMessage() {
                         message.message_type.charAt(0).toUpperCase() +
                         message.message_type.slice(1)
                       }}]<span class="chat-bubble-time"
+                        ><span>{{ formatMessageTime(message.created_at) }}</span
+                        ><component
+                          v-if="
+                            message.direction === 'outgoing' &&
+                            !isSystemEventMessage(message)
+                          "
+                          :is="getMessageStatusIcon(message.status)"
+                          :class="[
+                            'h-4 w-4 status-icon',
+                            getMessageStatusClass(message.status),
+                          ]" /></span
+                    ></span>
+                    <!-- GOWA marker: content not synced yet (~7s) -->
+                    <span
+                      v-else-if="message.message_type === 'ignore'"
+                      class="inline-flex items-center gap-1.5 text-muted-foreground italic"
+                    >
+                      <span
+                        class="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-current"
+                      ></span>
+                      <span>{{ t("chat.messageLoading") }}</span>
+                      <span class="chat-bubble-time not-italic"
                         ><span>{{ formatMessageTime(message.created_at) }}</span
                         ><component
                           v-if="
@@ -6962,5 +6730,43 @@ async function sendMediaMessage() {
 .sticky-date-enter-from,
 .sticky-date-leave-to {
   opacity: 0;
+}
+
+/* Inbound typing indicator — three bouncing dots next to "typing…" text. */
+.typing-dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 9999px;
+  background-color: currentColor;
+  display: inline-block;
+  animation: typing-bounce 1.2s ease-in-out infinite;
+}
+
+.typing-dot:nth-child(2) {
+  animation-delay: 0.18s;
+}
+
+.typing-dot:nth-child(3) {
+  animation-delay: 0.36s;
+}
+
+@keyframes typing-bounce {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .typing-dot {
+    animation: none;
+    opacity: 0.7;
+  }
 }
 </style>

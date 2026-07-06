@@ -91,14 +91,15 @@ function requestPairCode() {
             <img
               v-if="qrCode.startsWith('http://') || qrCode.startsWith('https://') || qrCode.startsWith('data:')"
               :src="qrCode"
-              class="w-[320px] h-[320px]"
+              class="w-[400px] h-[400px]"
+              style="image-rendering: pixelated; image-rendering: crisp-edges"
             />
-            <QRCode v-else :value="qrCode" :size="320" level="M" />
+            <QRCode v-else :value="qrCode" :size="400" level="M" />
           </div>
           <div
             v-else
             :class="[
-              'flex flex-col items-center justify-center h-[360px] w-[360px] rounded-2xl border mx-auto',
+              'flex flex-col items-center justify-center h-[420px] w-[420px] rounded-2xl border mx-auto',
               errorMessage
                 ? 'border-destructive/30 bg-destructive/5'
                 : 'border-border bg-muted/30 animate-pulse',

@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/compnew2006/whatomate/internal/websocket"
 	"github.com/google/uuid"
 	"go.mau.fi/whatsmeow/types"
+	"go.mau.fi/whatsmeow/types/events"
 )
 
 var (
@@ -96,4 +99,71 @@ func normalizeTypingPresencePhone(value string) string {
 		}
 	}
 	return builder.String()
+}
+
+// SubscribeChatPresence subscribes the instance to a contact's chat presence so
+// WhatsApp starts delivering *events.ChatPresence (typing) updates for that chat.
+// WhatsApp only emits typing events for direct chats you have subscribed to.
+// Best-effort: errors are logged and returned but do not interrupt chat UX.
+func (cm *ConnectionManager) SubscribeChatPresence(ctx context.Context, instanceID uuid.UUID, recipient string) error {
+	if cm == nil {
+		return ErrTypingPresenceInstanceUnavailable
+	}
+
+	client := cm.GetClient(instanceID)
+	if client == nil || !client.IsConnected() {
+		return ErrTypingPresenceInstanceUnavailable
+	}
+
+	chatJID, err := parseTypingPresenceRecipient(recipient)
+	if err != nil {
+		return err
+	}
+	if !isDirectChatJID(chatJID) {
+		return ErrTypingPresenceUnsupportedChat
+	}
+
+	if err := client.SubscribePresence(ctx, chatJID); err != nil {
+		return fmt.Errorf("subscribe chat presence: %w", err)
+	}
+	return nil
+}
+
+// HandleChatPresence processes an inbound *events.ChatPresence event from a
+// contact and broadcasts a typing WebSocket event to the organization so the
+// agent UI can show "typing…". It is best-effort: unknown contacts or non-direct
+// chats are silently ignored.
+func (cm *ConnectionManager) HandleChatPresence(evt *events.ChatPresence, instanceID, orgID uuid.UUID) {
+	if cm == nil || evt == nil || cm.hub == nil {
+		return
+	}
+
+	// ChatPresence embeds MessageSource; for 1:1 chats the sender is the contact.
+	senderJID := evt.Sender.ToNonAD()
+	if !isDirectChatJID(senderJID) || senderJID.User == "" {
+		return
+	}
+
+	// Resolve the contact by phone + instance — typing from an unknown contact
+	// has no chat to display in, so we skip silently rather than create a row.
+	var contact models.Contact
+	if err := cm.db.WithContext(context.Background()).
+		Where("organization_id = ? AND phone_number = ? AND instance_id = ?",
+			orgID, senderJID.User, instanceID).
+		First(&contact).Error; err != nil {
+		return
+	}
+
+	state := strings.ToLower(string(evt.State))
+	if state != string(types.ChatPresenceComposing) && state != string(types.ChatPresencePaused) {
+		return
+	}
+
+	cm.hub.BroadcastToOrg(orgID, websocket.WSMessage{
+		Type: websocket.TypeTyping,
+		Payload: websocket.TypingPayload{
+			ContactID: contact.ID.String(),
+			State:     state,
+		},
+	})
 }

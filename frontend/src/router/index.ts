@@ -1,8 +1,6 @@
 import { createRouter, createWebHistory } from "vue-router";
 import { useAuthStore } from "@/stores/auth";
 import { useConfigStore } from "@/stores/config";
-import { useLicenseStore } from "@/stores/license";
-import { moduleKeyForPath } from "@/modules/registry";
 
 // Permission-based route meta type
 declare module "vue-router" {
@@ -43,12 +41,6 @@ const router = createRouter({
       meta: { requiresAuth: false },
     },
     {
-      path: "/activate",
-      name: "activate",
-      component: () => import("@/views/public/ActivateLicenseView.vue"),
-      meta: { requiresAuth: false },
-    },
-    {
       path: "/pricing",
       alias: ["/plans", "/offer"],
       name: "marketing-redirect",
@@ -60,11 +52,6 @@ const router = createRouter({
       component: () => import("@/components/layout/AppLayout.vue"),
       meta: { requiresAuth: true },
       children: [
-        {
-          path: "license-cleanup",
-          name: "license-cleanup",
-          component: () => import("@/views/settings/LicenseCleanupView.vue"),
-        },
         {
           path: "",
           redirect: "/chat",
@@ -101,18 +88,6 @@ const router = createRouter({
           meta: { permission: "templates", metaOnly: true },
         },
         {
-          path: "flows",
-          name: "flows",
-          component: () => import("@/views/settings/FlowsView.vue"),
-          meta: { permission: "flows.whatsapp", metaOnly: true },
-        },
-        {
-          path: "whatsapp/campaigns",
-          name: "campaigns",
-          component: () => import("@/views/settings/CampaignsView.vue"),
-          meta: { permission: "campaigns" },
-        },
-        {
           path: "whatsapp/instances",
           name: "instances",
           component: () => import("@/views/settings/InstancesView.vue"),
@@ -139,24 +114,6 @@ const router = createRouter({
           name: "chatbot-keywords",
           component: () => import("@/views/chatbot/KeywordsView.vue"),
           meta: { permission: "chatbot.keywords" },
-        },
-        {
-          path: "chatbot/flows",
-          name: "chatbot-flows",
-          component: () => import("@/views/chatbot/ChatbotFlowsView.vue"),
-          meta: { permission: "flows.chatbot" },
-        },
-        {
-          path: "chatbot/flows/new",
-          name: "chatbot-flow-new",
-          component: () => import("@/views/chatbot/ChatbotFlowBuilderView.vue"),
-          meta: { permission: "flows.chatbot" },
-        },
-        {
-          path: "chatbot/flows/:id/edit",
-          name: "chatbot-flow-edit",
-          component: () => import("@/views/chatbot/ChatbotFlowBuilderView.vue"),
-          meta: { permission: "flows.chatbot" },
         },
         {
           path: "chatbot/ai",
@@ -247,54 +204,10 @@ const router = createRouter({
           redirect: "/whatsapp/closed-chats",
         },
         {
-          path: "settings/whatsapp-filter",
-          redirect: "/whatsapp/whatsapp-filter",
-        },
-        {
           path: "settings/tags",
           name: "tags",
           component: () => import("@/views/settings/TagsView.vue"),
           meta: { permission: "tags" },
-        },
-        {
-          path: "whatsapp/whatsapp-filter",
-          name: "whatsapp-filter",
-          component: () => import("@/views/settings/WhatsAppFilter.vue"),
-          meta: { permission: "wa_filter" },
-        },
-        {
-          path: "settings/group-search",
-          redirect: "/whatsapp/group-search",
-        },
-        {
-          path: "whatsapp/group-search",
-          name: "group-search",
-          component: () => import("@/views/settings/GroupSearch.vue"),
-          meta: { permission: "campaigns" },
-        },
-        {
-          path: "whatsapp/group-join-campaigns",
-          name: "group-join-campaigns",
-          component: () => import("@/views/settings/GroupJoinCampaignsView.vue"),
-          meta: { permission: "campaigns" },
-        },
-        {
-          path: "whatsapp/group-extraction",
-          name: "group-extraction",
-          component: () => import("@/views/settings/GroupExtractionView.vue"),
-          meta: { permission: "campaigns" },
-        },
-        {
-          path: "whatsapp/member-extraction",
-          name: "member-extraction",
-          component: () => import("@/views/settings/MemberExtractionView.vue"),
-          meta: { permission: "campaigns" },
-        },
-        {
-          path: "whatsapp/group-participants",
-          name: "group-participants",
-          component: () => import("@/views/settings/GroupParticipants.vue"),
-          meta: { title: "Group Members", icon: "Users", permission: "campaigns" },
         },
         {
           path: "whatsapp/extract",
@@ -313,12 +226,6 @@ const router = createRouter({
           name: "roles",
           component: () => import("@/views/settings/RolesView.vue"),
           meta: { permission: "roles" },
-        },
-        {
-          path: "settings/audit-log",
-          name: "audit-log",
-          component: () => import("@/views/settings/AuditLogView.vue"),
-          meta: { permission: "audit" },
         },
         {
           path: "settings/teams",
@@ -353,24 +260,6 @@ const router = createRouter({
           name: "sso-settings",
           component: () => import("@/views/settings/SSOSettingsView.vue"),
           meta: { permission: "settings.sso" },
-        },
-        {
-          path: "settings/license",
-          name: "license-settings",
-          component: () => import("@/views/settings/LicenseSettingsView.vue"),
-          meta: { adminOnly: true },
-        },
-        {
-          path: "settings/modules",
-          name: "modules-settings",
-          component: () => import("@/views/settings/ModulesView.vue"),
-          meta: { permission: "organizations" },
-        },
-        {
-          path: "settings/custom-actions",
-          name: "custom-actions",
-          component: () => import("@/views/settings/CustomActionsView.vue"),
-          meta: { permission: "custom_actions" },
         },
         {
           path: "facebook",
@@ -465,7 +354,6 @@ const navigationOrder = [
     childPaths: [
       { path: "/chatbot", permission: "settings.chatbot" },
       { path: "/chatbot/keywords", permission: "chatbot.keywords" },
-      { path: "/chatbot/flows", permission: "flows.chatbot" },
       { path: "/chatbot/ai", permission: "chatbot.ai" },
       { path: "/chatbot/transfers", permission: "transfers" },
     ],
@@ -473,27 +361,18 @@ const navigationOrder = [
   { path: "/analytics/agents", permission: "analytics.agents" },
   { path: "/analytics/meta-insights", permission: "analytics" },
   { path: "/templates", permission: "templates" },
-  { path: "/flows", permission: "flows.whatsapp" },
-  { path: "/whatsapp/campaigns", permission: "campaigns" },
   {
     path: "/whatsapp",
     permission: "campaigns",
     childPaths: [
-      { path: "/whatsapp/campaigns", permission: "campaigns" },
-      { path: "/whatsapp/group-join-campaigns", permission: "campaigns" },
-      { path: "/whatsapp/group-extraction", permission: "campaigns" },
-      { path: "/whatsapp/member-extraction", permission: "campaigns" },
       { path: "/chatbot", permission: "settings.chatbot" },
       { path: "/chatbot/keywords", permission: "chatbot.keywords" },
-      { path: "/chatbot/flows", permission: "flows.chatbot" },
       { path: "/chatbot/ai", permission: "chatbot.ai" },
       { path: "/chatbot/transfers", permission: "transfers" },
       { path: "/whatsapp/contacts", permission: "contacts" },
       { path: "/whatsapp/canned-responses", permission: "canned_responses" },
       { path: "/whatsapp/saved-contents", permission: "saved_contents" },
       { path: "/whatsapp/closed-chats", permission: "chat" },
-      { path: "/whatsapp/whatsapp-filter", permission: "wa_filter" },
-      { path: "/whatsapp/group-search", permission: "campaigns" },
       { path: "/whatsapp/agent-selection", permission: "agent_selection" },
     ],
   },
@@ -525,10 +404,8 @@ const navigationOrder = [
       { path: "/settings/teams", permission: "teams" },
       { path: "/settings/users", permission: "users" },
       { path: "/settings/roles", permission: "roles" },
-      { path: "/settings/audit-log", permission: "audit" },
       { path: "/settings/api-keys", permission: "api_keys" },
       { path: "/settings/webhooks", permission: "webhooks" },
-      { path: "/settings/custom-actions", permission: "custom_actions" },
       { path: "/settings/sso", permission: "settings.sso" },
     ],
   },
@@ -592,24 +469,6 @@ function getFirstAccessibleRoute(
 // Navigation guard
 router.beforeEach(async (to, _from, next) => {
   const authStore = useAuthStore();
-  const licenseStore = useLicenseStore();
-
-  try {
-    await licenseStore.fetchBootstrap();
-  } catch {
-    if (to.name !== "activate") {
-      return next({ name: "activate" });
-    }
-  }
-
-  const allowWhileLocked =
-    to.name === "activate" ||
-    to.name === "license-settings" ||
-    to.name === "sso-callback";
-
-  if (licenseStore.isLocked && !allowWhileLocked) {
-    return next({ name: "activate", query: { redirect: to.fullPath } });
-  }
 
   // Check if route requires auth
   if (to.meta.requiresAuth !== false) {
@@ -651,47 +510,15 @@ router.beforeEach(async (to, _from, next) => {
     }
   } else {
     // Redirect to appropriate page if already logged in
-    if (authStore.isAuthenticated && to.name === "activate") {
-      if (isAdminUser(authStore)) {
-        return next({ name: "license-settings" });
-      }
-      return next({ path: getFirstAccessibleRoute(authStore) });
-    }
-
     if (
-      !licenseStore.isLocked &&
       authStore.isAuthenticated &&
       (to.name === "login" || to.name === "register")
     ) {
-      if (licenseStore.showQuotaOverage) {
-        return next({ name: "license-cleanup" });
-      }
       return next({ path: getFirstAccessibleRoute(authStore) });
     }
   }
 
-  const allowWhileOverage =
-    to.name === "activate" ||
-    to.name === "license-cleanup" ||
-    to.name === "sso-callback";
-
-  if (
-    licenseStore.showQuotaOverage &&
-    authStore.isAuthenticated &&
-    !allowWhileOverage
-  ) {
-    return next({ name: "license-cleanup", query: { redirect: to.fullPath } });
-  }
-
   const configStore = useConfigStore();
-  const moduleKey = moduleKeyForPath(to.path);
-  if (moduleKey && authStore.isAuthenticated) {
-    await configStore.fetchConfig();
-    if (!configStore.isModuleEnabled(moduleKey)) {
-      const fallback = getFirstAccessibleRoute(authStore);
-      return next({ path: fallback === to.path ? "/profile" : fallback });
-    }
-  }
 
   // Provider-based access: block Meta-only routes when using whatsmeow
   if (to.meta.metaOnly) {

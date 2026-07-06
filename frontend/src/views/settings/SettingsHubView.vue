@@ -18,7 +18,6 @@ import {
   Webhook,
   Zap,
   ShieldCheck,
-  ShieldAlert,
   ArrowRight,
   ArrowLeft,
   Flame
@@ -144,15 +143,6 @@ const tools: ToolEntry[] = [
     color: "from-lime-500/10 to-green-500/10 dark:from-lime-500/20 dark:to-green-500/20 text-lime-600 dark:text-lime-400 border-lime-200 dark:border-lime-500/20",
     hoverGlow: "group-hover:shadow-[0_0_30px_rgba(132,204,22,0.15)]",
     permission: "settings.sso",
-  },
-  {
-    nameKey: "nav.license",
-    descKey: "nav.licenseDesc",
-    path: "/settings/license",
-    icon: ShieldAlert,
-    color: "from-rose-500/10 to-pink-500/10 dark:from-rose-500/20 dark:to-pink-500/20 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-500/20",
-    hoverGlow: "group-hover:shadow-[0_0_30px_rgba(244,63,94,0.15)]",
-    adminOnly: true,
   },
 ];
 

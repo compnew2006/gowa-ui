@@ -205,9 +205,32 @@ async function fetchQRSnapshot(instanceID: string): Promise<boolean> {
     const payload = (response.data?.data || response.data) as {
       instance_id?: string;
       available?: boolean;
+      already_connected?: boolean;
       qr_code?: string;
       timeout_seconds?: number;
+      state?: string;
+      jid?: string;
     };
+
+    // Fast path: the backend reports the device is already paired (this is
+    // what GOWA's /qr endpoint returns once the user has scanned). Close
+    // the QR modal and update the instance status immediately, without
+    // waiting for the slower polling reconciler to push a WebSocket event.
+    if (payload?.already_connected === true) {
+      clearQRSnapshotPoll();
+      clearConnectWatchdog();
+      // Derive phone from JID ("201007181781@s.whatsapp.net" → "201007181781")
+      // when the backend surfaces it, so handleConnected can store it.
+      let phone: string | undefined;
+      if (payload.jid && payload.jid.includes("@")) {
+        phone = payload.jid.split("@")[0];
+      }
+      handleConnected({
+        instance_id: payload.instance_id || instanceID,
+        phone_number: phone,
+      });
+      return true;
+    }
 
     if (payload?.available !== true || !payload.qr_code) {
       return false;

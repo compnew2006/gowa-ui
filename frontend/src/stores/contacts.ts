@@ -347,6 +347,13 @@ export const useContactsStore = defineStore("contacts", () => {
   const selectedInstanceId = ref("");
   const selectedChatTypes = ref<ChatTypeFilter[]>([]);
   const replyingTo = ref<Message | null>(null);
+  // Contacts currently typing in their WhatsApp chat (inbound composing/paused
+  // presence). Maps contactID → unix-ms timestamp of the last "composing" event.
+  const typingContactTimestamps = ref<Record<string, number>>({});
+  // Safety net: clear a stuck "typing…" state if no paused/composing event
+  // refreshes it within this window. WhatsApp presence can be lossy.
+  const TYPING_TIMEOUT_MS = 8000;
+  const typingTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const accountFilter = ref<string | null>(null);
   const inFlightContactFetches = new Map<string, Promise<Contact | null>>();
   const recentContactFetches = new Map<string, RecentContactFetch>();
@@ -1362,6 +1369,46 @@ export const useContactsStore = defineStore("contacts", () => {
     }
   }
 
+  // setTyping updates the inbound typing state for a contact based on a
+  // composing/paused presence event from the backend. "composing" marks them
+  // typing; "paused" or any unknown value clears it. A self-clearing safety
+  // timer guards against WhatsApp presence loss leaving a stuck indicator.
+  function setTyping(contactId: string, state: string) {
+    if (!contactId) return;
+    const composing = state === "composing";
+    if (!composing) {
+      delete typingContactTimestamps.value[contactId];
+      const existing = typingTimers.get(contactId);
+      if (existing) {
+        clearTimeout(existing);
+        typingTimers.delete(contactId);
+      }
+      typingContactTimestamps.value = { ...typingContactTimestamps.value };
+      return;
+    }
+
+    typingContactTimestamps.value = {
+      ...typingContactTimestamps.value,
+      [contactId]: Date.now(),
+    };
+
+    const prev = typingTimers.get(contactId);
+    if (prev) clearTimeout(prev);
+    typingTimers.set(
+      contactId,
+      setTimeout(() => {
+        delete typingContactTimestamps.value[contactId];
+        typingContactTimestamps.value = { ...typingContactTimestamps.value };
+        typingTimers.delete(contactId);
+      }, TYPING_TIMEOUT_MS),
+    );
+  }
+
+  function isContactTyping(contactId: string): boolean {
+    if (!contactId) return false;
+    return Boolean(typingContactTimestamps.value[contactId]);
+  }
+
   function updateContactTags(contactId: string, tags: string[]) {
     // Update in contacts list
     const contact = contacts.value.find((c) => c.id === contactId);
@@ -1418,6 +1465,8 @@ export const useContactsStore = defineStore("contacts", () => {
     updateMessageStatus,
     patchMessage,
     patchContact,
+    setTyping,
+    isContactTyping,
     setCurrentContact,
     clearMessages,
     setAccountFilter,

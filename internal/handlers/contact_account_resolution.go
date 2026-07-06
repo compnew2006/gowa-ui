@@ -51,7 +51,7 @@ func (a *App) resolveOutboundMessageAccount(
 ) (*models.WhatsAppAccount, error) {
 	accountName := strings.TrimSpace(requestedAccount)
 
-	if a.isWhatsmeowProvider() {
+	if a.isWhatsmeowProvider() || a.isGowaProvider() {
 		if accountName == "" && selectedInstance != nil {
 			accountName = strings.TrimSpace(selectedInstance.PhoneNumber)
 		}

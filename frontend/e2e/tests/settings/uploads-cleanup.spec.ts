@@ -26,21 +26,6 @@ test.describe("Uploads cleanup settings", () => {
   }) => {
     let savedPayload: Record<string, unknown> | null = null;
 
-    await page.route("**/api/license/bootstrap", async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          data: {
-            enabled: true,
-            status: "active",
-            locked: false,
-            show_quota_overage: false,
-          },
-        }),
-      });
-    });
-
     await page.route("**/api/me", async (route) => {
       await route.fulfill({
         status: 200,

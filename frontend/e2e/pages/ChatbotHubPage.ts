@@ -9,7 +9,6 @@ export class ChatbotHubPage extends BasePage {
   readonly toggleButton: Locator
   readonly statusBadge: Locator
   readonly keywordsCard: Locator
-  readonly flowsCard: Locator
   readonly aiContextsCard: Locator
   readonly statsCards: Locator
 
@@ -21,7 +20,6 @@ export class ChatbotHubPage extends BasePage {
     this.statusBadge = page.locator('.border').filter({ hasText: /Active|Inactive/ }).first()
     // Target cards specifically by their full card title (not sidebar links)
     this.keywordsCard = page.getByRole('link', { name: /Keyword Rules.*rules/i })
-    this.flowsCard = page.getByRole('link', { name: /Conversation Flows.*flows/i })
     this.aiContextsCard = page.getByRole('link', { name: /AI Contexts.*contexts/i })
     this.statsCards = page.locator('.grid .rounded-lg.border')
   }
@@ -37,11 +35,6 @@ export class ChatbotHubPage extends BasePage {
 
   async navigateToKeywords() {
     await this.keywordsCard.click()
-    await this.page.waitForLoadState('networkidle')
-  }
-
-  async navigateToFlows() {
-    await this.flowsCard.click()
     await this.page.waitForLoadState('networkidle')
   }
 
@@ -74,7 +67,6 @@ export class ChatbotHubPage extends BasePage {
 
   async expectNavigationCardsVisible() {
     await expect(this.keywordsCard).toBeVisible()
-    await expect(this.flowsCard).toBeVisible()
     await expect(this.aiContextsCard).toBeVisible()
   }
 

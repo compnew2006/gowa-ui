@@ -27,10 +27,6 @@ test.describe('Chatbot Hub Page', () => {
     await expect(chatbotHubPage.keywordsCard).toBeVisible()
   })
 
-  test('should have flows navigation card', async () => {
-    await expect(chatbotHubPage.flowsCard).toBeVisible()
-  })
-
   test('should have AI contexts navigation card', async () => {
     await expect(chatbotHubPage.aiContextsCard).toBeVisible()
   })
@@ -70,11 +66,6 @@ test.describe('Navigation Cards', () => {
   test('should navigate to keywords page', async ({ page }) => {
     await chatbotHubPage.navigateToKeywords()
     await expect(page).toHaveURL(/\/chatbot\/keywords/)
-  })
-
-  test('should navigate to flows page', async ({ page }) => {
-    await chatbotHubPage.navigateToFlows()
-    await expect(page).toHaveURL(/\/chatbot\/flows/)
   })
 
   test('should navigate to AI contexts page', async ({ page }) => {
@@ -125,10 +116,6 @@ test.describe('Chatbot Hub Card Content', () => {
     await expect(chatbotHubPage.keywordsCard.locator('h3')).toContainText('Keyword Rules')
   })
 
-  test('should show flows card with title', async () => {
-    await expect(chatbotHubPage.flowsCard.locator('h3')).toContainText('Conversation Flows')
-  })
-
   test('should show AI contexts card with title', async () => {
     await expect(chatbotHubPage.aiContextsCard.locator('h3')).toContainText('AI Contexts')
   })
@@ -136,11 +123,6 @@ test.describe('Chatbot Hub Card Content', () => {
   test('should show keywords card description', async () => {
     // Description is the second p element (first is count)
     await expect(chatbotHubPage.keywordsCard.locator('p').last()).toContainText('automated responses')
-  })
-
-  test('should show flows card description', async () => {
-    // Description is the second p element (first is count)
-    await expect(chatbotHubPage.flowsCard.locator('p').last()).toContainText('multi-step conversation')
   })
 
   test('should show AI contexts card description', async () => {

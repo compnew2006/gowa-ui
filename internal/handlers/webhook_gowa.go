@@ -280,6 +280,14 @@ func (a *App) handleGowaMessage(ctx context.Context, instance *models.WhatsAppIn
 		MediaMimeType:     p.MimeType,
 		MediaFilename:     p.Filename,
 		Status:            messageStatusForDirection(p.IsFromMe),
+		// Store the authoritative chat JID GOWA persists the message under
+		// (p.ChatID, with the documented "from" fallback). Without this, the
+		// row has an empty conversation_id and downstream JID resolution in
+		// ServeMedia/RetryMediaDownload collapses to contact.phone_number,
+		// which can disagree with GOWA's stored chat_jid (status broadcasts,
+		// groups, LID-routed chats, repaired phones) and GOWA then rejects
+		// the download with "<wamid> does not belong to chat <jid>".
+		ConversationID: counterpartyJID,
 	}
 	// Bug fix: use the GOWA message timestamp rather than GORM's auto-insert
 	// time, so messages order correctly even when delivered/batched late.
@@ -326,6 +334,12 @@ func (a *App) handleGowaMessage(ctx context.Context, instance *models.WhatsAppIn
 			patch["media_mime_type"] = p.MimeType
 			patch["media_filename"] = p.Filename
 		}
+		// Backfill conversation_id for rows created before this field was
+		// persisted on the GOWA path. First-write-wins, mirroring the fields
+		// above — never overwrite a non-empty conversation_id.
+		if msg.ConversationID == "" && counterpartyJID != "" {
+			patch["conversation_id"] = counterpartyJID
+		}
 		// First-write-wins for ordering stability: never overwrite an existing
 		// non-zero created_at, but if the original row was inserted without a
 		// timestamp, fill it from the GOWA payload now.
@@ -353,6 +367,8 @@ func (a *App) handleGowaMessage(ctx context.Context, instance *models.WhatsAppIn
 					msg.MediaMimeType = v.(string)
 				case "media_filename":
 					msg.MediaFilename = v.(string)
+				case "conversation_id":
+					msg.ConversationID = v.(string)
 				case "created_at":
 					msg.CreatedAt = v.(time.Time)
 				}
@@ -693,18 +709,42 @@ func (a *App) handleGowaDeleted(ctx context.Context, instance *models.WhatsAppIn
 // upsertGowaContact resolves an existing Contact by (org, instance, phone) or
 // creates one. GOWA doesn't surface contact lists with stable IDs, so the
 // phone number is the canonical key.
+//
+// IMPORTANT: for group chats (phone is a group ID, detected via
+// isLikelyGroupID), the displayName passed in is the SENDER's push name
+// (the person who sent the message in the group), NOT the group name.
+// Overwriting contact.ProfileName with that sender name is what made the
+// group chat header flip to "sabrin abdaluity Mohamed" instead of showing
+// the group name. For groups we:
+//   - never overwrite an existing profile_name with a sender push name
+//   - on creation, resolve the real group name from GOWA's /chats
+//     (best-effort; falls back to a stable placeholder if unreachable)
 func (a *App) upsertGowaContact(ctx context.Context, instance *models.WhatsAppInstance, phone, displayName string) (*models.Contact, error) {
 	if phone == "" {
 		return nil, errors.New("empty phone")
 	}
+	isGroup := isLikelyGroupID(phone) || phone == "status" ||
+		strings.HasSuffix(phone, "@g.us") || strings.HasSuffix(phone, "@newsletter")
+
 	var contact models.Contact
 	err := a.DB.WithContext(ctx).
 		Where("organization_id = ? AND instance_id = ? AND phone_number = ?",
 			instance.OrganizationID, instance.ID, phone).
 		First(&contact).Error
 	if err == nil {
-		// Refresh display name if GOWA gave us a fresher one.
-		if displayName != "" && contact.ProfileName != displayName {
+		// Refresh display name — but never with the volatile WhatsApp push
+		// name (p.FromName) for an existing contact. The push name is the
+		// sender's self-set WhatsApp profile name, which they can change at
+		// any time and which frequently disagrees with the chat name GOWA
+		// stored (e.g. GOWA has "وجآته البشري" but the push name is
+		// "مكتبة الأركان المثالية" — the account's business display name).
+		// Overwriting on every incoming message caused the chat header to
+		// flip to whatever push name WhatsApp reported that day.
+		//
+		// For 1:1 contacts we only set the name from the push name when the
+		// row has NO name yet (first contact). For groups we never touch it
+		// here — group names are resolved once at creation.
+		if !isGroup && displayName != "" && strings.TrimSpace(contact.ProfileName) == "" {
 			a.DB.Model(&contact).Update("profile_name", displayName)
 			contact.ProfileName = displayName
 		}
@@ -713,11 +753,18 @@ func (a *App) upsertGowaContact(ctx context.Context, instance *models.WhatsAppIn
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
 	}
+
+	// Creating a new contact. For groups, resolve the real group name
+	// rather than using the sender's push name.
+	resolvedName := displayName
+	if isGroup {
+		resolvedName = a.resolveGowaGroupName(ctx, instance, phone)
+	}
 	contact = models.Contact{
 		OrganizationID:  instance.OrganizationID,
 		InstanceID:      &instance.ID,
 		PhoneNumber:     phone,
-		ProfileName:     displayName,
+		ProfileName:     resolvedName,
 		WhatsAppAccount: instance.Name,
 		Status:          models.ChatStatusPending,
 	}
@@ -725,6 +772,40 @@ func (a *App) upsertGowaContact(ctx context.Context, instance *models.WhatsAppIn
 		return nil, err
 	}
 	return &contact, nil
+}
+
+// resolveGowaGroupName fetches the human-readable name of a group chat from
+// GOWA's /chats endpoint. Best-effort: on any error or empty result, falls
+// back to a stable placeholder ("Group <id>") so the UI never shows a
+// sender's push name as the group identity.
+func (a *App) resolveGowaGroupName(ctx context.Context, instance *models.WhatsAppInstance, phone string) string {
+	// Build the full JID GOWA expects (handles both group ID shapes).
+	chatJID := resolveGowaChatJID("", phone)
+	if chatJID == "" {
+		chatJID = phone
+	}
+	if a.GowaClient == nil {
+		return "Group " + phone
+	}
+	deviceID := gowaDeviceID(instance)
+	listCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	// GOWA's /chats supports a Search filter — use the JID to narrow results.
+	resp, err := a.GowaClient.ListChats(listCtx, deviceID, gowa.ListChatsFilter{
+		Search: chatJID,
+		Limit:  5,
+	})
+	if err != nil {
+		a.Log.Debug("GOWA group name lookup failed; using placeholder",
+			"error", err, "phone", phone, "chat_jid", chatJID)
+		return "Group " + phone
+	}
+	for _, chat := range resp.Data {
+		if chat.JID == chatJID && strings.TrimSpace(chat.Name) != "" {
+			return chat.Name
+		}
+	}
+	return "Group " + phone
 }
 
 // broadcastGowaEvent pushes an event to all WS clients in the org. Failures

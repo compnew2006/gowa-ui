@@ -172,6 +172,9 @@ const WS_TYPE_REACTION_UPDATE = "reaction_update";
 // Poll vote types
 const WS_TYPE_POLL_VOTE_UPDATED = "poll_vote_updated";
 
+// Typing presence (contact composing/paused)
+const WS_TYPE_TYPING = "typing";
+
 // Agent transfer types
 const WS_TYPE_AGENT_TRANSFER = "agent_transfer";
 const WS_TYPE_AGENT_TRANSFER_RESUME = "agent_transfer_resume";
@@ -400,6 +403,9 @@ class WebSocketService {
           break;
         case WS_TYPE_POLL_VOTE_UPDATED:
           this.handlePollVoteUpdated(store, message.payload);
+          break;
+        case WS_TYPE_TYPING:
+          this.handleTyping(store, message.payload);
           break;
         case WS_TYPE_PONG:
           // Pong received, connection is alive
@@ -713,6 +719,21 @@ class WebSocketService {
     if (currentContact && payload.contact_id === currentContact.id) {
       store.updateMessageReactions(payload.message_id, payload.reactions);
     }
+  }
+
+  // handleTyping applies an inbound typing-presence event (contact composing /
+  // paused) to the contacts store. The store owns the self-clearing state; the
+  // UI reads store.isContactTyping(contactID).
+  private handleTyping(
+    store: ReturnType<typeof useContactsStore>,
+    payload: any,
+  ) {
+    const contactID =
+      typeof payload?.contact_id === "string" ? payload.contact_id : "";
+    const state =
+      typeof payload?.state === "string" ? payload.state : "";
+    if (!contactID) return;
+    store.setTyping(contactID, state);
   }
 
   private handlePollVoteUpdated(

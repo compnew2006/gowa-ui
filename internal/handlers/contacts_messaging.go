@@ -520,15 +520,28 @@ func (a *App) SendMediaMessage(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
 	}
 
-	// Save file locally first
+	// Storage accounting still applies: even when GOWA is the sole on-disk
+	// owner, the upload consumes storage quota somewhere in the system.
 	if !a.checkQuotaWithDeltaOrRespond(r, license.ResourceStorage, orgID, int64(len(fileData))) {
 		return nil
 	}
 
-	localPath, err := a.saveMediaLocally(orgID, fileData, effectiveMIMEType, fileHeader.Filename)
-	if err != nil {
-		a.Log.Error("Failed to save media locally", "error", err)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to save media", nil, "")
+	// In GOWA mode the provider uploads the raw bytes directly to GOWA via
+	// multipart (provider.MediaUploader), so whatomate does NOT persist the
+	// outgoing file to its own disk — GOWA becomes the single source of
+	// truth, mirroring how incoming media already works. For whatsmeow/Meta
+	// we still need a local file because those providers go through a URL/
+	// media-ID upload flow handled further down.
+	var localPath string
+	if a.isGowaProvider() {
+		a.Log.Debug("GOWA outbound media: skipping local save, uploading bytes directly",
+			"msg_type", mediaType, "filename", fileHeader.Filename, "bytes", len(fileData))
+	} else {
+		localPath, err = a.saveMediaLocally(orgID, fileData, effectiveMIMEType, fileHeader.Filename)
+		if err != nil {
+			a.Log.Error("Failed to save media locally", "error", err)
+			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to save media", nil, "")
+		}
 	}
 
 	// Build and send via unified message sender
@@ -732,20 +745,64 @@ func (a *App) SendReaction(r *fastglue.Request) error {
 		}
 	}
 
-	// Remove existing reaction from this user (each user can only have one reaction)
+	// Resolve the reactor's WhatsApp phone number so we can dedup against
+	// the echo that GOWA pushes back via webhook. GOWA echoes outgoing
+	// reactions with from_phone = the connected account's phone (because
+	// IsFromMe=true). If we keyed only on the whatomate userID here, the
+	// echo would carry a different key (from_phone) and both entries would
+	// survive — producing the duplicate reaction the UI shows. We resolve
+	// the phone from the message's instance (the account that owns it) and
+	// use from_phone as the unified dedup key, mirroring handleGowaReaction.
+	reactorPhone := ""
+	if message.InstanceID != nil {
+		var reactInstance models.WhatsAppInstance
+		if err := requestDB.Session(&gorm.Session{}).
+			Where("id = ?", message.InstanceID).First(&reactInstance).Error; err == nil {
+			reactorPhone = jidToPhone(reactInstance.JID)
+			if reactorPhone == "" {
+				reactorPhone = reactInstance.PhoneNumber
+			}
+			// Backfill the instance row if GOWA knows the JID but our DB
+			// doesn't (happens for instances paired before the
+			// markGowaInstanceConnected sync path landed). This also speeds
+			// up future lookups and is a no-op when the row already has it.
+			if reactInstance.JID == "" && reactInstance.PhoneNumber == "" && a.isGowaProvider() && a.GowaClient != nil {
+				deviceID := gowaDeviceID(&reactInstance)
+				dlCtx, dlCancel := context.WithTimeout(context.Background(), 5*time.Second)
+				if device, dErr := a.GowaClient.GetDevice(dlCtx, deviceID); dErr == nil && device != nil && device.JID != "" {
+					reactorPhone = jidToPhone(device.JID)
+					_ = requestDB.Model(&reactInstance).Updates(map[string]any{
+						"jid":          device.JID,
+						"phone_number": reactorPhone,
+					})
+				}
+				dlCancel()
+			}
+		}
+	}
+
+	// Remove existing reaction from this reactor (each reactor can only have
+	// one reaction). Dedup on both from_user (legacy optimistic entries) and
+	// from_phone (echo + incoming entries) so the optimistic write and the
+	// echo converge on a single row.
 	userIDStr := userID.String()
 	newReactions := make([]Reaction, 0)
 	for _, r := range reactions {
-		if r.FromUser != userIDStr {
-			newReactions = append(newReactions, r)
+		if r.FromUser == userIDStr {
+			continue
 		}
+		if reactorPhone != "" && r.FromPhone == reactorPhone {
+			continue
+		}
+		newReactions = append(newReactions, r)
 	}
 
 	// Add new reaction if emoji is not empty
 	if req.Emoji != "" {
 		newReactions = append(newReactions, Reaction{
-			Emoji:    req.Emoji,
-			FromUser: userIDStr,
+			Emoji:     req.Emoji,
+			FromUser:  userIDStr,
+			FromPhone: reactorPhone,
 		})
 	}
 

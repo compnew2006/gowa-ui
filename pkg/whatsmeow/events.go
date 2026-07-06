@@ -28,6 +28,9 @@ func (cm *ConnectionManager) handleEvent(evt interface{}, instanceID, orgID uuid
 	case *events.Receipt:
 		cm.handleReceipt(ctx, v, instanceID, orgID)
 
+	case *events.ChatPresence:
+		cm.HandleChatPresence(v, instanceID, orgID)
+
 	case *events.HistorySync:
 		cm.handleHistorySync(ctx, v, instanceID, orgID)
 

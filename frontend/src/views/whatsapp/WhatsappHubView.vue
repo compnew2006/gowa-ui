@@ -7,13 +7,10 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   Smartphone,
-  Megaphone,
   Contact,
   MessageSquareText,
   BookOpen,
   Archive,
-  Filter,
-  Users,
   Route,
   ArrowRight,
   ArrowLeft,
@@ -25,17 +22,7 @@ const router = useRouter();
 const isRTL = computed(() => locale.value === "ar");
 
 // Defined list of WhatsApp tools to show in the grid
-// Defined list of WhatsApp tools to show in the grid
 const tools = [
-  {
-    nameKey: "nav.campaigns",
-    descKey: "nav.campaignsDesc",
-    path: "/whatsapp/campaigns",
-    icon: Megaphone,
-    color: "from-blue-500/10 to-indigo-500/10 dark:from-blue-500/20 dark:to-indigo-500/20 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-500/20",
-    hoverGlow: "group-hover:shadow-[0_0_30px_rgba(59,130,246,0.15)] dark:group-hover:shadow-[0_0_30px_rgba(59,130,246,0.2)]",
-    active: true
-  },
   {
     nameKey: "nav.whatsappAccounts",
     descKey: "nav.whatsappAccountsDesc",
@@ -82,66 +69,12 @@ const tools = [
     active: true
   },
   {
-    nameKey: "nav.whatsappFilter",
-    descKey: "nav.whatsappFilterDesc",
-    path: "/whatsapp/whatsapp-filter",
-    icon: Filter,
-    color: "from-violet-500/10 to-fuchsia-500/10 dark:from-violet-500/20 dark:to-fuchsia-500/20 text-violet-600 dark:text-violet-400 border-violet-200 dark:border-violet-500/20",
-    hoverGlow: "group-hover:shadow-[0_0_30px_rgba(139,92,246,0.15)] dark:group-hover:shadow-[0_0_30px_rgba(139,92,246,0.2)]",
-    active: true
-  },
-  {
-    nameKey: "nav.groupSearch",
-    descKey: "nav.groupSearchDesc",
-    path: "/whatsapp/group-search",
-    icon: Users,
-    color: "from-sky-500/10 to-indigo-500/10 dark:from-sky-500/20 dark:to-indigo-500/20 text-sky-600 dark:text-sky-400 border-sky-200 dark:border-sky-500/20",
-    hoverGlow: "group-hover:shadow-[0_0_30px_rgba(14,165,233,0.15)] dark:group-hover:shadow-[0_0_30px_rgba(14,165,233,0.2)]",
-    active: true
-  },
-  {
-    nameKey: "nav.groupJoinCampaigns",
-    descKey: "nav.groupJoinCampaignsDesc",
-    path: "/whatsapp/group-join-campaigns",
-    icon: Users,
-    color: "from-blue-600/10 to-cyan-600/10 dark:from-blue-600/20 dark:to-cyan-600/20 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-500/20",
-    hoverGlow: "group-hover:shadow-[0_0_30px_rgba(37,99,235,0.15)] dark:group-hover:shadow-[0_0_30px_rgba(37,99,235,0.2)]",
-    active: true
-  },
-  {
-    nameKey: "nav.groupParticipants",
-    descKey: "nav.groupParticipantsDesc",
-    path: "/whatsapp/group-participants",
-    icon: Users,
-    color: "from-emerald-600/10 to-teal-600/10 dark:from-emerald-600/20 dark:to-teal-600/20 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20",
-    hoverGlow: "group-hover:shadow-[0_0_30px_rgba(16,185,129,0.15)] dark:group-hover:shadow-[0_0_30px_rgba(16,185,129,0.2)]",
-    active: true
-  },
-  {
     nameKey: "nav.extract",
     descKey: "nav.extractDesc",
     path: "/whatsapp/extract",
     icon: MessageSquareText,
     color: "from-yellow-500/10 to-amber-500/10 dark:from-yellow-500/20 dark:to-amber-500/20 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-500/20",
     hoverGlow: "group-hover:shadow-[0_0_30px_rgba(234,179,8,0.15)] dark:group-hover:shadow-[0_0_30px_rgba(234,179,8,0.2)]",
-    active: true
-  },
-  {
-    nameKey: "nav.groupExtraction",
-    descKey: "nav.groupExtractionDesc",
-    path: "/whatsapp/group-extraction",
-    icon: Users,
-    color: "from-orange-500/10 to-red-500/10 dark:from-orange-500/20 dark:to-red-500/20 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-500/20",
-    hoverGlow: "group-hover:shadow-[0_0_30px_rgba(249,115,22,0.15)] dark:group-hover:shadow-[0_0_30px_rgba(249,115,22,0.2)]",
-    active: true
-  },
-  {
-    nameKey: "nav.memberExtraction",
-    descKey: "nav.memberExtractionDesc",
-    path: "/whatsapp/member-extraction",
-    icon: Users,
-    color: "from-rose-500/10 to-pink-500/10 dark:from-rose-500/20 dark:to-pink-500/20 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-500/20",
-    hoverGlow: "group-hover:shadow-[0_0_30px_rgba(244,63,94,0.15)] dark:group-hover:shadow-[0_0_30px_rgba(244,63,94,0.2)]",
     active: true
   },
   {

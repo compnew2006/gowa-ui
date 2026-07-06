@@ -20,6 +20,9 @@ const (
 	TypePong                = "pong"
 	TypeReactionUpdate      = "reaction_update"
 
+	// Chat typing presence (contact composing/paused) — see docs/CHAT_WORKFLOW.md
+	TypeTyping = "typing"
+
 	// Agent transfer types
 	TypeAgentTransfer       = "agent_transfer"
 	TypeAgentTransferResume = "agent_transfer_resume"
@@ -81,6 +84,13 @@ type SetContactPayload struct {
 type StatusUpdatePayload struct {
 	MessageID string `json:"message_id"`
 	Status    string `json:"status"`
+}
+
+// TypingPayload is the payload for typing messages — emitted when a WhatsApp
+// contact starts/stops typing in a direct chat. State is "composing" or "paused".
+type TypingPayload struct {
+	ContactID string `json:"contact_id"`
+	State     string `json:"state"`
 }
 
 // QRCodePayload is the payload for instance_qr_code messages

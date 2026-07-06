@@ -38,6 +38,41 @@ func gowaDeviceID(instance *models.WhatsAppInstance) string {
 	return instance.ID.String()
 }
 
+// isGowaDevicePaired reports whether the GOWA device slot for the given
+// instance is already paired with WhatsApp (i.e. the user has scanned the QR
+// and whatsmeow has authenticated). This is the critical pre-check the QR and
+// connect handlers must perform before asking GOWA for a login QR: calling
+// GET /devices/:id/login on an already-logged-in device returns 500 ("device
+// login not found"), which the legacy self-heal path misinterpreted as
+// "device slot corrupt" — it then deleted the live paired device and
+// re-provisioned an empty slot, destroying the user's session.
+//
+// IMPORTANT: GOWA's Device.State string is misleading here — "connected" only
+// means the websocket is up, NOT that the device is paired. A brand-new empty
+// slot shows state="connected" immediately after creation, before any QR scan.
+// The reliable signal is the explicit is_logged_in boolean from
+// GET /devices/:id/status, which is what the poller's
+// syncInstanceStatusFromGowa already uses. We mirror that contract here.
+//
+// Returns the live Device (for state + JID context in logs) and a boolean
+// indicating actual pairing. Errors are returned only on transport/lookup
+// failure.
+func (a *App) isGowaDevicePaired(ctx context.Context, deviceID string) (*gowa.Device, bool, error) {
+	if deviceID == "" || a.GowaClient == nil {
+		return nil, false, nil
+	}
+	// Use /status for the authoritative is_logged_in signal. Fall back to
+	// /devices/:id only for the JID/state metadata (not for the pairing
+	// decision).
+	status, err := a.GowaClient.GetStatus(ctx, deviceID)
+	if err != nil {
+		return nil, false, err
+	}
+	device, _ := a.GowaClient.GetDevice(ctx, deviceID) // best-effort, for JID/state
+	paired := status != nil && status.IsLoggedIn
+	return device, paired, nil
+}
+
 // gowaWebhookURLForInstance builds the per-instance callback URL that GOWA
 // will POST inbound events to. We append the instance UUID as a path segment
 // so the receiver can resolve the source instance without parsing JSON first.
@@ -165,6 +200,23 @@ func (a *App) GowaGetInstanceQR(r *fastglue.Request) error {
 
 	ctx, cancel := context.WithTimeout(r.RequestCtx, 30*time.Second)
 	defer cancel()
+
+	// Pre-check: never ask for a login QR when the device is already paired.
+	// GOWA returns 500 ("device login not found") for a logged-in device, which
+	// the legacy self-heal path misread as a corrupt slot and "fixed" by
+	// deleting the live session. If we are already paired, surface that to the
+	// caller instead of generating a QR.
+	if device, paired, statusErr := a.isGowaDevicePaired(ctx, gowaDeviceID(instance)); statusErr == nil && paired {
+		a.markGowaInstanceConnected(ctx, instance, device)
+		return r.SendEnvelope(map[string]any{
+			"instance_id":      instance.ID.String(),
+			"available":        false,
+			"already_connected": true,
+			"state":            device.State,
+			"jid":              device.JID,
+		})
+	}
+
 	login, err := a.gowaGetLoginQRWithSelfHealing(ctx, instance)
 	if err != nil {
 		a.Log.Error("GOWA login QR failed", "error", err, "instance_id", instance.ID)
@@ -173,7 +225,7 @@ func (a *App) GowaGetInstanceQR(r *fastglue.Request) error {
 
 	qrCodeVal := login.QRLink
 	if login.QRLink != "" {
-		if bytes, fetchErr := a.GowaClient.FetchBytes(ctx, login.QRLink); fetchErr == nil {
+		if bytes, fetchErr := a.GowaClient.FetchBytes(ctx, login.QRLink, gowaDeviceID(instance)); fetchErr == nil {
 			base64Data := base64.StdEncoding.EncodeToString(bytes)
 			qrCodeVal = fmt.Sprintf("data:image/png;base64,%s", base64Data)
 		} else {
@@ -188,6 +240,44 @@ func (a *App) GowaGetInstanceQR(r *fastglue.Request) error {
 		"timeout_seconds": login.QRDuration,
 		"device_id":       login.DeviceID,
 	})
+}
+
+// markGowaInstanceConnected syncs the local instance row to "connected" using
+// the live GOWA device state, mirroring what syncInstanceStatusFromGowa does
+// in the poller. This is invoked on the QR/connect short-circuit path so the
+// DB catches up to reality without waiting for the next poll sweep.
+func (a *App) markGowaInstanceConnected(ctx context.Context, instance *models.WhatsAppInstance, device *gowa.Device) {
+	if instance == nil || device == nil {
+		return
+	}
+	updates := map[string]any{"status": models.InstanceStatusConnected}
+	if device.JID != "" && instance.JID == "" {
+		updates["jid"] = device.JID
+		if phone := gowaJIDToPhone(device.JID); phone != "" {
+			updates["phone_number"] = phone
+		}
+	}
+	if instance.LastConnectedAt == nil {
+		now := time.Now()
+		updates["last_connected_at"] = &now
+	}
+	if err := a.DB.WithContext(ctx).Model(&models.WhatsAppInstance{}).
+		Where("id = ?", instance.ID).Updates(updates).Error; err != nil {
+		a.Log.Warn("GOWA: failed to mark instance connected on QR short-circuit",
+			"error", err, "instance_id", instance.ID)
+	}
+}
+
+// gowaJIDToPhone extracts the phone digits from a JID like
+// "12025550100@s.whatsapp.net". For group/newsletter JIDs it returns "".
+func gowaJIDToPhone(jid string) string {
+	if at := strings.IndexByte(jid, '@'); at > 0 {
+		local := jid[:at]
+		if strings.HasSuffix(jid, "@s.whatsapp.net") && local != "" {
+			return local
+		}
+	}
+	return ""
 }
 
 // GowaConnectInstance initiates pairing on GOWA. In GOWA, "connect" means
@@ -211,6 +301,20 @@ func (a *App) GowaConnectInstance(r *fastglue.Request) error {
 
 	ctx, cancel := context.WithTimeout(r.RequestCtx, 30*time.Second)
 	defer cancel()
+
+	// Pre-check: if the device is already paired, do NOT request a new login
+	// QR — GOWA returns 500 for a logged-in device and the self-heal path
+	// would destroy the live session. Mirror the QR handler's short-circuit.
+	if device, paired, statusErr := a.isGowaDevicePaired(ctx, gowaDeviceID(instance)); statusErr == nil && paired {
+		a.markGowaInstanceConnected(ctx, instance, device)
+		return r.SendEnvelope(map[string]any{
+			"status":           "already_connected",
+			"already_connected": true,
+			"state":            device.State,
+			"jid":              device.JID,
+		})
+	}
+
 	login, err := a.gowaGetLoginQRWithSelfHealing(ctx, instance)
 	if err != nil {
 		a.Log.Error("GOWA connect failed", "error", err, "instance_id", instance.ID)
@@ -226,7 +330,7 @@ func (a *App) GowaConnectInstance(r *fastglue.Request) error {
 
 	qrCodeVal := login.QRLink
 	if login.QRLink != "" {
-		if bytes, fetchErr := a.GowaClient.FetchBytes(ctx, login.QRLink); fetchErr == nil {
+		if bytes, fetchErr := a.GowaClient.FetchBytes(ctx, login.QRLink, gowaDeviceID(instance)); fetchErr == nil {
 			base64Data := base64.StdEncoding.EncodeToString(bytes)
 			qrCodeVal = fmt.Sprintf("data:image/png;base64,%s", base64Data)
 		} else {
@@ -467,6 +571,20 @@ func (a *App) gowaGetLoginQRWithSelfHealing(ctx context.Context, instance *model
 
 	a.Log.Warn("GOWA login QR failed, attempting self-healing",
 		"error", err, "status_code", gowaErr.StatusCode, "device_id", deviceID)
+
+	// Defense-in-depth: never enter the destructive self-heal path while the
+	// device is currently paired/logged in. GOWA returns 500 ("device login
+	// not found") for a logged-in device because there is no active login
+	// flow — that is not a corrupt slot, and deleting the device would
+	// destroy the user's live WhatsApp session. Bail out with the original
+	// error so the caller surfaces a clear "already connected" failure
+	// instead of nuking the pairing.
+	if device, paired, _ := a.isGowaDevicePaired(ctx, deviceID); paired {
+		a.Log.Warn("GOWA self-heal aborted: device is already paired, refusing to delete live session",
+			"device_id", deviceID, "state", device.State, "jid", device.JID)
+		return nil, fmt.Errorf("gowa: device %s is already %s — refusing to request a new login QR (would destroy the live session); use /disconnect first if you really want to re-pair",
+			deviceID, device.State)
+	}
 
 	// Step 1: try reconnect first (device exists but websocket dropped)
 	if reconnErr := a.GowaClient.Reconnect(ctx, deviceID); reconnErr == nil {

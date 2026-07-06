@@ -5,8 +5,6 @@ import { useRouter } from "vue-router";
 import { PageHeader } from "@/components/shared";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { moduleKeyForPath } from "@/modules/registry";
-import { useConfigStore } from "@/stores/config";
 import {
   Facebook,
   MessageCircle,
@@ -25,7 +23,6 @@ import {
 
 const { t, locale } = useI18n();
 const router = useRouter();
-const configStore = useConfigStore();
 const isRTL = computed(() => locale.value === "ar");
 
 // Defined list of Facebook tools to show in the grid
@@ -122,16 +119,7 @@ const tools = [
   }
 ];
 
-// Only show tools whose managed module is effective-enabled for the current
-// organization. moduleKeyForPath is the single source of truth for the
-// path → module-key mapping (see @/modules/registry), so this stays in sync
-// with the sidebar gating in AppLayout.vue automatically.
-const visibleTools = computed(() =>
-  tools.filter((tool) => {
-    const moduleKey = moduleKeyForPath(tool.path);
-    return moduleKey === undefined || configStore.isModuleEnabled(moduleKey);
-  }),
-);
+const visibleTools = computed(() => tools);
 
 function navigateTo(path: string) {
   router.push(path);

@@ -15,6 +15,7 @@ import (
 	objectstorage "github.com/compnew2006/whatomate/internal/storage"
 	"github.com/compnew2006/whatomate/internal/tenant"
 	"github.com/compnew2006/whatomate/internal/websocket"
+	"github.com/compnew2006/whatomate/pkg/gowa"
 	"github.com/compnew2006/whatomate/pkg/provider"
 	"github.com/compnew2006/whatomate/pkg/whatsapp"
 	"github.com/compnew2006/whatomate/pkg/whatsmeow"
@@ -45,6 +46,15 @@ type App struct {
 	HTTPClient *http.Client
 	// MessageProvider is the abstraction for sending messages (Meta or Whatsmeow)
 	MessageProvider provider.MessageProvider
+	// GowaClient is non-nil only when cfg.WhatsApp.Provider == "gowa". Stage 4+
+	// (instance lifecycle, read-side proxies, webhook receiver, polling
+	// reconciler) reach GOWA through this client rather than the
+	// MessageProvider interface, because the interface covers sends only.
+	GowaClient *gowa.Client
+	// GowaPoller is the background reconciler that catches events missed by
+	// the webhook channel. Non-nil only in gowa mode and only after
+	// StartGowaPoller has been called. Stop with StopGowaPoller on shutdown.
+	GowaPoller *gowaPoller
 	// WhatsmeowContactResolver resolves ad-hoc chat recipients for WhatsMeow start-chat flows.
 	WhatsmeowContactResolver WhatsmeowContactResolver
 	// WhatsmeowQueue is the per-instance message queue for whatsmeow rate limiting
@@ -154,6 +164,29 @@ func (a *App) StartCampaignStatsSubscriber() error {
 func (a *App) StopCampaignStatsSubscriber() {
 	if a.CampaignSubCancel != nil {
 		a.CampaignSubCancel()
+	}
+}
+
+// StartGowaPoller launches the GOWA background reconciler (Stage 7). It is
+// a no-op when not in gowa mode, when the client is nil, or when polling is
+// disabled in config. Idempotent: a second call is a no-op.
+func (a *App) StartGowaPoller(ctx context.Context) {
+	if !a.isGowaProvider() || a.GowaClient == nil {
+		return
+	}
+	if a.GowaPoller == nil {
+		a.GowaPoller = newGowaPoller(a)
+	}
+	if err := a.GowaPoller.Start(ctx); err != nil {
+		a.Log.Error("Failed to start GOWA polling reconciler", "error", err)
+	}
+}
+
+// StopGowaPoller signals the reconciler to drain and exit. Call this during
+// graceful shutdown alongside StopCampaignStatsSubscriber.
+func (a *App) StopGowaPoller() {
+	if a.GowaPoller != nil {
+		a.GowaPoller.Stop()
 	}
 }
 

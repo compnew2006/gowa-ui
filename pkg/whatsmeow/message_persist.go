@@ -240,6 +240,19 @@ func (cm *ConnectionManager) persistParsedMessage(
 	}
 	cm.scheduleContactAvatarRefresh(instanceID, contact)
 
+	// For direct chats, subscribe to chat presence so the agent UI receives
+	// typing (composing/paused) events for this contact. Best-effort: errors
+	// are logged but never interrupt inbound message persistence.
+	if !isGroup && !isChannel && contact.PhoneNumber != "" {
+		if subErr := cm.SubscribeChatPresence(ctx, instanceID, contact.PhoneNumber); subErr != nil {
+			cm.logger.Debug("chat presence subscribe failed",
+				"component", "whatsmeow",
+				"instance_id", instanceID,
+				"contact_id", contact.ID,
+				"error", subErr)
+		}
+	}
+
 	msgType, content, mimeType, filename, downloadable := cm.extractMessageContentMetadata(ctx, client, evt.Message)
 	if msgType == models.MessageTypeIgnore {
 		return nil, nil

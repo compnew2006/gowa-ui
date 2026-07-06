@@ -96,7 +96,32 @@ const DEFAULT_NOTIFICATION_SOUND: NotificationSoundKey = "notification1";
 const MAX_UPLOADS_CLEANUP_RETENTION_DAYS = 3650;
 const DEFAULT_UPLOADS_CLEANUP_SCHEDULE_HOUR = 3;
 
-const activeSettingsTab = ref("general");
+// Valid settings tabs; a #hash matching one of these activates it on load.
+const SETTINGS_TABS = ["general", "appearance", "chat", "notifications"] as const;
+type SettingsTab = (typeof SETTINGS_TABS)[number];
+function tabFromHash(hash: string): SettingsTab | null {
+  const value = hash.replace(/^#/, "");
+  return (SETTINGS_TABS as readonly string[]).includes(value)
+    ? (value as SettingsTab)
+    : null;
+}
+
+const initialTab =
+  typeof window !== "undefined"
+    ? tabFromHash(window.location.hash)
+    : null;
+const activeSettingsTab = ref<SettingsTab>(initialTab ?? "general");
+
+// Keep the active tab in sync if the hash changes while the view is mounted
+// (e.g. clicking another settings entry in the sidebar).
+function handleHashChange() {
+  const tab = tabFromHash(window.location.hash);
+  if (tab) activeSettingsTab.value = tab;
+}
+if (typeof window !== "undefined") {
+  window.addEventListener("hashchange", handleHashChange);
+  onBeforeUnmount(() => window.removeEventListener("hashchange", handleHashChange));
+}
 const isGeneralSubmitting = ref(false);
 const isAppearanceSubmitting = ref(false);
 const isNotificationSubmitting = ref(false);

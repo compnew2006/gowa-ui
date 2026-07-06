@@ -2,17 +2,10 @@ export { BasePage } from "./BasePage";
 export { TablePage } from "./TablePage";
 export { DialogPage } from "./DialogPage";
 export { LoginPage } from "./LoginPage";
-export { CampaignsPage } from "./CampaignsPage";
-export {
-  FlowsPage,
-  ChatbotFlowsPage,
-  ChatbotFlowBuilderPage,
-} from "./FlowsPage";
 export {
   CardGridPage,
   TableSettingsPage,
   CannedResponsesPage,
-  CustomActionsPage,
   ApiKeysPage,
   TagsPage,
   ContactsPage,
@@ -26,4 +19,3 @@ export { ChatbotSettingsPage } from "./ChatbotSettingsPage";
 export { ChatbotHubPage } from "./ChatbotHubPage";
 export { AgentTransfersPage } from "./AgentTransfersPage";
 export { ChatPage } from "./ChatPage";
-export { WhatsAppFilterPage } from "./WhatsAppFilterPage";

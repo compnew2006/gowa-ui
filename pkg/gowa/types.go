@@ -19,7 +19,10 @@
 // interface and compile-time asserts this with a top-level var.
 package gowa
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // ----- Envelope ---------------------------------------------------------------
 //
@@ -92,18 +95,47 @@ type LoginWithCodeResponse struct {
 // ----- Send -------------------------------------------------------------------
 
 // SendTextRequest is the POST /send/message body.
+//
+// ReplyMessageID mirrors GOWA's `reply_message_id` field (a *string). When set
+// to a non-empty WhatsApp message ID (wamid), GOWA renders the send as a quoted
+// reply to that message. The field is a pointer so an empty reply is encoded
+// as `null`/omitted, not as the empty string (which GOWA would still treat as
+// "no reply" but we keep the typed distinction for clarity).
+//
+// NOTE: previous versions of this struct used the JSON tag `reply_to`, which
+// GOWA silently ignored — the message went out as a plain text with no quote
+// context. The correct upstream field is `reply_message_id`.
 type SendTextRequest struct {
-	Phone   string `json:"phone"`
-	Message string `json:"message"`
-	ReplyTo string `json:"reply_to,omitempty"` // GOWA supports replying when set
+	Phone          string  `json:"phone"`
+	Message        string  `json:"message"`
+	ReplyMessageID *string `json:"reply_message_id,omitempty"`
 }
 
-// SendMediaRequest is the shared body shape for /send/image, /send/file,
-// /send/video, /send/audio. GOWA expects a publicly fetchable URL for media.
-type SendMediaRequest struct {
+// SendImageRequest is the payload structure for GOWA's /send/image.
+type SendImageRequest struct {
 	Phone    string `json:"phone"`
 	Caption  string `json:"caption,omitempty"`
-	URL      string `json:"url"`
+	ImageURL string `json:"image_url"`
+}
+
+// SendVideoRequest is the payload structure for GOWA's /send/video.
+type SendVideoRequest struct {
+	Phone    string `json:"phone"`
+	Caption  string `json:"caption,omitempty"`
+	VideoURL string `json:"video_url"`
+}
+
+// SendAudioRequest is the payload structure for GOWA's /send/audio.
+type SendAudioRequest struct {
+	Phone    string `json:"phone"`
+	AudioURL string `json:"audio_url"`
+}
+
+// SendFileRequest is the payload structure for GOWA's /send/file.
+type SendFileRequest struct {
+	Phone    string `json:"phone"`
+	Caption  string `json:"caption,omitempty"`
+	FileURL  string `json:"file_url"`
 	Filename string `json:"filename,omitempty"`
 }
 
@@ -150,6 +182,46 @@ type ChatInfo struct {
 	Archived            bool       `json:"archived"`
 }
 
+// UnmarshalJSON implements json.Unmarshaler for ChatInfo. GOWA sometimes
+// returns last_message_time, created_at, or updated_at as "" (empty string)
+// instead of null or omitting the field; the standard library rejects this
+// for time.Time. We handle it by treating empty-string as a zero time or nil pointer.
+func (c *ChatInfo) UnmarshalJSON(data []byte) error {
+	type Alias ChatInfo
+	aux := &struct {
+		LastMessageTime string `json:"last_message_time"`
+		CreatedAt       string `json:"created_at"`
+		UpdatedAt       string `json:"updated_at"`
+		*Alias
+	}{
+		Alias: (*Alias)(c),
+	}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+	if aux.LastMessageTime != "" {
+		t, err := parseGowaTime(aux.LastMessageTime)
+		if err == nil {
+			c.LastMessageTime = &t
+		}
+	} else {
+		c.LastMessageTime = nil
+	}
+	if aux.CreatedAt != "" {
+		t, err := parseGowaTime(aux.CreatedAt)
+		if err == nil {
+			c.CreatedAt = t
+		}
+	}
+	if aux.UpdatedAt != "" {
+		t, err := parseGowaTime(aux.UpdatedAt)
+		if err == nil {
+			c.UpdatedAt = t
+		}
+	}
+	return nil
+}
+
 // MessageReaction mirrors a single reaction embedded in MessageInfo.
 type MessageReaction struct {
 	MessageID  string    `json:"message_id"`
@@ -157,6 +229,28 @@ type MessageReaction struct {
 	Emoji      string    `json:"emoji"`
 	IsFromMe   bool      `json:"is_from_me"`
 	Timestamp  time.Time `json:"timestamp"`
+}
+
+// UnmarshalJSON implements json.Unmarshaler for MessageReaction to handle
+// GOWA sometimes returning timestamp as an empty string.
+func (mr *MessageReaction) UnmarshalJSON(data []byte) error {
+	type Alias MessageReaction
+	aux := &struct {
+		Timestamp string `json:"timestamp"`
+		*Alias
+	}{
+		Alias: (*Alias)(mr),
+	}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+	if aux.Timestamp != "" {
+		t, err := parseGowaTime(aux.Timestamp)
+		if err == nil {
+			mr.Timestamp = t
+		}
+	}
+	return nil
 }
 
 // MessageInfo mirrors a single message from GOWA's GetChatMessages response.
@@ -174,6 +268,42 @@ type MessageInfo struct {
 	FileLength int64             `json:"file_length,omitempty"`
 	CreatedAt  time.Time         `json:"created_at"`
 	UpdatedAt  time.Time         `json:"updated_at"`
+}
+
+// UnmarshalJSON implements json.Unmarshaler for MessageInfo to handle
+// GOWA sometimes returning timestamp, created_at, or updated_at as an empty string.
+func (m *MessageInfo) UnmarshalJSON(data []byte) error {
+	type Alias MessageInfo
+	aux := &struct {
+		Timestamp string `json:"timestamp"`
+		CreatedAt string `json:"created_at"`
+		UpdatedAt string `json:"updated_at"`
+		*Alias
+	}{
+		Alias: (*Alias)(m),
+	}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+	if aux.Timestamp != "" {
+		t, err := parseGowaTime(aux.Timestamp)
+		if err == nil {
+			m.Timestamp = t
+		}
+	}
+	if aux.CreatedAt != "" {
+		t, err := parseGowaTime(aux.CreatedAt)
+		if err == nil {
+			m.CreatedAt = t
+		}
+	}
+	if aux.UpdatedAt != "" {
+		t, err := parseGowaTime(aux.UpdatedAt)
+		if err == nil {
+			m.UpdatedAt = t
+		}
+	}
+	return nil
 }
 
 // Pagination mirrors GOWA's pagination block.

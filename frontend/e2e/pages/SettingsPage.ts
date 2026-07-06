@@ -354,39 +354,6 @@ export class CannedResponsesPage extends TableSettingsPage {
 }
 
 /**
- * Custom Actions Page
- */
-export class CustomActionsPage extends TableSettingsPage {
-  constructor(page: Page) {
-    super(page, { headingText: 'Custom Actions', addButtonText: 'Add Action' })
-    // Override heading to use text locator since this page uses CardTitle not h1
-    this.heading = page.locator('text=Custom Actions').first()
-  }
-
-  async goto() {
-    await this.page.goto('/settings/custom-actions')
-    await this.page.waitForLoadState('networkidle')
-  }
-
-  async fillWebhookAction(name: string, url: string) {
-    await this.getDialogInput('name').fill(name)
-    await this.getDialogInput('url').fill(url)
-  }
-
-  async fillUrlAction(name: string, url: string) {
-    await this.getDialogInput('name').fill(name)
-    await this.getDialogRadio('Open URL').click()
-    await this.getDialogInput('url').fill(url)
-  }
-
-  async fillJsAction(name: string, code: string) {
-    await this.getDialogInput('name').fill(name)
-    await this.getDialogRadio('JavaScript').click()
-    await this.getDialogTextarea('code').fill(code)
-  }
-}
-
-/**
  * API Keys Page
  */
 export class ApiKeysPage extends TableSettingsPage {

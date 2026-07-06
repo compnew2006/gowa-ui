@@ -3,10 +3,12 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/compnew2006/whatomate/internal/models"
+	"github.com/compnew2006/whatomate/internal/websocket"
 	"github.com/compnew2006/whatomate/pkg/gowa"
 	"github.com/google/uuid"
 )
@@ -182,14 +184,20 @@ func (p *gowaPoller) reconcileInstance(ctx context.Context, instance *models.Wha
 	// not run). Without this, the outbound send path's instance selector
 	// rejects every instance as "not connected".
 	statusCtx, statusCancel := context.WithTimeout(ctx, 10*time.Second)
-	status, statusErr := p.app.GowaClient.GetStatus(statusCtx, deviceID)
+	gowaStatus, statusErr := p.app.gowaFetchStatus(statusCtx, instance)
 	statusCancel()
 	if statusErr != nil {
 		// GOWA unreachable or device unknown — leave status as-is.
 		p.app.Log.Debug("GOWA poller: status probe failed",
 			"error", statusErr, "instance_id", instance.ID, "device_id", deviceID)
 	} else {
-		p.syncInstanceStatusFromGowa(ctx, instance, status)
+		// Build a synthetic DeviceStatus to reuse syncInstanceStatusFromGowa
+		syntheticStatus := &gowa.DeviceStatus{
+			DeviceID:    deviceID,
+			IsLoggedIn:  gowaStatus == models.InstanceStatusConnected,
+			IsConnected: gowaStatus == models.InstanceStatusConnected || gowaStatus == models.InstanceStatusConnecting,
+		}
+		p.syncInstanceStatusFromGowa(ctx, instance, syntheticStatus)
 	}
 
 	// Read the watermark for pagination cursor.
@@ -276,6 +284,13 @@ func (p *gowaPoller) reconcileInstance(ctx context.Context, instance *models.Wha
 // is_logged_in, and demotes to "disconnected" when both flags are false.
 // Without this, the outbound send path's instance selector rejects every
 // instance as "not connected" because the whatsmeow Connect path never ran.
+//
+// On any status TRANSITION (e.g. disconnected → connected after a QR scan),
+// we also broadcast a WebSocket event so the UI updates in real time — the
+// frontend closes the QR modal and refreshes the instance row without
+// requiring a manual page reload. This matters in GOWA mode because GOWA's
+// webhook subscription does not include connection/pairing events, so the
+// poller is the only path that detects a successful QR scan.
 func (p *gowaPoller) syncInstanceStatusFromGowa(ctx context.Context, instance *models.WhatsAppInstance, status *gowa.DeviceStatus) {
 	if status == nil {
 		return
@@ -287,14 +302,28 @@ func (p *gowaPoller) syncInstanceStatusFromGowa(ctx context.Context, instance *m
 	case status.IsConnected:
 		desired = models.InstanceStatusConnecting
 	}
-	if desired == instance.Status && instance.JID != "" {
+	previousStatus := instance.Status
+	if desired == previousStatus && instance.JID != "" {
 		return
 	}
 
 	updates := map[string]any{"status": desired}
-	if desired == models.InstanceStatusConnected && instance.LastConnectedAt == nil {
-		now := time.Now()
-		updates["last_connected_at"] = &now
+	// On a fresh pairing, GOWA's /devices/:id carries the JID of the newly
+	// linked account. Patch it onto the instance row so subsequent lookups
+	// (and the broadcast payload) carry the real phone number.
+	if desired == models.InstanceStatusConnected {
+		if device, err := p.app.GowaClient.GetDevice(ctx, status.DeviceID); err == nil && device != nil && device.JID != "" {
+			if instance.JID == "" {
+				updates["jid"] = device.JID
+			}
+			if instance.PhoneNumber == "" {
+				updates["phone_number"] = jidToPhone(device.JID)
+			}
+		}
+		if instance.LastConnectedAt == nil {
+			now := time.Now()
+			updates["last_connected_at"] = &now
+		}
 	}
 
 	if err := p.app.DB.WithContext(ctx).Model(&models.WhatsAppInstance{}).
@@ -304,10 +333,59 @@ func (p *gowaPoller) syncInstanceStatusFromGowa(ctx context.Context, instance *m
 			"error", err, "instance_id", instance.ID, "desired", desired)
 		return
 	}
-	if desired != instance.Status {
+	if desired != previousStatus {
 		p.app.Log.Info("GOWA poller: synced instance status from GOWA",
 			"instance_id", instance.ID, "device_id", status.DeviceID,
-			"old", instance.Status, "new", desired)
+			"old", previousStatus, "new", desired)
 		instance.Status = desired
+		// Reflect patched JID/phone back onto the in-memory row so the
+		// broadcast payload carries them.
+		if jid, ok := updates["jid"].(string); ok {
+			instance.JID = jid
+		}
+		if phone, ok := updates["phone_number"].(string); ok {
+			instance.PhoneNumber = phone
+		}
+		p.broadcastInstanceStatusChange(instance, desired, previousStatus)
+	}
+}
+
+// broadcastInstanceStatusChange pushes a WebSocket notification so the UI
+// reacts to GOWA device transitions in real time. Mirrors the events the
+// whatsmeow ConnectionManager emits (instance_connected /
+// instance_disconnected) so the frontend uses the exact same handlers.
+func (p *gowaPoller) broadcastInstanceStatusChange(instance *models.WhatsAppInstance, desired, previous models.InstanceStatus) {
+	if p.app.WSHub == nil {
+		return
+	}
+	phone := strings.TrimSpace(instance.PhoneNumber)
+	switch desired {
+	case models.InstanceStatusConnected:
+		p.app.Log.Info("GOWA poller: broadcasting instance_connected",
+			"instance_id", instance.ID, "phone", phone)
+		p.app.WSHub.BroadcastToOrg(instance.OrganizationID, websocket.WSMessage{
+			Type: websocket.TypeInstanceConnected,
+			Payload: websocket.InstancePayload{
+				InstanceID:  instance.ID.String(),
+				PhoneNumber: phone,
+				Status:      string(models.InstanceStatusConnected),
+			},
+		})
+	case models.InstanceStatusDisconnected:
+		// Only broadcast a disconnect when we actually dropped (not on the
+		// initial disconnected → disconnected noop). Avoids noise on cold
+		// starts where every unpaired instance would otherwise emit.
+		if previous == models.InstanceStatusConnected || previous == models.InstanceStatusConnecting {
+			p.app.Log.Info("GOWA poller: broadcasting instance_disconnected",
+				"instance_id", instance.ID, "previous", previous)
+			p.app.WSHub.BroadcastToOrg(instance.OrganizationID, websocket.WSMessage{
+				Type: websocket.TypeInstanceDisconnected,
+				Payload: websocket.InstancePayload{
+					InstanceID: instance.ID.String(),
+					PhoneNumber: phone,
+					Status:      string(models.InstanceStatusDisconnected),
+				},
+			})
+		}
 	}
 }
