@@ -1,0 +1,10 @@
+.idea
+.vscode
+.git
+.gitignore
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+# Keep docker/ in context so the image can COPY entrypoint.sh (see docker/golang.Dockerfile).

@@ -1,41 +1,53 @@
-# Binaries and build artifacts
-bin/
-/whatomate
-/whatomate*
-/whatomate_*
+# Root dependencies
+node_modules/
+.DS_Store
+.agents/
+.claude/
+.serena/
 
-# Database dumps and large scratch artifacts — never commit (PII risk, repo bloat)
-*.sql.bak
-/Dashboard/kingmaster/kingmaster_100k_backup.sql
-# Unrelated scratch installers / scripts
-/Meta.ai.dmg
-# Broadly ignore downloaded macOS installer DMGs (Gemini, GitHub, GoogleStudioAI, TelegramSaudi, etc.)
-*.dmg
-/Dashboard/kingmaster/download_videos.js
-*.bin
-/server
-/main
-/testsprite_tests
-/frontend/testsprite_tests
-/frontend/dist
-/frontend/node_modules
-# Build and lint outputs
-go_lint.txt
-go_lint.json
-go_build_err.txt
-frontend_typecheck.txt
-frontend_tsc.txt
-frontend_lint.json
-frontend_audit.json
+# GOWA exclusions
+GOWA/whatsapp_8.10.0_darwin_arm64/
+GOWA/whatsapp_8.10.0_darwin_arm64.zip
 
-# Generated reports and analysis
-diagnostics_report.md
-session_summary.md
-summary.md
-ARCHITECTURE_REVIEW.md
-ARCHITECTURE_RISK_REPORT.md
-CORS_WEBSOCKET_ORIGIN_HARDENING_REPORT.md
-COMMERCIALIZATION_PLAN.md
+# whatomate exclusions
+whatomate/bin/
+whatomate/whatomate
+whatomate/whatomate*
+whatomate/whatomate_*
+whatomate/config.toml
+whatomate/go.work
+whatomate/frontend/node_modules/
+whatomate/frontend/dist/
+whatomate/frontend/.env.local
+whatomate/frontend/.env.*.local
+whatomate/frontend/playwright-report/
+whatomate/frontend/test-results/
+whatomate/frontend/playwright/.cache/
+whatomate/internal/frontend/dist/*
+!whatomate/internal/frontend/dist/.gitkeep
+
+# Temp/logs/build outputs
+*.log
+logs/
+tmp/
+temp/
+uploads/
+test-results/
+*.test
+*.out
+*.prof
+*.db
+ruvector.db
+
+# OS & IDE
+.idea/
+.vscode/
+.zed/
+*.swp
+*.swo
+Thumbs.db
+
+# Compiled files
 *.exe
 *.exe~
 *.dll
@@ -44,100 +56,30 @@ COMMERCIALIZATION_PLAN.md
 *.tar.gz
 *.zip
 *.7z
+*.dmg
+*.bin
 
-# Config with secrets
-config.toml
-
-# Test binary, built with `go test -c`
-*.test
-
-# Output of the go coverage tool
-*.out
-
-# Go workspace file
-go.work
-
-# IDE
-.idea/
-.vscode/
-.zed/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Frontend
-frontend/node_modules/
-frontend/dist/
-frontend/.env.local
-frontend/.env.*.local
-
-# Playwright
-frontend/playwright-report/
-frontend/test-results/
-frontend/playwright/.cache/
-
-# Embedded frontend build (generated during build)
-internal/frontend/dist/*
-!internal/frontend/dist/.gitkeep
-
-# Logs
-*.log
-logs/
-
-# Temp files
-tmp/
-temp/
-uploads/
-
-# Test results
-test-results/
-
-# CocoIndex runtime/index artifacts
-.cocoindex_code/
-
-# Agent harness configuration
-# Track project-level Pi skills; keep runtime/cache/local state out of git.
-!.pi/
-!.pi/skills/
-!.pi/skills/**/
-!.pi/skills/**/SKILL.md
-!.pi/skills/**/references/
-!.pi/skills/**/references/**
-!.pi/settings.json
-.pi/cache/
-.pi/tmp/
-.pi/runs/
-.pi/sessions/
-.pi/logs/
-.pi/state/
-.pi/*.local.json
-
-# Developer-local agent settings and third-party skill libraries
-.claude/settings.local.json
-.claude/*.local.json
-.agent/
-.agents/
-.kilocode/
-.kilo/
-.claude-flow/
-.claude/
-.opencode/
-# Code health tool artifacts
-.desloppify/
-# Serena memories
-.serena/
-# Vector DB artifacts
-ruvector.db
-*.db
-# Ruflo swarm runtime state (local dev only)
-.swarm/
-# pprof / heap / cpu profiles
-*.prof
-# CocoIndex Code (ccc)
-/.cocoindex_code/
-/node_modules
-
-testsprite_tests/tmp/config.json
+# Database/scratch
+*.sql.bak
+whatomate/Dashboard/kingmaster/kingmaster_100k_backup.sql
+whatomate/Dashboard/kingmaster/download_videos.js
+whatomate/server
+whatomate/main
+whatomate/testsprite_tests/
+whatomate/frontend/testsprite_tests/
+whatomate/go_lint.txt
+whatomate/go_lint.json
+whatomate/go_build_err.txt
+whatomate/frontend_typecheck.txt
+whatomate/frontend_tsc.txt
+whatomate/frontend_lint.json
+whatomate/frontend_audit.json
+whatomate/diagnostics_report.md
+whatomate/session_summary.md
+whatomate/summary.md
+whatomate/ARCHITECTURE_REVIEW.md
+whatomate/ARCHITECTURE_RISK_REPORT.md
+whatomate/CORS_WEBSOCKET_ORIGIN_HARDENING_REPORT.md
+whatomate/COMMERCIALIZATION_PLAN.md
+whatomate/.cocoindex_code/
+whatomate/testsprite_tests/tmp/config.json

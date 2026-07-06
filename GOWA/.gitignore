@@ -1,0 +1,42 @@
+# Binaries
+bin/
+main
+main.exe
+src/gowa
+.claude
+
+# Build artifacts
+src/pkged.go
+
+# Database
+*.db
+storages/
+
+# Environment
+.env
+
+# Runtime media & QR codes
+statics/
+
+# History files
+history-*.json
+
+# Media conversions
+*.jpe
+
+# IDE & editor
+.idea/
+.vscode/settings.json
+.factory/
+.cursor/mcp.json
+.playwright-mcp/
+
+# OS files
+.DS_Store
+tmp/
+
+# Worktrees
+.worktrees/
+
+# whatsmeow store (legacy path)
+src/whatsapp/
