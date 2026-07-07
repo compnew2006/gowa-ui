@@ -3,7 +3,6 @@ package middleware
 import (
 	"context"
 	"fmt"
-	"net"
 	"net/url"
 	"strings"
 	"time"
@@ -91,16 +90,11 @@ func ParseAllowedOrigins(allowedOrigins string) map[string]bool {
 }
 
 // IsOriginAllowed checks if origin is in the explicit allowed set.
-// If no origins are configured, fallback rules apply:
-// 1. same-origin requests are allowed
-// 2. localhost/loopback origins are allowed for local development
-// 3. all other origins are rejected
 func IsOriginAllowed(origin string, allowedOrigins map[string]bool) bool {
 	return IsOriginAllowedForRequest(origin, allowedOrigins, "", false)
 }
 
-// IsOriginAllowedForRequest validates an origin against explicit allow-list and
-// safe defaults based on the incoming request host.
+// IsOriginAllowedForRequest validates an origin strictly against an explicit allow-list.
 func IsOriginAllowedForRequest(origin string, allowedOrigins map[string]bool, requestHost string, requestTLS bool) bool {
 	trimmedOrigin := strings.TrimSpace(origin)
 	if trimmedOrigin == "" {
@@ -117,19 +111,7 @@ func IsOriginAllowedForRequest(origin string, allowedOrigins map[string]bool, re
 		return allowedOrigins[normalizedOrigin]
 	}
 
-	originURL, err := url.Parse(normalizedOrigin)
-	if err != nil {
-		return false
-	}
-	originHost := strings.ToLower(originURL.Hostname())
-	originPort := effectivePort(originURL.Scheme, originURL.Port())
-
-	reqHost, reqPort := splitHostPort(requestHost, requestTLS)
-	if reqHost != "" && reqPort != "" && originHost == reqHost && originPort == reqPort {
-		return true
-	}
-
-	return isLoopbackHost(originHost)
+	return false
 }
 
 func normalizeOrigin(origin string) (string, bool) {
@@ -187,42 +169,6 @@ func formatHostPort(host, scheme, port string) string {
 	return hostPart + ":" + port
 }
 
-func splitHostPort(requestHost string, requestTLS bool) (string, string) {
-	trimmed := strings.TrimSpace(requestHost)
-	if trimmed == "" {
-		return "", ""
-	}
-
-	host := ""
-	port := ""
-
-	if parsedHost, parsedPort, err := net.SplitHostPort(trimmed); err == nil {
-		host = strings.ToLower(strings.Trim(parsedHost, "[]"))
-		port = parsedPort
-	} else {
-		host = strings.ToLower(strings.Trim(trimmed, "[]"))
-	}
-
-	if port == "" {
-		if requestTLS {
-			port = "443"
-		} else {
-			port = "80"
-		}
-	}
-	return host, port
-}
-
-func isLoopbackHost(host string) bool {
-	if host == "" {
-		return false
-	}
-	if host == "localhost" {
-		return true
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
-}
 
 // CORS handles Cross-Origin Resource Sharing with origin validation.
 func CORS(allowedOrigins map[string]bool) fastglue.FastMiddleware {

@@ -1,0 +1,15 @@
+<<<<<<< SEARCH
+		Config: &config.Config{
+			JWT: config.JWTConfig{Secret: testutil.TestJWTSecret},
+			Server: config.ServerConfig{
+				AllowedOrigins: "", // Allow all for test
+			},
+		},
+=======
+		Config: &config.Config{
+			JWT: config.JWTConfig{Secret: testutil.TestJWTSecret},
+			Server: config.ServerConfig{
+				AllowedOrigins: "http://localhost",
+			},
+		},
+>>>>>>> REPLACE

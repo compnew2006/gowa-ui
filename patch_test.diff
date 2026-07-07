@@ -1,0 +1,51 @@
+<<<<<<< SEARCH
+		{
+			name:           "fallback same origin allowed",
+			origin:         "https://api.example.com",
+			allowedOrigins: nil,
+			requestHost:    "api.example.com",
+			requestTLS:     true,
+			wantAllowed:    true,
+		},
+		{
+			name:           "fallback localhost allowed",
+			origin:         "http://localhost:5173",
+			allowedOrigins: nil,
+			requestHost:    "api.example.com",
+			requestTLS:     false,
+			wantAllowed:    true,
+		},
+		{
+			name:           "fallback cross origin denied",
+			origin:         "https://evil.example",
+			allowedOrigins: nil,
+			requestHost:    "api.example.com",
+			requestTLS:     true,
+			wantAllowed:    false,
+		},
+=======
+		{
+			name:           "fallback same origin denied (strict)",
+			origin:         "https://api.example.com",
+			allowedOrigins: nil,
+			requestHost:    "api.example.com",
+			requestTLS:     true,
+			wantAllowed:    false,
+		},
+		{
+			name:           "fallback localhost denied (strict)",
+			origin:         "http://localhost:5173",
+			allowedOrigins: nil,
+			requestHost:    "api.example.com",
+			requestTLS:     false,
+			wantAllowed:    false,
+		},
+		{
+			name:           "fallback cross origin denied",
+			origin:         "https://evil.example",
+			allowedOrigins: nil,
+			requestHost:    "api.example.com",
+			requestTLS:     true,
+			wantAllowed:    false,
+		},
+>>>>>>> REPLACE

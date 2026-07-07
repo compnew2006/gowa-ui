@@ -35,18 +35,18 @@ func TestNewUpgrader_CheckOrigin(t *testing.T) {
 			wantAllowed:    false,
 		},
 		{
-			name:           "fallback permits same origin",
+			name:           "fallback denies same origin (strict)",
 			host:           "example.com",
 			origin:         "http://example.com",
 			allowedOrigins: nil,
-			wantAllowed:    true,
+			wantAllowed:    false,
 		},
 		{
-			name:           "fallback permits localhost origin",
+			name:           "fallback denies localhost origin (strict)",
 			host:           "api.example.com",
 			origin:         "http://localhost:3000",
 			allowedOrigins: nil,
-			wantAllowed:    true,
+			wantAllowed:    false,
 		},
 		{
 			name:           "fallback blocks foreign origin",

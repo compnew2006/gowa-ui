@@ -101,20 +101,20 @@ func TestCORS(t *testing.T) {
 			wantCreds:      "",
 		},
 		{
-			name:           "empty allowlist allows same origin",
+			name:           "empty allowlist denies same origin (strict)",
 			host:           "app.example.com",
 			origin:         "http://app.example.com",
 			allowedOrigins: nil,
-			wantOrigin:     "http://app.example.com",
-			wantCreds:      "true",
+			wantOrigin:     "",
+			wantCreds:      "",
 		},
 		{
-			name:           "empty allowlist allows localhost development origin",
+			name:           "empty allowlist denies localhost development origin (strict)",
 			host:           "api.example.com",
 			origin:         "http://localhost:3000",
 			allowedOrigins: nil,
-			wantOrigin:     "http://localhost:3000",
-			wantCreds:      "true",
+			wantOrigin:     "",
+			wantCreds:      "",
 		},
 		{
 			name:           "empty allowlist blocks non-loopback cross origin",
@@ -220,20 +220,20 @@ func TestIsOriginAllowedForRequest(t *testing.T) {
 			wantAllowed:    false,
 		},
 		{
-			name:           "fallback same origin allowed",
+			name:           "fallback same origin denied (strict)",
 			origin:         "https://api.example.com",
 			allowedOrigins: nil,
 			requestHost:    "api.example.com",
 			requestTLS:     true,
-			wantAllowed:    true,
+			wantAllowed:    false,
 		},
 		{
-			name:           "fallback localhost allowed",
+			name:           "fallback localhost denied (strict)",
 			origin:         "http://localhost:5173",
 			allowedOrigins: nil,
 			requestHost:    "api.example.com",
 			requestTLS:     false,
-			wantAllowed:    true,
+			wantAllowed:    false,
 		},
 		{
 			name:           "fallback cross origin denied",
@@ -984,7 +984,8 @@ func TestAuth_MultipleMiddlewareChain(t *testing.T) {
 	req.RequestCtx.Request.Header.Set("Origin", "http://example.com")
 
 	// Apply CORS first
-	corsMiddleware := middleware.CORS(nil)
+	allowedOrigins := middleware.ParseAllowedOrigins("http://example.com")
+	corsMiddleware := middleware.CORS(allowedOrigins)
 	req = corsMiddleware(req)
 	require.NotNil(t, req)
 

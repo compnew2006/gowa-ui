@@ -1,0 +1,39 @@
+<<<<<<< SEARCH
+func splitHostPort(requestHost string, requestTLS bool) (string, string) {
+	trimmed := strings.TrimSpace(requestHost)
+	if trimmed == "" {
+		return "", ""
+	}
+
+	host := ""
+	port := ""
+
+	if parsedHost, parsedPort, err := net.SplitHostPort(trimmed); err == nil {
+		host = strings.ToLower(strings.Trim(parsedHost, "[]"))
+		port = parsedPort
+	} else {
+		host = strings.ToLower(strings.Trim(trimmed, "[]"))
+	}
+
+	if port == "" {
+		if requestTLS {
+			port = "443"
+		} else {
+			port = "80"
+		}
+	}
+	return host, port
+}
+
+func isLoopbackHost(host string) bool {
+	if host == "" {
+		return false
+	}
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+=======
+>>>>>>> REPLACE

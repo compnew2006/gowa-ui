@@ -1,0 +1,45 @@
+<<<<<<< SEARCH
+		{
+			name:           "fallback permits same origin",
+			host:           "example.com",
+			origin:         "http://example.com",
+			allowedOrigins: nil,
+			wantAllowed:    true,
+		},
+		{
+			name:           "fallback permits localhost origin",
+			host:           "api.example.com",
+			origin:         "http://localhost:3000",
+			allowedOrigins: nil,
+			wantAllowed:    true,
+		},
+		{
+			name:           "fallback blocks foreign origin",
+			host:           "api.example.com",
+			origin:         "https://evil.example",
+			allowedOrigins: nil,
+			wantAllowed:    false,
+		},
+=======
+		{
+			name:           "fallback denies same origin (strict)",
+			host:           "example.com",
+			origin:         "http://example.com",
+			allowedOrigins: nil,
+			wantAllowed:    false,
+		},
+		{
+			name:           "fallback denies localhost origin (strict)",
+			host:           "api.example.com",
+			origin:         "http://localhost:3000",
+			allowedOrigins: nil,
+			wantAllowed:    false,
+		},
+		{
+			name:           "fallback blocks foreign origin",
+			host:           "api.example.com",
+			origin:         "https://evil.example",
+			allowedOrigins: nil,
+			wantAllowed:    false,
+		},
+>>>>>>> REPLACE

@@ -1,0 +1,51 @@
+<<<<<<< SEARCH
+		{
+			name:           "empty allowlist allows same origin",
+			host:           "app.example.com",
+			origin:         "http://app.example.com",
+			allowedOrigins: nil,
+			wantOrigin:     "http://app.example.com",
+			wantCreds:      "true",
+		},
+		{
+			name:           "empty allowlist allows localhost development origin",
+			host:           "api.example.com",
+			origin:         "http://localhost:3000",
+			allowedOrigins: nil,
+			wantOrigin:     "http://localhost:3000",
+			wantCreds:      "true",
+		},
+		{
+			name:           "empty allowlist blocks cross origin",
+			host:           "api.example.com",
+			origin:         "https://evil.example",
+			allowedOrigins: nil,
+			wantOrigin:     "",
+			wantCreds:      "",
+		},
+=======
+		{
+			name:           "empty allowlist denies same origin (strict)",
+			host:           "app.example.com",
+			origin:         "http://app.example.com",
+			allowedOrigins: nil,
+			wantOrigin:     "",
+			wantCreds:      "",
+		},
+		{
+			name:           "empty allowlist denies localhost development origin (strict)",
+			host:           "api.example.com",
+			origin:         "http://localhost:3000",
+			allowedOrigins: nil,
+			wantOrigin:     "",
+			wantCreds:      "",
+		},
+		{
+			name:           "empty allowlist blocks cross origin",
+			host:           "api.example.com",
+			origin:         "https://evil.example",
+			allowedOrigins: nil,
+			wantOrigin:     "",
+			wantCreds:      "",
+		},
+>>>>>>> REPLACE

@@ -16,7 +16,7 @@ func TestWebSocketHandler_EchoesSubprotocol(t *testing.T) {
 		Config: &config.Config{
 			JWT: config.JWTConfig{Secret: testutil.TestJWTSecret},
 			Server: config.ServerConfig{
-				AllowedOrigins: "", // Allow all for test
+				AllowedOrigins: "http://localhost",
 			},
 		},
 		Log: testutil.NopLogger(),

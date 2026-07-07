@@ -1,0 +1,54 @@
+<<<<<<< SEARCH
+// IsOriginAllowedForRequest validates an origin against explicit allow-list and
+// safe defaults based on the incoming request host.
+func IsOriginAllowedForRequest(origin string, allowedOrigins map[string]bool, requestHost string, requestTLS bool) bool {
+	trimmedOrigin := strings.TrimSpace(origin)
+	if trimmedOrigin == "" {
+		// Non-browser clients may omit Origin.
+		return len(allowedOrigins) == 0
+	}
+
+	normalizedOrigin, ok := normalizeOrigin(trimmedOrigin)
+	if !ok {
+		return false
+	}
+
+	if len(allowedOrigins) > 0 {
+		return allowedOrigins[normalizedOrigin]
+	}
+
+	originURL, err := url.Parse(normalizedOrigin)
+	if err != nil {
+		return false
+	}
+	originHost := strings.ToLower(originURL.Hostname())
+	originPort := effectivePort(originURL.Scheme, originURL.Port())
+
+	reqHost, reqPort := splitHostPort(requestHost, requestTLS)
+	if reqHost != "" && reqPort != "" && originHost == reqHost && originPort == reqPort {
+		return true
+	}
+
+	return isLoopbackHost(originHost)
+}
+=======
+// IsOriginAllowedForRequest validates an origin strictly against an explicit allow-list.
+func IsOriginAllowedForRequest(origin string, allowedOrigins map[string]bool, requestHost string, requestTLS bool) bool {
+	trimmedOrigin := strings.TrimSpace(origin)
+	if trimmedOrigin == "" {
+		// Non-browser clients may omit Origin.
+		return len(allowedOrigins) == 0
+	}
+
+	normalizedOrigin, ok := normalizeOrigin(trimmedOrigin)
+	if !ok {
+		return false
+	}
+
+	if len(allowedOrigins) > 0 {
+		return allowedOrigins[normalizedOrigin]
+	}
+
+	return false
+}
+>>>>>>> REPLACE

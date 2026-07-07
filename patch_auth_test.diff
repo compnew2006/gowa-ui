@@ -1,0 +1,54 @@
+<<<<<<< SEARCH
+	// Apply CORS first
+	corsMiddleware := middleware.CORS(nil)
+	req = corsMiddleware(req)
+	require.NotNil(t, req)
+
+	// Then Auth
+	authMiddleware := middleware.Auth(testJWTSecret)
+	req = authMiddleware(req)
+	require.NotNil(t, req)
+
+	// Then RequirePermission (replaces RequireRole)
+	checker := func(uid uuid.UUID, resource, action string) bool {
+		return uid == userID // Allow the authenticated user
+	}
+	permMiddleware := middleware.RequirePermission(checker, "contacts", "read")
+	req = permMiddleware(req)
+	require.NotNil(t, req)
+
+	// Verify all context values are still present
+	assert.Equal(t, userID, req.RequestCtx.UserValue(middleware.ContextKeyUserID))
+	assert.Equal(t, orgID, req.RequestCtx.UserValue(middleware.ContextKeyOrganizationID))
+	assert.Equal(t, roleID, req.RequestCtx.UserValue(middleware.ContextKeyRoleID))
+
+	// Verify CORS headers are still present
+	assert.Equal(t, "http://example.com", string(req.RequestCtx.Response.Header.Peek("Access-Control-Allow-Origin")))
+=======
+	// Apply CORS first
+	allowedOrigins := middleware.ParseAllowedOrigins("http://example.com")
+	corsMiddleware := middleware.CORS(allowedOrigins)
+	req = corsMiddleware(req)
+	require.NotNil(t, req)
+
+	// Then Auth
+	authMiddleware := middleware.Auth(testJWTSecret)
+	req = authMiddleware(req)
+	require.NotNil(t, req)
+
+	// Then RequirePermission (replaces RequireRole)
+	checker := func(uid uuid.UUID, resource, action string) bool {
+		return uid == userID // Allow the authenticated user
+	}
+	permMiddleware := middleware.RequirePermission(checker, "contacts", "read")
+	req = permMiddleware(req)
+	require.NotNil(t, req)
+
+	// Verify all context values are still present
+	assert.Equal(t, userID, req.RequestCtx.UserValue(middleware.ContextKeyUserID))
+	assert.Equal(t, orgID, req.RequestCtx.UserValue(middleware.ContextKeyOrganizationID))
+	assert.Equal(t, roleID, req.RequestCtx.UserValue(middleware.ContextKeyRoleID))
+
+	// Verify CORS headers are still present
+	assert.Equal(t, "http://example.com", string(req.RequestCtx.Response.Header.Peek("Access-Control-Allow-Origin")))
+>>>>>>> REPLACE
