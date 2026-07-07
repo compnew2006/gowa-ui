@@ -324,3 +324,57 @@ var (
 	_ ManagedPlugin             = (*permissionTestPlugin)(nil)
 	_ PermissionProvidingPlugin = (*permissionTestPlugin)(nil)
 )
+
+// dummyGatingModulePlugin is used to test GatingModule embedding.
+type dummyGatingModulePlugin struct {
+	GatingModule
+}
+
+func (p *dummyGatingModulePlugin) Name() string {
+	return "dummy-gating-module"
+}
+
+func (p *dummyGatingModulePlugin) Manifest() ModuleManifest {
+	return ModuleManifest{
+		Key:            "dummy-gating-module",
+		DisplayName:    "Dummy Gating Module",
+		Version:        "1.0.0",
+		SchemaVersion:  1,
+		DefaultEnabled: true,
+	}
+}
+
+func TestNewGatingModule(t *testing.T) {
+	gm := NewGatingModule()
+
+	// 1. Verify it can initialize embedded PluginBase fields
+	var app handlers.App
+	db := newPluginPermissionTestDB(t)
+	rdb := redis.NewClient(&redis.Options{})
+	logger := slog.Default()
+
+	err := gm.Init(&app, db, rdb, logger)
+	require.NoError(t, err)
+
+	assert.Same(t, &app, gm.App)
+	assert.Same(t, db, gm.DB)
+	assert.Same(t, rdb, gm.RDB)
+	assert.Same(t, logger, gm.Log)
+
+	// 2. Verify Migrate returns nil
+	err = gm.Migrate(db)
+	assert.NoError(t, err)
+
+	// 3. Verify Routes does not panic
+	require.NotPanics(t, func() {
+		gm.Routes(fastglue.New())
+	})
+
+	// 4. Verify structural inheritance fulfills ManagedPlugin
+	plugin := &dummyGatingModulePlugin{GatingModule: gm}
+	var _ ManagedPlugin = plugin
+	var _ Plugin = plugin
+
+	assert.Equal(t, "dummy-gating-module", plugin.Name())
+	assert.Equal(t, "dummy-gating-module", plugin.Manifest().Key)
+}
