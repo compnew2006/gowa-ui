@@ -453,7 +453,10 @@ func (a *App) saveSavedContentMedia(orgID uuid.UUID, contentID string, data []by
 
 	filename := contentID + ext
 	relativePath := filepath.Join(subdir, filename)
-	filePath := filepath.Join(a.getMediaStoragePath(), relativePath)
+	filePath, err := a.resolveMediaFilePath(relativePath)
+	if err != nil {
+		return "", fmt.Errorf("invalid media file path: %w", err)
+	}
 
 	if err := os.WriteFile(filePath, data, 0600); err != nil {
 		return "", fmt.Errorf("failed to save media file: %w", err)
