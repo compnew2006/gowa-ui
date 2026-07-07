@@ -2,9 +2,10 @@ package frontend
 
 import (
 	"crypto/rand"
-	"encoding/base64"
 	"embed"
+	"encoding/base64"
 	"fmt"
+	"html"
 	"io/fs"
 	"net/http"
 	"path/filepath"
@@ -69,7 +70,7 @@ func Handler(basePath string) fasthttp.RequestHandler {
 	if basePath == "" {
 		baseHref = "/"
 	}
-	baseTag := fmt.Sprintf(`<head><base href="%s">`, baseHref)
+	baseTag := fmt.Sprintf(`<head><base href="%s">`, html.EscapeString(baseHref))
 	modifiedHTML := strings.Replace(string(indexContent), "<head>", baseTag, 1)
 
 	// Add a nonce placeholder to the inline theme-init script so CSP can allow it.
