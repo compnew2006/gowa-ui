@@ -278,6 +278,10 @@ func (a *App) RefreshToken(r *fastglue.Request) error {
 	}
 
 	token, err := jwt.ParseWithClaims(refreshTokenStr, &middleware.JWTClaims{}, func(token *jwt.Token) (interface{}, error) {
+		signingMethod, ok := token.Method.(*jwt.SigningMethodHMAC)
+		if !ok || signingMethod.Alg() != jwt.SigningMethodHS256.Alg() {
+			return nil, fmt.Errorf("unexpected JWT signing method: %s", token.Method.Alg())
+		}
 		return a.jwtSecretBytes()
 	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
 
