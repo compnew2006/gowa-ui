@@ -15,6 +15,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"gorm.io/gorm/logger"
 )
 
@@ -1073,24 +1074,20 @@ func BackfillAdminChatDeletePermission(db *gorm.DB) error {
 		return fmt.Errorf("failed to list admin roles: %w", err)
 	}
 
-	for _, role := range adminRoles {
-		var count int64
-		if err := db.Table("role_permissions").
-			Where("custom_role_id = ? AND permission_id = ?", role.ID, permission.ID).
-			Count(&count).Error; err != nil {
-			return fmt.Errorf("failed to inspect admin role permissions: %w", err)
-		}
-		if count > 0 {
-			continue
-		}
+	if len(adminRoles) == 0 {
+		return nil
+	}
 
-		if err := db.Exec(
-			"INSERT INTO role_permissions (custom_role_id, permission_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
-			role.ID,
-			permission.ID,
-		).Error; err != nil {
-			return fmt.Errorf("failed to backfill admin role %s: %w", role.ID, err)
-		}
+	var rolePerms []map[string]interface{}
+	for _, role := range adminRoles {
+		rolePerms = append(rolePerms, map[string]interface{}{
+			"custom_role_id": role.ID,
+			"permission_id":  permission.ID,
+		})
+	}
+
+	if err := db.Table("role_permissions").Clauses(clause.OnConflict{DoNothing: true}).Create(&rolePerms).Error; err != nil {
+		return fmt.Errorf("failed to backfill admin role permissions: %w", err)
 	}
 
 	return nil
@@ -1115,24 +1112,20 @@ func BackfillSystemChatPrefixPermission(db *gorm.DB) error {
 		return fmt.Errorf("failed to list system roles: %w", err)
 	}
 
-	for _, role := range systemRoles {
-		var count int64
-		if err := db.Table("role_permissions").
-			Where("custom_role_id = ? AND permission_id = ?", role.ID, permission.ID).
-			Count(&count).Error; err != nil {
-			return fmt.Errorf("failed to inspect role permissions: %w", err)
-		}
-		if count > 0 {
-			continue
-		}
+	if len(systemRoles) == 0 {
+		return nil
+	}
 
-		if err := db.Exec(
-			"INSERT INTO role_permissions (custom_role_id, permission_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
-			role.ID,
-			permission.ID,
-		).Error; err != nil {
-			return fmt.Errorf("failed to backfill role %s: %w", role.ID, err)
-		}
+	var rolePerms []map[string]interface{}
+	for _, role := range systemRoles {
+		rolePerms = append(rolePerms, map[string]interface{}{
+			"custom_role_id": role.ID,
+			"permission_id":  permission.ID,
+		})
+	}
+
+	if err := db.Table("role_permissions").Clauses(clause.OnConflict{DoNothing: true}).Create(&rolePerms).Error; err != nil {
+		return fmt.Errorf("failed to backfill system role permissions: %w", err)
 	}
 
 	return nil
@@ -1154,24 +1147,20 @@ func BackfillSystemChatBypassClaimPermission(db *gorm.DB) error {
 		return fmt.Errorf("failed to list system roles: %w", err)
 	}
 
-	for _, role := range systemRoles {
-		var count int64
-		if err := db.Table("role_permissions").
-			Where("custom_role_id = ? AND permission_id = ?", role.ID, permission.ID).
-			Count(&count).Error; err != nil {
-			return fmt.Errorf("failed to inspect role permissions: %w", err)
-		}
-		if count > 0 {
-			continue
-		}
+	if len(systemRoles) == 0 {
+		return nil
+	}
 
-		if err := db.Exec(
-			"INSERT INTO role_permissions (custom_role_id, permission_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
-			role.ID,
-			permission.ID,
-		).Error; err != nil {
-			return fmt.Errorf("failed to backfill role %s: %w", role.ID, err)
-		}
+	var rolePerms []map[string]interface{}
+	for _, role := range systemRoles {
+		rolePerms = append(rolePerms, map[string]interface{}{
+			"custom_role_id": role.ID,
+			"permission_id":  permission.ID,
+		})
+	}
+
+	if err := db.Table("role_permissions").Clauses(clause.OnConflict{DoNothing: true}).Create(&rolePerms).Error; err != nil {
+		return fmt.Errorf("failed to backfill system role permissions: %w", err)
 	}
 
 	return nil
@@ -1196,24 +1185,20 @@ func BackfillSystemContactSoftDeletePermission(db *gorm.DB) error {
 		return fmt.Errorf("failed to list system roles: %w", err)
 	}
 
-	for _, role := range systemRoles {
-		var count int64
-		if err := db.Table("role_permissions").
-			Where("custom_role_id = ? AND permission_id = ?", role.ID, permission.ID).
-			Count(&count).Error; err != nil {
-			return fmt.Errorf("failed to inspect role permissions: %w", err)
-		}
-		if count > 0 {
-			continue
-		}
+	if len(systemRoles) == 0 {
+		return nil
+	}
 
-		if err := db.Exec(
-			"INSERT INTO role_permissions (custom_role_id, permission_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
-			role.ID,
-			permission.ID,
-		).Error; err != nil {
-			return fmt.Errorf("failed to backfill role %s: %w", role.ID, err)
-		}
+	var rolePerms []map[string]interface{}
+	for _, role := range systemRoles {
+		rolePerms = append(rolePerms, map[string]interface{}{
+			"custom_role_id": role.ID,
+			"permission_id":  permission.ID,
+		})
+	}
+
+	if err := db.Table("role_permissions").Clauses(clause.OnConflict{DoNothing: true}).Create(&rolePerms).Error; err != nil {
+		return fmt.Errorf("failed to backfill system role permissions: %w", err)
 	}
 
 	return nil
@@ -1251,26 +1236,22 @@ func BackfillAdminUploadsCleanupPermissions(db *gorm.DB) error {
 		return fmt.Errorf("failed to list admin roles: %w", err)
 	}
 
+	if len(adminRoles) == 0 || len(permissions) == 0 {
+		return nil
+	}
+
+	var rolePerms []map[string]interface{}
 	for _, role := range adminRoles {
 		for _, permission := range permissions {
-			var count int64
-			if err := db.Table("role_permissions").
-				Where("custom_role_id = ? AND permission_id = ?", role.ID, permission.ID).
-				Count(&count).Error; err != nil {
-				return fmt.Errorf("failed to inspect admin role permissions: %w", err)
-			}
-			if count > 0 {
-				continue
-			}
-
-			if err := db.Exec(
-				"INSERT INTO role_permissions (custom_role_id, permission_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
-				role.ID,
-				permission.ID,
-			).Error; err != nil {
-				return fmt.Errorf("failed to backfill admin role %s: %w", role.ID, err)
-			}
+			rolePerms = append(rolePerms, map[string]interface{}{
+				"custom_role_id": role.ID,
+				"permission_id":  permission.ID,
+			})
 		}
+	}
+
+	if err := db.Table("role_permissions").Clauses(clause.OnConflict{DoNothing: true}).Create(&rolePerms).Error; err != nil {
+		return fmt.Errorf("failed to backfill admin uploads cleanup permissions: %w", err)
 	}
 
 	return nil
