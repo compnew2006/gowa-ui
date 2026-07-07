@@ -16,12 +16,12 @@ func (a *App) GetBusinessProfile(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
 	if err := a.requirePermission(r, userID, models.ResourceAccounts, models.ActionRead); err != nil {
-		return nil
+		return err
 	}
 
 	id, err := parsePathUUID(r, "id", "account")
 	if err != nil {
-		return nil
+		return err
 	}
 
 	account, err := a.resolveWhatsAppAccountByID(r, id, orgID)
@@ -29,7 +29,7 @@ func (a *App) GetBusinessProfile(r *fastglue.Request) error {
 		if err.Error() == "failed to decrypt account secrets" {
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to decrypt account secrets", nil, "")
 		}
-		return nil
+		return err
 	}
 
 	// Create a context for the request
@@ -52,12 +52,12 @@ func (a *App) UpdateBusinessProfile(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
 	if err := a.requirePermission(r, userID, models.ResourceAccounts, models.ActionWrite); err != nil {
-		return nil
+		return err
 	}
 
 	id, err := parsePathUUID(r, "id", "account")
 	if err != nil {
-		return nil
+		return err
 	}
 
 	account, err := a.resolveWhatsAppAccountByID(r, id, orgID)
@@ -65,12 +65,12 @@ func (a *App) UpdateBusinessProfile(r *fastglue.Request) error {
 		if err.Error() == "failed to decrypt account secrets" {
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to decrypt account secrets", nil, "")
 		}
-		return nil
+		return err
 	}
 
 	var input whatsapp.BusinessProfileInput
 	if err := a.decodeRequest(r, &input); err != nil {
-		return nil
+		return err
 	}
 
 	ctx := r.RequestCtx
@@ -84,6 +84,7 @@ func (a *App) UpdateBusinessProfile(r *fastglue.Request) error {
 	// Re-fetch to ensure we have the latest state
 	profile, err := a.WhatsApp.GetBusinessProfile(ctx, waAccount)
 	if err != nil {
+		_ = err
 		// If re-fetch fails, just return success message
 		return r.SendEnvelope(map[string]string{"message": "Profile updated successfully"})
 	}
@@ -98,12 +99,12 @@ func (a *App) UpdateProfilePicture(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
 	if err := a.requirePermission(r, userID, models.ResourceAccounts, models.ActionWrite); err != nil {
-		return nil
+		return err
 	}
 
 	id, err := parsePathUUID(r, "id", "account")
 	if err != nil {
-		return nil
+		return err
 	}
 
 	account, err := a.resolveWhatsAppAccountByID(r, id, orgID)
@@ -111,7 +112,7 @@ func (a *App) UpdateProfilePicture(r *fastglue.Request) error {
 		if err.Error() == "failed to decrypt account secrets" {
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to decrypt account secrets", nil, "")
 		}
-		return nil
+		return err
 	}
 
 	// 1. Get the file from request
