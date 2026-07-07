@@ -309,9 +309,10 @@ func (a *App) SendOutgoingMessage(ctx context.Context, req OutgoingMessageReques
 		}
 	} else if opts.Async {
 		a.wg.Add(1)
+		detachedCtx := context.WithoutCancel(ctx)
 		go func() {
 			defer a.wg.Done()
-			asyncCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+			asyncCtx, cancel := context.WithTimeout(detachedCtx, 30*time.Second)
 			defer cancel()
 
 			wamid, sendErr := sendFn(asyncCtx)
