@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 
@@ -229,6 +230,14 @@ type gowaMessagePayload struct {
 	Caption   string `json:"caption,omitempty"`
 }
 
+
+func parseGowaTimestamp(ts string) (time.Time, error) {
+	if sec, err := strconv.ParseInt(ts, 10, 64); err == nil {
+		return time.Unix(sec, 0), nil
+	}
+	return time.Parse(time.RFC3339, ts)
+}
+
 func (a *App) handleGowaMessage(ctx context.Context, instance *models.WhatsAppInstance, raw json.RawMessage) {
 	var p gowaMessagePayload
 	if err := json.Unmarshal(raw, &p); err != nil {
@@ -295,7 +304,7 @@ func (a *App) handleGowaMessage(ctx context.Context, instance *models.WhatsAppIn
 	// an existing row's timestamp (we also guard explicitly in the patch path
 	// below).
 	if p.Timestamp != "" {
-		if ts, tsErr := time.Parse(time.RFC3339, p.Timestamp); tsErr == nil {
+		if ts, tsErr := parseGowaTimestamp(p.Timestamp); tsErr == nil {
 			msg.CreatedAt = ts
 		} else {
 			a.Log.Debug("GOWA message timestamp unparseable; falling back to now",
@@ -344,7 +353,7 @@ func (a *App) handleGowaMessage(ctx context.Context, instance *models.WhatsAppIn
 		// non-zero created_at, but if the original row was inserted without a
 		// timestamp, fill it from the GOWA payload now.
 		if msg.CreatedAt.IsZero() && p.Timestamp != "" {
-			if ts, tsErr := time.Parse(time.RFC3339, p.Timestamp); tsErr == nil {
+			if ts, tsErr := parseGowaTimestamp(p.Timestamp); tsErr == nil {
 				patch["created_at"] = ts
 			}
 		}
