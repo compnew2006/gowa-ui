@@ -23,18 +23,35 @@ func BackfillInstanceAssignedChatResetSettings(db *gorm.DB) error {
 		return fmt.Errorf("failed to load organizations for assigned chat reset backfill: %w", err)
 	}
 
-	for _, org := range organizations {
-		if !waManager.HasAssignedChatResetSettings(org.Settings) {
-			continue
-		}
+	var orgIDsToProcess []string
+	var validOrgs []models.Organization
 
+	for _, org := range organizations {
+		if waManager.HasAssignedChatResetSettings(org.Settings) {
+			orgIDsToProcess = append(orgIDsToProcess, org.ID.String())
+			validOrgs = append(validOrgs, org)
+		}
+	}
+
+	if len(orgIDsToProcess) == 0 {
+		return nil
+	}
+
+	var allInstances []models.WhatsAppInstance
+	if err := db.Select("id", "organization_id", "settings").Where("organization_id IN ?", orgIDsToProcess).Find(&allInstances).Error; err != nil {
+		return fmt.Errorf("failed to load instances for organizations: %w", err)
+	}
+
+	instancesByOrg := make(map[string][]models.WhatsAppInstance)
+	for _, instance := range allInstances {
+		orgIDStr := instance.OrganizationID.String()
+		instancesByOrg[orgIDStr] = append(instancesByOrg[orgIDStr], instance)
+	}
+
+	for _, org := range validOrgs {
 		legacy := waManager.AssignedChatResetSettingsFromSettings(org.Settings)
 
-		var instances []models.WhatsAppInstance
-		if err := db.Select("id", "organization_id", "settings").Where("organization_id = ?", org.ID).Find(&instances).Error; err != nil {
-			return fmt.Errorf("failed to load instances for organization %s: %w", org.ID, err)
-		}
-
+		instances := instancesByOrg[org.ID.String()]
 		for _, instance := range instances {
 			if waManager.HasAssignedChatResetSettings(instance.Settings) {
 				continue
