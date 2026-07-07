@@ -927,15 +927,31 @@ func SeedPermissionsAndRoles(db *gorm.DB) error {
 	// Get all default permissions
 	defaultPerms := models.DefaultPermissions()
 
-	// Add any missing permissions
+	// Get all existing permissions to avoid N+1 queries
+	var existingPerms []models.Permission
+	if err := db.Find(&existingPerms).Error; err != nil {
+		return fmt.Errorf("failed to fetch existing permissions: %w", err)
+	}
+
+	// Create a map for O(1) lookups
+	existingMap := make(map[string]bool)
+	for _, p := range existingPerms {
+		existingMap[p.Resource+":"+p.Action] = true
+	}
+
+	// Find missing permissions
+	var toCreate []models.Permission
 	for _, perm := range defaultPerms {
-		var existing models.Permission
-		if err := db.Where("resource = ? AND action = ?", perm.Resource, perm.Action).First(&existing).Error; err != nil {
-			// Permission doesn't exist, create it
+		if !existingMap[perm.Resource+":"+perm.Action] {
 			perm.ID = uuid.New()
-			if err := db.Create(&perm).Error; err != nil {
-				return fmt.Errorf("failed to create permission %s:%s: %w", perm.Resource, perm.Action, err)
-			}
+			toCreate = append(toCreate, perm)
+		}
+	}
+
+	// Bulk insert missing permissions
+	if len(toCreate) > 0 {
+		if err := db.Create(&toCreate).Error; err != nil {
+			return fmt.Errorf("failed to bulk create permissions: %w", err)
 		}
 	}
 
