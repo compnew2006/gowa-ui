@@ -130,21 +130,6 @@ insertSyswalt($package['price'], 'شحن نقاط', date('Y-m-d H:i:s'));
             ]
         ]);
         
-    } elseif ($input['payment_method'] === 'online') {
-        // TODO: معالجة الدفع الإلكتروني
-        $conn->rollBack();
-        echo json_encode([
-            'success' => false,
-            'message' => 'الدفع الإلكتروني قيد التطوير'
-        ]);
-        
-    } elseif ($input['payment_method'] === 'agent') {
-        // TODO: إنشاء طلب للمندوب
-        $conn->rollBack();
-        echo json_encode([
-            'success' => false,
-            'message' => 'الدفع عن طريق المندوب قيد التطوير'
-        ]);
     } else {
         $conn->rollBack();
         echo json_encode([
