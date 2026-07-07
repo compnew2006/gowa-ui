@@ -14,6 +14,7 @@ from __future__ import annotations
 import os
 import pathlib
 import urllib.error
+import urllib.parse
 import urllib.request
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
@@ -55,7 +56,9 @@ class ProxyHandler(SimpleHTTPRequestHandler):
             self.send_response(204)
             self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
-            self.send_header("Access-Control-Allow-Headers", "Authorization,Content-Type")
+            self.send_header(
+                "Access-Control-Allow-Headers", "Authorization,Content-Type"
+            )
             self.send_header("Access-Control-Max-Age", "86400")
             self.send_header("Content-Length", "0")
             self.end_headers()
@@ -65,7 +68,7 @@ class ProxyHandler(SimpleHTTPRequestHandler):
         self.end_headers()
 
     def _proxy_request(self, send_body: bool = True):
-        upstream_path = self.path[len(PROXY_PREFIX):]
+        upstream_path = self.path[len(PROXY_PREFIX) :]
         if not upstream_path.startswith("/"):
             upstream_path = "/" + upstream_path
         upstream_url = f"{LMSTUDIO_TARGET}{upstream_path}"
@@ -84,6 +87,15 @@ class ProxyHandler(SimpleHTTPRequestHandler):
         elif LM_API_TOKEN:
             req_headers["Authorization"] = f"Bearer {LM_API_TOKEN}"
 
+        target_parsed = urllib.parse.urlparse(LMSTUDIO_TARGET)
+        upstream_parsed = urllib.parse.urlparse(upstream_url)
+        if (
+            target_parsed.scheme != upstream_parsed.scheme
+            or target_parsed.netloc != upstream_parsed.netloc
+        ):
+            self.send_error(400, "Bad Request: Invalid upstream URL")
+            return
+
         request = urllib.request.Request(
             upstream_url,
             data=body,
@@ -97,7 +109,16 @@ class ProxyHandler(SimpleHTTPRequestHandler):
                 self.send_response(resp.status)
                 for key, value in resp.headers.items():
                     k = key.lower()
-                    if k in {"transfer-encoding", "connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailers", "upgrade"}:
+                    if k in {
+                        "transfer-encoding",
+                        "connection",
+                        "keep-alive",
+                        "proxy-authenticate",
+                        "proxy-authorization",
+                        "te",
+                        "trailers",
+                        "upgrade",
+                    }:
                         continue
                     if k == "content-length":
                         continue
@@ -110,7 +131,10 @@ class ProxyHandler(SimpleHTTPRequestHandler):
         except urllib.error.HTTPError as e:
             payload = e.read() if send_body else b""
             self.send_response(e.code)
-            self.send_header("Content-Type", e.headers.get_content_type() if e.headers else "application/json")
+            self.send_header(
+                "Content-Type",
+                e.headers.get_content_type() if e.headers else "application/json",
+            )
             self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
