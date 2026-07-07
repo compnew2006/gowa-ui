@@ -247,3 +247,77 @@ func TestBuildKeyRingRejectsProductionConfigOverrideWithoutOptIn(t *testing.T) {
 		t.Fatal("buildKeyRing() error = nil, want production opt-in enforcement")
 	}
 }
+
+func TestParseKeyRing(t *testing.T) {
+	pub1, _, err := GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("GenerateKeyPair() error = %v", err)
+	}
+	pub2, _, err := GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("GenerateKeyPair() error = %v", err)
+	}
+
+	tests := []struct {
+		name    string
+		entries []KeyRingEntry
+		wantErr bool
+	}{
+		{
+			name: "Valid key ring",
+			entries: []KeyRingEntry{
+				{KID: "key-1", PublicKey: pub1},
+				{KID: "key-2", PublicKey: pub2},
+			},
+			wantErr: false,
+		},
+		{
+			name: "Missing KID",
+			entries: []KeyRingEntry{
+				{KID: "", PublicKey: pub1},
+			},
+			wantErr: true,
+		},
+		{
+			name: "Whitespace KID",
+			entries: []KeyRingEntry{
+				{KID: "   \t", PublicKey: pub1},
+			},
+			wantErr: true,
+		},
+		{
+			name: "Invalid base64 encoding",
+			entries: []KeyRingEntry{
+				{KID: "key-1", PublicKey: "invalid-base64!"},
+			},
+			wantErr: true,
+		},
+		{
+			name: "Invalid public key size",
+			entries: []KeyRingEntry{
+				{KID: "key-1", PublicKey: base64.StdEncoding.EncodeToString([]byte("too-short"))},
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseKeyRing(tt.entries)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ParseKeyRing() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr {
+				if len(got) != len(tt.entries) {
+					t.Errorf("ParseKeyRing() returned %d keys, want %d", len(got), len(tt.entries))
+				}
+				for _, entry := range tt.entries {
+					if _, ok := got[entry.KID]; !ok {
+						t.Errorf("ParseKeyRing() missing key %q in result", entry.KID)
+					}
+				}
+			}
+		})
+	}
+}
