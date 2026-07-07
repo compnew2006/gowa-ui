@@ -253,12 +253,27 @@ func (a *App) SyncCatalogs(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to fetch catalogs", nil, "")
 	}
 
+	// Fetch existing catalogs to avoid N+1 queries
+	var existingCatalogs []models.Catalog
+	if err := requestDB.Where("organization_id = ?", orgID).Find(&existingCatalogs).Error; err != nil {
+		a.Log.Error("Failed to fetch existing catalogs", "error", err)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to fetch existing catalogs", nil, "")
+	}
+
+	existingMap := make(map[string]models.Catalog)
+	for _, c := range existingCatalogs {
+		existingMap[c.MetaCatalogID] = c
+	}
+
 	// Sync each catalog
 	synced := 0
 	for _, mc := range metaCatalogs {
-		var existing models.Catalog
-		err := requestDB.Where("organization_id = ? AND meta_catalog_id = ?", orgID, mc.ID).First(&existing).Error
-		if err != nil {
+		if existing, exists := existingMap[mc.ID]; exists {
+			// Update existing
+			existing.Name = mc.Name
+			requestDB.Save(&existing)
+			synced++
+		} else {
 			// Create new catalog
 			catalog := models.Catalog{
 				OrganizationID:  orgID,
@@ -271,12 +286,6 @@ func (a *App) SyncCatalogs(r *fastglue.Request) error {
 				a.Log.Error("Failed to create synced catalog", "error", err, "meta_id", mc.ID)
 				continue
 			}
-			synced++
-		} else {
-			// Update existing
-			existing.Name = mc.Name
-			requestDB.
-				Save(&existing)
 			synced++
 		}
 	}
