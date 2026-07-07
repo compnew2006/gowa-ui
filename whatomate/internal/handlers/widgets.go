@@ -1188,7 +1188,7 @@ func (a *App) getChartData(orgID uuid.UUID, widget models.Widget, filters []Filt
 		SELECT DATE_TRUNC('day', %s) as date, COUNT(*) as count
 		FROM %s
 		WHERE organization_id = ? AND %s >= ? AND %s <= ?
-	`, dateField, tableName, dateField, dateField)
+	`, pgQuoteIdent(dateField), pgQuoteIdent(tableName), pgQuoteIdent(dateField), pgQuoteIdent(dateField))
 
 	args := []interface{}{orgID, start, end}
 	query, args, err := appendFilterSQL(query, args, widgetFilterColumns[widget.DataSource], filters)
@@ -1197,7 +1197,7 @@ func (a *App) getChartData(orgID uuid.UUID, widget models.Widget, filters []Filt
 		return chartData
 	}
 
-	query += fmt.Sprintf(" GROUP BY DATE_TRUNC('day', %s) ORDER BY date ASC", dateField)
+	query += fmt.Sprintf(" GROUP BY DATE_TRUNC('day', %s) ORDER BY date ASC", pgQuoteIdent(dateField))
 
 	type DailyCount struct {
 		Date  time.Time
@@ -1272,7 +1272,7 @@ func (a *App) getGroupedData(orgID uuid.UUID, widget models.Widget, filters []Fi
 		SELECT %s as label, COUNT(*) as value
 		FROM %s
 		WHERE organization_id = ? AND %s >= ? AND %s <= ?
-	`, groupColumn, tableName, dateField, dateField)
+	`, pgQuoteIdent(groupColumn), pgQuoteIdent(tableName), pgQuoteIdent(dateField), pgQuoteIdent(dateField))
 
 	args := []interface{}{orgID, start, end}
 	query, args, err := appendFilterSQL(query, args, widgetFilterColumns[widget.DataSource], filters)
@@ -1281,7 +1281,7 @@ func (a *App) getGroupedData(orgID uuid.UUID, widget models.Widget, filters []Fi
 		return dataPoints
 	}
 
-	query += fmt.Sprintf(" GROUP BY %s ORDER BY value DESC", groupColumn)
+	query += fmt.Sprintf(" GROUP BY %s ORDER BY value DESC", pgQuoteIdent(groupColumn))
 
 	type GroupedCount struct {
 		Label string
@@ -1368,7 +1368,7 @@ func (a *App) getGroupedTimeSeriesData(orgID uuid.UUID, widget models.Widget, fi
 		SELECT DATE_TRUNC('day', %s) as date, %s as group_value, COUNT(*) as count
 		FROM %s
 		WHERE organization_id = ? AND %s >= ? AND %s <= ?
-	`, dateField, groupColumn, tableName, dateField, dateField)
+	`, pgQuoteIdent(dateField), pgQuoteIdent(groupColumn), pgQuoteIdent(tableName), pgQuoteIdent(dateField), pgQuoteIdent(dateField))
 
 	args := []interface{}{orgID, start, end}
 	query, args, err := appendFilterSQL(query, args, widgetFilterColumns[widget.DataSource], filters)
@@ -1377,7 +1377,7 @@ func (a *App) getGroupedTimeSeriesData(orgID uuid.UUID, widget models.Widget, fi
 		return result
 	}
 
-	query += fmt.Sprintf(" GROUP BY DATE_TRUNC('day', %s), %s ORDER BY date ASC", dateField, groupColumn)
+	query += fmt.Sprintf(" GROUP BY DATE_TRUNC('day', %s), %s ORDER BY date ASC", pgQuoteIdent(dateField), pgQuoteIdent(groupColumn))
 
 	type GroupedRow struct {
 		Date       time.Time
@@ -1540,19 +1540,19 @@ func buildFilterSQL(columns map[string]string, filter FilterInput) (string, inte
 
 	switch filter.Operator {
 	case "equals":
-		return fmt.Sprintf("%s = ?", column), value, nil
+		return fmt.Sprintf("%s = ?", pgQuoteIdent(column)), value, nil
 	case "not_equals":
-		return fmt.Sprintf("%s != ?", column), value, nil
+		return fmt.Sprintf("%s != ?", pgQuoteIdent(column)), value, nil
 	case "contains":
-		return fmt.Sprintf("%s ILIKE ?", column), "%" + value + "%", nil
+		return fmt.Sprintf("%s ILIKE ?", pgQuoteIdent(column)), "%" + value + "%", nil
 	case "gt":
-		return fmt.Sprintf("%s > ?", column), value, nil
+		return fmt.Sprintf("%s > ?", pgQuoteIdent(column)), value, nil
 	case "lt":
-		return fmt.Sprintf("%s < ?", column), value, nil
+		return fmt.Sprintf("%s < ?", pgQuoteIdent(column)), value, nil
 	case "gte":
-		return fmt.Sprintf("%s >= ?", column), value, nil
+		return fmt.Sprintf("%s >= ?", pgQuoteIdent(column)), value, nil
 	case "lte":
-		return fmt.Sprintf("%s <= ?", column), value, nil
+		return fmt.Sprintf("%s <= ?", pgQuoteIdent(column)), value, nil
 	default:
 		return "", nil, fmt.Errorf("invalid filter operator")
 	}
@@ -1639,4 +1639,9 @@ func (a *App) getTableRows(orgID uuid.UUID, widget models.Widget, filters []Filt
 		}
 	}
 	return tableRows
+}
+
+// pgQuoteIdent safely quotes a Postgres identifier (table name, column name).
+func pgQuoteIdent(name string) string {
+	return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
 }
