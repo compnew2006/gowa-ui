@@ -24,14 +24,20 @@ WORKDIR /app
 # Install runtime dependencies
 RUN apk add --no-cache ca-certificates tzdata
 
+# Create a non-root user and group
+RUN addgroup -S whatomate && adduser -S whatomate -G whatomate
+
 # Copy binary from builder
 COPY --from=builder /app/whatomate .
 
 # Copy config example (will be overridden by env vars in production)
 COPY --from=builder /app/config.example.toml ./config.toml
 
-# Create uploads directory
-RUN mkdir -p /app/uploads
+# Create uploads directory and set ownership
+RUN mkdir -p /app/uploads && chown -R whatomate:whatomate /app
+
+# Switch to non-root user
+USER whatomate
 
 # Expose port
 EXPOSE 8080

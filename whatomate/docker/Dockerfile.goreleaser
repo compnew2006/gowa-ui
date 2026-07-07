@@ -8,11 +8,17 @@ WORKDIR /app
 # Install runtime dependencies
 RUN apk add --no-cache ca-certificates tzdata
 
+# Create a non-root user and group
+RUN addgroup -S whatomate && adduser -S whatomate -G whatomate
+
 # Copy pre-built binary from GoReleaser
 COPY whatomate .
 
-# Create uploads directory
-RUN mkdir -p /app/uploads
+# Create uploads directory and set ownership
+RUN mkdir -p /app/uploads && chown -R whatomate:whatomate /app
+
+# Switch to non-root user
+USER whatomate
 
 # Expose port
 EXPOSE 8080
