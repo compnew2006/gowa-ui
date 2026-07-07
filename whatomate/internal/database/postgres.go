@@ -534,11 +534,12 @@ func normalizeWhatsAppStatusRows(db *gorm.DB) error {
 	}
 
 	if senderColumn != "" {
+		quotedSenderColumn := pgQuoteIdent(senderColumn)
 		query := fmt.Sprintf(`
 			UPDATE whatsapp_statuses
 			SET %s = 'unknown@s.whatsapp.net'
 			WHERE %s IS NULL OR btrim(%s) = ''
-		`, senderColumn, senderColumn, senderColumn)
+		`, quotedSenderColumn, quotedSenderColumn, quotedSenderColumn)
 		if err := db.Exec(query).Error; err != nil {
 			return err
 		}
