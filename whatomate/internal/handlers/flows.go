@@ -590,14 +590,26 @@ func (a *App) SyncFlows(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to fetch flows from Meta", nil, "")
 	}
 
+	// Fetch all existing flows for the org to avoid N+1 queries
+	var allExistingFlows []models.WhatsAppFlow
+	if err := requestDB.Where("organization_id = ?", orgID).Find(&allExistingFlows).Error; err != nil {
+		a.Log.Error("Failed to fetch existing flows", "error", err)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to sync flows", nil, "")
+	}
+
+	// Build a map of existing flows by MetaFlowID for O(1) lookup
+	existingFlowsMap := make(map[string]models.WhatsAppFlow)
+	for _, f := range allExistingFlows {
+		existingFlowsMap[f.MetaFlowID] = f
+	}
+
 	// Sync each flow
 	synced := 0
 	created := 0
 	updated := 0
 
 	for _, mf := range metaFlows {
-		var existingFlow models.WhatsAppFlow
-		err := requestDB.Where("organization_id = ? AND meta_flow_id = ?", orgID, mf.ID).First(&existingFlow).Error
+		existingFlow, exists := existingFlowsMap[mf.ID]
 
 		category := ""
 		if len(mf.Categories) > 0 {
@@ -625,7 +637,7 @@ func (a *App) SyncFlows(r *fastglue.Request) error {
 			jsonVersion = flowAssets.Version
 		}
 
-		if err != nil {
+		if !exists {
 			// Flow doesn't exist locally, create it
 			newFlow := models.WhatsAppFlow{
 				OrganizationID:  orgID,
