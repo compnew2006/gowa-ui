@@ -59,18 +59,6 @@ const router = createRouter({
           // All roles can access profile
         },
         {
-          path: 'templates',
-          name: 'templates',
-          component: () => import('@/views/settings/TemplatesView.vue'),
-          meta: { permission: 'templates' }
-        },
-        {
-          path: 'templates/:id',
-          name: 'template-detail',
-          component: () => import('@/views/settings/TemplateDetailView.vue'),
-          meta: { permission: 'templates' }
-        },
-        {
           path: 'flows',
           name: 'flows',
           component: () => import('@/views/settings/FlowsView.vue'),
@@ -316,7 +304,6 @@ const navigationOrder = [
   ]},
   { path: '/chatbot/transfers', permission: 'transfers' },
   { path: '/analytics/agents', permission: 'analytics.agents' },
-  { path: '/templates', permission: 'templates' },
   { path: '/flows', permission: 'flows.whatsapp' },
   { path: '/campaigns', permission: 'campaigns' },
   { path: '/settings', permission: 'settings.general', childPaths: [

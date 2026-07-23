@@ -2,7 +2,6 @@ import {
   LayoutDashboard,
   MessageSquare,
   Bot,
-  FileText,
   Megaphone,
   Settings,
   Users,
@@ -61,7 +60,7 @@ export const navigationSections: NavSection[] = [
   },
   {
     label: 'nav.sectionMessaging',
-    permissions: ['settings.chatbot', 'chatbot.keywords', 'flows.chatbot', 'chatbot.ai', 'transfers', 'campaigns', 'templates', 'flows.whatsapp'],
+    permissions: ['settings.chatbot', 'chatbot.keywords', 'flows.chatbot', 'chatbot.ai', 'transfers', 'campaigns', 'flows.whatsapp'],
     items: [
       {
         name: 'nav.chatbot',
@@ -82,12 +81,6 @@ export const navigationSections: NavSection[] = [
         path: '/campaigns',
         icon: Megaphone,
         permission: 'campaigns'
-      },
-      {
-        name: 'nav.templates',
-        path: '/templates',
-        icon: FileText,
-        permission: 'templates'
       },
       {
         name: 'nav.flows',

@@ -18,7 +18,6 @@ const log = ref<AuditLogEntry | null>(null)
 const isLoading = ref(true)
 
 const resourceRouteMap: Record<string, (id: string) => string> = {
-  template: (id) => `/templates/${id}`,
   chatbot_settings: () => `/settings/chatbot`,
   chatbot_flow: (id) => `/chatbot/flows/${id}`,
   keyword_rule: (id) => `/chatbot/keywords/${id}`,
