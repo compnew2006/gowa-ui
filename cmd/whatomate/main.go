@@ -712,6 +712,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.POST("/api/gowa/servers/{id}/devices/{deviceId}/pair-code", app.GowaInstanceDevicePairCode)
 	g.POST("/api/gowa/servers/{id}/devices/{deviceId}/logout", app.GowaInstanceDeviceLogout)
 	g.POST("/api/gowa/servers/{id}/devices/{deviceId}/reconnect", app.GowaInstanceDeviceReconnect)
+	g.POST("/api/gowa/servers/{id}/devices/{deviceId}/sync", app.SyncGowaInstanceDevice)
 	g.GET("/api/gowa/servers/{id}/devices/{deviceId}/webhook", app.GetGowaInstanceDeviceWebhook)
 	g.PUT("/api/gowa/servers/{id}/devices/{deviceId}/webhook", app.SetGowaInstanceDeviceWebhook)
 
@@ -746,14 +747,14 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.PUT("/api/tags/{name}", app.UpdateTag)
 	g.DELETE("/api/tags/{name}", app.DeleteTag)
 
-		// Messages
-		g.GET("/api/contacts/{id}/messages", app.GetMessages)
-		g.POST("/api/contacts/{id}/messages", app.SendMessage)
-		g.POST("/api/contacts/{id}/mark-read", app.MarkContactRead)
-		g.POST("/api/contacts/{id}/messages/{message_id}/reaction", app.SendReaction)
-		g.POST("/api/contacts/{id}/messages/{message_id}/revoke", app.RevokeMessage)
-		g.POST("/api/contacts/{id}/typing", app.SendTypingIndicator)
-		g.POST("/api/messages", app.SendMessage) // Legacy route
+	// Messages
+	g.GET("/api/contacts/{id}/messages", app.GetMessages)
+	g.POST("/api/contacts/{id}/messages", app.SendMessage)
+	g.POST("/api/contacts/{id}/mark-read", app.MarkContactRead)
+	g.POST("/api/contacts/{id}/messages/{message_id}/reaction", app.SendReaction)
+	g.POST("/api/contacts/{id}/messages/{message_id}/revoke", app.RevokeMessage)
+	g.POST("/api/contacts/{id}/typing", app.SendTypingIndicator)
+	g.POST("/api/messages", app.SendMessage) // Legacy route
 	g.POST("/api/messages/template", app.SendTemplateMessage)
 	g.POST("/api/messages/media", app.SendMediaMessage)
 	g.PUT("/api/messages/{id}/read", app.MarkMessageRead)

@@ -504,11 +504,11 @@ func (a *App) CreateGowaInstanceDevice(r *fastglue.Request) error {
 	// webhook receiver returns 403 and no chat/message is ever stored, so the
 	// device appears connected but its chats never reach the inbox.
 	account, accountErr := a.ensureGowaAccountForDevice(orgID, userID, ensureGowaAccountOpts{
-		InstanceName:   bundle.instance.Name,
-		BaseURL:        bundle.instance.BaseURL,
-		DeviceID:       device.ID,
-		WebhookSecret:  webhookSecret,
-		PreferredName:  req.DeviceName,
+		InstanceName:  bundle.instance.Name,
+		BaseURL:       bundle.instance.BaseURL,
+		DeviceID:      device.ID,
+		WebhookSecret: webhookSecret,
+		PreferredName: req.DeviceName,
 	})
 
 	a.logAudit(orgID, userID, "devices", uuid.Nil, models.AuditActionCreated, nil, map[string]any{

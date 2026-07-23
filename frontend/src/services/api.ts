@@ -978,6 +978,11 @@ export const gowaServersService = {
     api.post(`/gowa/servers/${serverId}/devices/${encodeURIComponent(deviceId)}/logout`),
   deviceReconnect: (serverId: string, deviceId: string) =>
     api.post(`/gowa/servers/${serverId}/devices/${encodeURIComponent(deviceId)}/reconnect`),
+  // Backfills the WhatsAppAccount row for a device that exists on the GOWA
+  // server but has no account row in whatomate. Required for devices created
+  // before the provisioning fix, otherwise their chats never reach the inbox.
+  deviceSync: (serverId: string, deviceId: string) =>
+    api.post<{ device_id: string; account_id: string; account_name: string }>(`/gowa/servers/${serverId}/devices/${encodeURIComponent(deviceId)}/sync`),
   getDeviceWebhook: (serverId: string, deviceId: string) =>
     api.get<{ webhook: { webhook_url: string; webhook_events: string; webhook_insecure_skip_verify: boolean } }>(`/gowa/servers/${serverId}/devices/${encodeURIComponent(deviceId)}/webhook`),
   setDeviceWebhook: (serverId: string, deviceId: string, data: { webhook_url: string; webhook_events: string; webhook_insecure_skip_verify?: boolean }) =>

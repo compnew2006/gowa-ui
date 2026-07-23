@@ -40,6 +40,7 @@ import {
   Trash2,
   LogOut,
   RefreshCw,
+  RefreshCcw,
   Webhook,
   Loader2,
   CheckCircle2,
@@ -325,6 +326,19 @@ async function reconnect(d: GowaDevice) {
   }
 }
 
+async function syncDevice(d: GowaDevice) {
+  statusLoading.value = true;
+  try {
+    await gowaServersService.deviceSync(serverId.value, d.id);
+    toast.success(t("gowaServers.synced", "Device synced"));
+    await refreshDevices();
+  } catch (e) {
+    toast.error(getErrorMessage(e, "Failed to sync device"));
+  } finally {
+    statusLoading.value = false;
+  }
+}
+
 async function openWebhook(d: GowaDevice) {
   webhookDevice.value = d;
   webhookForm.value = {
@@ -528,6 +542,16 @@ async function confirmDelete() {
                     >
                       <RefreshCw class="h-3.5 w-3.5 mr-1" />
                       {{ $t("gowaServers.reconnect", "Reconnect") }}
+                    </Button>
+                    <Button
+                      v-if="canWriteDevices"
+                      size="sm"
+                      variant="ghost"
+                      @click="syncDevice(d)"
+                      :disabled="statusLoading"
+                    >
+                      <RefreshCcw class="h-3.5 w-3.5 mr-1" />
+                      {{ $t("gowaServers.sync", "Sync") }}
                     </Button>
                     <Button
                       v-if="canWriteDevices && d.is_connected"

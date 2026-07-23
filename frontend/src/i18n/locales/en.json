@@ -1152,6 +1152,8 @@
     "connect": "Connect",
     "logout": "Logout",
     "reconnect": "Reconnect",
+    "sync": "Sync",
+    "synced": "Device synced",
     "webhook": "Webhook",
     "connected": "Connected",
     "disconnected": "Disconnected",

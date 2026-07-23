@@ -941,6 +941,8 @@
     "connect": "اتصال",
     "logout": "تسجيل الخروج",
     "reconnect": "إعادة الاتصال",
+    "sync": "مزامنة",
+    "synced": "تمت مزامنة الجهاز",
     "webhook": "الويبهوك",
     "connected": "متصل",
     "disconnected": "غير متصل",
