@@ -153,12 +153,6 @@ const router = createRouter({
           meta: { permission: 'analytics.agents' }
         },
         {
-          path: 'analytics/meta-insights',
-          name: 'meta-insights',
-          component: () => import('@/views/analytics/MetaInsightsView.vue'),
-          meta: { permission: 'analytics' }
-        },
-        {
           path: 'settings',
           name: 'settings',
           component: () => import('@/views/settings/SettingsView.vue'),
@@ -322,7 +316,6 @@ const navigationOrder = [
   ]},
   { path: '/chatbot/transfers', permission: 'transfers' },
   { path: '/analytics/agents', permission: 'analytics.agents' },
-  { path: '/analytics/meta-insights', permission: 'analytics' },
   { path: '/templates', permission: 'templates' },
   { path: '/flows', permission: 'flows.whatsapp' },
   { path: '/campaigns', permission: 'campaigns' },

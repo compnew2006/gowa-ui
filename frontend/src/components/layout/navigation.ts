@@ -17,7 +17,6 @@ import {
   ShieldCheck,
   Zap,
   Shield,
-  LineChart,
   Tags,
   ScrollText
 } from 'lucide-vue-next'
@@ -107,12 +106,6 @@ export const navigationSections: NavSection[] = [
         path: '/analytics/agents',
         icon: BarChart3,
         permission: 'analytics.agents'
-      },
-      {
-        name: 'nav.metaInsights',
-        path: '/analytics/meta-insights',
-        icon: LineChart,
-        permission: 'analytics'
       },
     ]
   },
