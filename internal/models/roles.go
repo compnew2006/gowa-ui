@@ -63,6 +63,7 @@ const (
 	ResourceSettingsChatbotAI       = "settings.chatbot.ai"
 	ResourceAccounts                = "accounts"
 	ResourceDevices                 = "devices"
+	ResourceGowaInstances           = "gowa_instances"
 	ResourceTemplates               = "templates"
 	ResourceFlowsWhatsApp           = "flows.whatsapp"
 	ResourceFlowsChatbot            = "flows.chatbot"
@@ -136,6 +137,12 @@ func DefaultPermissions() []Permission {
 		// Devices (GOWA device management — pairing, provisioning, status)
 		{Resource: ResourceDevices, Action: ActionRead, Description: "View GOWA device status and instances"},
 		{Resource: ResourceDevices, Action: ActionWrite, Description: "Pair and provision GOWA devices"},
+		{Resource: ResourceDevices, Action: ActionDelete, Description: "Delete GOWA devices"},
+
+		// GOWA instances (DB-managed GOWA servers)
+		{Resource: ResourceGowaInstances, Action: ActionRead, Description: "View GOWA server instances"},
+		{Resource: ResourceGowaInstances, Action: ActionWrite, Description: "Create and edit GOWA server instances"},
+		{Resource: ResourceGowaInstances, Action: ActionDelete, Description: "Delete GOWA server instances"},
 
 		// Templates
 		{Resource: ResourceTemplates, Action: ActionRead, Description: "View message templates"},
@@ -262,7 +269,9 @@ func SystemRolePermissions() map[string][]string {
 		// Accounts
 		"accounts:read", "accounts:write", "accounts:delete",
 		// Devices
-		"devices:read", "devices:write",
+		"devices:read", "devices:write", "devices:delete",
+		// GOWA instances
+		"gowa_instances:read", "gowa_instances:write", "gowa_instances:delete",
 		// Templates
 		"templates:read", "templates:write", "templates:delete", "templates:sync",
 		// Flows

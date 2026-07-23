@@ -59,7 +59,6 @@ func (c *Client) Capabilities() whatsapp.Capabilities {
 		Flows:           false,
 		Calls:           false,
 		Catalog:         false,
-		Analytics:       false,
 		BusinessProfile: false,
 		MediaUpload:     false, // GOWA sends inline, no two-step upload
 		Interactive:     false, // no native buttons in v8.10.0

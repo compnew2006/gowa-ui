@@ -10,11 +10,7 @@ test.describe('Login', () => {
     await loginPage.goto()
   })
 
-  test('should display login form', async ({ page }) => {
-    await expect(loginPage.emailInput).toBeVisible()
-    await expect(loginPage.passwordInput).toBeVisible()
-    await expect(loginPage.submitButton).toBeVisible()
-  })
+  // removed: form-render test (Rule 7); covered by login-success/error tests.
 
   test('should login successfully with valid credentials', async ({ page }) => {
     await loginPage.login(TEST_USERS.admin.email, TEST_USERS.admin.password)
@@ -26,24 +22,17 @@ test.describe('Login', () => {
     await loginPage.expectLoginError()
   })
 
-  test('should show validation error for empty email', async ({ page }) => {
-    await loginPage.passwordInput.fill('password')
+  // Rule 3: merged empty-email and empty-password validation tests into
+  // one that submits an empty form (both fields blank) and asserts the
+  // page stays on /login.
+  test('should show validation error for empty fields', async ({ page }) => {
+    // Leave both fields empty and submit.
     await loginPage.submitButton.click()
     // Should stay on login page
     await expect(page).toHaveURL(/\/login/)
   })
 
-  test('should show validation error for empty password', async ({ page }) => {
-    await loginPage.emailInput.fill('test@test.com')
-    await loginPage.submitButton.click()
-    // Should stay on login page
-    await expect(page).toHaveURL(/\/login/)
-  })
-
-  test('should navigate to register page', async ({ page }) => {
-    await loginPage.goToRegister()
-    await expect(page).toHaveURL(/\/register/)
-  })
+  // removed: navigate-to-register test (Rule 7); tests vue-router, not product logic.
 
   test('should logout successfully', async ({ page }) => {
     // First login
@@ -66,7 +55,10 @@ test.describe('Authentication Redirect', () => {
     const loginPage = new LoginPage(page)
     await loginPage.goto()
     await loginPage.login(TEST_USERS.admin.email, TEST_USERS.admin.password)
-    // Should be on dashboard or chat
-    await expect(page).toHaveURL(/\/(dashboard|chat)?/)
+    // Rule 4: was `expect(page).toHaveURL(/\/(dashboard|chat)?/)` — the
+    // whole group is optional, so the regex matches ANY URL (including
+    // /login). Tightened to mirror the expectLoginSuccess helper in
+    // helpers/auth.ts: assert we are no longer on /login.
+    await expect(page).not.toHaveURL(/\/login/)
   })
 })

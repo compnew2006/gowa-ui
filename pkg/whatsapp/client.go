@@ -70,7 +70,6 @@ func (c *Client) Capabilities() Capabilities {
 		Flows:           true,
 		Calls:           true,
 		Catalog:         true,
-		Analytics:       true,
 		BusinessProfile: true,
 		MediaUpload:     true,
 		Interactive:     true,

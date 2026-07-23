@@ -46,7 +46,13 @@ test.describe('Chatbot Flow Builder - Text node', () => {
   })
 
   test('Expected response defaults to None (fire-and-forget)', async () => {
+    // Rule 5: the previous body only asserted the "Expected response" label
+    // was visible, which is true regardless of the default. A freshly added
+    // Text node is `type: message`, so the Select renders the "none" option
+    // whose trigger text is "None (fire-and-forget)". Asserting that value
+    // (not the label) makes the default-selection claim honest.
     await expect(builder.page.getByText('Expected response')).toBeVisible()
+    await expect(builder.page.getByText('None (fire-and-forget)')).toBeVisible()
   })
 })
 

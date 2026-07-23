@@ -87,7 +87,11 @@ test.describe('Campaign Create - Template Loading', () => {
     const accountSelect = page.locator('button[role="combobox"]').first()
     await accountSelect.click()
     await page.getByRole('option', { name: 'Account Alpha' }).click()
-    await page.waitForTimeout(500)
+    // Rule 6: replace fixed waitForTimeout(500) with a deterministic
+    // wait for the templates XHR triggered by the account selection.
+    await page.waitForResponse(
+      (r) => r.url().includes('/api/templates') && r.request().method() === 'GET',
+    )
 
     // Open template dropdown
     const templateSelect = page.locator('button[role="combobox"]').nth(1)
@@ -108,7 +112,10 @@ test.describe('Campaign Create - Template Loading', () => {
     const accountSelect = page.locator('button[role="combobox"]').first()
     await accountSelect.click()
     await page.getByRole('option', { name: 'Account Alpha' }).click()
-    await page.waitForTimeout(500)
+    // Rule 6: wait for the templates XHR instead of a fixed 500 ms.
+    await page.waitForResponse(
+      (r) => r.url().includes('/api/templates') && r.request().method() === 'GET',
+    )
 
     // Open template dropdown and verify 2 templates
     const templateSelect = page.locator('button[role="combobox"]').nth(1)
@@ -119,7 +126,10 @@ test.describe('Campaign Create - Template Loading', () => {
     // Switch to second account
     await accountSelect.click()
     await page.getByRole('option', { name: 'Account Beta' }).click()
-    await page.waitForTimeout(500)
+    // Rule 6: wait for the new templates XHR before re-opening the dropdown.
+    await page.waitForResponse(
+      (r) => r.url().includes('/api/templates') && r.request().method() === 'GET',
+    )
 
     // Verify 1 template
     await templateSelect.click()
@@ -135,7 +145,10 @@ test.describe('Campaign Create - Template Loading', () => {
     const accountSelect = page.locator('button[role="combobox"]').first()
     await accountSelect.click()
     await page.getByRole('option', { name: 'Account Beta' }).click()
-    await page.waitForTimeout(500)
+    // Rule 6: wait for the templates XHR instead of a fixed 500 ms.
+    await page.waitForResponse(
+      (r) => r.url().includes('/api/templates') && r.request().method() === 'GET',
+    )
 
     // Open template dropdown
     const templateSelect = page.locator('button[role="combobox"]').nth(1)

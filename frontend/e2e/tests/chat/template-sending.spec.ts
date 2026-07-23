@@ -263,7 +263,7 @@ test.describe('Template Sending', () => {
     await chatPage.cancelTemplateDialog()
   })
 
-  test('should send simple template successfully', async ({ page }) => {
+  test('should attempt to send a simple template and surface a result toast', async ({ page }) => {
     await loginAsAdmin(page)
     const chatPage = new ChatPage(page)
     await chatPage.goto(contactId)
@@ -277,18 +277,19 @@ test.describe('Template Sending', () => {
     // Click send
     await chatPage.sendTemplate()
 
-    // Should show success toast or the dialog should close
-    // The API may fail if no WhatsApp account is configured, so we check both outcomes
+    // The test WhatsApp account carries a fake access_token (see beforeAll),
+    // so the backend's call to Meta can legitimately fail — the send handler
+    // therefore surfaces either a success toast ("Template sent") or an error
+    // toast. We assert that *some* result toast appears (the send actually
+    // fired and the UI reacted) rather than promising success it can't keep.
     const toastSuccess = page.locator('[data-sonner-toast]').filter({ hasText: /Template sent/i })
     const toastError = page.locator('[data-sonner-toast]').filter({ hasText: /Failed/i })
-    const dialogClosed = chatPage.templateDialog
-
-    // Wait for either toast to appear
     await expect(toastSuccess.or(toastError)).toBeVisible({ timeout: 10000 })
 
-    // If successful, the dialog should close
-    if (await toastSuccess.isVisible()) {
-      await expect(dialogClosed).not.toBeVisible()
+    // On the success branch the dialog must close — a real behavioral check
+    // that only the success path satisfies, rather than accepting either.
+    if (await toastSuccess.isVisible({ timeout: 1000 }).catch(() => false)) {
+      await expect(chatPage.templateDialog).not.toBeVisible()
     }
   })
 
@@ -320,7 +321,7 @@ test.describe('Template Sending', () => {
     await chatPage.cancelTemplateDialog()
   })
 
-  test('should send template with params successfully', async ({ page }) => {
+  test('should attempt to send a parameterised template and surface a result toast', async ({ page }) => {
     await loginAsAdmin(page)
     const chatPage = new ChatPage(page)
     await chatPage.goto(contactId)
@@ -338,10 +339,18 @@ test.describe('Template Sending', () => {
     // Send
     await chatPage.sendTemplate()
 
-    // Check for success or failure toast
+    // Same caveat as the simple-template send: the fake access_token means the
+    // Meta roundtrip can fail, so we assert a result toast appears (the send
+    // fired) rather than promising success. See the simple-template test for
+    // the full rationale.
     const toastSuccess = page.locator('[data-sonner-toast]').filter({ hasText: /Template sent/i })
     const toastError = page.locator('[data-sonner-toast]').filter({ hasText: /Failed/i })
     await expect(toastSuccess.or(toastError)).toBeVisible({ timeout: 10000 })
+
+    // On the success branch the parameterised send must also close the dialog.
+    if (await toastSuccess.isVisible({ timeout: 1000 }).catch(() => false)) {
+      await expect(chatPage.templateDialog).not.toBeVisible()
+    }
   })
 
   test('should close template picker when clicking cancel', async ({ page }) => {

@@ -697,6 +697,24 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.GET("/api/gowa/instances", app.GowaInstances)
 	g.POST("/api/gowa/create-device", app.GowaCreateDevice)
 
+	// GOWA servers (DB-managed instances + per-instance device management)
+	g.GET("/api/gowa/servers", app.ListGowaInstances)
+	g.POST("/api/gowa/servers", app.CreateGowaInstance)
+	g.GET("/api/gowa/servers/{id}", app.GetGowaInstance)
+	g.PUT("/api/gowa/servers/{id}", app.UpdateGowaInstance)
+	g.DELETE("/api/gowa/servers/{id}", app.DeleteGowaInstance)
+
+	// Devices within a DB-managed GOWA server
+	g.GET("/api/gowa/servers/{id}/devices", app.ListGowaInstanceDevices)
+	g.POST("/api/gowa/servers/{id}/devices", app.CreateGowaInstanceDevice)
+	g.DELETE("/api/gowa/servers/{id}/devices/{deviceId}", app.DeleteGowaInstanceDevice)
+	g.GET("/api/gowa/servers/{id}/devices/{deviceId}/qr", app.GowaInstanceDeviceQR)
+	g.POST("/api/gowa/servers/{id}/devices/{deviceId}/pair-code", app.GowaInstanceDevicePairCode)
+	g.POST("/api/gowa/servers/{id}/devices/{deviceId}/logout", app.GowaInstanceDeviceLogout)
+	g.POST("/api/gowa/servers/{id}/devices/{deviceId}/reconnect", app.GowaInstanceDeviceReconnect)
+	g.GET("/api/gowa/servers/{id}/devices/{deviceId}/webhook", app.GetGowaInstanceDeviceWebhook)
+	g.PUT("/api/gowa/servers/{id}/devices/{deviceId}/webhook", app.SetGowaInstanceDeviceWebhook)
+
 	// Contacts
 	g.GET("/api/contacts", app.ListContacts)
 	g.POST("/api/contacts", app.CreateContact)

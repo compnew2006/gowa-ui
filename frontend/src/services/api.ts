@@ -939,4 +939,57 @@ export interface ChatFlowGraph {
   entry_node: string
 }
 
+// GOWA Servers (DB-managed GOWA instances + per-instance devices)
+export interface GowaServer {
+  id: string
+  name: string
+  base_url: string
+  webhook_url: string
+  is_active: boolean
+  has_credentials: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface GowaDevice {
+  id: string
+  phone_number?: string
+  display_name: string
+  state: string
+  jid: string
+  created_at: string
+  webhook_url?: string
+  webhook_events?: string
+  is_connected: boolean
+  is_logged_in: boolean
+}
+
+export const gowaServersService = {
+  list: () => api.get<{ instances: GowaServer[] }>('/gowa/servers'),
+  get: (id: string) => api.get<{ instance: GowaServer }>(`/gowa/servers/${id}`),
+  create: (data: { name: string; base_url: string; username: string; password: string; webhook_url?: string; is_active?: boolean }) =>
+    api.post<{ instance: GowaServer }>('/gowa/servers', data),
+  update: (id: string, data: Partial<{ name: string; base_url: string; username: string; password: string; webhook_url: string; is_active: boolean }>) =>
+    api.put<{ instance: GowaServer }>(`/gowa/servers/${id}`, data),
+  delete: (id: string) => api.delete(`/gowa/servers/${id}`),
+
+  // Devices within a server
+  listDevices: (serverId: string) => api.get<{ devices: GowaDevice[] }>(`/gowa/servers/${serverId}/devices`),
+  createDevice: (serverId: string, data: { device_name: string }) =>
+    api.post<{ device_id: string; webhook_secret: string }>(`/gowa/servers/${serverId}/devices`, data),
+  deleteDevice: (serverId: string, deviceId: string) => api.delete(`/gowa/servers/${serverId}/devices/${encodeURIComponent(deviceId)}`),
+  deviceQR: (serverId: string, deviceId: string) =>
+    api.get<{ qr_link: string; qr_duration: number; already_connected?: boolean }>(`/gowa/servers/${serverId}/devices/${encodeURIComponent(deviceId)}/qr`),
+  devicePairCode: (serverId: string, deviceId: string, phone: string) =>
+    api.post<{ pair_code: string }>(`/gowa/servers/${serverId}/devices/${encodeURIComponent(deviceId)}/pair-code`, { phone }),
+  deviceLogout: (serverId: string, deviceId: string) =>
+    api.post(`/gowa/servers/${serverId}/devices/${encodeURIComponent(deviceId)}/logout`),
+  deviceReconnect: (serverId: string, deviceId: string) =>
+    api.post(`/gowa/servers/${serverId}/devices/${encodeURIComponent(deviceId)}/reconnect`),
+  getDeviceWebhook: (serverId: string, deviceId: string) =>
+    api.get<{ webhook: { webhook_url: string; webhook_events: string; webhook_insecure_skip_verify: boolean } }>(`/gowa/servers/${serverId}/devices/${encodeURIComponent(deviceId)}/webhook`),
+  setDeviceWebhook: (serverId: string, deviceId: string, data: { webhook_url: string; webhook_events: string; webhook_insecure_skip_verify?: boolean }) =>
+    api.put(`/gowa/servers/${serverId}/devices/${encodeURIComponent(deviceId)}/webhook`, data),
+}
+
 export default api

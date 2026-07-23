@@ -1,5 +1,5 @@
-import { test, expect } from '@playwright/test'
-import { loginAsAdmin, navigateToFirstItem, expectMetadataVisible, expectActivityLogVisible, expectDeleteFromForm, ApiHelper } from '../../helpers'
+import { test, expect, type APIRequestContext } from '@playwright/test'
+import { loginAsAdmin, navigateToFirstItem, expectMetadataVisible, expectActivityLogVisible, expectDeleteFromForm, verifyAuditLogged, ApiHelper } from '../../helpers'
 import { AIContextsPage } from '../../pages'
 import { createTestScope, SUPER_ADMIN } from '../../framework'
 
@@ -8,7 +8,9 @@ const scope = createTestScope('ai-contexts')
 // Seed an AI context via the API. Returns the new resource's ID, or null on
 // failure. Replaces the old UI-based seed which was flaky (async permission
 // loading, dialog/click race conditions, silently skipped on any failure).
-async function seedAIContextViaAPI(request: import('@playwright/test').APIRequestContext): Promise<string | null> {
+// Also asserts the audit log recorded the create — per ARCHITECTURE.md every
+// CRUD mutation gets a verifyAuditLogged side-channel.
+async function seedAIContextViaAPI(request: APIRequestContext): Promise<string | null> {
   const api = new ApiHelper(request)
   await api.login(SUPER_ADMIN.email, SUPER_ADMIN.password)
   const resp = await api.post('/api/chatbot/ai-contexts', {
@@ -19,7 +21,31 @@ async function seedAIContextViaAPI(request: import('@playwright/test').APIReques
   })
   if (!resp.ok()) return null
   const body = await resp.json()
-  return body.data?.id ?? null
+  const id = body.data?.id ?? null
+  if (id) {
+    await verifyAuditLogged(request, 'ai_context', id, 'created')
+  }
+  return id
+}
+
+// Variant that exposes the seeded name so search tests can target it
+// deterministically instead of asserting `<= 50` rows on a negative search.
+async function seedNamedAIContextViaAPI(request: APIRequestContext, name: string): Promise<string | null> {
+  const api = new ApiHelper(request)
+  await api.login(SUPER_ADMIN.email, SUPER_ADMIN.password)
+  const resp = await api.post('/api/chatbot/ai-contexts', {
+    name,
+    context_type: 'static',
+    static_content: 'E2E seeded AI context content',
+    enabled: true,
+  })
+  if (!resp.ok()) return null
+  const body = await resp.json()
+  const id = body.data?.id ?? null
+  if (id) {
+    await verifyAuditLogged(request, 'ai_context', id, 'created')
+  }
+  return id
 }
 
 test.describe('AI Contexts - List View', () => {
@@ -58,10 +84,22 @@ test.describe('AI Contexts - List View', () => {
     expect(page.url()).toMatch(/\/chatbot\/ai\/[a-f0-9-]+/)
   })
 
-  test('should search and filter', async ({ page }) => {
+  test('should search and filter', async ({ page, request }) => {
+    // Positive case: seed a uniquely-named context, search for that exact
+    // name, and assert it is the only visible row.
+    const uniqueName = scope.name('search-target')
+    const id = await seedNamedAIContextViaAPI(request, uniqueName)
+    expect(id, 'API seed must succeed').toBeTruthy()
+    await aiPage.goto()
+    await aiPage.search(uniqueName)
+    // TODO(test-guard): move to AIContextsPage POM (raw table-row locator)
+    const matchingRows = page.locator('tbody tr')
+    await expect(matchingRows).toHaveCount(1)
+    await expect(matchingRows.first()).toContainText(uniqueName)
+
+    // Negative case: a string that matches nothing must yield zero rows.
     await aiPage.search('nonexistent-context-xyz')
-    const filteredRows = await page.locator('tbody tr').count()
-    expect(filteredRows).toBeLessThanOrEqual(50)
+    await expect(page.locator('tbody tr')).toHaveCount(0)
   })
 
   test('should show delete confirmation from list', async ({ page, request }) => {
@@ -119,38 +157,42 @@ test.describe('AI Contexts - Detail Page CRUD', () => {
   })
 
   test('should edit existing context', async ({ page, request }) => {
-    await page.goto('/chatbot/ai')
+    // Seed a known context and open its detail page directly. The previous
+    // version gated the save in `if (await saveBtn.isVisible())`, so any
+    // permission or timing hiccup turned the test into a silent no-op.
+    const id = await seedAIContextViaAPI(request)
+    expect(id, 'API seed must succeed').toBeTruthy()
+    await page.goto(`/chatbot/ai/${id}`)
     await page.waitForLoadState('networkidle')
-
-    let href = await navigateToFirstItem(page)
-    if (!href) {
-      const id = await seedAIContextViaAPI(request)
-      expect(id, 'API seed must succeed').toBeTruthy()
-      await page.goto('/chatbot/ai')
-      await page.waitForLoadState('networkidle')
-      href = await navigateToFirstItem(page)
-      expect(href, 'detail link must be present after API seed').toBeTruthy()
-    }
 
     const nameInput = page.locator('input').first()
     expect(await nameInput.isDisabled(), 'admin should have write permission').toBe(false)
 
     const original = await nameInput.inputValue()
-    await nameInput.fill(original + ' edited')
+    const edited = `${original} edited`
+    await nameInput.fill(edited)
     await page.waitForTimeout(300)
 
     const saveBtn = page.getByRole('button', { name: /Save/i })
-    if (await saveBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await saveBtn.click({ force: true })
-      await page.waitForTimeout(2000)
-      // Revert
-      await nameInput.fill(original)
-      await page.waitForTimeout(300)
-      const revertBtn = page.getByRole('button', { name: /Save/i })
-      if (await revertBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-        await revertBtn.click({ force: true })
-      }
-    }
+    await expect(saveBtn).toBeVisible({ timeout: 5000 })
+    await saveBtn.click({ force: true })
+
+    // Verify the edit persisted by reloading the page — this is the
+    // assertion the previous no-op skipped.
+    await page.reload()
+    await page.waitForLoadState('networkidle')
+    await expect(nameInput).toHaveValue(edited)
+
+    // Revert so the seeded row is left clean.
+    await nameInput.fill(original)
+    await page.waitForTimeout(300)
+    const revertBtn = page.getByRole('button', { name: /Save/i })
+    await expect(revertBtn).toBeVisible({ timeout: 5000 })
+    await revertBtn.click({ force: true })
+
+    await verifyAuditLogged(request, 'ai_context', id!, 'updated', {
+      expectedFields: ['name'],
+    })
   })
 
   test('should delete from detail page', async ({ page, request }) => {

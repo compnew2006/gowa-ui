@@ -1,9 +1,27 @@
 import { test, expect, type Page, type Locator } from '@playwright/test'
 import { TablePage } from '../../pages'
-import { loginAsAdmin } from '../../helpers'
+import { loginAsAdmin, verifyAuditLogged } from '../../helpers'
 import { createTestScope } from '../../framework'
 
 const scope = createTestScope('roles')
+
+// Read the column header's aria-sort attribute directly. The TablePage POM
+// exposes icon-based sort detection, but asserting aria-sort is the stronger,
+// accessible contract (and toggling asc/desc on click is what we want to
+// prove). This is a spec-local reader, not a POM edit.
+async function getAriaSort(page: Page, column: string): Promise<'ascending' | 'descending' | null> {
+  const header = page.locator('thead th').filter({ hasText: column }).first()
+  if (await header.count() === 0) return null
+  const value = await header.getAttribute('aria-sort')
+  if (value === 'ascending' || value === 'descending') return value
+  return null
+}
+
+// Extract a role id from a /settings/roles/:id detail URL.
+function roleIdFromUrl(page: Page): string | null {
+  const match = page.url().match(/\/settings\/roles\/([a-f0-9-]+)$/)
+  return match ? match[1] : null
+}
 
 // Detail-page form helpers
 function nameInput(page: Page): Locator {
@@ -75,7 +93,7 @@ test.describe('Roles Management', () => {
     await expect(page.getByText(/^Permissions$/).first()).toBeVisible()
   })
 
-  test('should create a new custom role', async ({ page }) => {
+  test('should create a new custom role', async ({ page, request }) => {
     const roleName = scope.name('test')
 
     await gotoCreateRole(page)
@@ -91,11 +109,20 @@ test.describe('Roles Management', () => {
     await saveButton(page).click()
     await page.waitForLoadState('networkidle')
 
+    // Capture the new role's id from the detail-page URL for the audit assertion.
+    const roleId = roleIdFromUrl(page)
+    expect(roleId, 'expected to land on the new role detail page').not.toBeNull()
+
     // Verify role appears in list
     await page.goto('/settings/roles')
     await page.waitForLoadState('networkidle')
     await tablePage.search(roleName)
     await tablePage.expectRowExists(roleName)
+
+    // API side-channel: confirm the audit trail recorded the creation.
+    if (roleId) {
+      await verifyAuditLogged(request, 'role', roleId, 'created')
+    }
   })
 
   test('should require role name', async ({ page }) => {
@@ -123,7 +150,7 @@ test.describe('Roles Management', () => {
     await expect(page.locator('text=System').first()).toBeVisible()
   })
 
-  test('should edit custom role', async ({ page }) => {
+  test('should edit custom role', async ({ page, request }) => {
     // Create a role via the detail page
     const originalName = scope.name('edit')
     await gotoCreateRole(page)
@@ -137,6 +164,8 @@ test.describe('Roles Management', () => {
     await page.waitForLoadState('networkidle')
     await openRoleDetail(tablePage, page, originalName)
 
+    const roleId = roleIdFromUrl(page)
+
     const updatedName = scope.name('updated')
     await nameInput(page).fill(updatedName)
     await descriptionInput(page).fill('Updated description')
@@ -149,15 +178,22 @@ test.describe('Roles Management', () => {
     await page.waitForLoadState('networkidle')
     await tablePage.search(updatedName)
     await tablePage.expectRowExists(updatedName)
+
+    // API side-channel: confirm the audit trail recorded the update.
+    if (roleId) {
+      await verifyAuditLogged(request, 'role', roleId, 'updated')
+    }
   })
 
-  test('should delete custom role', async ({ page }) => {
+  test('should delete custom role', async ({ page, request }) => {
     // Create a role via the detail page
     const roleName = scope.name('delete')
     await gotoCreateRole(page)
     await nameInput(page).fill(roleName)
     await saveButton(page).click()
     await page.waitForLoadState('networkidle')
+
+    const roleId = roleIdFromUrl(page)
 
     // Navigate back and delete from the list
     await page.goto('/settings/roles')
@@ -170,6 +206,11 @@ test.describe('Roles Management', () => {
     await tablePage.clearSearch()
     await tablePage.search(roleName)
     await tablePage.expectRowNotExists(roleName)
+
+    // API side-channel: confirm the audit trail recorded the deletion.
+    if (roleId) {
+      await verifyAuditLogged(request, 'role', roleId, 'deleted')
+    }
   })
 
   test('should not allow deleting system roles', async ({ page }) => {
@@ -285,28 +326,21 @@ test.describe('Roles - Table Sorting', () => {
     tablePage = new TablePage(page)
   })
 
-  test('should sort by role name', async () => {
-    await tablePage.clickColumnHeader('Role')
-    const direction = await tablePage.getSortDirection('Role')
-    expect(direction).not.toBeNull()
-  })
+  test('roles table sorts by each column', async ({ page }) => {
+    // Collapsed from four near-identical tests (sort by Role / Description /
+    // Users / Created). Each used to assert only that the sort indicator was
+    // non-null; this loop additionally asserts the aria-sort attribute toggles
+    // between ascending and descending on successive clicks.
+    for (const column of ['Role', 'Description', 'Users', 'Created']) {
+      await tablePage.clickColumnHeader(column)
+      const firstSort = await getAriaSort(page, column)
+      expect(firstSort, `${column}: expected a sort direction after first click`).not.toBeNull()
 
-  test('should sort by description', async () => {
-    await tablePage.clickColumnHeader('Description')
-    const direction = await tablePage.getSortDirection('Description')
-    expect(direction).not.toBeNull()
-  })
-
-  test('should sort by user count', async () => {
-    await tablePage.clickColumnHeader('Users')
-    const direction = await tablePage.getSortDirection('Users')
-    expect(direction).not.toBeNull()
-  })
-
-  test('should sort by created date', async () => {
-    await tablePage.clickColumnHeader('Created')
-    const direction = await tablePage.getSortDirection('Created')
-    expect(direction).not.toBeNull()
+      await tablePage.clickColumnHeader(column)
+      const secondSort = await getAriaSort(page, column)
+      expect(secondSort, `${column}: expected a sort direction after second click`).not.toBeNull()
+      expect(secondSort, `${column}: sort should toggle on second click`).not.toEqual(firstSort)
+    }
   })
 
   test('should toggle sort direction', async () => {

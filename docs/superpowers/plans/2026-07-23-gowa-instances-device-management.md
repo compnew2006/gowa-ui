@@ -1626,6 +1626,7 @@ In `frontend/src/i18n/locales/en.json`, add a new top-level key (e.g. after the 
     "webhook": "Webhook",
     "connected": "Connected",
     "disconnected": "Disconnected",
+    "connecting": "Connecting",
     "qrCode": "QR Code",
     "pairCode": "Pair Code",
     "phoneNumber": "Phone Number",
@@ -1686,6 +1687,7 @@ In `frontend/src/i18n/locales/ar.json`, add the matching block (Arabic translati
     "webhook": "الويبهوك",
     "connected": "متصل",
     "disconnected": "غير متصل",
+    "connecting": "جارٍ الاتصال",
     "qrCode": "رمز QR",
     "pairCode": "رمز الاقتران",
     "phoneNumber": "رقم الهاتف",
@@ -2075,10 +2077,41 @@ const qrLink = ref('')
 const qrDuration = ref(30)
 const qrLoading = ref(false)
 const qrTimer = ref<ReturnType<typeof setTimeout> | null>(null)
+// Polls the QR endpoint every 3s while the connect dialog is open. The QR
+// handler short-circuits with already_connected=true once GOWA reports the
+// device logged in, so this auto-detects a successful scan/pair and closes
+// the dialog. Mirrors gowa-ui + the existing AccountDetailView.
+const statusPoll = ref<ReturnType<typeof setInterval> | null>(null)
 const pairPhone = ref('')
 const pairCode = ref('')
 const pairLoading = ref(false)
 const statusLoading = ref(false)
+
+// state → badge class (GOWA state enum: disconnected/connecting/connected/logged_in)
+function stateClass(state: string): string {
+  switch (state) {
+    case 'logged_in': return 'border-emerald-600 text-emerald-600 bg-emerald-500/10'
+    case 'connected': return 'border-sky-600 text-sky-600 bg-sky-500/10'
+    case 'connecting': return 'border-amber-600 text-amber-600 bg-amber-500/10'
+    default: return 'text-muted-foreground'
+  }
+}
+function stateLabel(state: string): string {
+  const map: Record<string, string> = {
+    logged_in: t('gowaServers.connected', 'Logged in'),
+    connected: t('gowaServers.connected', 'Connected'),
+    connecting: t('gowaServers.connecting', 'Connecting'),
+    disconnected: t('gowaServers.disconnected', 'Disconnected'),
+  }
+  return map[state] || state || t('gowaServers.disconnected', 'Disconnected')
+}
+
+async function onPairingSuccess() {
+  clearTimers()
+  toast.success(t('gowaServers.connected', 'Connected'))
+  connectOpen.value = false
+  await refreshDevices()
+}
 
 // Webhook dialog
 const webhookOpen = ref(false)
@@ -2143,6 +2176,9 @@ function openConnect(d: GowaDevice) {
   pairCode.value = ''
   pairPhone.value = ''
   fetchQr()
+  // Start polling so we auto-close on a successful scan/pair.
+  if (statusPoll.value) clearInterval(statusPoll.value)
+  statusPoll.value = setInterval(fetchQr, 3000)
 }
 
 async function fetchQr() {
@@ -2153,14 +2189,15 @@ async function fetchQr() {
     const data = resp.data.data || resp.data
     if (data.already_connected) {
       qrLink.value = ''
-      toast.success(t('gowaServers.connected', 'Connected'))
-      await refreshDevices()
+      await onPairingSuccess()
       return
     }
     qrLink.value = data.qr_link || ''
     qrDuration.value = data.qr_duration || 30
-    if (qrTimer.value) clearTimeout(qrTimer.value)
-    qrTimer.value = setTimeout(fetchQr, (qrDuration.value + 2) * 1000)
+    // Only set the QR-refresh timer if we're not already polling (avoid double timers).
+    if (!statusPoll.value && qrTimer.value === null) {
+      qrTimer.value = setTimeout(fetchQr, (qrDuration.value + 2) * 1000)
+    }
   } catch (e) {
     toast.error(getErrorMessage(e, t('accounts.gowaQrFailed', 'Failed to get QR code')))
   } finally {
@@ -2191,6 +2228,7 @@ async function closeConnect() {
 
 function clearTimers() {
   if (qrTimer.value) { clearTimeout(qrTimer.value); qrTimer.value = null }
+  if (statusPoll.value) { clearInterval(statusPoll.value); statusPoll.value = null }
 }
 
 async function copyText(txt: string) {
@@ -2326,13 +2364,13 @@ async function confirmDelete() {
                   <div class="flex items-start justify-between gap-2">
                     <div class="min-w-0">
                       <p class="font-medium text-sm truncate">{{ d.display_name || d.id }}</p>
-                      <code class="text-[10px] bg-muted px-1.5 py-0.5 rounded font-mono block mt-1 truncate">{{ d.jid || d.id }}</code>
+                      <code class="text-[10px] bg-muted px-1.5 py-0.5 rounded font-mono block mt-1 truncate">{{ d.jid || d.phone_number || d.id }}</code>
                     </div>
-                    <Badge v-if="d.is_connected" variant="outline" class="border-green-600 text-green-600 flex-shrink-0">
-                      <CheckCircle2 class="h-3 w-3 mr-1" /> {{ $t('gowaServers.connected', 'Connected') }}
-                    </Badge>
-                    <Badge v-else variant="outline" class="border-amber-600 text-amber-600 flex-shrink-0">
-                      <AlertCircle class="h-3 w-3 mr-1" /> {{ $t('gowaServers.disconnected', 'Disconnected') }}
+                    <!-- State badge: uses the full GOWA state enum, not just is_connected. -->
+                    <Badge variant="outline" :class="stateClass(d.state) + ' flex-shrink-0'">
+                      <CheckCircle2 v-if="d.state === 'logged_in' || d.is_connected" class="h-3 w-3 mr-1" />
+                      <AlertCircle v-else class="h-3 w-3 mr-1" />
+                      {{ stateLabel(d.state) }}
                     </Badge>
                   </div>
 
@@ -2514,8 +2552,9 @@ git commit -m "chore: frontend build clean"
 
 ## Self-Review Notes (plan author)
 
-- **Spec coverage:** ✅ Model + migration (A1), RBAC incl. `devices:delete` + labels (A2), CRUD handlers (A3), device ops incl. webhook (A4), routes (A5), frontend service/store/constants/nav/router/i18n/views (B1–B7).
+- **Spec coverage:** ✅ Model + migration (A1), RBAC incl. `devices:delete` + labels (A2), CRUD handlers (A3), device ops incl. webhook (A4), routes (A5), frontend service/store/constants/nav/router/i18n/views (B1–B7). Cross-source gaps G1–G3 applied (A0 + B7).
 - **Placeholder scan:** No TBD/TODO; all steps carry full code or exact edits.
-- **Type consistency:** Backend `GowaInstanceResponse` (has_credentials) ↔ frontend `GowaServer` (has_credentials). Device handler returns inline `deviceWithStatus` (is_connected/is_logged_in/jid) ↔ frontend `GowaDevice`. `parseDeviceID`/`{deviceId}` path param matches the route and the frontend `encodeURIComponent`.
-- **Spec deltas from verified facts:** `LoginWithCode` is in `pkg/gowa/app.go` (handled). Encryption is explicit-call, not gorm hooks (handled via `EncryptCredentials`/`DecryptCredentials`). No `gowa-ui` — UI authored fresh from `AccountDetailView.vue` reference (handled).
+- **Type consistency:** Backend `GowaInstanceResponse` (has_credentials) ↔ frontend `GowaServer` (has_credentials). Device handler returns inline `deviceWithStatus` (is_connected/is_logged_in/jid) ↔ frontend `GowaDevice` (now incl. `phone_number` per spec). `parseDeviceID`/`{deviceId}` path param matches the route and the frontend `encodeURIComponent`.
+- **Spec deltas from verified facts:** `LoginWithCode` is in `pkg/gowa/app.go` (handled). Encryption is explicit-call, not gorm hooks (handled via `EncryptCredentials`/`DecryptCredentials`). gowa-ui reference exists at `/Users/noiemany/Downloads/gowa-ui` (React) — used only for UX patterns, not code copy (the existing `AccountDetailView.vue` is the real Vue template). Login endpoints confirmed against OpenAPI spec v9.0.0 (gowa-ui's `/devices/{id}/login` calls are deprecated/dead — NOT used here).
 - **Blast radius:** Legacy `/api/gowa/instances` + `/api/gowa/create-device` untouched → account-creation dropdown unaffected (decision #1). No config→DB import (decision #2).
+- **Cross-source verification:** See the "Cross-source verification" section above. Three gaps (phone_number, status polling, state badges) found by comparing gowa-ui + OpenAPI spec and applied to this plan. WebSocket real-time, `/app/info`, single-device GET, and Chatwoot surface are deliberately out of scope.

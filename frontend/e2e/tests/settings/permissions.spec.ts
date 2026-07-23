@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
-import { ApiHelper, loginAsAdmin } from '../../helpers'
+import { ApiHelper, loginAsAdmin, verifyAuditLogged } from '../../helpers'
 import {
   createTestScope,
   createUserWithPermissions,
@@ -168,12 +168,45 @@ test.describe('Dynamic Role Updates', () => {
     await api.deleteRole(user.role.id).catch(() => {})
   })
 
-  test('user initially has limited access', async ({ page }) => {
+  test('granting a permission to a role updates the visible menu after reload', async ({ page, request }) => {
+    // The previous version of this test ("user initially has limited access")
+    // was an exact duplicate of "user with limited role sees only permitted
+    // menu items" — same setup, same assertions, no dynamic update. This
+    // version actually exercises the dynamic path: assert the limited menu,
+    // mutate the role's permissions via the API, reload, then assert the
+    // newly-granted menu item appears.
     await loginAs(page, user)
     await page.waitForSelector('aside nav')
 
-    const menuItems = await getSidebarMenuItems(page)
+    // Baseline: only chat is visible; settings is not.
+    let menuItems = await getSidebarMenuItems(page)
     expect(menuItems.some((item) => item.includes('chat'))).toBeTruthy()
     expect(menuItems.some((item) => item.includes('settings'))).toBeFalsy()
+
+    // Grant an additional permission to the role. settings.general:read
+    // surfaces the Settings menu (proven by the "Role with Settings Access"
+    // describe above), so this is a real, observable change.
+    const newPerms = await api.findPermissionKeys([
+      { resource: 'chat', action: 'read' },
+      { resource: 'settings.general', action: 'read' },
+    ])
+    const updateResp = await api.put('/api/roles/' + user.role.id, {
+      name: user.role.name,
+      description: `Test role for ${scope.prefix}`,
+      permissions: newPerms,
+    })
+    expect(updateResp.ok(), `role update: ${await updateResp.text()}`).toBe(true)
+
+    // Reload so the permission check re-runs against the updated role.
+    await page.reload()
+    await page.waitForLoadState('networkidle')
+    await page.waitForSelector('aside nav')
+
+    // After the grant + reload, the Settings menu should now be visible.
+    menuItems = await getSidebarMenuItems(page)
+    expect(menuItems.some((item) => item.includes('settings'))).toBeTruthy()
+
+    // API side-channel: the role mutation was audited.
+    await verifyAuditLogged(request, 'role', user.role.id, 'updated')
   })
 })

@@ -10,6 +10,7 @@ import (
 // DeviceInfo represents a registered GOWA device.
 type DeviceInfo struct {
 	ID            string    `json:"id"`
+	PhoneNumber   string    `json:"phone_number,omitempty"`
 	DisplayName   string    `json:"display_name"`
 	State         string    `json:"state"`
 	JID           string    `json:"jid"`

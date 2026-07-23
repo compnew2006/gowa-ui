@@ -92,6 +92,7 @@ test.describe('API Keys Management', () => {
     await page.goto('/settings/api-keys')
     await page.waitForLoadState('networkidle')
 
+    // TODO(test-guard): use TablePage POM
     // Click the name to go to detail
     await page.locator('tbody tr .font-medium').getByText(keyName, { exact: true }).first().click()
     await page.waitForURL(/\/settings\/api-keys\/[a-f0-9-]+$/)
@@ -118,6 +119,7 @@ test.describe('API Keys Management', () => {
     await tablePage.expectRowExists(keyName)
 
     // Click the delete (last) button on the row
+    // TODO(test-guard): use TablePage POM
     const row = await tablePage.getRow(keyName)
     await row.locator('td:last-child button').last().click()
     await expect(page.locator('[role="alertdialog"]')).toBeVisible()
@@ -148,37 +150,22 @@ test.describe('API Keys - Table Sorting', () => {
     tablePage = new TablePage(page)
   })
 
-  test('should sort by name', async () => {
-    await tablePage.clickColumnHeader('Name')
-    const direction = await tablePage.getSortDirection('Name')
-    expect(direction).not.toBeNull()
-  })
+  // Collapsed: previously four near-duplicate per-column tests that only
+  // asserted `getSortDirection(...) !== null` plus a separate toggle test.
+  // Data-driven per Rule 3/4. Each column now asserts a concrete direction
+  // is applied AND that re-clicking toggles asc<->desc (not merely non-null).
+  for (const column of ['Name', 'Last Used', 'Expires', 'Status']) {
+    test(`should sort by ${column} and toggle direction`, async () => {
+      await tablePage.clickColumnHeader(column)
+      const firstDirection = await tablePage.getSortDirection(column)
+      // Must be a concrete direction, not null — strengthens the old
+      // `!== null` assertion which silently passed on a stale/no-op state.
+      expect(firstDirection, `${column} should set a sort direction`).toMatch(/^(asc|desc)$/)
 
-  test('should sort by last used', async () => {
-    await tablePage.clickColumnHeader('Last Used')
-    const direction = await tablePage.getSortDirection('Last Used')
-    expect(direction).not.toBeNull()
-  })
-
-  test('should sort by expires', async () => {
-    await tablePage.clickColumnHeader('Expires')
-    const direction = await tablePage.getSortDirection('Expires')
-    expect(direction).not.toBeNull()
-  })
-
-  test('should sort by status', async () => {
-    await tablePage.clickColumnHeader('Status')
-    const direction = await tablePage.getSortDirection('Status')
-    expect(direction).not.toBeNull()
-  })
-
-  test('should toggle sort direction', async () => {
-    await tablePage.clickColumnHeader('Name')
-    const firstDirection = await tablePage.getSortDirection('Name')
-
-    await tablePage.clickColumnHeader('Name')
-    const secondDirection = await tablePage.getSortDirection('Name')
-
-    expect(firstDirection).not.toEqual(secondDirection)
-  })
+      await tablePage.clickColumnHeader(column)
+      const secondDirection = await tablePage.getSortDirection(column)
+      expect(secondDirection, `${column} direction should toggle on re-click`).toMatch(/^(asc|desc)$/)
+      expect(secondDirection, `${column} should flip between asc and desc`).not.toEqual(firstDirection)
+    })
+  }
 })

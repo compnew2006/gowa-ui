@@ -15,25 +15,9 @@ test.describe('Chatbot Settings Page', () => {
     await chatbotSettingsPage.expectPageVisible()
   })
 
-  test('should have Messages tab', async () => {
-    await expect(chatbotSettingsPage.messagesTab).toBeVisible()
-  })
-
-  test('should have Agents tab', async () => {
-    await expect(chatbotSettingsPage.agentsTab).toBeVisible()
-  })
-
-  test('should have Hours tab', async () => {
-    await expect(chatbotSettingsPage.hoursTab).toBeVisible()
-  })
-
-  test('should have SLA tab', async () => {
-    await expect(chatbotSettingsPage.slaTab).toBeVisible()
-  })
-
-  test('should have AI tab', async () => {
-    await expect(chatbotSettingsPage.aiTab).toBeVisible()
-  })
+  // removed: tab-existence tests redundant with per-tab describe blocks below
+  // (Messages/Agents/Hours/SLA/AI tab visibility is asserted via each
+  // describe's expectXTabVisible() and the Tab Navigation describe).
 })
 
 test.describe('Messages Tab', () => {
@@ -49,25 +33,14 @@ test.describe('Messages Tab', () => {
     await chatbotSettingsPage.expectMessagesTabVisible()
   })
 
-  test('should have greeting message field', async ({ page }) => {
+  // Collapsed: previously five per-field existence tests (greeting, fallback,
+  // timeout, add-greeting-button, add-fallback-button). Data-driven per Rule 4.
+  test('Messages tab renders expected fields', async ({ page }) => {
     await expect(page.locator('textarea#greeting')).toBeVisible()
-  })
-
-  test('should have fallback message field', async ({ page }) => {
     await expect(page.locator('textarea#fallback')).toBeVisible()
-  })
-
-  test('should have session timeout field', async ({ page }) => {
     await expect(page.locator('input#timeout')).toBeVisible()
-  })
-
-  test('should have add greeting button option', async ({ page }) => {
     await expect(page.getByRole('button', { name: /Add Button/i }).first()).toBeVisible()
-  })
-
-  test('should have add fallback button option', async ({ page }) => {
-    const addButtons = page.getByRole('button', { name: /Add Button/i })
-    await expect(addButtons.last()).toBeVisible()
+    await expect(page.getByRole('button', { name: /Add Button/i }).last()).toBeVisible()
   })
 
   test('should fill greeting message', async ({ page }) => {
@@ -96,18 +69,13 @@ test.describe('Agents Tab', () => {
     await chatbotSettingsPage.expectAgentsTabVisible()
   })
 
+  // Collapsed: previously three per-toggle existence tests. Data-driven per Rule 4.
   // exact:true anchors on the toggle label and avoids matching the
   // recent-activity / audit-log panel which renders entries like
   // "Assign To Same Agent: false" (different casing + trailing colon).
-  test('should have allow queue pickup toggle', async ({ page }) => {
+  test('Agents tab renders expected toggles', async ({ page }) => {
     await expect(page.getByText('Allow Agents to Pick from Queue', { exact: true })).toBeVisible()
-  })
-
-  test('should have assign to same agent toggle', async ({ page }) => {
     await expect(page.getByText('Assign to Same Agent', { exact: true })).toBeVisible()
-  })
-
-  test('should have current conversation only toggle', async ({ page }) => {
     await expect(page.getByText('Agents See Current Conversation Only', { exact: true })).toBeVisible()
   })
 
@@ -139,8 +107,18 @@ test.describe('Business Hours Tab', () => {
     await chatbotSettingsPage.expectHoursTabVisible()
   })
 
-  test('should have enable business hours toggle', async ({ page }) => {
+  // Collapsed: previously a standalone "have enable business hours toggle"
+  // existence test. Combined with the out-of-hours message visibility check
+  // into one field-render assertion per Rule 4. (Toggling business hours on
+  // first is required to reveal the out-of-hours message field.)
+  test('Business Hours tab renders expected fields', async ({ page }) => {
     await expect(page.getByText('Enable Business Hours')).toBeVisible()
+    const toggle = page.locator('button[role="switch"]').first()
+    const state = await toggle.getAttribute('data-state')
+    if (state === 'unchecked') {
+      await toggle.click()
+    }
+    await expect(page.getByText('Out of Hours Message')).toBeVisible()
   })
 
   test('should toggle business hours enabled', async ({ page }) => {
@@ -161,14 +139,9 @@ test.describe('Business Hours Tab', () => {
     await expect(page.getByText('Tuesday')).toBeVisible()
   })
 
-  test('should have out of hours message field', async ({ page }) => {
-    const toggle = page.locator('button[role="switch"]').first()
-    const state = await toggle.getAttribute('data-state')
-    if (state === 'unchecked') {
-      await toggle.click()
-    }
-    await expect(page.getByText('Out of Hours Message')).toBeVisible()
-  })
+  // removed: standalone "have out of hours message field" visibility test —
+  // folded into the data-driven "Business Hours tab renders expected fields"
+  // existence test above.
 
   test('should save business hours settings', async () => {
     await chatbotSettingsPage.saveSettings()
@@ -190,19 +163,13 @@ test.describe('SLA Tab', () => {
     await chatbotSettingsPage.expectSLATabVisible()
   })
 
-  test('should have enable SLA toggle', async ({ page }) => {
+  // Collapsed: previously two per-toggle existence tests (enable SLA, client
+  // inactivity reminders). Combined with the response/escalation field labels
+  // into one data-driven render check per Rule 4. Toggling SLA on first is
+  // required to reveal the time fields.
+  test('SLA tab renders expected fields and toggles', async ({ page }) => {
     await expect(page.getByText('Enable SLA Tracking')).toBeVisible()
-  })
-
-  test('should toggle SLA enabled', async ({ page }) => {
-    const toggle = page.locator('button[role="switch"]').first()
-    const initialState = await toggle.getAttribute('data-state')
-    await toggle.click()
-    const newState = await toggle.getAttribute('data-state')
-    expect(newState).not.toBe(initialState)
-  })
-
-  test('should show SLA fields when enabled', async ({ page }) => {
+    await expect(page.getByText('Client Inactivity Reminders')).toBeVisible()
     const toggle = page.locator('button[role="switch"]').first()
     const state = await toggle.getAttribute('data-state')
     if (state === 'unchecked') {
@@ -213,8 +180,12 @@ test.describe('SLA Tab', () => {
     await expect(page.locator('label').filter({ hasText: /Escalation Time/i })).toBeVisible()
   })
 
-  test('should have client inactivity reminders toggle', async ({ page }) => {
-    await expect(page.getByText('Client Inactivity Reminders')).toBeVisible()
+  test('should toggle SLA enabled', async ({ page }) => {
+    const toggle = page.locator('button[role="switch"]').first()
+    const initialState = await toggle.getAttribute('data-state')
+    await toggle.click()
+    const newState = await toggle.getAttribute('data-state')
+    expect(newState).not.toBe(initialState)
   })
 
   test('should save SLA settings', async () => {
@@ -237,8 +208,20 @@ test.describe('AI Tab', () => {
     await chatbotSettingsPage.expectAITabVisible()
   })
 
-  test('should have enable AI toggle', async ({ page }) => {
+  // Collapsed: previously four per-field existence tests (enable AI toggle,
+  // AI Provider/Model labels, API key field, system prompt field). Data-driven
+  // per Rule 4. Toggling AI on first is required to reveal the config fields.
+  test('AI tab renders expected fields when enabled', async ({ page }) => {
     await expect(page.getByText('Enable AI Responses')).toBeVisible()
+    const toggle = page.locator('button[role="switch"]').first()
+    const state = await toggle.getAttribute('data-state')
+    if (state === 'unchecked') {
+      await toggle.click()
+    }
+    await expect(page.locator('label').filter({ hasText: /^AI Provider$/ })).toBeVisible()
+    await expect(page.locator('label').filter({ hasText: /^Model$/ })).toBeVisible()
+    await expect(page.locator('label').filter({ hasText: /^API Key$/ })).toBeVisible()
+    await expect(page.getByText('System Prompt')).toBeVisible()
   })
 
   test('should toggle AI enabled', async ({ page }) => {
@@ -247,34 +230,6 @@ test.describe('AI Tab', () => {
     await toggle.click()
     const newState = await toggle.getAttribute('data-state')
     expect(newState).not.toBe(initialState)
-  })
-
-  test('should show AI configuration when enabled', async ({ page }) => {
-    const toggle = page.locator('button[role="switch"]').first()
-    const state = await toggle.getAttribute('data-state')
-    if (state === 'unchecked') {
-      await toggle.click()
-    }
-    await expect(page.locator('label').filter({ hasText: /^AI Provider$/ })).toBeVisible()
-    await expect(page.locator('label').filter({ hasText: /^Model$/ })).toBeVisible()
-  })
-
-  test('should have API key field', async ({ page }) => {
-    const toggle = page.locator('button[role="switch"]').first()
-    const state = await toggle.getAttribute('data-state')
-    if (state === 'unchecked') {
-      await toggle.click()
-    }
-    await expect(page.locator('label').filter({ hasText: /^API Key$/ })).toBeVisible()
-  })
-
-  test('should have system prompt field', async ({ page }) => {
-    const toggle = page.locator('button[role="switch"]').first()
-    const state = await toggle.getAttribute('data-state')
-    if (state === 'unchecked') {
-      await toggle.click()
-    }
-    await expect(page.getByText('System Prompt')).toBeVisible()
   })
 
   test('should show AI providers', async ({ page }) => {

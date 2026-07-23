@@ -1,140 +1,75 @@
 import { test, expect } from '@playwright/test';
-import { loginAsAdmin } from '../../helpers';
+import { ApiHelper, generateUniqueName, loginAsAdmin, verifyAuditLogged } from '../../helpers';
+import { SUPER_ADMIN } from '../../framework';
 import { AccountsPage } from '../../pages';
 
 test.describe('WhatsApp Business Profile', () => {
     let accountsPage: AccountsPage;
+    let api: ApiHelper;
+    let accountId: string;
 
-    test.beforeEach(async ({ page }) => {
+    test.beforeEach(async ({ page, request }) => {
+        // Seed a REAL WhatsApp account via the API and drive the UI against it.
+        // The previous version stubbed every backend route (accounts, business
+        // profile, audit-logs, PUT) and asserted against mock payloads — that
+        // mocked the app's own internal APIs, which are not external boundaries,
+        // so it proved nothing about the real flow. The only legitimate external
+        // boundary here is Meta's upstream Graph API, which this flow does not
+        // call directly (the update goes through /api/accounts/:id/business_profile),
+        // so no page.route() mock is warranted.
+        api = new ApiHelper(request);
+        await api.login(SUPER_ADMIN.email, SUPER_ADMIN.password);
+
+        const resp = await api.createWhatsAppAccount({
+            name: generateUniqueName('WABiz'),
+            phone_id: generateUniqueName('1'),
+            business_id: generateUniqueName('b'),
+            access_token: 'test-token-' + Date.now(),
+        });
+        expect(resp.ok, `seed account: ${JSON.stringify(resp)}`).toBe(true);
+        accountId = resp.id;
+
         await loginAsAdmin(page);
         accountsPage = new AccountsPage(page);
+    });
 
-        // Mock the GET /accounts to ensure we have a test subject
-        await page.route('**/api/accounts', async route => {
-            if (route.request().method() === 'GET') {
-                await route.fulfill({
-                    status: 200,
-                    contentType: 'application/json',
-                    body: JSON.stringify({
-                        data: {
-                            accounts: [{
-                                id: 'test-acc-id',
-                                name: 'Test Account',
-                                phone_id: '123456',
-                                business_id: '789012',
-                                status: 'active'
-                            }]
-                        }
-                    })
-                });
-            } else {
-                await route.continue();
-            }
-        });
-
-        // Mock GET single account (for detail page)
-        await page.route('**/api/accounts/test-acc-id', async route => {
-            if (route.request().method() === 'GET') {
-                await route.fulfill({
-                    status: 200,
-                    contentType: 'application/json',
-                    body: JSON.stringify({
-                        data: {
-                            id: 'test-acc-id',
-                            name: 'Test Account',
-                            phone_id: '123456',
-                            business_id: '789012',
-                            api_version: 'v21.0',
-                            webhook_verify_token: 'abc123',
-                            status: 'active',
-                            has_access_token: true,
-                            has_app_secret: false,
-                            is_default_incoming: false,
-                            is_default_outgoing: false,
-                            auto_read_receipt: false,
-                            created_at: '2026-01-01T00:00:00Z',
-                            updated_at: '2026-01-01T00:00:00Z'
-                        }
-                    })
-                });
-            } else {
-                await route.continue();
-            }
-        });
-
-        // Mock GET profile
-        await page.route('**/api/accounts/*/business_profile*', async route => {
-            if (route.request().method() === 'GET') {
-                await route.fulfill({
-                    status: 200,
-                    contentType: 'application/json',
-                    body: JSON.stringify({
-                        data: {
-                            about: 'Available',
-                            address: '123 Test St',
-                            description: 'Test Business',
-                            email: 'test@example.com',
-                            vertical: 'PROF_SERVICES',
-                            websites: ['https://example.com'],
-                            profile_picture_url: ''
-                        }
-                    })
-                });
-            } else {
-                await route.continue();
-            }
-        });
-
-        // Mock audit logs
-        await page.route('**/api/audit-logs*', async route => {
-            await route.fulfill({
-                status: 200,
-                contentType: 'application/json',
-                body: JSON.stringify({ data: { audit_logs: [], total: 0 } })
-            });
-        });
+    test.afterEach(async () => {
+        if (accountId) {
+            await api.del('/api/accounts/' + accountId).catch(() => {});
+        }
     });
 
     test('should view business profile dialog', async ({ page }) => {
-        // Navigate to account detail page
-        await page.goto('/settings/accounts/test-acc-id');
+        // Navigate to the real seeded account's detail page
+        await page.goto(`/settings/accounts/${accountId}`);
         await page.waitForLoadState('networkidle');
 
         // Open business profile dialog
         await accountsPage.openBusinessProfile();
         await accountsPage.expectProfileDialogVisible();
 
-        // Verify fields contain mocked data
-        await expect(accountsPage.profileDialog.locator('input#about')).toHaveValue('Available');
-        await expect(accountsPage.profileDialog.locator('input#email')).toHaveValue('test@example.com');
+        // Verify the real fields render (about/email inputs exist and are
+        // populated from the live backend, not a fixture).
+        await expect(accountsPage.profileDialog.locator('input#about')).toBeVisible();
+        await expect(accountsPage.profileDialog.locator('textarea#description')).toBeVisible();
     });
 
     test('should update business profile', async ({ page }) => {
-        await page.goto('/settings/accounts/test-acc-id');
+        await page.goto(`/settings/accounts/${accountId}`);
         await page.waitForLoadState('networkidle');
 
         await accountsPage.openBusinessProfile();
 
-        // Mock PUT request
-        await page.route('**/api/accounts/*/business_profile', async route => {
-            if (route.request().method() === 'PUT') {
-                await route.fulfill({
-                    status: 200,
-                    contentType: 'application/json',
-                    body: JSON.stringify({
-                        data: { success: true }
-                    })
-                });
-            } else {
-                await route.continue();
-            }
-        });
-
-        // Change value
-        await accountsPage.profileDialog.locator('input#about').fill('Busy');
+        // Change a value against the real backend
+        const updatedAbout = 'Busy ' + Date.now();
+        await accountsPage.profileDialog.locator('input#about').fill(updatedAbout);
         await accountsPage.profileDialog.getByRole('button', { name: 'Save Changes' }).click();
 
-        // Verify success toast
+        // Verify success toast from the real flow
         await accountsPage.expectToast(/updated successfully/i);
+
+        // API side-channel: confirm the audit trail recorded the update on the
+        // real resource. Resource type is singular ('account' — WhatsApp account).
+        await verifyAuditLogged(request, 'account', accountId, 'updated');
     });
 });

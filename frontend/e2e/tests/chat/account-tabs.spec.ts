@@ -202,9 +202,17 @@ test.describe('Multi-Account Tabs', () => {
     // Inactive tab should be visible (not transparent/invisible)
     const inactiveTab = inactiveTabs.first()
     await expect(inactiveTab).toBeVisible()
-    // Check it has a background class for visibility
-    const classes = await inactiveTab.getAttribute('class') || ''
-    expect(classes).toContain('bg-white')
+
+    // The active tab is account-2 (most recent incoming), so the single
+    // inactive tab must be the other account — assert its label rather than a
+    // Tailwind class, so the test survives a restyle.
+    await expect(inactiveTab).toHaveText('account-1')
+
+    // TODO(test-guard): assert inactive styling via a stable attribute
+    // (data-state="inactive" / aria-selected="false") once ChatView's account
+    // tab buttons expose one. Today the active/inactive distinction is purely
+    // a Tailwind class (bg-emerald-600 vs bg-white/[0.08]) with no semantic
+    // attribute, so a class-based assertion would couple to the stylesheet.
   })
 
   test('should switch account when clicking inactive tab', async ({ page }) => {

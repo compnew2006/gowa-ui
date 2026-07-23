@@ -128,6 +128,8 @@ func runMigrations(db *gorm.DB) error {
 		&models.CallPermission{},
 		// Audit
 		&models.AuditLog{},
+		// GOWA instances
+		&models.GowaInstance{},
 	)
 }
 
@@ -173,6 +175,7 @@ func cleanupTables(db *gorm.DB) {
 		"sso_providers",
 		"webhooks",
 		"custom_actions",
+		"gowa_instances",
 		"user_availability_logs",
 		"user_organizations",
 		"users",
@@ -217,6 +220,7 @@ func TruncateTables(db *gorm.DB) {
 		"sso_providers",
 		"webhooks",
 		"custom_actions",
+		"gowa_instances",
 		"user_availability_logs",
 		"user_organizations",
 		"users",

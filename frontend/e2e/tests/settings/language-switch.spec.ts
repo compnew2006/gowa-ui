@@ -16,6 +16,11 @@ test.describe('Language Switching', () => {
   })
 
   test.describe('Settings Page Language Selector', () => {
+    // TODO(test-guard): extract LanguageSwitcher POM — the locator
+    // `page.locator('button[role="combobox"]').filter({ hasText: /English/ })`
+    // is repeated across these tests (and again with /Español/ on the way back).
+    // Encapsulate it (plus the open/select/back flow) in a pages/ POM rather than
+    // re-inlining the combobox query in each test.
     test('should display language selector on settings page', async ({ page }) => {
       await page.goto('/settings')
       await page.waitForLoadState('networkidle')

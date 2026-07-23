@@ -26,7 +26,6 @@ func TestClient_Capabilities(t *testing.T) {
 	assert.False(t, caps.Flows)
 	assert.False(t, caps.Calls)
 	assert.False(t, caps.Catalog)
-	assert.False(t, caps.Analytics)
 	assert.False(t, caps.BusinessProfile)
 	assert.False(t, caps.MediaUpload)
 	assert.False(t, caps.Interactive)

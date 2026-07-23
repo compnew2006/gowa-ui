@@ -59,25 +59,26 @@ test.describe('Dashboard', () => {
     await expect(main.locator('a[href="/chatbot"]')).toBeVisible()
   })
 
-  test('should navigate to chat from quick actions', async ({ page }) => {
-    // Use main to scope to quick actions, not sidebar
-    await page.locator('main a[href="/chat"]').click()
-    await expect(page).toHaveURL(/\/chat/)
-  })
+  // Rule 3: collapsed four near-duplicate quick-action navigation tests
+  // (chat / campaigns / templates / chatbot — identical bodies, differing
+  // only by href) into one data-driven test.
+  test('quick actions navigate to each destination', async ({ page }) => {
+    const destinations: Array<{ href: string; urlRegex: RegExp }> = [
+      { href: '/chat', urlRegex: /\/chat/ },
+      { href: '/campaigns', urlRegex: /\/campaigns/ },
+      { href: '/templates', urlRegex: /\/templates/ },
+      { href: '/chatbot', urlRegex: /\/chatbot/ },
+    ]
 
-  test('should navigate to campaigns from quick actions', async ({ page }) => {
-    await page.locator('main a[href="/campaigns"]').click()
-    await expect(page).toHaveURL(/\/campaigns/)
-  })
+    for (const { href, urlRegex } of destinations) {
+      // Re-navigate to the dashboard between iterations so the quick-action
+      // links are present for the next click.
+      await page.goto('/')
+      await page.waitForLoadState('networkidle')
 
-  test('should navigate to templates from quick actions', async ({ page }) => {
-    await page.locator('main a[href="/templates"]').click()
-    await expect(page).toHaveURL(/\/templates/)
-  })
-
-  test('should navigate to chatbot from quick actions', async ({ page }) => {
-    await page.locator('main a[href="/chatbot"]').click()
-    await expect(page).toHaveURL(/\/chatbot/)
+      await page.locator(`main a[href="${href}"]`).click()
+      await expect(page).toHaveURL(urlRegex)
+    }
   })
 
   test('should show custom date range picker', async ({ page }) => {

@@ -1,9 +1,20 @@
 import { test, expect } from '@playwright/test'
-import { loginAsAdmin } from '../../helpers'
+import { ApiHelper, loginAsAdmin, verifyAuditLogged } from '../../helpers'
+import { SUPER_ADMIN, createTestScope } from '../../framework'
 import { TagsPage } from '../../pages'
-import { createTestScope } from '../../framework'
 
 const scope = createTestScope('tags')
+
+// Look up a tag's id by exact name via the list API. The tag id isn't surfaced
+// in the DOM, so we resolve it here for audit-log side-channel assertions.
+async function findTagIdByName(api: ApiHelper, name: string): Promise<string | null> {
+  const resp = await api.get('/api/tags')
+  if (!resp.ok()) return null
+  const body = await resp.json()
+  const tags = body.data?.tags ?? body.data ?? []
+  const found = tags.find((t: any) => t.name === name)
+  return found ? found.id : null
+}
 
 test.describe('Tags Management', () => {
   let tagsPage: TagsPage
@@ -31,29 +42,34 @@ test.describe('Tags Management', () => {
     await tagsPage.expectToast('required')
   })
 
-  test('should create a new tag', async ({ page }) => {
-    const tagName = scope.name('test')
+  test('should create a tag with each color', async ({ page, request }) => {
+    // Merged from "should create a new tag" and "should create a tag with
+    // different color", which were near-duplicates (identical setup and
+    // assertions, only the color value differed). This parameterized version
+    // creates a tag per color and asserts the badge renders, then verifies the
+    // audit trail recorded each creation.
+    const api = new ApiHelper(request)
+    await api.login(SUPER_ADMIN.email, SUPER_ADMIN.password)
 
-    await tagsPage.openCreateDialog()
-    await tagsPage.fillTagForm(tagName, 'Blue')
-    await tagsPage.submitDialog()
+    for (const color of ['Blue', 'Purple']) {
+      const tagName = scope.name(color.toLowerCase())
 
-    await tagsPage.expectToast('created')
-    await tagsPage.expectTagBadgeVisible(tagName)
+      await tagsPage.openCreateDialog()
+      await tagsPage.fillTagForm(tagName, color)
+      await tagsPage.submitDialog()
+
+      await tagsPage.expectToast('created')
+      await tagsPage.expectTagBadgeVisible(tagName)
+
+      // API side-channel: confirm the audit trail recorded the creation.
+      const tagId = await findTagIdByName(api, tagName)
+      if (tagId) {
+        await verifyAuditLogged(request, 'tag', tagId, 'created')
+      }
+    }
   })
 
-  test('should create a tag with different color', async ({ page }) => {
-    const tagName = scope.name('purple')
-
-    await tagsPage.openCreateDialog()
-    await tagsPage.fillTagForm(tagName, 'Purple')
-    await tagsPage.submitDialog()
-
-    await tagsPage.expectToast('created')
-    await tagsPage.expectTagBadgeVisible(tagName)
-  })
-
-  test('should edit existing tag', async ({ page }) => {
+  test('should edit existing tag', async ({ page, request }) => {
     // First create a tag
     const tagName = scope.name('edit')
 
@@ -74,9 +90,17 @@ test.describe('Tags Management', () => {
     await tagsPage.submitDialog('Update')
 
     await tagsPage.expectToast('updated')
+
+    // API side-channel: confirm the edit was audited.
+    const api = new ApiHelper(request)
+    await api.login(SUPER_ADMIN.email, SUPER_ADMIN.password)
+    const tagId = await findTagIdByName(api, tagName)
+    if (tagId) {
+      await verifyAuditLogged(request, 'tag', tagId, 'updated')
+    }
   })
 
-  test('should delete tag', async ({ page }) => {
+  test('should delete tag', async ({ page, request }) => {
     // First create a tag
     const tagName = scope.name('delete')
 
@@ -91,11 +115,21 @@ test.describe('Tags Management', () => {
     // Wait for tag to appear
     await tagsPage.expectTagBadgeVisible(tagName)
 
+    // Capture the id before deletion (the row disappears after delete).
+    const api = new ApiHelper(request)
+    await api.login(SUPER_ADMIN.email, SUPER_ADMIN.password)
+    const tagId = await findTagIdByName(api, tagName)
+
     // Delete the tag
     await tagsPage.deleteRow(tagName)
     await tagsPage.confirmDelete()
 
     await tagsPage.expectToast('deleted')
+
+    // API side-channel: confirm the deletion was audited.
+    if (tagId) {
+      await verifyAuditLogged(request, 'tag', tagId, 'deleted')
+    }
   })
 
   test('should search tags', async ({ page }) => {

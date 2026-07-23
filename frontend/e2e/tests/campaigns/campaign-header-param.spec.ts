@@ -1,6 +1,6 @@
 import { test, expect, request as playwrightRequest } from '@playwright/test'
 import { Client } from 'pg'
-import { loginAsAdmin, ApiHelper } from '../../helpers'
+import { loginAsAdmin, ApiHelper, verifyAuditLogged } from '../../helpers'
 import { createTestScope } from '../../framework'
 
 const scope = createTestScope('campaign-header-param')
@@ -130,6 +130,10 @@ test.describe('Campaign recipients — TEXT header parameter', () => {
     await addBtn.click()
     await addResp
     await expect(dialog).toBeHidden()
+
+    // Rule (audit): recipients import mutates the campaign — assert the
+    // audit log recorded an `updated` entry against the campaign.
+    await verifyAuditLogged(request, 'campaign', campaignId, 'updated')
 
     // Side-channel: load the recipient row and assert HeaderParams was
     // persisted as its own JSONB field — separate from TemplateParams.

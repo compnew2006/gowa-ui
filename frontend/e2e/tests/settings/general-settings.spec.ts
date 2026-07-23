@@ -11,21 +11,10 @@ test.describe('General Settings Page', () => {
     await settingsPage.goto()
   })
 
-  test('should display settings page', async () => {
-    await settingsPage.expectPageVisible()
-  })
-
-  test('should have General tab', async () => {
-    await expect(settingsPage.generalTab).toBeVisible()
-  })
-
-  test('should have Notifications tab', async () => {
-    await expect(settingsPage.notificationsTab).toBeVisible()
-  })
-
-  test('should show General tab by default', async () => {
-    await expect(settingsPage.orgNameInput).toBeVisible()
-  })
+  // removed: "should display settings page", "should have General tab",
+  // "should have Notifications tab" — these asserted only static labels and
+  // are covered by the General Tab / Notifications Tab / Settings Tab
+  // Navigation describes below.
 })
 
 test.describe('General Tab', () => {
@@ -73,12 +62,23 @@ test.describe('General Tab', () => {
     await page.keyboard.press('Escape')
   })
 
-  test('should toggle mask phone numbers', async ({ page }) => {
+  test('should toggle mask phone numbers and persist on reload', async ({ page }) => {
+    // TODO(test-guard): anchor toggle to its label via POM (maskPhoneSwitch)
     const toggle = page.locator('button[role="switch"]').first()
     const initialState = await toggle.getAttribute('data-state')
     await toggle.click()
     const newState = await toggle.getAttribute('data-state')
     expect(newState).not.toBe(initialState)
+
+    // Persist the change and verify it survives a reload (Rule 1).
+    await settingsPage.saveGeneralSettings()
+    await settingsPage.expectToast(/saved|success/i)
+    await page.reload()
+    await page.waitForLoadState('networkidle')
+
+    // TODO(test-guard): anchor toggle to its label via POM (maskPhoneSwitch)
+    const persistedToggle = page.locator('button[role="switch"]').first()
+    await expect(persistedToggle).toHaveAttribute('data-state', newState!)
   })
 
   test('should save general settings', async () => {
@@ -116,28 +116,61 @@ test.describe('Notifications Tab', () => {
     await expect(page.getByText('Campaign Updates', { exact: true })).toBeVisible()
   })
 
-  test('should toggle email notifications', async ({ page }) => {
+  test('should toggle email notifications and persist on reload', async ({ page }) => {
+    // TODO(test-guard): anchor toggle to its label via POM (emailNotificationsSwitch)
     const toggle = page.locator('button[role="switch"]').first()
     const initialState = await toggle.getAttribute('data-state')
     await toggle.click()
     const newState = await toggle.getAttribute('data-state')
     expect(newState).not.toBe(initialState)
+
+    // Persist the change and verify it survives a reload (Rule 1).
+    await settingsPage.saveNotificationSettings()
+    await settingsPage.expectToast(/saved|success/i)
+    await page.reload()
+    await page.waitForLoadState('networkidle')
+
+    // TODO(test-guard): anchor toggle to its label via POM (emailNotificationsSwitch)
+    const persistedToggle = page.locator('button[role="switch"]').first()
+    await expect(persistedToggle).toHaveAttribute('data-state', newState!)
   })
 
-  test('should toggle new message alerts', async ({ page }) => {
+  test('should toggle new message alerts and persist on reload', async ({ page }) => {
+    // TODO(test-guard): anchor toggle to its label via POM (newMessageAlertsSwitch)
     const toggle = page.locator('button[role="switch"]').nth(1)
     const initialState = await toggle.getAttribute('data-state')
     await toggle.click()
     const newState = await toggle.getAttribute('data-state')
     expect(newState).not.toBe(initialState)
+
+    // Persist the change and verify it survives a reload (Rule 1).
+    await settingsPage.saveNotificationSettings()
+    await settingsPage.expectToast(/saved|success/i)
+    await page.reload()
+    await page.waitForLoadState('networkidle')
+
+    // TODO(test-guard): anchor toggle to its label via POM (newMessageAlertsSwitch)
+    const persistedToggle = page.locator('button[role="switch"]').nth(1)
+    await expect(persistedToggle).toHaveAttribute('data-state', newState!)
   })
 
-  test('should toggle campaign updates', async ({ page }) => {
+  test('should toggle campaign updates and persist on reload', async ({ page }) => {
+    // TODO(test-guard): anchor toggle to its label via POM (campaignUpdatesSwitch)
     const toggle = page.locator('button[role="switch"]').nth(2)
     const initialState = await toggle.getAttribute('data-state')
     await toggle.click()
     const newState = await toggle.getAttribute('data-state')
     expect(newState).not.toBe(initialState)
+
+    // Persist the change and verify it survives a reload (Rule 1).
+    await settingsPage.saveNotificationSettings()
+    await settingsPage.expectToast(/saved|success/i)
+    await page.reload()
+    await page.waitForLoadState('networkidle')
+
+    // TODO(test-guard): anchor toggle to its label via POM (campaignUpdatesSwitch)
+    const persistedToggle = page.locator('button[role="switch"]').nth(2)
+    await expect(persistedToggle).toHaveAttribute('data-state', newState!)
   })
 
   test('should have save button', async () => {

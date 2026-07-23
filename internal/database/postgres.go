@@ -115,6 +115,9 @@ func GetMigrationModels() []MigrationModel {
 		{"CallTransfer", &models.CallTransfer{}},
 		{"CallPermission", &models.CallPermission{}},
 		{"AuditLog", &models.AuditLog{}},
+
+		// GOWA instances (DB-managed GOWA servers)
+		{"GowaInstance", &models.GowaInstance{}},
 	}
 }
 

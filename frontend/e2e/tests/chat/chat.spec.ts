@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
 import { ApiHelper, login, loginAsAdmin } from '../../helpers'
 import { ChatPage } from '../../pages'
 import { createTestScope } from '../../framework'
@@ -9,335 +9,192 @@ const cannedScope = createTestScope('chat-canned-preview')
 // different org from the UI session and the chat composer never renders.
 const ADMIN_USER = { email: 'admin@admin.com', password: 'admin', role: 'admin' as const }
 
-test.describe('Chat Page', () => {
-  let chatPage: ChatPage
+// Scope + helper for the low-level chat-layout specs below. Every contact
+// created here gets a unique profile name so search/clear-search tests can
+// assert against a known row.
+const layoutScope = createTestScope('chat-layout')
 
-  test.beforeEach(async ({ page }) => {
+/**
+ * Resolve a contact row in the contacts sidebar by its rendered name.
+ *
+ * TODO(test-guard): encapsulate in ChatPage POM. ChatPage.contactList /
+ * getContactItem() currently target `.contact-item, [data-testid="contact"]`
+ * selectors that do not exist in ChatView.vue — the rows are plain
+ * div.cursor-pointer. Until the POM is realigned, match the seeded name text
+ * directly against the rendered row.
+ */
+function contactRowByName(page: Page, name: string) {
+  return page.locator('div.cursor-pointer').filter({ hasText: name }).first()
+}
+
+test.describe('Chat page layout', () => {
+  let chatPage: ChatPage
+  let seededName: string
+
+  test.beforeEach(async ({ page, request }) => {
+    // Seed a contact via the API so the list is guaranteed non-empty and a
+    // unique name is available for search assertions. Uses the same
+    // admin@admin.com session the UI logs in as (see Canned Response block).
+    const api = new ApiHelper(request)
+    await api.login(ADMIN_USER.email, ADMIN_USER.password)
+    seededName = layoutScope.name('Chat Test')
+    await api.createContact(layoutScope.phone(), seededName)
+
     await loginAsAdmin(page)
     chatPage = new ChatPage(page)
     await chatPage.goto()
   })
 
-  test('should display chat page', async () => {
-    await chatPage.expectPageVisible()
+  test('chat view shows the contact list on first load', async () => {
+    // The search input is part of the contacts sidebar — its presence proves
+    // the chat layout (not a bare body) rendered.
+    await expect(chatPage.searchInput).toBeVisible()
   })
 
-  test('should show contact list area', async ({ page }) => {
-    // Chat page should have some layout
-    await expect(page.locator('body')).toBeVisible()
+  test('contact list area is visible beside the chat area', async ({ page }) => {
+    await expect(chatPage.searchInput).toBeVisible()
+    // The seeded contact's name should appear in the sidebar list.
+    // TODO(test-guard): encapsulate in ChatPage POM
+    await expect(contactRowByName(page, seededName)).toBeVisible({ timeout: 10_000 })
   })
 
-  test('should have search input', async ({ page }) => {
-    const searchInput = page.locator('input[placeholder*="Search"]')
-    if (await searchInput.isVisible()) {
-      await expect(searchInput).toBeVisible()
-    }
+  test('contacts sidebar renders the search input', async () => {
+    await expect(chatPage.searchInput).toBeVisible()
+    await expect(chatPage.searchInput).toHaveAttribute('placeholder', /Search/i)
+  })
+
+  test('searching by a contact name filters the list to that row', async ({ page }) => {
+    // TODO(test-guard): encapsulate in ChatPage POM
+    const seededRow = contactRowByName(page, seededName)
+    await expect(seededRow).toBeVisible({ timeout: 10_000 })
+
+    await chatPage.searchContacts(seededName)
+    // The matched row stays visible after server-side filtering.
+    await expect(seededRow).toBeVisible()
+  })
+
+  test('clearing the search restores the full contact list', async ({ page }) => {
+    // TODO(test-guard): encapsulate in ChatPage POM
+    const seededRow = contactRowByName(page, seededName)
+    await expect(seededRow).toBeVisible({ timeout: 10_000 })
+
+    await chatPage.searchContacts('zzzz-no-such-contact')
+    // A no-match search hides the seeded row.
+    await expect(seededRow).toHaveCount(0)
+
+    // Clearing brings the full list back.
+    await chatPage.searchContacts('')
+    await expect(seededRow).toBeVisible({ timeout: 10_000 })
+  })
+
+  test('contact list shows at least one seeded contact', async ({ page }) => {
+    // TODO(test-guard): encapsulate in ChatPage POM
+    const seededRow = contactRowByName(page, seededName)
+    await expect(seededRow).toBeVisible({ timeout: 10_000 })
   })
 })
 
-test.describe('Contact List', () => {
+test.describe('Chat composer', () => {
   let chatPage: ChatPage
+  let contactId: string
 
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page, request }) => {
+    const api = new ApiHelper(request)
+    await api.login(ADMIN_USER.email, ADMIN_USER.password)
+    const contact = await api.createContact(layoutScope.phone(), layoutScope.name('Composer'))
+    contactId = contact.id
+
     await loginAsAdmin(page)
     chatPage = new ChatPage(page)
-    await chatPage.goto()
+    // Navigate straight to the seeded contact so the composer mounts without
+    // depending on the (stale) POM contact-row locators.
+    await chatPage.goto(contactId)
   })
 
-  test('should search contacts', async ({ page }) => {
-    const searchInput = page.locator('input[placeholder*="Search"]')
-    if (await searchInput.isVisible()) {
-      await searchInput.fill('test')
-      await page.waitForTimeout(500)
-      // Search should filter contacts
-    }
+  test('chat composer toolbar renders all action buttons when a contact is selected', async () => {
+    // Collapsed from the former per-button "should have X button" no-op tests
+    // (Rule 3): one body asserts the whole toolbar renders. The send button
+    // only enables once there is text; visibility is what we assert here.
+    await expect(chatPage.messageInput).toBeVisible({ timeout: 10_000 })
+    await expect(chatPage.sendButton).toBeVisible()
+    await expect(chatPage.attachButton).toBeVisible()
+    await expect(chatPage.emojiButton).toBeVisible()
+    await expect(chatPage.cannedResponsesButton).toBeVisible()
+    await expect(chatPage.templatePickerButton).toBeVisible()
   })
 
-  test('should clear search', async ({ page }) => {
-    const searchInput = page.locator('input[placeholder*="Search"]')
-    if (await searchInput.isVisible()) {
-      await searchInput.fill('test')
-      await searchInput.fill('')
-      await page.waitForTimeout(500)
-    }
+  test('typing into the message input updates its value', async () => {
+    await expect(chatPage.messageInput).toBeVisible({ timeout: 10_000 })
+    const text = `Hello ${Date.now()}`
+    await chatPage.messageInput.fill(text)
+    await expect(chatPage.messageInput).toHaveValue(text)
   })
 
-  test('should show contact items', async ({ page }) => {
-    // Contact list may or may not have items
-    const contacts = page.locator('.contact-item, [data-testid="contact"], .cursor-pointer')
-    const count = await contacts.count()
-    // Just verify the page loads without error
-    expect(count).toBeGreaterThanOrEqual(0)
+  test('clearing the message input empties its value', async () => {
+    await expect(chatPage.messageInput).toBeVisible({ timeout: 10_000 })
+    await chatPage.messageInput.fill('Temporary text')
+    await chatPage.messageInput.fill('')
+    await expect(chatPage.messageInput).toHaveValue('')
   })
 })
 
-test.describe('Message Area', () => {
+test.describe('Chat conditional actions', () => {
   let chatPage: ChatPage
+  let contactId: string
 
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page, request }) => {
+    const api = new ApiHelper(request)
+    await api.login(ADMIN_USER.email, ADMIN_USER.password)
+    const contact = await api.createContact(layoutScope.phone(), layoutScope.name('Transfer'))
+    contactId = contact.id
+
     await loginAsAdmin(page)
     chatPage = new ChatPage(page)
-    await chatPage.goto()
+    await chatPage.goto(contactId)
   })
 
-  test('should show message area when contact selected', async ({ page }) => {
-    // Try to click first contact if available
-    const contacts = page.locator('.cursor-pointer').filter({ has: page.locator('text=/[+0-9]|contact/i') })
-    const count = await contacts.count()
-    if (count > 0) {
-      await contacts.first().click()
-      await page.waitForLoadState('networkidle')
-      // Message input should appear
-      const messageInput = page.locator('textarea, input[placeholder*="message" i]')
-      if (await messageInput.first().isVisible()) {
-        await expect(messageInput.first()).toBeVisible()
-      }
-    }
+  // transfer / resume are conditional on chatbot session state, which the
+  // chat-layout suite does not seed. Asserting unconditionally would be a
+  // flaky guess; marking fixme with the reason instead of a tautology.
+  test.fixme('transfer button renders when a chatbot session is active', async ({ page }) => {
+    const transferBtn = page.getByRole('button', { name: /Transfer/i })
+    await expect(transferBtn).toBeVisible()
   })
 
-  test('should have message input field', async ({ page }) => {
-    const contacts = page.locator('.cursor-pointer').filter({ has: page.locator('text=/[+0-9]/') })
-    const count = await contacts.count()
-    if (count > 0) {
-      await contacts.first().click()
-      await page.waitForLoadState('networkidle')
-      const messageInput = page.locator('textarea, input[placeholder*="message" i]')
-      if (await messageInput.first().isVisible()) {
-        await expect(messageInput.first()).toBeVisible()
-      }
-    }
-  })
-
-  test('should have send button', async ({ page }) => {
-    const contacts = page.locator('.cursor-pointer').filter({ has: page.locator('text=/[+0-9]/') })
-    const count = await contacts.count()
-    if (count > 0) {
-      await contacts.first().click()
-      await page.waitForLoadState('networkidle')
-      const sendBtn = page.locator('button').filter({ has: page.locator('.lucide-send') })
-      if (await sendBtn.isVisible()) {
-        await expect(sendBtn).toBeVisible()
-      }
-    }
+  test.fixme('resume button renders when a chatbot session is paused', async ({ page }) => {
+    const resumeBtn = page.getByRole('button', { name: /Resume/i })
+    await expect(resumeBtn).toBeVisible()
   })
 })
 
-test.describe('Chat Actions', () => {
+test.describe('Chat messages display', () => {
   let chatPage: ChatPage
+  let contactId: string
 
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page, request }) => {
+    const api = new ApiHelper(request)
+    await api.login(ADMIN_USER.email, ADMIN_USER.password)
+    const contact = await api.createContact(layoutScope.phone(), layoutScope.name('Messages'))
+    contactId = contact.id
+
     await loginAsAdmin(page)
     chatPage = new ChatPage(page)
-    await chatPage.goto()
+    await chatPage.goto(contactId)
   })
 
-  test('should have attachment button', async ({ page }) => {
-    const contacts = page.locator('.cursor-pointer').filter({ has: page.locator('text=/[+0-9]/') })
-    const count = await contacts.count()
-    if (count > 0) {
-      await contacts.first().click()
-      await page.waitForLoadState('networkidle')
-      const attachBtn = page.locator('button').filter({ has: page.locator('.lucide-paperclip') })
-      if (await attachBtn.isVisible()) {
-        await expect(attachBtn).toBeVisible()
-      }
-    }
+  // A fresh contact has no messages — the messages area only renders bubbles
+  // once a row exists. Seeding an inbound message requires SQL (there is no
+  // createMessage API factory; see message-bubbles.spec.ts for the pattern).
+  // Marking fixme until a SQL seed is wired in here, rather than asserting a
+  // tautology on a possibly-empty list.
+  test.fixme('messages area renders bubbles for a conversation with history', async () => {
+    // TODO(test-guard): seed a message via SQL — see message-bubbles.spec.ts pattern
+    await expect(chatPage.messageList).toBeVisible()
   })
 
-  test('should have emoji button', async ({ page }) => {
-    const contacts = page.locator('.cursor-pointer').filter({ has: page.locator('text=/[+0-9]/') })
-    const count = await contacts.count()
-    if (count > 0) {
-      await contacts.first().click()
-      await page.waitForLoadState('networkidle')
-      const emojiBtn = page.locator('button').filter({ has: page.locator('.lucide-smile') })
-      if (await emojiBtn.isVisible()) {
-        await expect(emojiBtn).toBeVisible()
-      }
-    }
-  })
-})
-
-test.describe('Chat Message Input', () => {
-  let chatPage: ChatPage
-
-  test.beforeEach(async ({ page }) => {
-    await loginAsAdmin(page)
-    chatPage = new ChatPage(page)
-    await chatPage.goto()
-  })
-
-  test('should type in message input', async ({ page }) => {
-    const contacts = page.locator('.cursor-pointer').filter({ has: page.locator('text=/[+0-9]/') })
-    const count = await contacts.count()
-    if (count > 0) {
-      await contacts.first().click()
-      await page.waitForLoadState('networkidle')
-      const messageInput = page.locator('textarea, input[placeholder*="message" i]').first()
-      if (await messageInput.isVisible()) {
-        await messageInput.fill('Test message')
-        await expect(messageInput).toHaveValue('Test message')
-      }
-    }
-  })
-
-  test('should clear input after typing', async ({ page }) => {
-    const contacts = page.locator('.cursor-pointer').filter({ has: page.locator('text=/[+0-9]/') })
-    const count = await contacts.count()
-    if (count > 0) {
-      await contacts.first().click()
-      await page.waitForLoadState('networkidle')
-      const messageInput = page.locator('textarea, input[placeholder*="message" i]').first()
-      if (await messageInput.isVisible()) {
-        await messageInput.fill('Test message')
-        await messageInput.fill('')
-        await expect(messageInput).toHaveValue('')
-      }
-    }
-  })
-})
-
-test.describe('Contact Info Panel', () => {
-  let chatPage: ChatPage
-
-  test.beforeEach(async ({ page }) => {
-    await loginAsAdmin(page)
-    chatPage = new ChatPage(page)
-    await chatPage.goto()
-  })
-
-  test('should have contact info button', async ({ page }) => {
-    const contacts = page.locator('.cursor-pointer').filter({ has: page.locator('text=/[+0-9]/') })
-    const count = await contacts.count()
-    if (count > 0) {
-      await contacts.first().click()
-      await page.waitForLoadState('networkidle')
-      const infoBtn = page.locator('button').filter({ has: page.locator('.lucide-info, .lucide-user') })
-      if (await infoBtn.first().isVisible()) {
-        await expect(infoBtn.first()).toBeVisible()
-      }
-    }
-  })
-})
-
-test.describe('Chat Transfer Actions', () => {
-  let chatPage: ChatPage
-
-  test.beforeEach(async ({ page }) => {
-    await loginAsAdmin(page)
-    chatPage = new ChatPage(page)
-    await chatPage.goto()
-  })
-
-  test('should have transfer button if available', async ({ page }) => {
-    const contacts = page.locator('.cursor-pointer').filter({ has: page.locator('text=/[+0-9]/') })
-    const count = await contacts.count()
-    if (count > 0) {
-      await contacts.first().click()
-      await page.waitForLoadState('networkidle')
-      // Transfer button may or may not be visible depending on state
-      const transferBtn = page.getByRole('button', { name: /Transfer/i })
-      const isVisible = await transferBtn.isVisible()
-      expect(typeof isVisible).toBe('boolean')
-    }
-  })
-
-  test('should have resume button if available', async ({ page }) => {
-    const contacts = page.locator('.cursor-pointer').filter({ has: page.locator('text=/[+0-9]/') })
-    const count = await contacts.count()
-    if (count > 0) {
-      await contacts.first().click()
-      await page.waitForLoadState('networkidle')
-      // Resume button may or may not be visible depending on state
-      const resumeBtn = page.getByRole('button', { name: /Resume/i })
-      const isVisible = await resumeBtn.isVisible()
-      expect(typeof isVisible).toBe('boolean')
-    }
-  })
-})
-
-test.describe('Chat Messages Display', () => {
-  let chatPage: ChatPage
-
-  test.beforeEach(async ({ page }) => {
-    await loginAsAdmin(page)
-    chatPage = new ChatPage(page)
-    await chatPage.goto()
-  })
-
-  test('should display messages area', async ({ page }) => {
-    const contacts = page.locator('.cursor-pointer').filter({ has: page.locator('text=/[+0-9]/') })
-    const count = await contacts.count()
-    if (count > 0) {
-      await contacts.first().click()
-      await page.waitForLoadState('networkidle')
-      // Messages area should be present
-      const messagesArea = page.locator('.messages, [data-testid="messages"], .overflow-y-auto').first()
-      if (await messagesArea.isVisible()) {
-        await expect(messagesArea).toBeVisible()
-      }
-    }
-  })
-
-  test('should show message bubbles if messages exist', async ({ page }) => {
-    const contacts = page.locator('.cursor-pointer').filter({ has: page.locator('text=/[+0-9]/') })
-    const count = await contacts.count()
-    if (count > 0) {
-      await contacts.first().click()
-      await page.waitForLoadState('networkidle')
-      await page.waitForTimeout(1000)
-      // Messages may or may not exist
-      const messages = page.locator('.message, [data-testid="message"], .rounded-lg.p-2, .rounded-lg.p-3')
-      const messageCount = await messages.count()
-      expect(messageCount).toBeGreaterThanOrEqual(0)
-    }
-  })
-})
-
-test.describe('Canned Responses', () => {
-  let chatPage: ChatPage
-
-  test.beforeEach(async ({ page }) => {
-    await loginAsAdmin(page)
-    chatPage = new ChatPage(page)
-    await chatPage.goto()
-  })
-
-  test('should have canned responses button', async ({ page }) => {
-    const contacts = page.locator('.cursor-pointer').filter({ has: page.locator('text=/[+0-9]/') })
-    const count = await contacts.count()
-    if (count > 0) {
-      await contacts.first().click()
-      await page.waitForLoadState('networkidle')
-      const cannedBtn = page.locator('button').filter({ has: page.locator('.lucide-message-square-text, .lucide-book-text') })
-      if (await cannedBtn.first().isVisible()) {
-        await expect(cannedBtn.first()).toBeVisible()
-      }
-    }
-  })
-})
-
-test.describe('Custom Actions', () => {
-  let chatPage: ChatPage
-
-  test.beforeEach(async ({ page }) => {
-    await loginAsAdmin(page)
-    chatPage = new ChatPage(page)
-    await chatPage.goto()
-  })
-
-  test('should have custom actions button', async ({ page }) => {
-    const contacts = page.locator('.cursor-pointer').filter({ has: page.locator('text=/[+0-9]/') })
-    const count = await contacts.count()
-    if (count > 0) {
-      await contacts.first().click()
-      await page.waitForLoadState('networkidle')
-      const actionsBtn = page.locator('button').filter({ has: page.locator('.lucide-zap, .lucide-bolt') })
-      if (await actionsBtn.first().isVisible()) {
-        await expect(actionsBtn.first()).toBeVisible()
-      }
-    }
-  })
+  // removed: tautological assertion ("messageCount >= 0"); fully covered by
+  // message-bubbles.spec.ts which seeds messages via SQL and asserts real
+  // bubble rendering.
 })
 
 test.describe('Canned Response Preview', () => {

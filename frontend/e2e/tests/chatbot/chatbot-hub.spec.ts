@@ -94,20 +94,18 @@ test.describe('Stats Cards', () => {
 
   test('should display stats cards', async ({ page }) => {
     // Stats cards should be visible
+    // TODO(test-guard): replace brittle Tailwind selector with data-testid / POM locator
     const cards = page.locator('.rounded-lg.border')
     await expect(cards.first()).toBeVisible()
   })
 
-  test('should show total sessions stat', async ({ page }) => {
-    await expect(page.getByText('Total Sessions')).toBeVisible()
-  })
-
-  test('should show active sessions stat', async ({ page }) => {
-    await expect(page.getByText('Active Sessions')).toBeVisible()
-  })
-
-  test('should show messages handled stat', async ({ page }) => {
-    await expect(page.getByText('Messages Handled')).toBeVisible()
+  // Rule 3: collapse the three "should show <stat>" tests into one
+  // data-driven test that loops over the stat names. Avoids three near-
+  // identical tests that each re-login and re-navigate to the same page.
+  test('should show each chatbot stat label', async ({ page }) => {
+    for (const stat of ['Total Sessions', 'Active Sessions', 'Messages Handled']) {
+      await expect(page.getByText(stat)).toBeVisible()
+    }
   })
 })
 

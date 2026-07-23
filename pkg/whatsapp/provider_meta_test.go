@@ -24,7 +24,6 @@ func TestClient_Capabilities_AllTrue(t *testing.T) {
 	assert.True(t, caps.Flows)
 	assert.True(t, caps.Calls)
 	assert.True(t, caps.Catalog)
-	assert.True(t, caps.Analytics)
 	assert.True(t, caps.BusinessProfile)
 	assert.True(t, caps.MediaUpload)
 	assert.True(t, caps.Interactive)

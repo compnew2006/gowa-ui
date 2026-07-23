@@ -99,6 +99,7 @@ test.describe('Audit Logs', () => {
     // list view doesn't show resource names, only resource type + field, so
     // visually picking the right row is unreliable when other specs are
     // also producing webhook updates in parallel.
+    // TODO(test-guard): route through ApiHelper for consistency with the rest of the suite
     const auditResp = await page.request.get(
       `/api/audit-logs?resource_type=webhook&resource_id=${webhookId}&action=updated&limit=1`,
     )

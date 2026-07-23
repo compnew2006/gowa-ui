@@ -20,15 +20,26 @@ test.describe('Agent Analytics', () => {
   })
 
   test('should change time range filter', async ({ page }) => {
+    const timeRangeSelect = page.locator('button[role="combobox"]').first()
     // Open time range dropdown
-    await page.locator('button[role="combobox"]').first().click()
+    await timeRangeSelect.click()
 
     // Select different option
     const options = page.locator('[role="option"]')
-    if (await options.count() > 1) {
-      await options.nth(1).click()
-      await page.waitForLoadState('networkidle')
-    }
+    const count = await options.count()
+    // Rule 4: original used `if (count > 1)` with no else — a no-op when
+    // the dropdown had 0-1 options. Now we assert the dropdown actually
+    // exposes more than one option (the filter is meaningful) and that
+    // selecting the second one updates the trigger's label.
+    expect(count).toBeGreaterThan(1)
+
+    const selectedLabel = (await options.nth(1).textContent()) ?? ''
+    expect(selectedLabel.trim().length).toBeGreaterThan(0)
+    await options.nth(1).click()
+    await page.waitForLoadState('networkidle')
+
+    // Assert the combobox now reflects the newly-selected label.
+    await expect(timeRangeSelect).toContainText(selectedLabel.trim())
   })
 
   test('should display agent performance metrics', async ({ page }) => {
@@ -49,5 +60,13 @@ test.describe('Agent Analytics - Agent Role', () => {
 
     // Agents should be able to see the analytics page (with limited data)
     await expect(page).toHaveURL(/\/analytics\/agents/)
+
+    // Rule 4: original only asserted the URL — a permission gate that
+    // never asserted the gated content actually rendered. Assert the page
+    // heading (the same one the admin-role test checks) is visible, which
+    // proves the agent wasn't bounced to a permission-denied screen.
+    await expect(page.locator('h1')).toContainText('Agent Analytics')
+    // And explicitly: no permission-denied message surfaces.
+    await expect(page.getByText(/you do not have|permission denied|forbidden/i)).toHaveCount(0)
   })
 })
