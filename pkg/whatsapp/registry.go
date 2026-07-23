@@ -94,6 +94,20 @@ func (r *Registry) getOrCreateGowa(baseURL, deviceID string) Provider {
 	return p
 }
 
+// InvalidateGowa drops the cached GOWA client for the given base URL (or all
+// of them when baseURL is empty) so the next Get() re-resolves credentials via
+// the factory. Call this whenever a GOWA instance's credentials change in the
+// DB, otherwise the stale (cached) client keeps using the old username/password.
+func (r *Registry) InvalidateGowa(baseURL string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if baseURL == "" {
+		r.gowa = make(map[string]Provider)
+		return
+	}
+	delete(r.gowa, baseURL)
+}
+
 // --- Factory registration ---
 
 // gowaFactory is set by RegisterGowaFactory so that the whatsapp package

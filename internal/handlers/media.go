@@ -269,22 +269,8 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 					gowaClient, ok := provider.(*gowa.Client)
 					if ok {
 						a.Log.Info("Media missing from disk, attempting auto-recovery", "message_id", message.ID, "path", fullPath)
-						// Build the chat JID for the GOWA download call. Individual
-						// chats use "@s.whatsapp.net"; GROUP chats use "@g.us". The
-						// contact's phone_number holds the bare ID either way. Detect
-						// groups via the is_group_chat metadata flag, with the "120363"
-						// group-ID prefix as a fallback (WhatsApp group IDs share that
-						// prefix). Using the wrong suffix makes GOWA reject the JID
-						// with INVALID_JID (... is not on whatsapp).
-						isGroup := contact.Metadata != nil && contact.Metadata["is_group_chat"] == true
-						if !isGroup && strings.HasPrefix(contact.PhoneNumber, "120363") {
-							isGroup = true
-						}
-						suffix := "@s.whatsapp.net"
-						if isGroup {
-							suffix = "@g.us"
-						}
-						chatJID := contact.PhoneNumber + suffix
+						// Build the chat JID (handles group @g.us vs 1:1 suffix).
+						chatJID := gowaChatJID(&contact)
 						ctx, cancel := context.WithTimeout(r.RequestCtx, 30*time.Second)
 						data, mediaType, derr := gowaClient.DownloadMessageMedia(ctx, waAccount, message.WhatsAppMessageID, chatJID)
 						cancel()

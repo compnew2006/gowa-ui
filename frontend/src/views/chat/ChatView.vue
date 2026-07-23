@@ -307,10 +307,22 @@ const executingActionId = ref<string | null>(null)
 // Tags filter state
 const isTagFilterOpen = ref(false)
 
-// Service window state
+// Whether the selected (or contact-default) account is a GOWA provider.
+// Used to skip Meta-only restrictions (24h service window, typing) for GOWA.
+const isCurrentAccountGowa = computed(() => {
+  const name = selectedAccount.value || contactsStore.currentContact?.whatsapp_account
+  if (!name) return false
+  const acct = orgAccounts.value.find((a: any) => a?.name === name)
+  return acct?.provider_type === 'gowa'
+})
+
+// Service window state. The 24-hour customer-service window is a Meta Cloud
+// API restriction only — GOWA (multi-device) accounts can message freely at any
+// time, so the expired-window banner must never show for them.
 const isServiceWindowExpired = computed(() => {
   const contact = contactsStore.currentContact
   if (!contact) return false
+  if (isCurrentAccountGowa.value) return false
   return contact.service_window_open === false
 })
 
@@ -1330,18 +1342,6 @@ async function sendTemplateMessage() {
 // Reaction handling
 const reactionPickerMessageId = ref<string | null>(null)
 const quickReactionEmojis = ['👍', '❤️', '😂', '😮', '😢', '🙏']
-
-// --- GOWA typing indicator + revoke (delete-for-everyone) ---
-// Typing is GOWA-only: Meta Cloud API has no equivalent. We gate on the
-// selected account's provider_type so Meta accounts never spam a 400. The
-// action is outbound-only (it renders on the recipient's WhatsApp), so no
-// local UI state changes here — we just forward start/stop to the backend.
-const isCurrentAccountGowa = computed(() => {
-  const name = selectedAccount.value || contactsStore.currentContact?.whatsapp_account
-  if (!name) return false
-  const acct = orgAccounts.value.find((a: any) => a?.name === name)
-  return acct?.provider_type === 'gowa'
-})
 
 // Typing debounce state. On the first keystroke after idle we send "start";
 // after TYPING_STOP_DELAY ms of no input (or on send/blur) we send "stop".

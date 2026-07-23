@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/shridarpatil/whatomate/internal/contactutil"
 	"github.com/shridarpatil/whatomate/internal/models"
 	"github.com/shridarpatil/whatomate/pkg/gowa"
 	"github.com/valyala/fasthttp"
@@ -177,6 +179,12 @@ func (a *App) CreateGowaInstance(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create GOWA instance", nil, "")
 	}
 
+	// Drop any cached GOWA client for this base URL so the messaging registry
+	// picks up the new credentials on the next send.
+	if a.WARegistry != nil {
+		a.WARegistry.InvalidateGowa(inst.BaseURL)
+	}
+
 	a.logAudit(orgID, userID, "gowa_instances", inst.ID, models.AuditActionCreated, nil, map[string]any{
 		"name": inst.Name, "base_url": inst.BaseURL,
 	})
@@ -235,6 +243,14 @@ func (a *App) UpdateGowaInstance(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update GOWA instance", nil, "")
 	}
 
+	// Drop cached GOWA clients for both the old and new base URLs so the
+	// messaging registry re-resolves credentials on the next send. The base
+	// URL may have changed, and credentials were just (re)encrypted.
+	if a.WARegistry != nil {
+		a.WARegistry.InvalidateGowa(old.BaseURL)
+		a.WARegistry.InvalidateGowa(instance.BaseURL)
+	}
+
 	a.logAudit(orgID, userID, "gowa_instances", instance.ID, models.AuditActionUpdated,
 		map[string]any{"name": old.Name, "base_url": old.BaseURL, "is_active": old.IsActive},
 		map[string]any{"name": instance.Name, "base_url": instance.BaseURL, "is_active": instance.IsActive})
@@ -261,6 +277,12 @@ func (a *App) DeleteGowaInstance(r *fastglue.Request) error {
 	if err := a.DB.Delete(instance).Error; err != nil {
 		a.Log.Error("Failed to delete GOWA instance", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete GOWA instance", nil, "")
+	}
+
+	// Drop the cached GOWA client so future sends no longer resolve to a
+	// provider whose credentials were just removed.
+	if a.WARegistry != nil {
+		a.WARegistry.InvalidateGowa(instance.BaseURL)
 	}
 
 	a.logAudit(orgID, userID, "gowa_instances", instance.ID, models.AuditActionDeleted, map[string]any{
@@ -313,6 +335,31 @@ func (a *App) ListGowaInstanceDevices(r *fastglue.Request) error {
 	return r.SendEnvelope(map[string]any{"devices": out})
 }
 
+// lookupGowaDeviceJID returns the connected WhatsApp JID for a GOWA device
+// (e.g. "966561853319@s.whatsapp.net") by listing devices on the GOWA server
+// and matching by ID. Returns "" when the device is not found or has not yet
+// paired (no JID assigned).
+//
+// This is required because GOWA webhooks send the connected JID as the
+// top-level device_id, while whatomate stores the device's custom id as
+// GowaDeviceID. The JID must be persisted as WhatsAppAccount.PhoneID for the
+// webhook resolver (getGowaAccountByDeviceID) to match incoming messages.
+func lookupGowaDeviceJID(ctx context.Context, client *gowa.Client, deviceID string) string {
+	if client == nil || deviceID == "" {
+		return ""
+	}
+	devices, err := client.ListDevices(ctx)
+	if err != nil {
+		return ""
+	}
+	for _, d := range devices {
+		if d.ID == deviceID {
+			return strings.TrimSpace(d.JID)
+		}
+	}
+	return ""
+}
+
 // ensureGowaAccountOpts parameterizes ensureGowaAccountForDevice.
 type ensureGowaAccountOpts struct {
 	InstanceName  string // GowaInstance.Name, used to build a unique account name
@@ -320,13 +367,21 @@ type ensureGowaAccountOpts struct {
 	DeviceID      string // GOWA device id (becomes WhatsAppAccount.GowaDeviceID)
 	WebhookSecret string // HMAC secret (encrypted at rest)
 	PreferredName string // optional human label; defaults to InstanceName
+	// DeviceJID is the connected WhatsApp JID for this device (e.g.
+	// "966561853319@s.whatsapp.net"). GOWA webhooks send this JID as the
+	// top-level device_id, so it must be stored as WhatsAppAccount.PhoneID for
+	// getGowaAccountByDeviceID to resolve the account. May be empty for a
+	// freshly created device that has not yet paired; it is backfilled on the
+	// first connection webhook and on subsequent syncs.
+	DeviceJID string
 }
 
 // ensureGowaAccountForDevice creates the WhatsAppAccount row that the GOWA
 // webhook receiver needs to resolve a device (getGowaAccountByDeviceID). It is
 // idempotent on GowaDeviceID: if an account already exists for this device it
-// is returned unchanged. The per-org unique Name constraint (idx_wa_org_name)
-// is satisfied by suffixing; the device id is the real identity key.
+// is returned unchanged (and its PhoneID is backfilled if a JID is now known).
+// The per-org unique Name constraint (idx_wa_org_name) is satisfied by
+// suffixing; the device id is the real identity key.
 //
 // This mirrors App.CreateAccount's GOWA branch (accounts.go:159-181) but is
 // scoped to the GOWA-Servers provisioning path, which previously created the
@@ -335,6 +390,16 @@ func (a *App) ensureGowaAccountForDevice(orgID, userID uuid.UUID, opts ensureGow
 	// Idempotent: a device may already have an account (retry, re-provision).
 	var existing models.WhatsAppAccount
 	if err := a.DB.Where("organization_id = ? AND gowa_device_id = ?", orgID, opts.DeviceID).First(&existing).Error; err == nil {
+		// Backfill the JID if we now know it but the row predates pairing.
+		// This is the key fix for "device connected but no chats": GOWA sends
+		// the JID as device_id, so PhoneID must be set or the webhook lookup
+		// fails with "Unknown GOWA device" on every real message.
+		if opts.DeviceJID != "" && existing.PhoneID != opts.DeviceJID {
+			if err := a.DB.Model(&existing).Update("phone_id", opts.DeviceJID).Error; err != nil {
+				return nil, fmt.Errorf("update gowa account phone_id: %w", err)
+			}
+			existing.PhoneID = opts.DeviceJID
+		}
 		a.decryptAccountSecrets(&existing)
 		return &existing, nil
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -370,10 +435,14 @@ func (a *App) ensureGowaAccountForDevice(orgID, userID uuid.UUID, opts ensureGow
 	}
 
 	account := models.WhatsAppAccount{
-		BaseModel:         models.BaseModel{},
-		OrganizationID:    orgID,
-		Name:              name,
-		ProviderType:      "gowa",
+		BaseModel:      models.BaseModel{},
+		OrganizationID: orgID,
+		Name:           name,
+		ProviderType:   "gowa",
+		// GOWA webhooks key device_id by the connected JID, not the custom
+		// device id. Storing the JID as PhoneID here lets the webhook lookup
+		// match on the first message (see getGowaAccountByDeviceID).
+		PhoneID:           opts.DeviceJID,
 		GowaBaseURL:       opts.BaseURL,
 		GowaDeviceID:      opts.DeviceID,
 		GowaWebhookSecret: opts.WebhookSecret,
@@ -437,11 +506,20 @@ func (a *App) SyncGowaInstanceDevice(r *fastglue.Request) error {
 		}
 	}
 
+	// Fetch the connected JID from GOWA so we can store it as PhoneID. Without
+	// this, GOWA webhooks (keyed by JID) can't resolve the account and every
+	// real message is rejected with "Unknown GOWA device".
+	jid := lookupGowaDeviceJID(context.Background(), bundle.client, deviceID)
+	if jid == "" {
+		a.Log.Warn("GOWA device has no connected JID; PhoneID will be backfilled on connect", "device", deviceID)
+	}
+
 	account, err := a.ensureGowaAccountForDevice(orgID, userID, ensureGowaAccountOpts{
 		InstanceName:  bundle.instance.Name,
 		BaseURL:       bundle.instance.BaseURL,
 		DeviceID:      deviceID,
 		WebhookSecret: secret,
+		DeviceJID:     jid,
 	})
 	if err != nil {
 		a.Log.Error("Failed to backfill GOWA WhatsAppAccount", "error", err, "device", deviceID)
@@ -449,13 +527,390 @@ func (a *App) SyncGowaInstanceDevice(r *fastglue.Request) error {
 	}
 
 	a.logAudit(orgID, userID, "devices", account.ID, models.AuditActionUpdated, nil, map[string]any{
-		"device_id": deviceID, "synced_account": true,
+		"device_id": deviceID, "synced_account": true, "jid": jid,
 	})
 	return r.SendEnvelope(map[string]any{
 		"device_id":    deviceID,
 		"account_id":   account.ID,
 		"account_name": account.Name,
+		"jid":          jid,
 	})
+}
+
+// SyncGowaInstanceDeviceContacts imports a device's chat list from GOWA and
+// upserts the corresponding contact rows, so the Contacts page populates
+// immediately for a connected device instead of waiting for the next inbound
+// webhook. It is read-only with respect to GOWA (GET /chats) and idempotent
+// with respect to whatomate (reuses contactutil.GetOrCreateContact).
+//
+// POST /api/gowa/servers/{id}/devices/{deviceId}/sync-contacts
+func (a *App) SyncGowaInstanceDeviceContacts(r *fastglue.Request) error {
+	orgID, userID, err := a.requireAuth(r, models.ResourceDevices, models.ActionWrite)
+	if err != nil {
+		return nil
+	}
+	bundle, ok := a.resolveGowaInstance(r, orgID)
+	if !ok {
+		return nil
+	}
+	deviceID := parseDeviceID(r)
+	if deviceID == "" {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "deviceId is required", nil, "")
+	}
+
+	// Resolve the WhatsAppAccount for this device. It must already exist (the
+	// /sync endpoint provisions it); importing contacts never mutates the
+	// webhook config, so we surface a clear 409 if the account is missing
+	// rather than silently side-effecting GOWA.
+	account, err := a.getGowaAccountByDeviceID(deviceID)
+	if err != nil {
+		a.Log.Warn("GOWA contact sync requested for device with no account row", "device_id", deviceID, "error", err)
+		return r.SendErrorEnvelope(fasthttp.StatusConflict,
+			"Device account is not provisioned yet. Click the Sync button first to set up the device account.", nil, "")
+	}
+	// Guard against cross-org device-id reuse: getGowaAccountByDeviceID is not
+	// org-scoped (it predates multi-org), so re-check ownership here.
+	if account.OrganizationID != orgID {
+		a.Log.Warn("GOWA contact sync device/account org mismatch", "device_id", deviceID,
+			"account_org", account.OrganizationID, "request_org", orgID)
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "GOWA instance not found", nil, "")
+	}
+
+	ctx := context.Background()
+	chats, total, err := bundle.client.ListChats(ctx, deviceID, gowa.ListChatsOptions{})
+	if err != nil {
+		a.Log.Error("Failed to list GOWA chats for contact sync", "error", err, "device", deviceID)
+		return r.SendErrorEnvelope(fasthttp.StatusBadGateway, "Failed to fetch chats from GOWA", nil, "")
+	}
+
+	created, touched := 0, 0
+	for _, ch := range chats {
+		jid := strings.TrimSpace(ch.JID)
+		if jid == "" {
+			continue
+		}
+		name := strings.TrimSpace(ch.Name)
+
+		isGroup := strings.HasSuffix(jid, "@g.us") || strings.HasSuffix(jid, "@newsletter")
+		// Match the webhook convention: group/newsletter chats are keyed by their
+		// full JID (the @g.us/@newsletter suffix is part of the identity), while
+		// 1:1 chats use the bare phone digits.
+		identity := jid
+		if !isGroup {
+			identity = gowa.PhoneFromJID(jid)
+			if identity == "" {
+				continue
+			}
+		}
+
+		contact, isNew, err := contactutil.GetOrCreateContact(a.DB, orgID, identity, name)
+		if err != nil {
+			a.Log.Error("Failed to upsert contact during GOWA sync", "error", err, "jid", jid)
+			continue
+		}
+		touched++
+
+		// Set group metadata to match how the webhook path marks group chats
+		// (chatbot_processor.go:169-177), so the contact list renders the group
+		// badge consistently. We only need to write when it isn't already set.
+		if isGroup {
+			needsMetaUpdate := false
+			if contact.Metadata == nil {
+				contact.Metadata = models.JSONB{}
+				needsMetaUpdate = true
+			}
+			if contact.Metadata["is_group_chat"] != true {
+				contact.Metadata["is_group_chat"] = true
+				needsMetaUpdate = true
+			}
+			if needsMetaUpdate {
+				if err := a.DB.Model(contact).Update("metadata", contact.Metadata).Error; err != nil {
+					a.Log.Error("Failed to set group metadata during GOWA sync", "error", err, "jid", jid)
+				}
+			}
+		}
+
+		// Stamp the owning account name if empty. The webhook path leaves this
+		// null for message-created contacts; setting it here lets the Contacts
+		// UI's account filter work for synced rows. NOTE: the column is
+		// whats_app_account (GORM maps the WhatsAppAccount field to
+		// whats_app_account, not whatsapp_account), so the raw Update must use
+		// the DB column name.
+		if contact.WhatsAppAccount == "" {
+			if err := a.DB.Model(contact).Update("whats_app_account", account.Name).Error; err != nil {
+				a.Log.Error("Failed to stamp whats_app_account during GOWA sync", "error", err, "jid", jid)
+			}
+		}
+
+		if isNew {
+			created++
+		}
+	}
+
+	a.logAudit(orgID, userID, "devices", uuid.Nil, models.AuditActionUpdated, nil, map[string]any{
+		"device_id":      deviceID,
+		"action":         "sync_contacts",
+		"chats_seen":     total,
+		"contacts_total": touched,
+		"contacts_new":   created,
+	})
+	return r.SendEnvelope(map[string]any{
+		"device_id": deviceID,
+		"synced":    touched,
+		"created":   created,
+		"total":     total,
+	})
+}
+
+// gowaMsgTypeToWhatomate maps a GOWA chat-message media_type to whatomate's
+// MessageType. Empty media_type means a plain-text message.
+func gowaMsgTypeToWhatomate(mediaType string) models.MessageType {
+	switch strings.ToLower(strings.TrimSpace(mediaType)) {
+	case "image":
+		return models.MessageTypeImage
+	case "video":
+		return models.MessageTypeVideo
+	case "audio", "voice", "ptt":
+		return models.MessageTypeAudio
+	case "document":
+		return models.MessageTypeDocument
+	default:
+		return models.MessageTypeText
+	}
+}
+
+// SyncGowaInstanceMessages backfills a device's message history from GOWA into
+// the messages table. It iterates the device's chat list (GET /chats), and for
+// each chat pulls recent messages (GET /chat/{jid}/messages), upserting them as
+// messages rows keyed by whats_app_message_id (idempotent), and stamps each
+// contact's last_message_at/preview from its newest message.
+//
+// This is required because GOWA only delivers NEW messages via webhook; the
+// device's existing chat history is never replayed. Without this backfill,
+// contacts imported via /sync-contacts have zero messages and the chat view
+// shows an empty conversation even though the device has history.
+//
+// PerChatLimit caps messages fetched per chat (default 50, newest-first) so
+// the operation stays bounded for large histories.
+//
+// POST /api/gowa/servers/{id}/devices/{deviceId}/sync-messages  body: {"per_chat_limit": 50, "max_chats": 0}
+func (a *App) SyncGowaInstanceMessages(r *fastglue.Request) error {
+	orgID, userID, err := a.requireAuth(r, models.ResourceDevices, models.ActionWrite)
+	if err != nil {
+		return nil
+	}
+	bundle, ok := a.resolveGowaInstance(r, orgID)
+	if !ok {
+		return nil
+	}
+	deviceID := parseDeviceID(r)
+	if deviceID == "" {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "deviceId is required", nil, "")
+	}
+
+	// The WhatsAppAccount must already exist (provisioned by /sync) so we can
+	// stamp the owning account name on every message.
+	account, err := a.getGowaAccountByDeviceID(deviceID)
+	if err != nil {
+		a.Log.Warn("GOWA message sync requested for device with no account row", "device_id", deviceID, "error", err)
+		return r.SendErrorEnvelope(fasthttp.StatusConflict,
+			"Device account is not provisioned yet. Click the Sync button first to set up the device account.", nil, "")
+	}
+	if account.OrganizationID != orgID {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "GOWA instance not found", nil, "")
+	}
+
+	var req struct {
+		PerChatLimit int `json:"per_chat_limit"`
+		MaxChats     int `json:"max_chats"`
+	}
+	_ = r.Decode(&req, "json")
+	if req.PerChatLimit <= 0 || req.PerChatLimit > 100 {
+		req.PerChatLimit = 50
+	}
+
+	ctx := context.Background()
+	chats, totalChats, err := bundle.client.ListChats(ctx, deviceID, gowa.ListChatsOptions{Limit: 100})
+	if err != nil {
+		a.Log.Error("Failed to list GOWA chats for message sync", "error", err, "device", deviceID)
+		return r.SendErrorEnvelope(fasthttp.StatusBadGateway, "Failed to fetch chat list from GOWA", nil, "")
+	}
+	if req.MaxChats > 0 && len(chats) > req.MaxChats {
+		chats = chats[:req.MaxChats]
+	}
+
+	chatsWithMsgs := 0
+	msgsStored := 0
+	for _, ch := range chats {
+		jid := strings.TrimSpace(ch.JID)
+		if jid == "" {
+			continue
+		}
+
+		isGroup := strings.HasSuffix(jid, "@g.us") || strings.HasSuffix(jid, "@newsletter")
+		identity := jid
+		if !isGroup {
+			identity = gowa.PhoneFromJID(jid)
+			if identity == "" {
+				continue
+			}
+		}
+
+		contact, _, err := contactutil.GetOrCreateContact(a.DB, orgID, identity, strings.TrimSpace(ch.Name))
+		if err != nil {
+			a.Log.Error("Failed to upsert contact during GOWA message sync", "error", err, "jid", jid)
+			continue
+		}
+
+		// Fetch recent history (newest-first). GOWA returns the newest page
+		// first at offset 0, so per_chat_limit gives us the tail of the convo.
+		msgs, _, err := bundle.client.GetChatMessages(ctx, deviceID, jid, gowa.ChatMessagesOptions{Limit: req.PerChatLimit})
+		if err != nil {
+			a.Log.Error("Failed to fetch GOWA chat messages", "error", err, "device", deviceID, "jid", jid)
+			continue
+		}
+		if len(msgs) == 0 {
+			continue
+		}
+
+		// Stamp the owning account name if empty (mirrors /sync-contacts).
+		if contact.WhatsAppAccount == "" {
+			a.DB.Model(contact).Update("whatsapp_account", account.Name)
+		}
+
+		// Bulk-insert messages, skipping any whose whats_app_message_id already
+		// exists (idempotent re-sync). GORM Clause OnConflict would need a
+		// unique constraint on the message id; we instead pre-filter by querying
+		// existing ids for this chat to avoid a schema change.
+		existing := make(map[string]bool, len(msgs))
+		{
+			ids := make([]string, 0, len(msgs))
+			for _, m := range msgs {
+				if m.ID != "" {
+					ids = append(ids, m.ID)
+				}
+			}
+			if len(ids) > 0 {
+				var found []string
+				a.DB.Model(&models.Message{}).
+					Where("whats_app_message_id IN ?", ids).
+					Pluck("whats_app_message_id", &found)
+				for _, id := range found {
+					existing[id] = true
+				}
+			}
+		}
+
+		var newest models.Message
+		for _, m := range msgs {
+			if m.ID == "" || existing[m.ID] {
+				continue
+			}
+			ts := gowa.ParseTimestamp(m.Timestamp)
+			if ts.IsZero() {
+				ts = time.Now()
+			}
+			direction := models.DirectionIncoming
+			status := models.MessageStatusReceived
+			if m.IsFromMe {
+				direction = models.DirectionOutgoing
+				status = models.MessageStatusSent
+			}
+			msgType := gowaMsgTypeToWhatomate(m.MediaType)
+			// For media messages, prefer the stored content as caption only if
+			// it's a text body; otherwise leave content empty (media lives in
+			// MediaURL/Filename).
+			content := m.Content
+			if msgType != models.MessageTypeText {
+				content = "" // caption is not reliably separated by GOWA history
+			}
+
+			msg := models.Message{
+				// Set CreatedAt to the message's real timestamp so historical
+				// messages render in chronological order in the chat view
+				// (GORM's autoCreateTime honors an explicitly-set value).
+				BaseModel:         models.BaseModel{ID: uuid.New(), CreatedAt: ts},
+				OrganizationID:    orgID,
+				WhatsAppAccount:   account.Name,
+				ContactID:         contact.ID,
+				WhatsAppMessageID: m.ID,
+				Direction:         direction,
+				MessageType:       msgType,
+				Content:           content,
+				MediaURL:          m.URL,
+				MediaFilename:     m.Filename,
+				Status:            status,
+			}
+			// Preserve the original timestamp via Metadata so the UI can render
+			// historical order even though created_at is now.
+			if msg.Metadata == nil {
+				msg.Metadata = models.JSONB{}
+			}
+			msg.Metadata["synced_from_history"] = true
+			msg.Metadata["gowa_timestamp"] = m.Timestamp
+
+			if err := a.DB.Create(&msg).Error; err != nil {
+				a.Log.Error("Failed to store GOWA history message", "error", err, "msg_id", m.ID)
+				continue
+			}
+			msgsStored++
+
+			// Track the newest message (largest timestamp) for the contact stamp.
+			// GOWA returns newest-first, so the first non-skipped msg is newest.
+			if newest.ID == uuid.Nil {
+				newest = msg
+			}
+		}
+
+		// Stamp the contact's last_message_at/preview from the newest message.
+		if newest.ID != uuid.Nil {
+			preview := getMessagePreviewFromContent(newest.MessageType, newest.Content)
+			// Use the chat's last_message_time (authoritative from GOWA) when available.
+			lastAt := gowa.ParseTimestamp(ch.LastMessageTime)
+			if lastAt.IsZero() {
+				lastAt = time.Now()
+			}
+			a.DB.Model(contact).Updates(map[string]any{
+				"last_message_at":      lastAt,
+				"last_message_preview": preview,
+			})
+			chatsWithMsgs++
+		}
+	}
+
+	a.logAudit(orgID, userID, "devices", uuid.Nil, models.AuditActionUpdated, nil, map[string]any{
+		"device_id":       deviceID,
+		"action":          "sync_messages",
+		"chats_seen":      totalChats,
+		"chats_with_msgs": chatsWithMsgs,
+		"messages_stored": msgsStored,
+		"per_chat_limit":  req.PerChatLimit,
+	})
+	return r.SendEnvelope(map[string]any{
+		"device_id":       deviceID,
+		"chats_seen":      totalChats,
+		"chats_with_msgs": chatsWithMsgs,
+		"messages_stored": msgsStored,
+	})
+}
+
+// getMessagePreviewFromContent returns a short preview string for a message,
+// mirroring updateContactLastMessage/getMessagePreview logic but for history.
+func getMessagePreviewFromContent(msgType models.MessageType, content string) string {
+	switch msgType {
+	case models.MessageTypeText:
+		return truncateString(content, 100)
+	case models.MessageTypeImage:
+		return "[Image]"
+	case models.MessageTypeVideo:
+		return "[Video]"
+	case models.MessageTypeAudio:
+		return "[Audio]"
+	case models.MessageTypeDocument:
+		return "[Document]"
+	default:
+		return truncateString(content, 100)
+	}
 }
 
 // CreateGowaInstanceDevice provisions a new device on a GOWA instance (mirrors
@@ -502,13 +957,17 @@ func (a *App) CreateGowaInstanceDevice(r *fastglue.Request) error {
 	// Provision the matching WhatsAppAccount row so incoming webhooks for this
 	// device can resolve an account (getGowaAccountByDeviceID). Without it the
 	// webhook receiver returns 403 and no chat/message is ever stored, so the
-	// device appears connected but its chats never reach the inbox.
+	// device appears connected but its chats never reach the inbox. A freshly
+	// created device has no JID yet; PhoneID stays empty and is backfilled by
+	// the connect webhook or a later /sync.
+	jid := lookupGowaDeviceJID(ctx, bundle.client, device.ID)
 	account, accountErr := a.ensureGowaAccountForDevice(orgID, userID, ensureGowaAccountOpts{
 		InstanceName:  bundle.instance.Name,
 		BaseURL:       bundle.instance.BaseURL,
 		DeviceID:      device.ID,
 		WebhookSecret: webhookSecret,
 		PreferredName: req.DeviceName,
+		DeviceJID:     jid,
 	})
 
 	a.logAudit(orgID, userID, "devices", uuid.Nil, models.AuditActionCreated, nil, map[string]any{

@@ -72,6 +72,11 @@ func deviceID(account *whatsapp.Account) string {
 // whatomate stores phone numbers as digits (e.g. "16505551234"); GOWA
 // expects a full JID (e.g. "16505551234@s.whatsapp.net"). If the input
 // already contains "@" it is assumed to be a JID and returned as-is.
+//
+// Group chats use a "@g.us" suffix instead of "@s.whatsapp.net". WhatsApp
+// group IDs share the "120363" (or "120362") prefix, so we detect them and
+// apply the correct suffix — otherwise GOWA rejects the JID with
+// "is not on whatsapp" (the bug behind group send/revoke/typing failures).
 func toJID(phone string) string {
 	if phone == "" {
 		return ""
@@ -80,6 +85,11 @@ func toJID(phone string) string {
 		if phone[i] == '@' {
 			return phone // already a JID
 		}
+	}
+	// WhatsApp group/community IDs start with 120362/120363. These need the
+	// @g.us suffix; everything else is a 1:1 phone and uses @s.whatsapp.net.
+	if strings.HasPrefix(phone, "120362") || strings.HasPrefix(phone, "120363") {
+		return phone + "@g.us"
 	}
 	return phone + "@s.whatsapp.net"
 }

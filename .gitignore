@@ -35,7 +35,7 @@ frontend/node_modules/
 frontend/dist/
 frontend/.env.local
 frontend/.env.*.local
-
+.playwright-mcp/
 # Playwright
 frontend/playwright-report/
 frontend/test-results/

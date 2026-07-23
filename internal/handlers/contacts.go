@@ -557,13 +557,8 @@ func (a *App) markMessagesAsRead(orgID uuid.UUID, contactID uuid.UUID, contact *
 							// the Provider interface's MarkMessageRead lacks it.
 							if account.IsGowa() {
 								if gc, ok := provider.(*gowa.Client); ok {
-									// Build the chat JID. For group contacts the
-									// phone_number already holds the full @g.us JID;
-									// for 1:1 it's a bare phone that needs the suffix.
-									chatJID := contact.PhoneNumber
-									if !strings.Contains(chatJID, "@") {
-										chatJID += "@s.whatsapp.net"
-									}
+									// Build the chat JID (handles group @g.us vs 1:1 suffix).
+									chatJID := gowaChatJID(contact)
 									if err := gc.MarkMessageReadWithJID(ctx, waAccount, msg.WhatsAppMessageID, chatJID); err != nil {
 										a.Log.Error("Failed to send GOWA read receipt", "error", err, "message_id", msg.WhatsAppMessageID)
 									}
@@ -1163,7 +1158,7 @@ func (a *App) sendWhatsAppReaction(account *models.WhatsAppAccount, contact *mod
 			a.Log.Error("GOWA provider not available for reaction", "account", account.Name)
 			return
 		}
-		chatJID := contact.PhoneNumber + "@s.whatsapp.net"
+		chatJID := gowaChatJID(contact)
 		if err := gowaClient.SendReaction(context.Background(), account.ToWAAccount(), message.WhatsAppMessageID, chatJID, emoji); err != nil {
 			a.Log.Error("GOWA reaction error", "error", err, "account", account.Name)
 		}
@@ -1215,6 +1210,31 @@ func (a *App) sendWhatsAppReaction(account *models.WhatsAppAccount, contact *mod
 }
 
 // TypingRequest is the body for the typing-indicator endpoint.
+// gowaChatJID builds the WhatsApp JID for a GOWA API call from a contact.
+// Group contacts (metadata is_group_chat, or phone_number starting with the
+// WhatsApp group-ID prefix 120362/120363) need the "@g.us" suffix; 1:1 chats
+// use "@s.whatsapp.net". If the phone already contains "@" it is returned
+// unchanged. Centralizing this fixes group send/revoke/typing/reaction/read —
+// previously each call site hardcoded "@s.whatsapp.net" and GOWA rejected
+// group JIDs with "is not on whatsapp".
+func gowaChatJID(contact *models.Contact) string {
+	if contact == nil {
+		return ""
+	}
+	phone := contact.PhoneNumber
+	if phone == "" || strings.Contains(phone, "@") {
+		return phone
+	}
+	isGroup := contact.Metadata != nil && contact.Metadata["is_group_chat"] == true
+	if !isGroup && (strings.HasPrefix(phone, "120362") || strings.HasPrefix(phone, "120363")) {
+		isGroup = true
+	}
+	if isGroup {
+		return phone + "@g.us"
+	}
+	return phone + "@s.whatsapp.net"
+}
+
 // action is "start" or "stop".
 type TypingRequest struct {
 	Action string `json:"action"`
@@ -1226,7 +1246,7 @@ type TypingRequest struct {
 // The indicator is outbound-only (it shows on the recipient's WhatsApp), so
 // no WebSocket event is broadcast back to the Whatomate UI.
 func (a *App) SendTypingIndicator(r *fastglue.Request) error {
-	orgID, _, err := a.getOrgAndUserID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
@@ -1248,7 +1268,7 @@ func (a *App) SendTypingIndicator(r *fastglue.Request) error {
 	// Resolve contact (honoring per-user assignment scoping).
 	var contact models.Contact
 	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
-	query = a.scopeAssignedContact(query, uuid.Nil, orgID)
+	query = a.scopeAssignedContact(query, userID, orgID)
 	if err := query.First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
 	}
@@ -1267,13 +1287,8 @@ func (a *App) SendTypingIndicator(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusServiceUnavailable, "GOWA provider not available", nil, "")
 	}
 
-	// Derive the chat JID. For group contacts phone_number already holds the
-	// full @g.us JID; for 1:1 it is a bare phone that needs the suffix. This
-	// mirrors the read-receipt JID derivation in MarkContactRead.
-	chatJID := contact.PhoneNumber
-	if !strings.Contains(chatJID, "@") {
-		chatJID += "@s.whatsapp.net"
-	}
+	// Derive the chat JID (handles group @g.us vs 1:1 @s.whatsapp.net).
+	chatJID := gowaChatJID(&contact)
 
 	if err := gowaClient.SendChatPresence(context.Background(), account.ToWAAccount(), chatJID, action); err != nil {
 		a.Log.Error("GOWA typing indicator error", "error", err, "account", account.Name, "action", action)
@@ -1295,7 +1310,7 @@ type RevokeMessageRequest struct{}
 // here mirror the inbound message.revoked webhook handler so the two paths
 // stay consistent.
 func (a *App) RevokeMessage(r *fastglue.Request) error {
-	orgID, _, err := a.getOrgAndUserID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
@@ -1312,7 +1327,7 @@ func (a *App) RevokeMessage(r *fastglue.Request) error {
 	// Resolve the contact (assignment scoping applied).
 	var contact models.Contact
 	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
-	query = a.scopeAssignedContact(query, uuid.Nil, orgID)
+	query = a.scopeAssignedContact(query, userID, orgID)
 	if err := query.First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
 	}
@@ -1351,10 +1366,7 @@ func (a *App) RevokeMessage(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusServiceUnavailable, "GOWA provider not available", nil, "")
 	}
 
-	chatJID := contact.PhoneNumber
-	if !strings.Contains(chatJID, "@") {
-		chatJID += "@s.whatsapp.net"
-	}
+	chatJID := gowaChatJID(&contact)
 
 	if err := gowaClient.RevokeMessage(context.Background(), account.ToWAAccount(), message.WhatsAppMessageID, chatJID); err != nil {
 		a.Log.Error("GOWA revoke error", "error", err, "message_id", message.ID, "account", account.Name)

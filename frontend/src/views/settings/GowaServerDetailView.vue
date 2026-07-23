@@ -47,6 +47,7 @@ import {
   AlertCircle,
   Copy,
   Smartphone,
+  Contact,
 } from "lucide-vue-next";
 
 const route = useRoute();
@@ -339,6 +340,31 @@ async function syncDevice(d: GowaDevice) {
   }
 }
 
+// Pulls the device's chat list from GOWA into the whatomate contacts table so
+// the Contacts page is populated for a connected device without waiting for an
+// inbound message. Requires the device account to be provisioned first (the
+// "Sync" button above), otherwise the backend returns 409.
+async function syncDeviceContacts(d: GowaDevice) {
+  statusLoading.value = true;
+  try {
+    const resp = await gowaServersService.deviceSyncContacts(serverId.value, d.id);
+    const data = unwrap<{ synced: number; created: number }>(resp);
+    toast.success(
+      t("gowaServers.syncContactsSuccess", { synced: data.synced, created: data.created }),
+    );
+  } catch (e: any) {
+    // 409 = device account not provisioned yet; guide the user to click Sync first.
+    const status = e?.response?.status;
+    if (status === 409) {
+      toast.error(t("gowaServers.syncContactsNeedSync", "Click the Sync button first to set up the device account."));
+    } else {
+      toast.error(getErrorMessage(e, "Failed to sync contacts"));
+    }
+  } finally {
+    statusLoading.value = false;
+  }
+}
+
 async function openWebhook(d: GowaDevice) {
   webhookDevice.value = d;
   webhookForm.value = {
@@ -552,6 +578,16 @@ async function confirmDelete() {
                     >
                       <RefreshCcw class="h-3.5 w-3.5 mr-1" />
                       {{ $t("gowaServers.sync", "Sync") }}
+                    </Button>
+                    <Button
+                      v-if="canWriteDevices && d.is_connected"
+                      size="sm"
+                      variant="ghost"
+                      @click="syncDeviceContacts(d)"
+                      :disabled="statusLoading"
+                    >
+                      <Contact class="h-3.5 w-3.5 mr-1" />
+                      {{ $t("gowaServers.syncContacts", "Sync Contacts") }}
                     </Button>
                     <Button
                       v-if="canWriteDevices && d.is_connected"

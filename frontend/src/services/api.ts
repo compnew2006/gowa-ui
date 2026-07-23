@@ -983,6 +983,11 @@ export const gowaServersService = {
   // before the provisioning fix, otherwise their chats never reach the inbox.
   deviceSync: (serverId: string, deviceId: string) =>
     api.post<{ device_id: string; account_id: string; account_name: string }>(`/gowa/servers/${serverId}/devices/${encodeURIComponent(deviceId)}/sync`),
+  // Imports the device's chat list from GOWA into the whatomate contacts table,
+  // so the Contacts page is populated for a connected device without waiting
+  // for an inbound message. Idempotent; safe to run repeatedly.
+  deviceSyncContacts: (serverId: string, deviceId: string) =>
+    api.post<{ device_id: string; synced: number; created: number; total: number }>(`/gowa/servers/${serverId}/devices/${encodeURIComponent(deviceId)}/sync-contacts`),
   getDeviceWebhook: (serverId: string, deviceId: string) =>
     api.get<{ webhook: { webhook_url: string; webhook_events: string; webhook_insecure_skip_verify: boolean } }>(`/gowa/servers/${serverId}/devices/${encodeURIComponent(deviceId)}/webhook`),
   setDeviceWebhook: (serverId: string, deviceId: string, data: { webhook_url: string; webhook_events: string; webhook_insecure_skip_verify?: boolean }) =>

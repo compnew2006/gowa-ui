@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/shridarpatil/whatomate/pkg/whatsapp"
 )
@@ -92,15 +95,49 @@ func (c *Client) DownloadMessageMedia(ctx context.Context, account *whatsapp.Acc
 		return nil, "", fmt.Errorf("parse download response: %w", err)
 	}
 
-	if dlResp.Results.FileURL == "" {
+	if dlResp.Results.FileURL == "" && dlResp.Results.FilePath == "" {
 		return nil, "", fmt.Errorf("no file URL in download response")
 	}
 
+	// GOWA returns file_url with its OWN hostname but often WITHOUT the port
+	// (e.g. "http://localhost/statics/..." instead of "http://localhost:3080/..."),
+	// which makes the subsequent fetch hit the wrong host:port (connection refused
+	// on :80). Resolve the URL against the client's known base URL: prefer the
+	// relative file_path joined to the base URL, and only fall back to file_url
+	// if file_path is absent and file_url is absolute with an explicit port.
+	fileURL := resolveGowaFileURL(c.baseURL, dlResp.Results.FilePath, dlResp.Results.FileURL)
+
 	// Fetch the actual bytes from the file URL.
-	data, err := c.DownloadMedia(ctx, dlResp.Results.FileURL, "")
+	data, err := c.DownloadMedia(ctx, fileURL, "")
 	if err != nil {
 		return nil, "", err
 	}
 
 	return data, dlResp.Results.MediaType, nil
+}
+
+// resolveGowaFileURL builds a fetchable URL for a GOWA-downloaded media file.
+// GOWA's file_url uses the server's hostname but frequently omits the port
+// (http://localhost/...), so fetching it directly fails. We trust the client's
+// base URL instead and join the relative file_path onto it. If file_path is
+// empty, we keep file_url but only when it already carries a port (host:port);
+// otherwise we treat the path portion as relative and rejoin it to baseURL.
+func resolveGowaFileURL(baseURL, filePath, fileURL string) string {
+	// Preferred: relative file_path joined to the known base URL.
+	if filePath != "" {
+		return strings.TrimSuffix(baseURL, "/") + "/" + strings.TrimPrefix(filePath, "/")
+	}
+	// Fallback: repair file_url. If it lacks an explicit port, swap its scheme
+	// + host for the base URL's and keep the path.
+	if u, err := url.Parse(fileURL); err == nil && u.IsAbs() {
+		if base, bErr := url.Parse(baseURL); bErr == nil && base.Host != "" {
+			if _, _, pErr := net.SplitHostPort(u.Host); pErr != nil {
+				// u.Host has no port — rebuild using base URL's scheme+host(+port).
+				u.Scheme = base.Scheme
+				u.Host = base.Host
+				return u.String()
+			}
+		}
+	}
+	return fileURL
 }

@@ -11,6 +11,7 @@
   "common": {
     "save": "حفظ",
     "cancel": "إلغاء",
+    "created": "تاريخ الإنشاء",
     "delete": "حذف",
     "edit": "تعديل",
     "create": "إنشاء",
@@ -943,6 +944,9 @@
     "reconnect": "إعادة الاتصال",
     "sync": "مزامنة",
     "synced": "تمت مزامنة الجهاز",
+    "syncContacts": "مزامنة جهات الاتصال",
+    "syncContactsSuccess": "تمت مزامنة {synced} جهة اتصال ({created} جديدة)",
+    "syncContactsNeedSync": "اضغط زر المزامنة أولاً لإعداد حساب الجهاز.",
     "webhook": "الويبهوك",
     "connected": "متصل",
     "disconnected": "غير متصل",
@@ -960,6 +964,9 @@
     "saveWebhook": "حفظ الويبهوك"
   },
   "accounts": {
+    "serverConnection": "اتصال الخادم",
+    "gowaBaseUrl": "عنوان خادم GOWA",
+    "gowaDeviceId": "الجهاز / JID",
     "metaConnectionDetails": "تفاصيل",
     "verifiedName": "الاسم الموثق",
     "qualityRating": "تقييم الجودة",

@@ -11,6 +11,7 @@
   "common": {
     "save": "Save",
     "cancel": "Cancel",
+    "created": "Created",
     "delete": "Delete",
     "edit": "Edit",
     "create": "Create",
@@ -1154,6 +1155,9 @@
     "reconnect": "Reconnect",
     "sync": "Sync",
     "synced": "Device synced",
+    "syncContacts": "Sync Contacts",
+    "syncContactsSuccess": "Synced {synced} contacts ({created} new)",
+    "syncContactsNeedSync": "Click the Sync button first to set up the device account.",
     "webhook": "Webhook",
     "connected": "Connected",
     "disconnected": "Disconnected",
@@ -1171,6 +1175,9 @@
     "saveWebhook": "Save Webhook"
   },
   "accounts": {
+    "serverConnection": "Server Connection",
+    "gowaBaseUrl": "GOWA Base URL",
+    "gowaDeviceId": "Device / JID",
     "metaConnectionDetails": "Details",
     "verifiedName": "Verified Name",
     "qualityRating": "Quality Rating",
