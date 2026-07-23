@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -127,13 +128,23 @@ func (a *App) RedownloadMedia(r *fastglue.Request) error {
 			"Downloaded the file but failed to save it", nil, "")
 	}
 
+	// Sniff the real MIME type from the bytes. GOWA returns a generic
+	// media_type ("image"/"audio"/"video") which is NOT a valid MIME type and
+	// breaks the frontend (which checks startsWith("image/")). The sniffed
+	// value (e.g. "image/jpeg") is authoritative.
+	sniffLen := 512
+	if len(data) < sniffLen {
+		sniffLen = len(data)
+	}
+	sniffedType := http.DetectContentType(data[:sniffLen])
+
 	// Update the message in place.
 	updates := map[string]any{
 		"media_url": relativePath,
 	}
-	// Keep the MIME type current if we now know it.
-	if mediaType != "" {
-		updates["media_mime_type"] = mediaType
+	// Store the sniffed MIME type so the frontend can render the bubble.
+	if sniffedType != "" {
+		updates["media_mime_type"] = sniffedType
 	}
 	if err := a.DB.Model(&models.Message{}).Where("id = ?", message.ID).Updates(updates).Error; err != nil {
 		a.Log.Error("Failed to update message media_url after re-download", "message_id", message.ID, "error", err)

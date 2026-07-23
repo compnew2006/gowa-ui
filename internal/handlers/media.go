@@ -150,8 +150,12 @@ func (a *App) saveMediaBytes(data []byte, mimeType string) (string, error) {
 		sniffLen = len(data)
 	}
 	sniffType := http.DetectContentType(data[:sniffLen])
-	// Use the sniffed type if the caller didn't provide a useful one.
-	if mimeType == "" || mimeType == "application/octet-stream" {
+	// Use the sniffed type if the caller didn't provide a useful one. GOWA
+	// returns generic types ("image", "audio", "video", "document") without
+	// the slash subtype, which are NOT valid MIME types and break the frontend
+	// (it checks media_mime_type.startsWith("image/")). Treat those as unknown
+	// so the sniffed type wins.
+	if mimeType == "" || mimeType == "application/octet-stream" || !strings.Contains(mimeType, "/") {
 		mimeType = sniffType
 	}
 	ext := getExtensionFromMimeType(mimeType)
@@ -280,10 +284,17 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 						if derr == nil && len(data) > 0 {
 							relativePath, serr := a.saveMediaBytes(data, mediaType)
 							if serr == nil {
-								// Update the message in place
-								updates := map[string]any{"media_url": relativePath}
-								if mediaType != "" {
-									updates["media_mime_type"] = mediaType
+								// Update the message in place. Sniff the real MIME
+								// type from the bytes (GOWA's mediaType is generic
+								// like "image", not a valid MIME type).
+								sniffLen := 512
+								if len(data) < sniffLen {
+									sniffLen = len(data)
+								}
+								sniffedType := http.DetectContentType(data[:sniffLen])
+								updates := map[string]any{
+									"media_url":       relativePath,
+									"media_mime_type": sniffedType,
 								}
 								a.DB.Model(&models.Message{}).Where("id = ?", message.ID).Updates(updates)
 

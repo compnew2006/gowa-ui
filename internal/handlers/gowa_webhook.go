@@ -366,6 +366,29 @@ func (a *App) processGowaOutgoingMessage(account *models.WhatsAppAccount, msg *g
 	// Determine message type, content, and media from the GOWA payload.
 	// Media messages carry the file URL in the polymorphic fields; we download
 	// it via the GOWA client and store locally (same as incoming media).
+
+	// Dedup: if this message was already recorded (e.g. sent from the whatomate
+	// UI, which created a local row with the GOWA-returned wamid), update its
+	// reply context in place and skip creating a duplicate. The GOWA echo and
+	// the local row share the same WhatsAppMessageID.
+	if msg.ID != "" {
+		var existing models.Message
+		if err := a.DB.Where("whats_app_message_id = ?", msg.ID).First(&existing).Error; err == nil {
+			// Patch the reply context onto the existing row if the echo carries one
+			// and the local row doesn't already have it.
+			if msg.RepliedToID != "" && !existing.IsReply {
+				var replyToMsg models.Message
+				if err := a.DB.Where("whats_app_message_id = ?", msg.RepliedToID).First(&replyToMsg).Error; err == nil {
+					a.DB.Model(&existing).Updates(map[string]any{
+						"is_reply":            true,
+						"reply_to_message_id": replyToMsg.ID,
+					})
+				}
+			}
+			return
+		}
+	}
+
 	msgType := models.MessageTypeText
 	content := msg.Body
 	var mediaURL, mediaMime, mediaFilename string
@@ -444,6 +467,22 @@ func (a *App) processGowaOutgoingMessage(account *models.WhatsAppAccount, msg *g
 		MediaMimeType:     mediaMime,
 		MediaFilename:     mediaFilename,
 		Status:            models.MessageStatusSent,
+	}
+
+	// Reply context. When a message is sent from the phone as a reply to
+	// another message, GOWA echoes it back with RepliedToID set to the
+	// original message's WhatsApp ID. Resolve it to the local message row so
+	// the chat bubble renders as a quote (mirrors the incoming path). Without
+	// this, text replies sent from the phone show as plain messages instead
+	// of quoted replies.
+	if msg.RepliedToID != "" {
+		var replyToMsg models.Message
+		if err := a.DB.Where("whats_app_message_id = ?", msg.RepliedToID).First(&replyToMsg).Error; err == nil {
+			outgoing.IsReply = true
+			outgoing.ReplyToMessageID = &replyToMsg.ID
+		} else {
+			a.Log.Debug("Outgoing reply-to message not found locally", "reply_to_wamid", msg.RepliedToID)
+		}
 	}
 
 	if err := a.DB.Create(outgoing).Error; err != nil {

@@ -134,14 +134,27 @@ api.interceptors.response.use(
         // Retry the original request
         return api(originalRequest)
       } catch {
-        // Refresh failed — notify waiting requests and redirect to login
+        // Refresh failed (token expired/invalid, e.g. after a server restart)
+        // — notify waiting requests, clear the local session, and redirect to
+        // login once. Guard against multiple concurrent 401s each triggering a
+        // redirect, which would flood the console and history.
         onRefreshComplete(false)
         isRefreshing = false
 
         localStorage.removeItem('user')
         localStorage.removeItem('auth_token')
         localStorage.removeItem('refresh_token')
-        window.location.href = basePath + '/login'
+        // Clear the CSRF cookie we can reach (HttpOnly access/refresh cookies
+        // are cleared by /auth/logout server-side; on a hard expiry they simply
+        // expire). Removing whm_csrf avoids the next login attempt inheriting a
+        // mismatched token.
+        document.cookie = 'whm_csrf=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT; SameSite=Lax'
+
+        // Redirect once, even if many requests fail simultaneously.
+        if (!window.location.pathname.endsWith('/login')) {
+          const redirect = encodeURIComponent(window.location.pathname + window.location.search)
+          window.location.href = basePath + `/login?redirect=${redirect}`
+        }
       }
     }
 
