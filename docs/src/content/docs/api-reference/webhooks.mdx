@@ -1,0 +1,189 @@
+---
+title: Webhooks
+description: Receive real-time updates from WhatsApp
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+Whatomate receives webhooks from Meta's WhatsApp Business API and processes them automatically. You can also configure your own webhook endpoints to receive notifications about message events.
+
+## Meta Webhook Configuration
+
+Whatomate exposes webhook endpoints that you configure in your Meta App settings:
+
+### Verification Endpoint
+
+```bash
+GET /api/webhook
+```
+
+Meta sends a verification request when setting up webhooks:
+
+| Parameter | Description |
+|-----------|-------------|
+| `hub.mode` | Always "subscribe" |
+| `hub.verify_token` | Your configured verify token |
+| `hub.challenge` | Challenge string to return |
+
+### Event Endpoint
+
+```bash
+POST /api/webhook
+```
+
+All WhatsApp events are sent to this endpoint.
+
+## Webhook Events
+
+### Incoming Message
+
+Triggered when a new message is received.
+
+```json
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "WHATSAPP_BUSINESS_ACCOUNT_ID",
+      "changes": [
+        {
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "1234567890",
+              "phone_number_id": "PHONE_NUMBER_ID"
+            },
+            "contacts": [
+              {
+                "profile": {
+                  "name": "John Doe"
+                },
+                "wa_id": "1234567890"
+              }
+            ],
+            "messages": [
+              {
+                "from": "1234567890",
+                "id": "wamid.xxx",
+                "timestamp": "1234567890",
+                "type": "text",
+                "text": {
+                  "body": "Hello!"
+                }
+              }
+            ]
+          },
+          "field": "messages"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Message Status Update
+
+Triggered when a message status changes.
+
+```json
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "changes": [
+        {
+          "value": {
+            "statuses": [
+              {
+                "id": "wamid.xxx",
+                "status": "delivered",
+                "timestamp": "1234567890",
+                "recipient_id": "1234567890"
+              }
+            ]
+          },
+          "field": "messages"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Status Values
+
+| Status | Description |
+|--------|-------------|
+| `sent` | Message sent to WhatsApp servers |
+| `delivered` | Message delivered to recipient |
+| `read` | Message read by recipient |
+| `failed` | Message failed to deliver |
+
+## WebSocket Events
+
+For real-time updates in your frontend, connect to the WebSocket endpoint:
+
+```javascript
+const ws = new WebSocket('ws://your-server:8080/ws?token=YOUR_JWT_TOKEN');
+
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  console.log('Event:', data.type, data.payload);
+};
+```
+
+### Event Types
+
+| Event | Description |
+|-------|-------------|
+| `message:new` | New message received |
+| `message:status` | Message status updated |
+| `contact:new` | New contact created |
+| `contact:updated` | Contact information updated |
+
+### Message Event Payload
+
+```json
+{
+  "type": "message:new",
+  "payload": {
+    "id": "uuid",
+    "contact_id": "uuid",
+    "direction": "incoming",
+    "type": "text",
+    "content": {
+      "text": "Hello!"
+    },
+    "timestamp": "2024-01-01T12:00:00Z"
+  }
+}
+```
+
+## Security
+
+### Webhook Verification
+
+Always verify webhook requests are from Meta:
+
+1. Check the `X-Hub-Signature-256` header
+2. Compute HMAC-SHA256 of the request body using your app secret
+3. Compare with the signature in the header
+
+Whatomate handles this verification automatically.
+
+<Aside type="caution">
+  Keep your webhook verify token and app secret secure. Never expose them in client-side code.
+</Aside>
+
+### Rate Limiting
+
+Meta may send webhooks at high volumes during campaigns. Whatomate:
+- Processes webhooks asynchronously
+- Queues events in Redis for processing
+- Handles duplicate events gracefully
+
+<Aside type="tip">
+  Use the WebSocket connection for real-time UI updates instead of polling the API.
+</Aside>

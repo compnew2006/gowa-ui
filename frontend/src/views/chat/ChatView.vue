@@ -1,0 +1,3170 @@
+<script setup lang="ts">
+import { ref, watch, onMounted, onUnmounted, nextTick, computed, defineAsyncComponent } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
+import { useContactsStore, type Contact, type Message } from '@/stores/contacts'
+import { useAuthStore } from '@/stores/auth'
+import { useUsersStore } from '@/stores/users'
+import { useTransfersStore } from '@/stores/transfers'
+import { wsService } from '@/services/websocket'
+import { contactsService, chatbotService, messagesService, customActionsService, accountsService, cannedResponsesService, getRequestHeaders, type CustomAction, type ActionResult, type CannedResponse } from '@/services/api'
+import { useTagsStore } from '@/stores/tags'
+import { TagBadge } from '@/components/ui/tag-badge'
+import { getTagColorClass } from '@/lib/constants'
+import { getErrorMessage } from '@/lib/api-utils'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Spinner } from '@/components/ui/spinner'
+import { Separator } from '@/components/ui/separator'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+// Lazy-load emoji picker to reduce initial bundle size
+const EmojiPicker = defineAsyncComponent(() => {
+  return import('vue3-emoji-picker').then(module => {
+    // Import CSS when component loads
+    import('vue3-emoji-picker/css')
+    return module.default
+  })
+})
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { toast } from 'vue-sonner'
+import {
+  Search,
+  Send,
+  Paperclip,
+  FileText,
+  Smile,
+  MoreVertical,
+  Phone,
+  PhoneCall,
+  Check,
+  CheckCheck,
+  Clock,
+  AlertCircle,
+  User,
+  UserPlus,
+  UserMinus,
+  UserX,
+  Play,
+  Reply,
+  X,
+  SmilePlus,
+  MapPin,
+  ExternalLink,
+  Loader2,
+  Zap,
+  Ticket,
+  BarChart,
+  Link,
+  Mail,
+  Globe,
+  Code,
+  RotateCw,
+  Filter,
+  StickyNote,
+  Lock,
+  Hand,
+  Users,
+  Info,
+  LogOut,
+  Ghost
+} from 'lucide-vue-next'
+import { getInitials, getAvatarGradient } from '@/lib/utils'
+import { useColorMode } from '@/composables/useColorMode'
+import { useInfiniteScroll } from '@/composables/useInfiniteScroll'
+import CannedResponsePicker from '@/components/chat/CannedResponsePicker.vue'
+import PreviewButtonGroup from '@/components/chatbot/flow-preview/PreviewButtonGroup.vue'
+import TemplatePicker from '@/components/chat/TemplatePicker.vue'
+import ContactInfoPanel from '@/components/chat/ContactInfoPanel.vue'
+import ConversationNotes from '@/components/chat/ConversationNotes.vue'
+import { useNotesStore } from '@/stores/notes'
+import { useHeaderMedia } from '@/composables/useHeaderMedia'
+import { CreateContactDialog } from '@/components/shared'
+import HeaderMediaUpload from '@/components/shared/HeaderMediaUpload.vue'
+import { Download } from 'lucide-vue-next'
+import MediaBurstDialog from '@/components/chat/MediaBurstDialog.vue'
+import MediaRetryButton from '@/components/chat/MediaRetryButton.vue'
+import { useMediaBurst } from '@/composables/useMediaBurst'
+import { useMediaExport } from '@/composables/useMediaExport'
+
+const { t } = useI18n()
+const route = useRoute()
+const router = useRouter()
+const contactsStore = useContactsStore()
+const authStore = useAuthStore()
+const usersStore = useUsersStore()
+const transfersStore = useTransfersStore()
+const tagsStore = useTagsStore()
+const notesStore = useNotesStore()
+const { isDark } = useColorMode()
+
+const canWriteContacts = authStore.hasPermission('contacts', 'write')
+const canExportMedia = authStore.hasPermission('contacts', 'export')
+
+const messageInput = ref('')
+const messagesEndRef = ref<HTMLElement | null>(null)
+const messageInputRef = ref<HTMLTextAreaElement | null>(null)
+const isSending = ref(false)
+const isAssignDialogOpen = ref(false)
+const isInviteDialogOpen = ref(false)
+const isTransferring = ref(false)
+const isResuming = ref(false)
+// Tracks incoming messages that arrived while the chat is open.
+// Surfaced as a "N unread messages" pill at the top of the chat panel
+// (WhatsApp-style). Click the pill to jump up to the first message of
+// the unread batch; cleared on click or contact switch. See issue #280.
+const newMessagesCount = ref(0)
+const firstUnreadId = ref<string | null>(null)
+const isAtBottom = ref(true)
+const SCROLL_BOTTOM_THRESHOLD = 80
+const isInfoPanelOpen = ref(false)
+const isNotesPanelOpen = ref(false)
+const contactSessionData = ref<any>(null)
+
+
+// Multi-account state
+const selectedAccount = ref<string | null>(null)
+const contactAccounts = ref<string[]>([])
+const orgAccounts = ref<any[]>([])
+
+// File upload state
+const fileInputRef = ref<HTMLInputElement | null>(null)
+const selectedFile = ref<File | null>(null)
+const filePreviewUrl = ref<string | null>(null)
+const isMediaDialogOpen = ref(false)
+const mediaCaption = ref('')
+const isUploadingMedia = ref(false)
+
+// Media burst: detect a flurry of incoming files and offer to collect them
+// together (ZIP) or separately. The burst is a living computed over the
+// reactive messages array — no timers, no watchers.
+const {
+  recentBurst,
+  isCollectible,
+  burstCount
+} = useMediaBurst(computed(() => contactsStore.messages))
+const {
+  isDownloading: isBurstDownloading,
+  progress: burstProgress,
+  redownloading: redownloadingIds,
+  downloadAsZip,
+  downloadSeparately,
+  redownload
+} = useMediaExport()
+const isBurstDialogOpen = ref(false)
+
+// Messages whose media failed to load in the DOM (video error, image error).
+// Keyed by message id so the "Retry download" affordance only shows on broken bubbles.
+const brokenMediaIds = ref(new Set<string>())
+
+/**
+ * Re-fetch a message's media from the provider and, on success, patch the
+ * updated media_url into the store so the bubble re-renders with live media.
+ */
+async function retryMediaDownload(message: Message) {
+  const result = await redownload(message)
+  if (!result.ok) return
+  // Patch the message in the store so the bubble re-renders.
+  const idx = contactsStore.messages.findIndex((m) => m.id === message.id)
+  if (idx !== -1) {
+    const updated = {
+      ...contactsStore.messages[idx],
+      media_url: result.mediaUrl || contactsStore.messages[idx].media_url,
+      media_mime_type: result.mediaMimeType || contactsStore.messages[idx].media_mime_type
+    }
+    const fresh = [...contactsStore.messages]
+    fresh[idx] = updated
+    contactsStore.messages = fresh
+  }
+  // Clear the broken flag so any error placeholder hides.
+  const cleared = new Set(brokenMediaIds.value)
+  cleared.delete(message.id)
+  brokenMediaIds.value = cleared
+}
+
+function markMediaBroken(message: Message) {
+  if (brokenMediaIds.value.has(message.id)) return
+  const next = new Set(brokenMediaIds.value)
+  next.add(message.id)
+  brokenMediaIds.value = next
+}
+
+function isRedownloading(message: Message): boolean {
+  return !!redownloadingIds.value && redownloadingIds.value.has(message.id)
+}
+
+// Cache for media blob URLs (message_id -> blob URL)
+
+
+// Canned responses slash command state
+const cannedPickerOpen = ref(false)
+const cannedSearchQuery = ref('')
+
+// Canned response preview dialog state
+const cannedDialogOpen = ref(false)
+const selectedCannedResponse = ref<CannedResponse | null>(null)
+const cannedParamNames = ref<string[]>([])
+const cannedParamValues = ref<Record<string, string>>({})
+const isSendingCanned = ref(false)
+// Tokens that the chat already knows how to fill from the current contact /
+// signed-in agent. Shared by canned responses (resolved client-side into the
+// outgoing message) and templates (pre-filled into the param payload so the
+// backend forwards the resolved value to Meta).
+const AUTO_RESOLVED_CONTEXT_TOKENS = new Set(['contact_name', 'phone_number', 'user_name', 'agent_name'])
+
+// Sticky date header state
+const stickyDate = ref('')
+const showStickyDate = ref(false)
+let stickyDateTimeout: ReturnType<typeof setTimeout> | null = null
+
+// Emoji picker state
+const emojiPickerOpen = ref(false)
+
+// Template picker state
+const templatePickerRef = ref<HTMLElement | null>(null)
+const templateDialogOpen = ref(false)
+const selectedTemplate = ref<any>(null)
+const templateParamNames = ref<string[]>([])
+const templateParamValues = ref<Record<string, string>>({})
+// Name of the TEXT-header variable (max 1 per Meta) and its value. Kept in
+// its own ref so a positional {{1}} in the header doesn't collide with a
+// {{1}} body parameter — both can be filled independently.
+const templateHeaderParamName = ref<string | null>(null)
+const templateHeaderParamValue = ref('')
+const templateButtonUrlParams = ref<{ index: number; text: string; value: string; type: string }[]>([])
+const isSendingTemplate = ref(false)
+const templateHeaderType = computed(() => selectedTemplate.value?.header_type)
+const {
+  file: templateHeaderFile,
+  previewUrl: templateHeaderPreview,
+  needsMedia: templateNeedsHeaderMedia,
+  acceptTypes: templateHeaderAccept,
+  handleFileChange: handleTemplateHeaderFile,
+  clear: clearTemplateHeaderMedia,
+} = useHeaderMedia(templateHeaderType)
+
+// Custom actions state
+const customActions = ref<CustomAction[]>([])
+const executingActionId = ref<string | null>(null)
+
+// Tags filter state
+const isTagFilterOpen = ref(false)
+
+// Service window state
+const isServiceWindowExpired = computed(() => {
+  const contact = contactsStore.currentContact
+  if (!contact) return false
+  return contact.service_window_open === false
+})
+
+function openTemplatePicker() {
+  const btn = templatePickerRef.value?.querySelector('button')
+  btn?.click()
+}
+
+// Add contact dialog state
+const isAddContactOpen = ref(false)
+
+function openAddContactDialog() {
+  isAddContactOpen.value = true
+}
+
+async function onContactCreated(contact: any) {
+  // Refresh contacts and select the new one
+  await contactsStore.fetchContacts()
+  if (contact?.id) {
+    router.push({ name: 'chat-conversation', params: { contactId: contact.id } })
+  }
+}
+
+// Infinite scroll for contacts (load more at bottom)
+const contactsScroll = useInfiniteScroll({
+  direction: 'bottom',
+  onLoadMore: () => contactsStore.loadMoreContacts(),
+  hasMore: computed(() => contactsStore.hasMoreContacts),
+  isLoading: computed(() => contactsStore.isLoadingMoreContacts)
+})
+
+// Infinite scroll for messages (load older at top)
+const messagesScroll = useInfiniteScroll({
+  direction: 'top',
+  onLoadMore: async () => {
+    if (!contactsStore.currentContact) return
+    await messagesScroll.preserveScrollPosition(async () => {
+      await contactsStore.fetchOlderMessages(contactsStore.currentContact!.id, selectedAccount.value || undefined)
+      await nextTick()
+      // Load media for any new messages
+      try {
+        // Media loading handled reactively
+      } catch (e) {
+        console.error('Error loading media:', e)
+      }
+    })
+  },
+  hasMore: computed(() => contactsStore.hasMoreMessages),
+  isLoading: computed(() => contactsStore.isLoadingOlderMessages),
+  onScroll: (event) => {
+    const el = event.target as HTMLElement
+    updateStickyDate(el)
+    updateAtBottom(el)
+  }
+})
+
+function updateAtBottom(el: HTMLElement) {
+  const distanceFromBottom = el.scrollHeight - el.clientHeight - el.scrollTop
+  isAtBottom.value = distanceFromBottom < SCROLL_BOTTOM_THRESHOLD
+}
+
+const contactId = computed(() => route.params.contactId as string | undefined)
+
+// Get active transfer for current contact from the store (reactive)
+const activeTransfer = computed(() => {
+  if (!contactsStore.currentContact) return null
+  return transfersStore.getActiveTransferForContact(contactsStore.currentContact.id)
+})
+
+const activeTransferId = computed(() => activeTransfer.value?.id || null)
+
+// ─── Chat lifecycle: claim & collaboration ───
+const isClaiming = ref(false)
+const isJoining = ref(false)
+
+async function handleClaim() {
+  if (!contactsStore.currentContact) return
+  isClaiming.value = true
+  try {
+    await contactsStore.claimChat(contactsStore.currentContact.id)
+  } catch (error: any) {
+    if (error.response?.status === 409) {
+      console.error('Chat already assigned:', error.response.data?.message)
+    }
+  } finally {
+    isClaiming.value = false
+  }
+}
+
+async function handleJoin() {
+  if (!contactsStore.currentContact) return
+  isJoining.value = true
+  try {
+    await contactsStore.joinChat(contactsStore.currentContact.id)
+  } catch {
+    console.error('Failed to join chat')
+  } finally {
+    isJoining.value = false
+  }
+}
+
+async function handleLeave() {
+  if (!contactsStore.currentContact) return
+  try {
+    await contactsStore.leaveChat(contactsStore.currentContact.id)
+  } catch {
+    console.error('Failed to leave chat')
+  }
+}
+
+async function handleClose() {
+  if (!contactsStore.currentContact) return
+  try {
+    await contactsStore.closeChat(contactsStore.currentContact.id)
+  } catch {
+    console.error('Failed to close chat')
+  }
+}
+
+async function handleReopen() {
+  if (!contactsStore.currentContact) return
+  try {
+    await contactsStore.reopenChat(contactsStore.currentContact.id)
+  } catch {
+    console.error('Failed to reopen chat')
+  }
+}
+
+async function handleInvite(userId: string) {
+  if (!contactsStore.currentContact) return
+  try {
+    await contactsStore.inviteCollaborator(contactsStore.currentContact.id, userId)
+  } catch {
+    console.error('Failed to invite collaborator')
+  }
+}
+
+async function handleRemoveCollaborator(userId: string) {
+  if (!contactsStore.currentContact) return
+  try {
+    await contactsStore.removeCollaborator(contactsStore.currentContact.id, userId)
+  } catch {
+    console.error('Failed to remove collaborator')
+  }
+}
+
+
+// Check if current user can assign contacts (admin or manager only)
+const canAssignContacts = computed(() => {
+  // Try store first, then fallback to localStorage
+  let role = authStore.userRole
+  if (!role || role === 'agent') {
+    try {
+      const storedUser = localStorage.getItem('user')
+      if (storedUser) {
+        const user = JSON.parse(storedUser)
+        role = user.role?.name || user.role // Support both old and new format
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return role === 'admin' || role === 'manager'
+})
+
+// Get list of users for assignment
+const assignableUsers = computed(() => {
+  return usersStore.users.filter(u => u.is_active)
+})
+
+// Icon mapping for custom actions
+const actionIconMap: Record<string, any> = {
+  'ticket': Ticket,
+  'user': User,
+  'bar-chart': BarChart,
+  'link': Link,
+  'phone': Phone,
+  'mail': Mail,
+  'file-text': FileText,
+  'external-link': ExternalLink,
+  'zap': Zap,
+  'globe': Globe,
+  'code': Code
+}
+
+function getActionIcon(iconName: string) {
+  return actionIconMap[iconName] || Zap
+}
+
+async function fetchCustomActions() {
+  try {
+    const response = await customActionsService.list()
+    const data = (response.data as any).data || response.data
+    customActions.value = (data.custom_actions || []).filter((a: CustomAction) => a.is_active)
+  } catch (error) {
+    // Silently fail - custom actions are optional
+    console.error('Failed to fetch custom actions:', error)
+  }
+}
+
+function toggleTagFilter(tagName: string) {
+  const index = contactsStore.selectedTags.indexOf(tagName)
+  if (index === -1) {
+    contactsStore.selectedTags.push(tagName)
+  } else {
+    contactsStore.selectedTags.splice(index, 1)
+  }
+  // Refetch contacts with new filter
+  contactsStore.fetchContacts()
+}
+
+function clearTagFilter() {
+  contactsStore.selectedTags = []
+  contactsStore.fetchContacts()
+}
+
+async function executeCustomAction(action: CustomAction) {
+  if (!contactsStore.currentContact || executingActionId.value) return
+
+  executingActionId.value = action.id
+  try {
+    const response = await customActionsService.execute(action.id, contactsStore.currentContact.id)
+    let result: ActionResult = (response.data as any).data || response.data
+
+    // JavaScript actions are now executed server-side via goja.
+    // The response already contains structured result fields (toast, clipboard, redirect_url, message).
+
+    // Handle different result types
+    if (result.redirect_url) {
+      // Open URL action result - prepend base path for relative URLs
+      let redirectUrl = result.redirect_url
+      if (redirectUrl.startsWith('/api/')) {
+        const basePath = ((window as any).__BASE_PATH__ ?? '').replace(/\/$/, '')
+        redirectUrl = basePath + redirectUrl
+      }
+      try {
+        const parsed = new URL(redirectUrl, window.location.origin)
+        if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+          window.open(parsed.href, '_blank')
+        }
+      } catch {
+        // Invalid URL, ignore
+      }
+    }
+
+    if (result.clipboard) {
+      // Copy to clipboard
+      await navigator.clipboard.writeText(result.clipboard)
+      toast.success(t('common.copiedToClipboard'))
+    }
+
+    if (result.toast) {
+      // Show toast notification
+      if (result.toast.type === 'success') {
+        toast.success(result.toast.message)
+      } else if (result.toast.type === 'error') {
+        toast.error(result.toast.message)
+      } else {
+        toast.info(result.toast.message)
+      }
+    } else if (result.success && !result.redirect_url && !result.clipboard) {
+      // Default success message
+      toast.success(result.message || t('chat.actionExecuted'))
+    } else if (!result.success) {
+      toast.error(result.message || t('chat.actionFailed'))
+    }
+  } catch (error: any) {
+    const message = error.response?.data?.message || 'Failed to execute action'
+    toast.error(message)
+  } finally {
+    executingActionId.value = null
+  }
+}
+
+// Search state for assignment dialog
+const assignSearchQuery = ref('')
+
+// Filtered users for assignment dialog
+const filteredAssignableUsers = computed(() => {
+  const query = assignSearchQuery.value.toLowerCase().trim()
+  if (!query) return assignableUsers.value
+  return assignableUsers.value.filter(u =>
+    u.full_name.toLowerCase().includes(query) ||
+    u.email.toLowerCase().includes(query)
+  )
+})
+
+// Fetch contacts on mount (WebSocket is connected in AppLayout)
+onMounted(async () => {
+  // Ensure auth session is restored
+  if (!authStore.isAuthenticated) {
+    authStore.restoreSession()
+  }
+
+  await contactsStore.fetchContacts()
+
+  // Setup infinite scroll for contacts list
+  await nextTick()
+  contactsScroll.setup()
+
+  // Fetch transfers to track active transfers
+  transfersStore.fetchTransfers({ status: 'active' })
+
+  // Fetch users if can assign contacts
+  if (canAssignContacts.value) {
+    usersStore.fetchUsers().catch(() => {
+      // Silently fail if user list can't be loaded
+    })
+  }
+
+  // Fetch custom actions for admins/managers
+  if (canAssignContacts.value) {
+    fetchCustomActions()
+  }
+
+  // Fetch org-level WhatsApp accounts for account tabs
+  try {
+    const res = await accountsService.list()
+    orgAccounts.value = res.data.data?.accounts || []
+  } catch {
+    orgAccounts.value = []
+  }
+
+  // Fetch available tags for filtering (if not already loaded)
+  if (tagsStore.tags.length === 0) {
+    tagsStore.fetchTags().catch(() => {})
+  }
+
+  if (contactId.value) {
+    await selectContact(contactId.value)
+  }
+
+  // Auto-scroll to the unread divider and mark messages read when the agent
+  // returns — covers both tab-switch (visibilitychange) and OS window focus
+  // (focus event), since "tab visible but window unfocused" is a real state
+  // and we don't want to send blue-tick receipts when no one is looking.
+  // See issue #280.
+  document.addEventListener('visibilitychange', onUserActive)
+  window.addEventListener('focus', onUserActive)
+})
+
+function onUserActive() {
+  if (document.visibilityState !== 'visible' || !document.hasFocus()) return
+  if (!firstUnreadId.value) return
+  if (contactsStore.currentContact) {
+    contactsService.markRead(contactsStore.currentContact.id)
+      .catch(() => { /* non-critical */ })
+  }
+  nextTick(() => {
+    const el = document.getElementById(`message-${firstUnreadId.value}`)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  })
+}
+
+onUnmounted(() => {
+  wsService.setCurrentContact(null)
+  // Clear current contact when leaving chat view so notifications work on other pages
+  contactsStore.setCurrentContact(null)
+  notesStore.clearNotes()
+  // Clear sticky date timeout
+  if (stickyDateTimeout) clearTimeout(stickyDateTimeout)
+  document.removeEventListener('visibilitychange', onUserActive)
+  window.removeEventListener('focus', onUserActive)
+})
+
+function updateStickyDate(scrollContainer: HTMLElement) {
+  // Find all date separator elements
+  const dateSeparators = scrollContainer.querySelectorAll('[data-date-separator]')
+  if (dateSeparators.length === 0) return
+
+  const containerRect = scrollContainer.getBoundingClientRect()
+  const containerTop = containerRect.top + 60 // Offset for sticky header position
+
+  // Find the last date separator that's above the viewport top
+  let currentDate = ''
+  for (const separator of dateSeparators) {
+    const rect = separator.getBoundingClientRect()
+    if (rect.top < containerTop) {
+      currentDate = separator.getAttribute('data-date-separator') || ''
+    } else {
+      break
+    }
+  }
+
+  // Show sticky date if we have scrolled past at least one date separator
+  if (currentDate && scrollContainer.scrollTop > 50) {
+    stickyDate.value = currentDate
+    showStickyDate.value = true
+
+    // Hide after scrolling stops
+    if (stickyDateTimeout) clearTimeout(stickyDateTimeout)
+    stickyDateTimeout = setTimeout(() => {
+      showStickyDate.value = false
+    }, 1500)
+  } else {
+    showStickyDate.value = false
+  }
+}
+
+// Watch for route changes
+watch(contactId, async (newId) => {
+  if (newId) {
+    notesStore.notes = []
+    notesStore.hasMore = false
+    await selectContact(newId)
+  } else {
+    wsService.setCurrentContact(null)
+    contactsStore.setCurrentContact(null)
+    contactsStore.clearMessages()
+    notesStore.clearNotes()
+  }
+})
+
+async function selectContact(id: string) {
+  // Direct deep links to /chat/:id may target a contact that isn't in the
+  // currently-loaded (paginated) list — fall back to fetching it directly.
+  let contact = contactsStore.contacts.find(c => c.id === id)
+  if (!contact) {
+    contact = await contactsStore.fetchContact(id)
+  }
+  if (contact) {
+    // Reset unread pill — fetchMessages will mark everything read on the server
+    newMessagesCount.value = 0
+    firstUnreadId.value = null
+    isAtBottom.value = true
+
+    // Remove old scroll listener before switching contacts
+    messagesScroll.cleanup()
+
+    // Reset account selection when switching contacts
+    selectedAccount.value = null
+    contactAccounts.value = []
+    contactsStore.setAccountFilter(null)
+
+    contactsStore.setCurrentContact(contact)
+    await contactsStore.fetchMessages(id)
+
+    // Discover distinct accounts from the unfiltered message set
+    const accounts = new Set<string>()
+    for (const msg of contactsStore.messages) {
+      if (msg.whatsapp_account) accounts.add(msg.whatsapp_account)
+    }
+    contactAccounts.value = Array.from(accounts).sort()
+
+    // Auto-select account and filter client-side (avoids a second fetch)
+    if (orgAccounts.value.length > 1) {
+      // Find account of the most recent incoming message
+      for (let i = contactsStore.messages.length - 1; i >= 0; i--) {
+        const msg = contactsStore.messages[i]
+        if (msg.direction === 'incoming' && msg.whatsapp_account) {
+          selectedAccount.value = msg.whatsapp_account
+          break
+        }
+      }
+      // Fallback to contact's default account, then first org account
+      if (!selectedAccount.value) {
+        selectedAccount.value = contact.whatsapp_account || contactAccounts.value[0] || orgAccounts.value[0]?.name
+      }
+      if (selectedAccount.value) {
+        contactsStore.setAccountFilter(selectedAccount.value)
+        // Filter messages client-side instead of re-fetching
+        contactsStore.messages = contactsStore.messages.filter(
+          (m: any) => m.whatsapp_account === selectedAccount.value
+        )
+      }
+    } else if (contactAccounts.value.length === 1) {
+      selectedAccount.value = contactAccounts.value[0]
+    } else if (contact.whatsapp_account) {
+      selectedAccount.value = contact.whatsapp_account
+    }
+
+    // Tell WebSocket server which contact we're viewing
+    wsService.setCurrentContact(id)
+    // Wait for DOM to render messages before scrolling
+    await nextTick()
+    // Load media for messages after messages are fetched
+    try {
+      // Media loading handled reactively
+    } catch (e) {
+      console.error('Error loading media:', e)
+    }
+    // Scroll after a brief delay to ensure content is rendered (instant on initial load)
+    setTimeout(() => {
+      scrollToBottom(true)
+      // Setup scroll listener for infinite scroll after initial scroll
+      messagesScroll.setup()
+    }, 50)
+
+    // Fetch notes and session data in parallel (independent requests)
+    const [, sessionResult] = await Promise.all([
+      notesStore.fetchNotes(id),
+      contactsService.getSessionData(id).catch(() => null)
+    ])
+    if (sessionResult) {
+      contactSessionData.value = sessionResult.data.data || sessionResult.data
+      if (contactSessionData.value?.panel_config?.sections?.length > 0) {
+        isInfoPanelOpen.value = true
+      }
+    } else {
+      contactSessionData.value = null
+    }
+  }
+}
+
+// Watch for new messages. WhatsApp Web style: while the browser tab is
+// focused on this chat the user is "watching", so auto-scroll if they're
+// at the bottom. When they're on another tab, pile up unread and surface
+// a divider above the first message that arrived while away (issue #280).
+// The two branches are mutually exclusive — auto-scrolling while the tab
+// is hidden races with the divider state.
+watch(() => contactsStore.messages.length, (newLen, oldLen) => {
+  if (newLen <= oldLen) return
+  const latest = contactsStore.messages[newLen - 1]
+  const isIncoming = latest?.direction === 'incoming'
+  // "Not actively looking" covers both other-tab (hidden) and other-window
+  // (visible but unfocused). The divider should pile in either case.
+  const userAway = typeof document !== 'undefined'
+    && (document.visibilityState === 'hidden' || !document.hasFocus())
+  if (isIncoming && userAway) {
+    if (newMessagesCount.value === 0) {
+      firstUnreadId.value = latest.id
+    }
+    newMessagesCount.value += 1
+    return
+  }
+  // Outgoing (the agent replied) — they've seen the unread, drop the divider.
+  if (!isIncoming && newMessagesCount.value > 0) {
+    newMessagesCount.value = 0
+    firstUnreadId.value = null
+  }
+  if (isAtBottom.value || !isIncoming) {
+    scrollToBottom()
+  }
+})
+
+// Watch for messages changes to load media
+watch(() => contactsStore.messages, () => {
+  try {
+    // Media loading handled reactively
+  } catch (e) {
+    console.error('Error loading media:', e)
+  }
+}, { deep: true })
+
+async function switchAccount(accountName: string) {
+  if (!contactsStore.currentContact || accountName === selectedAccount.value) return
+  selectedAccount.value = accountName
+  contactsStore.setAccountFilter(accountName)
+  await contactsStore.fetchMessages(contactsStore.currentContact.id, { account: accountName })
+  await nextTick()
+  try {
+    // Media loading handled reactively
+  } catch (e) {
+    console.error('Error loading media:', e)
+  }
+  scrollToBottom(true)
+}
+
+function handleContactClick(contact: Contact) {
+  router.push(`/chat/${contact.id}`)
+}
+
+async function sendMessage() {
+  if (!messageInput.value.trim() || !contactsStore.currentContact) return
+
+  isSending.value = true
+  try {
+    await contactsStore.sendMessage(
+      contactsStore.currentContact.id,
+      'text',
+      { body: messageInput.value },
+      contactsStore.replyingTo?.id,
+      selectedAccount.value || undefined
+    )
+    messageInput.value = ''
+    contactsStore.clearReplyingTo()
+    resetTextareaHeight()
+    await nextTick()
+    scrollToBottom()
+  } catch (error) {
+    toast.error(getErrorMessage(error, t('chat.sendMessageFailed')))
+  } finally {
+    isSending.value = false
+  }
+}
+
+const retryingMessageId = ref<string | null>(null)
+
+async function retryMessage(message: Message) {
+  if (!contactsStore.currentContact || retryingMessageId.value) return
+
+  retryingMessageId.value = message.id
+  try {
+    // Get the message content based on type
+    const content = message.content || {}
+
+    await contactsStore.sendMessage(
+      contactsStore.currentContact.id,
+      message.message_type,
+      content,
+      undefined,
+      message.whatsapp_account || selectedAccount.value || undefined
+    )
+
+    // Remove the failed message from the list after successful retry
+    const messages = (contactsStore.messages as any).get?.(contactsStore.currentContact.id) as Message[] | undefined
+    if (messages) {
+      const index = messages.findIndex((m: Message) => m.id === message.id)
+      if (index !== -1) {
+        messages.splice(index, 1)
+      }
+    }
+
+    toast.success(t('chat.messageSent'))
+  } catch (error) {
+    toast.error(getErrorMessage(error, t('chat.sendMessageFailed')))
+  } finally {
+    retryingMessageId.value = null
+  }
+}
+
+function autoResizeTextarea() {
+  const textarea = messageInputRef.value
+  if (!textarea) return
+  textarea.style.height = 'auto'
+  textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px'
+}
+
+function resetTextareaHeight() {
+  const textarea = messageInputRef.value
+  if (!textarea) return
+  textarea.style.height = 'auto'
+}
+
+function getReplyPreviewContent(message: Message): string {
+  if (!message.reply_to_message) return ''
+  const reply = message.reply_to_message
+  if (reply.message_type === 'text') {
+    const body = reply.content?.body || ''
+    return body.length > 50 ? body.substring(0, 50) + '...' : body
+  }
+  if (reply.message_type === 'button_reply') {
+    const body = typeof reply.content === 'string' ? reply.content : (reply.content?.body || '')
+    return body.length > 50 ? body.substring(0, 50) + '...' : body
+  }
+  if (reply.message_type === 'interactive') {
+    const body = typeof reply.content === 'string' ? reply.content : ((reply as any).interactive_data?.body || reply.content?.body || '')
+    return body.length > 50 ? body.substring(0, 50) + '...' : body
+  }
+  if (reply.message_type === 'template') {
+    const body = reply.content?.body || ''
+    return body.length > 50 ? body.substring(0, 50) + '...' : body
+  }
+  if (reply.message_type === 'image') return '[Photo]'
+  if (reply.message_type === 'video') return '[Video]'
+  if (reply.message_type === 'audio') return '[Audio]'
+  if (reply.message_type === 'document') return '[Document]'
+  if (reply.message_type === 'location') return '[Location]'
+  if (reply.message_type === 'contacts') return '[Contact]'
+  if (reply.message_type === 'sticker') return '[Sticker]'
+  return '[Message]'
+}
+
+function scrollToMessage(messageId: string | undefined) {
+  if (!messageId) return
+  const messageEl = document.getElementById(`message-${messageId}`)
+  if (messageEl) {
+    messageEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    messageEl.classList.add('highlight-message')
+    setTimeout(() => messageEl.classList.remove('highlight-message'), 2000)
+  }
+}
+
+function extractCannedTokens(content: string): string[] {
+  const seen = new Set<string>()
+  const matches = content.matchAll(/\{\{\s*([\w.-]+)\s*\}\}/g)
+  for (const m of matches) seen.add(m[1])
+  return Array.from(seen)
+}
+
+// Collect tokens from the message body AND every button field, so the param
+// dialog prompts for custom tokens used anywhere on the response.
+function extractCannedTokensFromResponse(r: CannedResponse): string[] {
+  const seen = new Set<string>(extractCannedTokens(r.content))
+  for (const btn of r.buttons || []) {
+    for (const t of extractCannedTokens(btn.title || '')) seen.add(t)
+    for (const t of extractCannedTokens(btn.url || '')) seen.add(t)
+    for (const t of extractCannedTokens(btn.phone_number || '')) seen.add(t)
+  }
+  return Array.from(seen)
+}
+
+// Resolve a single context token (contact_name / phone_number / user_name /
+// agent_name) against the current chat. Returns null for any key that isn't
+// in AUTO_RESOLVED_CONTEXT_TOKENS so callers can fall back to their own param
+// dict.
+function resolveContextToken(key: string): string | null {
+  const contact = contactsStore.currentContact
+  if (key === 'contact_name') return contact?.profile_name || contact?.name || 'there'
+  if (key === 'phone_number') return contact?.phone_number || ''
+  if (key === 'user_name' || key === 'agent_name') return authStore.user?.full_name || ''
+  return null
+}
+
+// Shared {{...}} resolver used by the body preview and the button fields, so
+// `{{phone_number}}` works inside a button URL the same way it does in content.
+function resolveCannedTokens(text: string): string {
+  if (!text) return text
+  return text.replace(/\{\{\s*([\w.-]+)\s*\}\}/g, (_match, key: string) => {
+    const ctx = resolveContextToken(key)
+    if (ctx !== null) return ctx
+    const value = cannedParamValues.value[key]
+    return value ? value : `{{${key}}}`
+  })
+}
+
+const cannedPreview = computed(() =>
+  selectedCannedResponse.value ? resolveCannedTokens(selectedCannedResponse.value.content) : '',
+)
+
+// Resolved buttons (with {{...}} substitution applied) for the dialog preview.
+// Empty array when no response is selected or it has no buttons.
+const cannedPreviewButtons = computed(() => {
+  const raw = selectedCannedResponse.value?.buttons || []
+  return raw.map(b => ({
+    ...b,
+    title: resolveCannedTokens(b.title),
+    ...(b.url !== undefined ? { url: resolveCannedTokens(b.url) } : {}),
+    ...(b.phone_number !== undefined ? { phone_number: resolveCannedTokens(b.phone_number) } : {}),
+  }))
+})
+
+function handleCannedSelect(response: CannedResponse) {
+  selectedCannedResponse.value = response
+  const tokens = extractCannedTokensFromResponse(response).filter(
+    t => !AUTO_RESOLVED_CONTEXT_TOKENS.has(t)
+  )
+  cannedParamNames.value = tokens
+  cannedParamValues.value = Object.fromEntries(tokens.map(t => [t, '']))
+  // Drop the slash command (or any stray text) so the textarea starts clean.
+  messageInput.value = ''
+  resetTextareaHeight()
+  cannedPickerOpen.value = false
+  cannedSearchQuery.value = ''
+  cannedDialogOpen.value = true
+}
+
+async function sendCannedResponse() {
+  if (!contactsStore.currentContact || !selectedCannedResponse.value) return
+
+  const missing = cannedParamNames.value.some(n => !cannedParamValues.value[n]?.trim())
+  if (missing) {
+    toast.error(t('chat.parameterRequired'))
+    return
+  }
+
+  const body = cannedPreview.value
+  const responseId = selectedCannedResponse.value.id
+  // Substitute {{...}} tokens in every button field — same rules as the body —
+  // so URLs like https://x.com/u/{{phone_number}} resolve at send time.
+  const buttons = (selectedCannedResponse.value.buttons || []).map(b => ({
+    ...b,
+    title: resolveCannedTokens(b.title),
+    ...(b.url !== undefined ? { url: resolveCannedTokens(b.url) } : {}),
+    ...(b.phone_number !== undefined ? { phone_number: resolveCannedTokens(b.phone_number) } : {}),
+  }))
+  const replyButtons = buttons.filter(b => !b.type || b.type === 'reply')
+  const urlButtons = buttons.filter(b => b.type === 'url')
+
+  // WhatsApp Cloud API supports: 1-3 reply buttons (interactive.button),
+  // 4-10 reply rows (interactive.list — backend's SendInteractiveButtons
+  // auto-picks the right shape), a single cta_url, or a single voice_call
+  // (Business Calling click-to-call). Phone buttons and multi-URL / mixed
+  // combos aren't representable; the detail-page validator blocks save for
+  // those, so the text fallback here is just a safety net.
+  const voiceCallButtons = buttons.filter(b => b.type === 'voice_call')
+  const flowButtons = buttons.filter(b => b.type === 'flow')
+  let sendType: 'text' | 'interactive' = 'text'
+  let interactive: {
+    type: 'button' | 'list' | 'cta_url' | 'voice_call' | 'flow'
+    body: string
+    buttons?: Array<{ id: string; title: string }>
+    button_text?: string
+    url?: string
+    display_text?: string
+    ttl_minutes?: number
+    flow_id?: string
+    first_screen?: string
+  } | undefined
+
+  if (buttons.length === 1 && flowButtons.length === 1) {
+    const f = flowButtons[0]
+    sendType = 'interactive'
+    interactive = {
+      type: 'flow',
+      body,
+      // The button title is the CTA label shown to the customer.
+      button_text: resolveCannedTokens(f.title),
+      flow_id: f.flow_id,
+      first_screen: f.screen,
+    }
+  } else if (buttons.length === 1 && voiceCallButtons.length === 1) {
+    const vc = voiceCallButtons[0]
+    sendType = 'interactive'
+    interactive = {
+      type: 'voice_call',
+      body,
+      // {{...}} tokens already resolved in the canned-preview path; the
+      // button title is what becomes Meta's display_text. Backend
+      // truncates to 20 chars and stamps the agent-id payload.
+      display_text: resolveCannedTokens(vc.title),
+      ttl_minutes: vc.ttl_minutes ?? 15,
+    }
+  } else if (buttons.length > 0 && replyButtons.length === buttons.length && replyButtons.length <= 10) {
+    sendType = 'interactive'
+    interactive = {
+      type: replyButtons.length <= 3 ? 'button' : 'list',
+      body,
+      buttons: replyButtons.map(b => ({ id: b.id, title: b.title })),
+    }
+  } else if (buttons.length === 1 && urlButtons.length === 1) {
+    sendType = 'interactive'
+    interactive = {
+      type: 'cta_url',
+      body,
+      button_text: urlButtons[0].title,
+      url: urlButtons[0].url || '',
+    }
+  }
+
+  isSendingCanned.value = true
+  try {
+    await contactsStore.sendMessage(
+      contactsStore.currentContact.id,
+      sendType,
+      sendType === 'interactive' ? { body } : { body },
+      contactsStore.replyingTo?.id,
+      selectedAccount.value || undefined,
+      interactive ? { interactive } : undefined,
+    )
+    cannedResponsesService.use(responseId).catch(() => {})
+    contactsStore.clearReplyingTo()
+    cannedDialogOpen.value = false
+    selectedCannedResponse.value = null
+    cannedParamNames.value = []
+    cannedParamValues.value = {}
+    await nextTick()
+    scrollToBottom()
+  } catch (error) {
+    toast.error(getErrorMessage(error, t('chat.sendMessageFailed')))
+  } finally {
+    isSendingCanned.value = false
+  }
+}
+
+function closeCannedPicker() {
+  cannedPickerOpen.value = false
+  cannedSearchQuery.value = ''
+}
+
+function insertEmoji(emoji: string) {
+  messageInput.value += emoji
+  emojiPickerOpen.value = false
+}
+
+// Template message handling
+function getTemplateBodyContent(tpl: any): string {
+  return tpl.body_content || ''
+}
+
+const templatePreview = computed(() => {
+  if (!selectedTemplate.value) return ''
+  const body = getTemplateBodyContent(selectedTemplate.value)
+  return body.replace(/\{\{\s*([\w.-]+)\s*\}\}/g, (_match, key: string) => {
+    const supplied = templateParamValues.value[key]
+    if (supplied) return supplied
+    const ctx = resolveContextToken(key)
+    if (ctx !== null) return ctx
+    return `{{${key}}}`
+  })
+})
+
+// Show the header input only when the user has to fill it. Context-token
+// names (contact_name, phone_number, …) auto-resolve and stay hidden — same
+// rule body params follow via templateParamNames filtering.
+const showHeaderParamInput = computed(() =>
+  !!templateHeaderParamName.value &&
+  !AUTO_RESOLVED_CONTEXT_TOKENS.has(templateHeaderParamName.value)
+)
+
+function extractButtonUrlParams(buttons: any[]): { index: number; text: string; value: string; type: string }[] {
+  if (!buttons?.length) return []
+  return buttons
+    .map((btn: any, index: number) => {
+      if (btn.type === 'COPY_CODE') {
+        return { index, text: btn.text || 'Copy Code', value: btn.example?.[0] || '', type: 'COPY_CODE' }
+      }
+      if (btn.type !== 'URL' || !btn.url) return null
+      const hasParams = /\{\{[^}]+\}\}/.test(btn.url)
+      if (!hasParams) return null
+      return { index, text: btn.text || 'URL Button', value: '', type: 'URL' }
+    })
+    .filter((b): b is { index: number; text: string; value: string; type: string } => b !== null)
+}
+
+function handleTemplateWithParams(template: any, paramNames: string[]) {
+  selectedTemplate.value = template
+  // Pre-fill body context tokens from the conversation; keep them in the
+  // payload dict so the backend forwards them to Meta, but hide them from
+  // the dialog so the agent doesn't have to type values we already know —
+  // same pattern as canned responses (see handleCannedSelect).
+  const initial: Record<string, string> = {}
+  for (const name of paramNames) {
+    const resolved = resolveContextToken(name)
+    initial[name] = resolved ?? ''
+  }
+  templateParamValues.value = initial
+  templateParamNames.value = paramNames.filter(n => !AUTO_RESOLVED_CONTEXT_TOKENS.has(n))
+
+  // Identify the TEXT-header variable (max 1) and pre-fill from context.
+  // Context-token names (contact_name / phone_number / agent_name / user_name)
+  // resolve automatically and stay hidden from the dialog — same convention
+  // as body params.
+  templateHeaderParamName.value = null
+  templateHeaderParamValue.value = ''
+  if (template.header_type === 'TEXT' && template.header_content) {
+    const m = template.header_content.match(/\{\{([^}]+)\}\}/)
+    if (m) {
+      const name = m[1].trim()
+      templateHeaderParamName.value = name
+      templateHeaderParamValue.value = resolveContextToken(name) ?? ''
+    }
+  }
+
+  clearTemplateHeaderMedia()
+  templateButtonUrlParams.value = extractButtonUrlParams(template.buttons)
+  templateDialogOpen.value = true
+}
+
+async function sendTemplateMessage() {
+  if (!contactsStore.currentContact || !selectedTemplate.value) return
+
+  // Validate header param (separate ref so it can hold its own value even
+  // when the body has a {{1}} that would otherwise collide). Auto-resolved
+  // context tokens are exempt — their value comes from the conversation.
+  if (showHeaderParamInput.value && !templateHeaderParamValue.value.trim()) {
+    toast.error(t('chat.parameterRequired'))
+    return
+  }
+
+  // Validate all body params are filled
+  const missingBody = templateParamNames.value.some(n => !templateParamValues.value[n]?.trim())
+  if (missingBody) {
+    toast.error(t('chat.parameterRequired'))
+    return
+  }
+
+  // Validate header media if required
+  if (templateNeedsHeaderMedia.value && !templateHeaderFile.value) {
+    toast.error(t('chat.headerMediaRequired'))
+    return
+  }
+
+  // Validate all button URL params are filled
+  const missingButton = templateButtonUrlParams.value.some(b => !b.value?.trim())
+  if (missingButton) {
+    toast.error(t('chat.parameterRequired'))
+    return
+  }
+
+  // Build button params map: button index -> value
+  const buttonParams: Record<string, string> | undefined =
+    templateButtonUrlParams.value.length > 0
+      ? Object.fromEntries(templateButtonUrlParams.value.map(b => [String(b.index), b.value]))
+      : undefined
+
+  // Header value goes in its own payload field so a positional {{1}} header
+  // doesn't overwrite a positional {{1}} body parameter in the flat map.
+  const headerParams: Record<string, string> | undefined =
+    templateHeaderParamName.value && templateHeaderParamValue.value
+      ? { [templateHeaderParamName.value]: templateHeaderParamValue.value }
+      : undefined
+
+  isSendingTemplate.value = true
+  try {
+    await contactsStore.sendTemplate(
+      contactsStore.currentContact.id,
+      selectedTemplate.value.name,
+      templateParamValues.value,
+      selectedAccount.value || undefined,
+      templateHeaderFile.value || undefined,
+      buttonParams,
+      headerParams
+    )
+    toast.success(t('chat.templateSent'))
+    templateDialogOpen.value = false
+    selectedTemplate.value = null
+    templateParamNames.value = []
+    templateParamValues.value = {}
+    templateHeaderParamName.value = null
+    templateHeaderParamValue.value = ''
+    clearTemplateHeaderMedia()
+    templateButtonUrlParams.value = []
+  } catch (error: any) {
+    const message = error.response?.data?.message || t('chat.templateSendFailed')
+    toast.error(message)
+  } finally {
+    isSendingTemplate.value = false
+  }
+}
+
+// Reaction handling
+const reactionPickerMessageId = ref<string | null>(null)
+const quickReactionEmojis = ['👍', '❤️', '😂', '😮', '😢', '🙏']
+
+async function sendReaction(messageId: string, emoji: string) {
+  if (!contactsStore.currentContact) return
+
+  try {
+    const response = await messagesService.sendReaction(
+      contactsStore.currentContact.id,
+      messageId,
+      emoji
+    )
+    // Update will come via WebSocket, but we can update locally for immediate feedback
+    const data = response.data.data || response.data
+    contactsStore.updateMessageReactions(messageId, data.reactions)
+  } catch (error) {
+    toast.error(t('chat.reactionFailed'))
+  }
+  reactionPickerMessageId.value = null
+}
+
+function _toggleReactionPicker(messageId: string) {
+  if (reactionPickerMessageId.value === messageId) {
+    reactionPickerMessageId.value = null
+  } else {
+    reactionPickerMessageId.value = messageId
+  }
+}
+void _toggleReactionPicker // Suppress unused warning
+
+function replyToMessage(message: Message) {
+  contactsStore.setReplyingTo(message)
+  nextTick(() => {
+    messageInputRef.value?.focus()
+  })
+}
+
+// Watch for slash commands in message input
+watch(messageInput, (val) => {
+  if (val.startsWith('/')) {
+    const query = val.slice(1) // Remove the leading /
+    cannedSearchQuery.value = query
+    cannedPickerOpen.value = true
+  } else if (cannedPickerOpen.value) {
+    // Close picker if user removes the /
+    cannedPickerOpen.value = false
+    cannedSearchQuery.value = ''
+  }
+})
+
+async function assignContactToUser(userId: string | null) {
+  if (!contactsStore.currentContact) return
+
+  try {
+    await contactsService.assign(contactsStore.currentContact.id, userId)
+    toast.success(userId ? t('chat.contactAssigned') : t('chat.contactUnassigned'))
+    // Update current contact with new assignment
+    contactsStore.currentContact = {
+      ...contactsStore.currentContact,
+      assigned_user_id: userId || undefined
+    }
+    // Refresh contacts list
+    await contactsStore.fetchContacts()
+  } catch (error: any) {
+    const message = error.response?.data?.message || t('chat.assignFailed')
+    toast.error(message)
+  }
+}
+
+async function transferToAgent() {
+  if (!contactsStore.currentContact) return
+
+  isTransferring.value = true
+  try {
+    await chatbotService.createTransfer({
+      contact_id: contactsStore.currentContact.id,
+      whatsapp_account: (contactsStore.currentContact as any).whatsapp_account,
+      source: 'manual'
+    })
+    toast.success(t('chat.transferSuccess'), {
+      description: t('chat.transferSuccessDesc')
+    })
+    // Refresh transfers store (WebSocket will also update, but this ensures immediate sync)
+    await transfersStore.fetchTransfers({ status: 'active' })
+  } catch (error: any) {
+    const message = error.response?.data?.message || t('chat.transferFailed')
+    toast.error(message)
+  } finally {
+    isTransferring.value = false
+  }
+}
+
+async function resumeChatbot() {
+  if (!activeTransferId.value) return
+
+  const currentContactId = contactsStore.currentContact?.id
+  isResuming.value = true
+  try {
+    await chatbotService.resumeTransfer(activeTransferId.value)
+    toast.success(t('chat.resumeSuccess'), {
+      description: t('chat.resumeSuccessDesc')
+    })
+    // Refresh transfers store to update UI
+    await transfersStore.fetchTransfers({ status: 'active' })
+    // Refresh contacts list (assignment may have changed)
+    await contactsStore.fetchContacts()
+
+    // Check if current contact is still in the list (may have been unassigned)
+    if (currentContactId) {
+      const stillExists = contactsStore.contacts.some(c => c.id === currentContactId)
+      if (!stillExists) {
+        // Contact no longer visible to this user, navigate away
+        contactsStore.setCurrentContact(null)
+        contactsStore.clearMessages()
+        router.push('/chat')
+      }
+    }
+  } catch (error: any) {
+    const message = error.response?.data?.message || t('chat.resumeFailed')
+    toast.error(message)
+  } finally {
+    isResuming.value = false
+  }
+}
+
+function scrollToBottom(instant = false) {
+  nextTick(() => {
+    if (messagesEndRef.value) {
+      messagesEndRef.value.scrollIntoView({
+        behavior: instant ? 'instant' : 'smooth',
+        block: 'end'
+      })
+    }
+  })
+}
+
+
+function getMessageStatusIcon(status: string) {
+  switch (status) {
+    case 'sent':
+      return Check
+    case 'delivered':
+      return CheckCheck
+    case 'read':
+      return CheckCheck
+    case 'failed':
+      return AlertCircle
+    default:
+      return Clock
+  }
+}
+
+function getMessageStatusClass(status: string) {
+  switch (status) {
+    case 'read':
+      return 'text-blue-400' // Bright blue for read
+    case 'failed':
+      return 'text-destructive'
+    default:
+      return 'text-muted-foreground' // Gray for sent/delivered
+  }
+}
+
+function formatMessageTime(dateStr: string) {
+  const date = new Date(dateStr)
+  return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+}
+
+function formatContactTime(dateStr?: string) {
+  if (!dateStr) return ''
+  const date = new Date(dateStr)
+  const now = new Date()
+  const diffDays = Math.floor((now.getTime() - date.getTime()) / 86400000)
+
+  if (diffDays === 0) {
+    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+  } else if (diffDays === 1) {
+    return 'Yesterday'
+  } else if (diffDays < 7) {
+    return date.toLocaleDateString('en-US', { weekday: 'short' })
+  }
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+function getDateLabel(dateStr: string): string {
+  const date = new Date(dateStr)
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const messageDate = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+  const diffDays = Math.floor((today.getTime() - messageDate.getTime()) / 86400000)
+
+  if (diffDays === 0) {
+    return 'Today'
+  } else if (diffDays === 1) {
+    return 'Yesterday'
+  }
+  return date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+}
+
+function shouldShowDateSeparator(index: number): boolean {
+  const messages = contactsStore.messages
+  if (index === 0) return true
+
+  const currentDate = new Date(messages[index].created_at)
+  const prevDate = new Date(messages[index - 1].created_at)
+
+  return currentDate.toDateString() !== prevDate.toDateString()
+}
+
+function getMessageContent(message: Message): string {
+  if (message.message_type === 'text') {
+    return message.content?.body || ''
+  }
+  if (message.message_type === 'button_reply' || message.message_type === 'nfm_reply') {
+    // Button/flow reply stores the response text in content
+    if (typeof message.content === 'string') {
+      return message.content
+    }
+    return message.content?.body || ''
+  }
+  if (message.message_type === 'interactive' || message.message_type === 'flow') {
+    // Interactive/flow messages store body text in content (string) or content.body or interactive_data.body
+    if (typeof message.content === 'string') {
+      return message.content
+    }
+    if (message.interactive_data?.body) {
+      return message.interactive_data.body
+    }
+    return message.content?.body || '[Interactive Message]'
+  }
+  // For media messages, return caption if available (media is displayed inline)
+  if (message.message_type === 'image' || message.message_type === 'video' || message.message_type === 'sticker') {
+    return message.content?.body || ''
+  }
+  if (message.message_type === 'audio') {
+    return '' // Audio doesn't have captions
+  }
+  if (message.message_type === 'document') {
+    return message.content?.body || ''
+  }
+  if (message.message_type === 'template') {
+    // Show actual content if available (campaign messages), otherwise fallback
+    return message.content?.body || '[Template Message]'
+  }
+  if (message.message_type === 'location') {
+    return '' // Location is displayed as a map/card, not text
+  }
+  if (message.message_type === 'contacts') {
+    return '' // Contacts are displayed as a card, not text
+  }
+  if (message.message_type === 'unsupported') {
+    return '' // Displayed as a visual card, not text
+  }
+  return '[Message]'
+}
+
+interface LocationData {
+  latitude: number
+  longitude: number
+  name?: string
+  address?: string
+}
+
+interface ContactData {
+  name: string
+  phones?: string[]
+}
+
+function getLocationData(message: Message): LocationData | null {
+  if (message.message_type !== 'location') return null
+  try {
+    // Content is stored as JSON string in body
+    const body = message.content?.body || message.content
+    if (typeof body === 'string') {
+      return JSON.parse(body)
+    }
+    return body as LocationData
+  } catch {
+    return null
+  }
+}
+
+function getContactsData(message: Message): ContactData[] {
+  if (message.message_type !== 'contacts') return []
+  try {
+    // Content is stored as JSON string in body
+    const body = message.content?.body || message.content
+    if (typeof body === 'string') {
+      return JSON.parse(body)
+    }
+    return body as ContactData[]
+  } catch {
+    return []
+  }
+}
+
+function getGoogleMapsUrl(location: LocationData): string {
+  return `https://www.google.com/maps?q=${location.latitude},${location.longitude}`
+}
+
+function getInteractiveButtons(message: Message): Array<{ id: string; title: string; type: string; url: string }> {
+  if (!message.interactive_data) {
+    return []
+  }
+  // Support both interactive and template messages with buttons
+  if (message.message_type !== 'interactive' && message.message_type !== 'template') {
+    return []
+  }
+  // Handle both "buttons" (<=3) and "rows" (>3 list format)
+  const items = message.interactive_data.buttons || message.interactive_data.rows
+  if (!items || !Array.isArray(items)) {
+    return []
+  }
+  return items.map((btn: any) => ({
+    id: btn.reply?.id || btn.id || '',
+    title: btn.reply?.title || btn.title || btn.text || '',
+    type: btn.type || 'QUICK_REPLY',
+    url: btn.url || ''
+  }))
+}
+
+interface CTAUrlData {
+  type: 'cta_url'
+  body: string
+  button_text: string
+  url: string
+}
+
+function getCTAUrlData(message: Message): CTAUrlData | null {
+  if (message.message_type !== 'interactive' || !message.interactive_data) {
+    return null
+  }
+  if (message.interactive_data.type !== 'cta_url') {
+    return null
+  }
+  return {
+    type: 'cta_url',
+    body: message.interactive_data.body || '',
+    button_text: (message.interactive_data as any).button_text || 'Open',
+    url: (message.interactive_data as any).url || ''
+  }
+}
+
+interface VoiceCallData {
+  display_text: string
+  ttl_minutes?: number
+}
+
+function getVoiceCallData(message: Message): VoiceCallData | null {
+  if (message.message_type !== 'interactive' || !message.interactive_data) {
+    return null
+  }
+  if (message.interactive_data.type !== 'voice_call') {
+    return null
+  }
+  return {
+    display_text: (message.interactive_data as any).display_text || 'Call',
+    ttl_minutes: (message.interactive_data as any).ttl_minutes,
+  }
+}
+
+function getFlowButtonText(message: Message): string | null {
+  if (message.message_type !== 'flow') {
+    return null
+  }
+  if (!message.interactive_data) {
+    return null
+  }
+  return (message.interactive_data as any).button_text || 'Open'
+}
+
+function isMediaMessage(message: Message): boolean {
+  return ['image', 'video', 'audio', 'document'].includes(message.message_type)
+}
+
+function getMediaUrl(message: Message): string {
+  if (!message.media_url) return ''
+  const basePath = ((window as any).__BASE_PATH__ ?? '').replace(/\/$/, '')
+  return `${basePath}/api/media/${message.id}`
+}
+
+function openMediaPreview(message: Message) {
+  const url = getMediaUrl(message)
+  if (url) {
+    window.open(url, '_blank')
+  }
+}
+
+function handleImageError(event: Event) {
+  const img = event.target as HTMLImageElement
+  img.style.display = 'none'
+}
+
+function handleMediaError(event: Event, mediaType: string) {
+  console.error(`Failed to load ${mediaType}:`, event)
+}
+
+// File upload functions
+function openFilePicker() {
+  fileInputRef.value?.click()
+}
+
+function handleFileSelect(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  // Validate file type
+  const allowedTypes = ['image/', 'video/', 'audio/', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument']
+  const isAllowed = allowedTypes.some(type => file.type.startsWith(type))
+  if (!isAllowed) {
+    toast.error(t('chat.unsupportedFileType'), {
+      description: t('chat.unsupportedFileTypeDesc')
+    })
+    return
+  }
+
+  // Validate file size (16MB limit for WhatsApp)
+  const maxSize = 16 * 1024 * 1024
+  if (file.size > maxSize) {
+    toast.error(t('chat.fileTooLarge'), {
+      description: t('chat.fileTooLargeDesc')
+    })
+    return
+  }
+
+  selectedFile.value = file
+  mediaCaption.value = ''
+
+  // Create preview URL for images and videos
+  if (file.type.startsWith('image/') || file.type.startsWith('video/')) {
+    filePreviewUrl.value = URL.createObjectURL(file)
+  } else {
+    filePreviewUrl.value = null
+  }
+
+  isMediaDialogOpen.value = true
+
+  // Reset input so same file can be selected again
+  input.value = ''
+}
+
+function closeMediaDialog() {
+  isMediaDialogOpen.value = false
+  if (filePreviewUrl.value) {
+    URL.revokeObjectURL(filePreviewUrl.value)
+    filePreviewUrl.value = null
+  }
+  selectedFile.value = null
+  mediaCaption.value = ''
+}
+
+function getMediaType(mimeType: string): string {
+  if (mimeType.startsWith('image/')) return 'image'
+  if (mimeType.startsWith('video/')) return 'video'
+  if (mimeType.startsWith('audio/')) return 'audio'
+  return 'document'
+}
+
+async function sendMediaMessage() {
+  if (!selectedFile.value || !contactsStore.currentContact) return
+
+  isUploadingMedia.value = true
+  try {
+    const formData = new FormData()
+    formData.append('file', selectedFile.value)
+    formData.append('contact_id', contactsStore.currentContact.id)
+    formData.append('type', getMediaType(selectedFile.value.type))
+    if (mediaCaption.value.trim()) {
+      formData.append('caption', mediaCaption.value.trim())
+    }
+    if (selectedAccount.value) {
+      formData.append('whatsapp_account', selectedAccount.value)
+    }
+
+    const basePath = ((window as any).__BASE_PATH__ ?? '').replace(/\/$/, '')
+    const response = await fetch(`${basePath}/api/messages/media`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: getRequestHeaders({ csrf: true }),
+      body: formData
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.message || 'Failed to send media')
+    }
+
+    const result = await response.json()
+
+    // Add the message to the store (addMessage has duplicate checking for WebSocket)
+    if (result.data) {
+      contactsStore.addMessage(result.data)
+      scrollToBottom()
+    }
+
+    toast.success(t('chat.mediaSent'))
+    closeMediaDialog()
+  } catch (error: any) {
+    toast.error(t('chat.mediaFailed'), {
+      description: error.message || t('chat.mediaFailedDesc')
+    })
+  } finally {
+    isUploadingMedia.value = false
+  }
+}
+</script>
+
+<template>
+  <div class="flex h-full bg-[#0a0a0b] light:bg-gray-50">
+    <!-- Contacts List -->
+    <div class="w-80 border-r border-white/[0.08] light:border-gray-200 flex flex-col bg-[#0a0a0b] light:bg-white">
+      <!-- Search Header -->
+      <div class="p-2 border-b border-white/[0.08] light:border-gray-200">
+        <div class="flex items-center gap-2">
+          <div class="relative flex-1">
+            <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-white/40 light:text-gray-400" />
+            <Input
+              v-model="contactsStore.searchQuery"
+              :placeholder="$t('chat.searchContacts') + '...'"
+              class="pl-8 h-8 text-sm bg-white/[0.04] border-white/[0.1] text-white placeholder:text-white/40 light:bg-gray-50 light:border-gray-200 light:text-gray-900 light:placeholder:text-gray-400"
+            />
+          </div>
+          <!-- Add Contact -->
+          <Tooltip v-if="canWriteContacts">
+            <TooltipTrigger as-child>
+              <Button
+                variant="ghost"
+                size="icon"
+                :aria-label="$t('chat.addContact')"
+                class="h-8 w-8 shrink-0 text-white/40 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100"
+                @click="openAddContactDialog"
+              >
+                <UserPlus class="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{{ $t('chat.addContact') }}</TooltipContent>
+          </Tooltip>
+          <!-- Tag Filter -->
+          <Popover v-model:open="isTagFilterOpen">
+            <PopoverTrigger as-child>
+              <Button
+                variant="ghost"
+                size="icon"
+                class="h-8 w-8 shrink-0 relative"
+                :class="contactsStore.selectedTags.length > 0 ? 'text-emerald-400 bg-emerald-500/10' : 'text-white/40 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100'"
+              >
+                <Filter class="h-4 w-4" />
+                <span v-if="contactsStore.selectedTags.length > 0" class="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-emerald-500 text-[10px] text-white flex items-center justify-center">
+                  {{ contactsStore.selectedTags.length }}
+                </span>
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" class="w-56 p-2">
+              <div class="space-y-2">
+                <div class="flex items-center justify-between px-1">
+                  <span class="text-sm font-medium">{{ $t('chat.filterByTags') }}</span>
+                  <Button
+                    v-if="contactsStore.selectedTags.length > 0"
+                    variant="ghost"
+                    size="sm"
+                    class="h-6 px-2 text-xs"
+                    @click="clearTagFilter"
+                  >
+                    Clear
+                  </Button>
+                </div>
+                <Separator />
+                <div v-if="tagsStore.tags.length === 0" class="py-2 text-center text-sm text-muted-foreground">
+                  {{ $t('chat.noTagsAvailable') }}
+                </div>
+                <div v-else class="space-y-1 max-h-48 overflow-y-auto">
+                  <button
+                    v-for="tag in tagsStore.tags"
+                    :key="tag.name"
+                    class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-white/[0.08] light:hover:bg-gray-100 transition-colors"
+                    :class="contactsStore.selectedTags.includes(tag.name) && 'bg-white/[0.08] light:bg-gray-100'"
+                    @click="toggleTagFilter(tag.name)"
+                  >
+                    <span :class="['w-2 h-2 rounded-full shrink-0', getTagColorClass(tag.color).split(' ')[0]]" />
+                    <span class="flex-1 text-left truncate">{{ tag.name }}</span>
+                    <Check
+                      v-if="contactsStore.selectedTags.includes(tag.name)"
+                      class="h-4 w-4 text-emerald-400 shrink-0"
+                    />
+                  </button>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
+        <!-- Active tag filters -->
+        <div v-if="contactsStore.selectedTags.length > 0" class="flex flex-wrap gap-1 mt-2">
+          <TagBadge
+            v-for="tagName in contactsStore.selectedTags"
+            :key="tagName"
+            :color="tagsStore.getTagByName(tagName)?.color"
+            class="cursor-pointer hover:opacity-80"
+            @click="toggleTagFilter(tagName)"
+          >
+            {{ tagName }}
+            <X class="h-3 w-3 ml-1" />
+          </TagBadge>
+        </div>
+      </div>
+
+      <!-- Contacts -->
+      <ScrollArea :ref="(el: any) => contactsScroll.scrollAreaRef.value = el" orientation="vertical" class="flex-1">
+        <div class="py-1 w-full">
+          <div
+            v-for="contact in contactsStore.sortedContacts"
+            :key="contact.id"
+            :class="[
+              'flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-white/[0.04] light:hover:bg-gray-50 transition-colors',
+              contactsStore.currentContact?.id === contact.id && 'bg-white/[0.08] light:bg-gray-100'
+            ]"
+            @click="handleContactClick(contact)"
+          >
+            <Avatar class="h-9 w-9 ring-2 ring-white/[0.1] light:ring-gray-200">
+              <AvatarImage :src="contact.avatar_url" />
+              <AvatarFallback :class="'text-xs bg-gradient-to-br text-white ' + getAvatarGradient(contact.name || contact.phone_number)">
+                {{ getInitials(contact.name || contact.phone_number) }}
+              </AvatarFallback>
+            </Avatar>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between gap-2">
+                <p
+                  class="flex-1 min-w-0 text-sm font-medium truncate text-white light:text-gray-900"
+                  :title="contact.name || contact.phone_number"
+                >
+                  {{ contact.name || contact.phone_number }}
+                  <Badge v-if="contact.is_group_chat" class="ml-1 h-4 text-[9px] align-middle bg-blue-500/20 text-blue-400 light:bg-blue-100 light:text-blue-700">
+                    {{ $t('chat.group') }}
+                  </Badge>
+                </p>
+                <span class="flex-shrink-0 text-[11px] text-white/40 light:text-gray-500">
+                  {{ formatContactTime(contact.last_message_at) }}
+                </span>
+              </div>
+              <div class="flex items-center justify-between gap-2">
+                <p class="flex-1 min-w-0 text-xs text-white/50 light:text-gray-500 truncate">
+                  {{ contact.phone_number }}
+                </p>
+                <Badge v-if="contact.unread_count > 0" class="flex-shrink-0 h-5 text-[10px] bg-emerald-500/20 text-emerald-400 light:bg-emerald-100 light:text-emerald-700">
+                  {{ contact.unread_count }}
+                </Badge>
+              </div>
+            </div>
+          </div>
+
+          <!-- Loading indicator for infinite scroll -->
+          <div v-if="contactsStore.isLoadingMoreContacts" class="p-3 text-center">
+            <Loader2 class="h-5 w-5 mx-auto animate-spin text-white/40 light:text-gray-400" />
+          </div>
+
+          <div v-if="contactsStore.sortedContacts.length === 0" class="p-3 text-center text-white/40 light:text-gray-500">
+            <User class="h-6 w-6 mx-auto mb-1.5 opacity-50" />
+            <p class="text-sm">{{ $t('chat.noContacts') }}</p>
+          </div>
+        </div>
+      </ScrollArea>
+    </div>
+
+    <!-- Chat Area -->
+    <div class="flex-1 flex flex-col bg-[#0f0f10] light:bg-gray-50">
+      <!-- No Contact Selected -->
+      <div
+        v-if="!contactsStore.currentContact"
+        class="flex-1 flex items-center justify-center text-white/40 light:text-gray-500"
+      >
+        <div class="text-center">
+          <div class="h-16 w-16 rounded-2xl bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-emerald-500/20">
+            <Send class="h-8 w-8 text-white" />
+          </div>
+          <h3 class="font-medium text-lg mb-1 text-white light:text-gray-900">{{ $t('chat.selectConversation') }}</h3>
+          <p class="text-sm text-white/50 light:text-gray-500">{{ $t('chat.chooseContact') }}</p>
+        </div>
+      </div>
+
+      <!-- Chat Interface -->
+      <template v-else>
+        <!-- Chat Header -->
+        <div class="h-14 flex-shrink-0 px-4 border-b border-white/[0.08] light:border-gray-200 flex items-center justify-between bg-[#0f0f10] light:bg-white">
+          <div class="flex items-center gap-2">
+            <Avatar class="h-8 w-8 ring-2 ring-white/[0.1] light:ring-gray-200">
+              <AvatarImage :src="contactsStore.currentContact.avatar_url" />
+              <AvatarFallback :class="'text-xs bg-gradient-to-br text-white ' + getAvatarGradient(contactsStore.currentContact.name || contactsStore.currentContact.phone_number)">
+                {{ getInitials(contactsStore.currentContact.name || contactsStore.currentContact.phone_number) }}
+              </AvatarFallback>
+            </Avatar>
+            <div>
+              <div class="flex items-center gap-1.5">
+                <p class="text-sm font-medium text-white light:text-gray-900">
+                  {{ contactsStore.currentContact.name || contactsStore.currentContact.phone_number }}
+                </p>
+                <Badge v-if="contactsStore.currentContact?.assigned_user_name && !contactsStore.isPendingClaim"
+                       class="text-[10px] h-5 bg-emerald-500/20 text-emerald-400 light:bg-emerald-100 light:text-emerald-700">
+                  👤 {{ contactsStore.currentContact.assigned_user_name }}
+                </Badge>
+                <Badge v-if="contactsStore.isChatClosed"
+                       class="text-[10px] h-5 bg-gray-500/20 text-gray-400 light:bg-gray-100 light:text-gray-600">
+                  {{ $t('chat.conversationClosed') }}
+                </Badge>
+                <Badge v-if="activeTransferId" class="text-[10px] h-5 bg-orange-500/20 text-orange-400 light:bg-orange-100 light:text-orange-700">
+                  Paused
+                </Badge>
+                <Badge v-if="contactsStore.currentContact?.marketing_opt_out" class="text-[10px] h-5 bg-red-500/20 text-red-400 light:bg-red-100 light:text-red-700" :title="$t('chat.marketingOptOut')">
+                  {{ $t('chat.marketingOptOut', 'Marketing Opt-out') }}
+                </Badge>
+              </div>
+              <p class="text-[11px] text-white/50 light:text-gray-500">
+                {{ contactsStore.currentContact.phone_number }}
+              </p>
+            </div>
+          </div>
+          <div class="flex items-center gap-1">
+            <!-- Collaborators bar (Ghost Mode: admins hidden from agents server-side) -->
+            <div v-if="contactsStore.currentContact?.collaborators?.length || contactsStore.isAdminOrManager"
+                 class="flex items-center gap-2">
+              <div class="flex -space-x-2">
+                <div v-for="collab in contactsStore.currentContact?.collaborators"
+                     :key="collab.user_id"
+                     class="group relative h-7 w-7 rounded-full bg-blue-500/20 ring-2 ring-background flex items-center justify-center text-xs font-medium text-blue-400"
+                     :title="`${collab.name} (${collab.role})`">
+                  {{ collab.name?.charAt(0)?.toUpperCase() || '?' }}
+                  <!-- Admin/manager: remove (✕) button on each collaborator -->
+                  <button v-if="contactsStore.isAdminOrManager && collab.user_id !== authStore.user?.id"
+                          type="button"
+                          :aria-label="$t('chat.removeFromConversation')"
+                          class="absolute -top-1 -right-1 h-3.5 w-3.5 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          @click.stop="handleRemoveCollaborator(collab.user_id)">
+                    <X class="h-2.5 w-2.5" />
+                  </button>
+                </div>
+                <!-- Ghost badge: admin/manager viewing is not in collaborators, show self as ghost -->
+                <div v-if="contactsStore.isAdminOrManager && !contactsStore.isCollaborator"
+                     class="h-7 w-7 rounded-full bg-purple-500/20 ring-2 ring-background flex items-center justify-center text-xs font-medium text-purple-300"
+                     :title="$t('chat.youAreGhosting')">
+                  <Ghost class="h-3.5 w-3.5" />
+                </div>
+              </div>
+              <!-- Leave button: collaborators (not owner) OR admin/manager ghost-exit.
+                   Last participant → label swaps to "Leave & Close". -->
+              <Button v-if="(contactsStore.isCollaborator && !contactsStore.isAssignedToMe) || (contactsStore.isAdminOrManager && !contactsStore.isPendingClaim && !contactsStore.isChatClosed)"
+                      variant="ghost" size="sm" @click="handleLeave" class="text-xs">
+                <LogOut class="mr-1 h-3 w-3" />
+                {{ contactsStore.isLastParticipant ? $t('chat.leaveAndClose') : $t('chat.leaveConversation') }}
+              </Button>
+            </div>
+
+            <!-- Invite collaborator button (managers/admins only, on open chats) -->
+            <Tooltip v-if="contactsStore.canCollaborate && contactsStore.currentContact?.chat_status === 'open' && !contactsStore.isPendingClaim">
+              <TooltipTrigger as-child>
+                <Button variant="ghost" size="icon" class="h-8 w-8 text-white/50 hover:text-blue-400 hover:bg-blue-500/10 light:text-gray-500" @click="isInviteDialogOpen = true">
+                  <UserPlus class="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{{ $t('chat.inviteCollaborator') }}</TooltipContent>
+            </Tooltip>
+
+            <!-- Close conversation button.
+                 Admins/managers always see it (force-close & kick all).
+                 Agents see it when they are a participant (owner/collaborator). -->
+            <Tooltip v-if="contactsStore.currentContact && contactsStore.currentContact.chat_status === 'open' && !contactsStore.isPendingClaim && (contactsStore.isAdminOrManager || contactsStore.isAssignedToMe || contactsStore.isCollaborator)">
+              <TooltipTrigger as-child>
+                <Button variant="ghost" size="icon" class="h-8 w-8 text-white/50 hover:text-red-400 hover:bg-red-500/10 light:text-gray-500" @click="handleClose">
+                  <CheckCheck class="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{{ $t('chat.closeConversation') }}</TooltipContent>
+            </Tooltip>
+
+            <Tooltip v-if="canAssignContacts">
+              <TooltipTrigger as-child>
+                <Button variant="ghost" size="icon" class="h-8 w-8 text-white/50 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100" @click="isAssignDialogOpen = true">
+                  <UserPlus class="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{{ $t('chat.assignToAgent') }}</TooltipContent>
+            </Tooltip>
+            <Tooltip v-if="activeTransferId">
+              <TooltipTrigger as-child>
+                <Button variant="ghost" size="icon" class="h-8 w-8 text-white/50 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100" :disabled="isResuming" @click="resumeChatbot">
+                  <Play class="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{{ $t('chat.resumeChatbot') }}</TooltipContent>
+            </Tooltip>
+            <!-- Custom Action Buttons -->
+            <Tooltip v-for="action in customActions" :key="action.id">
+              <TooltipTrigger as-child>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="h-8 w-8 text-white/50 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100"
+                  :disabled="executingActionId === action.id"
+                  @click="executeCustomAction(action)"
+                >
+                  <Loader2 v-if="executingActionId === action.id" class="h-4 w-4 animate-spin" />
+                  <component v-else :is="getActionIcon(action.icon)" class="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{{ action.name }}</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  id="notes-button"
+                  class="h-8 w-8 relative text-white/50 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100"
+                  :class="isNotesPanelOpen && 'bg-amber-500/10 text-amber-400 light:bg-amber-50 light:text-amber-600'"
+                  @click="isNotesPanelOpen = !isNotesPanelOpen"
+                >
+                  <StickyNote class="h-4 w-4" />
+                  <span
+                    v-if="notesStore.notes.length > 0 && !isNotesPanelOpen"
+                    id="notes-badge"
+                    class="absolute -top-0.5 -right-0.5 h-4 min-w-[16px] rounded-full bg-amber-500 text-[10px] text-white flex items-center justify-center px-1"
+                  >
+                    {{ notesStore.notes.length }}
+                  </span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{{ $t('chat.internalNotes') }}</TooltipContent>
+            </Tooltip>
+            <!-- Collect a burst of incoming files (ZIP or separate) — hidden for unclaimed/closed chats -->
+            <Tooltip v-if="canExportMedia && !contactsStore.isPendingClaim && !contactsStore.isChatClosed">
+              <TooltipTrigger as-child>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  id="collect-files-button"
+                  class="relative h-8 w-8 text-white/50 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100"
+                  :disabled="!isCollectible"
+                  @click="isBurstDialogOpen = true"
+                >
+                  <Download class="h-4 w-4" />
+                  <span
+                    v-if="burstCount > 0"
+                    class="absolute -top-0.5 -right-0.5 h-4 min-w-[16px] rounded-full bg-primary text-[10px] text-white flex items-center justify-center px-1"
+                  >
+                    {{ burstCount }}
+                  </span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{{ $t('chat.collectFiles') }}</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  id="info-button"
+                  class="h-8 w-8 text-white/50 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100"
+                  :class="isInfoPanelOpen && 'bg-white/[0.08] text-white light:bg-gray-100 light:text-gray-900'"
+                  @click="isInfoPanelOpen = !isInfoPanelOpen"
+                >
+                  <Info class="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{{ $t('chat.contactInfo') }}</TooltipContent>
+            </Tooltip>
+            <DropdownMenu>
+              <DropdownMenuTrigger as-child>
+                <Button variant="ghost" size="icon" class="h-8 w-8 text-white/50 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100">
+                  <MoreVertical class="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>{{ $t('chat.contactOptions') }}</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem v-if="canAssignContacts" @click="isAssignDialogOpen = true">
+                  <UserPlus class="mr-2 h-4 w-4" />
+                  <span>{{ $t('chat.assignToAgent') }}</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem v-if="!activeTransferId" @click="transferToAgent" :disabled="isTransferring">
+                  <UserX class="mr-2 h-4 w-4" />
+                  <span>{{ $t('chat.transferToAgent') }}</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem v-if="activeTransferId" @click="resumeChatbot" :disabled="isResuming">
+                  <Play class="mr-2 h-4 w-4" />
+                  <span>{{ $t('chat.resumeChatbot') }}</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem @click="isInfoPanelOpen = !isInfoPanelOpen">
+                  <Info class="mr-2 h-4 w-4" />
+                  <span>{{ isInfoPanelOpen ? $t('chat.hideContactDetails') : $t('chat.viewContactDetails') }}</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+
+        <!-- Account Tabs (shown when contact has messages from multiple WhatsApp accounts) -->
+        <div
+          v-if="orgAccounts.length > 1 && selectedAccount"
+          class="flex-shrink-0 px-4 py-2 border-b border-white/[0.08] light:border-gray-200 bg-[#0a0a0b] light:bg-gray-50"
+        >
+          <div class="inline-flex items-center gap-1 rounded-lg bg-white/[0.06] light:bg-gray-100 p-1">
+            <button
+              v-for="acct in orgAccounts"
+              :key="acct.name"
+              :class="[
+                'rounded-md px-3 py-1 text-xs font-medium whitespace-nowrap transition-all',
+                acct.name === selectedAccount
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'bg-white/[0.08] text-white/70 hover:text-white/90 hover:bg-white/[0.12] light:bg-gray-200 light:text-gray-600 light:hover:text-gray-800 light:hover:bg-gray-300'
+              ]"
+              @click="switchAccount(acct.name)"
+            >
+              {{ acct.name }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Messages -->
+        <div class="relative flex-1 min-h-0 overflow-hidden">
+          <!-- Loading overlay while switching contacts / loading the first page -->
+          <Spinner v-if="contactsStore.isLoadingMessages" overlay />
+
+
+
+          <!-- Sticky date header -->
+          <Transition name="sticky-date">
+            <div
+              v-if="showStickyDate"
+              class="absolute top-2 left-1/2 -translate-x-1/2 z-10 px-3 py-1 bg-white/[0.08] light:bg-gray-200 backdrop-blur-sm rounded-full text-[11px] text-white/50 light:text-gray-600 font-medium shadow-sm"
+            >
+              {{ stickyDate }}
+            </div>
+          </Transition>
+
+          <!-- Floating "files just in" chip — appears when a burst is collectible (hidden for unclaimed chats) -->
+          <Transition name="sticky-date">
+            <button
+              v-if="isCollectible && !contactsStore.isPendingClaim && !contactsStore.isChatClosed"
+              type="button"
+              class="absolute top-12 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary text-primary-foreground text-xs font-medium shadow-lg hover:opacity-90 animate-pulse"
+              @click="isBurstDialogOpen = true"
+            >
+              <Download class="h-3.5 w-3.5" />
+              {{ $t('chat.filesJustIn', { count: burstCount }) }}
+            </button>
+          </Transition>
+
+          <!-- Claim screen: pending unassigned conversation -->
+          <div v-if="contactsStore.isPendingClaim"
+               class="flex flex-col items-center justify-center h-full px-6 text-center">
+            <div class="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-amber-500/10 ring-1 ring-amber-500/20">
+              <Lock class="h-10 w-10 text-amber-500" />
+            </div>
+            <h3 class="text-lg font-semibold text-foreground mb-2">{{ $t('chat.chatNotClaimed') }}</h3>
+            <p class="text-sm text-muted-foreground mb-1">{{ $t('chat.claimToViewMessages') }}</p>
+            <p class="text-2xl font-bold text-amber-500 mb-6">
+              {{ contactsStore.pendingMessageCount }} {{ $t('chat.messagesWaiting') }}
+            </p>
+            <Button size="lg" :disabled="isClaiming" @click="handleClaim" class="gap-2">
+              <Hand class="h-5 w-5" />
+              {{ isClaiming ? $t('common.loading') : $t('chat.claimChat') }}
+            </Button>
+          </div>
+
+          <!-- Closed screen: conversation is closed, show reopen button.
+               Admins/managers bypass this — they can view closed content
+               instantly (spec §1.A + §3: "Admin can still see content? YES"). -->
+          <div v-else-if="contactsStore.isChatClosed && !contactsStore.canManageAllChats"
+               class="flex flex-col items-center justify-center h-full px-6 text-center">
+            <div class="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-gray-500/10 ring-1 ring-gray-500/20">
+              <CheckCheck class="h-10 w-10 text-gray-400" />
+            </div>
+            <h3 class="text-lg font-semibold text-foreground mb-2">{{ $t('chat.conversationClosed') }}</h3>
+            <p class="text-sm text-muted-foreground mb-6">{{ $t('chat.reopenHint') }}</p>
+            <Button size="lg" :disabled="isClaiming" @click="handleClaim" class="gap-2">
+              <Hand class="h-5 w-5" />
+              {{ isClaiming ? $t('common.loading') : $t('chat.reopenConversation') }}
+            </Button>
+          </div>
+
+          <!-- Join screen: assigned to another agent — only for agents (not managers/admins who can see everything) -->
+          <div v-else-if="contactsStore.isAssignedToOther && !contactsStore.isCollaborator && contactsStore.canCollaborate && !contactsStore.canManageAllChats"
+               class="flex flex-col items-center justify-center h-full px-6 text-center">
+            <div class="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-blue-500/10 ring-1 ring-blue-500/20">
+              <Users class="h-10 w-10 text-blue-500" />
+            </div>
+            <h3 class="text-lg font-semibold mb-2">{{ $t('chat.assignedToAnother') }}</h3>
+            <p class="text-sm text-muted-foreground mb-6">{{ $t('chat.joinAsCollaboratorHint') }}</p>
+            <Button size="lg" :disabled="isJoining" @click="handleJoin" class="gap-2">
+              <UserPlus class="h-5 w-5" />
+              {{ isJoining ? $t('common.loading') : $t('chat.joinAsCollaborator') }}
+            </Button>
+          </div>
+
+          <ScrollArea v-else :ref="(el: any) => messagesScroll.scrollAreaRef.value = el" class="h-full p-3 chat-background">
+            <div class="space-y-2">
+              <!-- Loading indicator for older messages -->
+              <div v-if="contactsStore.isLoadingOlderMessages" class="flex justify-center py-2">
+                <div class="flex items-center gap-2 text-white/40 light:text-gray-500 text-sm">
+                  <div class="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  <span>{{ $t('chat.loadingOlderMessages') }}...</span>
+                </div>
+              </div>
+              <template
+                v-for="(message, index) in contactsStore.messages"
+                :key="message.id"
+              >
+                <!-- Date separator -->
+                <div
+                  v-if="shouldShowDateSeparator(index)"
+                  class="flex items-center justify-center my-4"
+                  :data-date-separator="getDateLabel(message.created_at)"
+                >
+                  <div class="px-3 py-1 bg-white/[0.06] light:bg-gray-200 rounded-full text-[11px] text-white/40 light:text-gray-600 font-medium">
+                    {{ getDateLabel(message.created_at) }}
+                  </div>
+                </div>
+
+                <!-- Unread divider (WhatsApp-style; appears above the first
+                     message that arrived while the tab was hidden) -->
+                <div
+                  v-if="newMessagesCount > 0 && message.id === firstUnreadId"
+                  class="flex items-center justify-center my-4"
+                >
+                  <div class="px-3 py-1 bg-white/[0.06] light:bg-gray-200 rounded-full text-[11px] text-white/40 light:text-gray-600 font-medium">
+                    {{ newMessagesCount }} {{ newMessagesCount === 1 ? $t('chat.unreadMessage', 'unread message') : $t('chat.unreadMessages', 'unread messages') }}
+                  </div>
+                </div>
+
+              <!-- System message -->
+              <div
+                v-if="message.metadata?.is_system_message"
+                :id="`message-${message.id}`"
+                class="flex items-center justify-center my-3 w-full animate-fade-in"
+              >
+                <div class="px-3.5 py-1 bg-white/[0.04] light:bg-gray-200/60 rounded-full text-[11px] text-white/45 light:text-gray-500 font-medium max-w-[85%] text-center select-none border-none shadow-none">
+                  {{ getMessageContent(message) }}
+                </div>
+              </div>
+
+              <!-- Message bubble -->
+              <div
+                v-else
+                :id="`message-${message.id}`"
+                :class="[
+                  'flex group',
+                  message.direction === 'outgoing' ? 'justify-end' : 'justify-start'
+                ]"
+              >
+              <div
+                :class="[
+                  'chat-bubble',
+                  message.direction === 'outgoing' ? 'chat-bubble-outgoing' : 'chat-bubble-incoming'
+                ]"
+              >
+                <!-- Reply preview (if this message is replying to another) -->
+                <!-- Sender name for group messages (who sent it inside the group) -->
+                <span
+                  v-if="message.direction === 'incoming' && contactsStore.currentContact?.is_group_chat && (message.sender_push_name || message.sender_phone)"
+                  class="block text-xs font-medium mb-1 text-blue-400"
+                >
+                  {{ message.sender_push_name || message.sender_phone }}
+                </span>
+                <div
+                  v-if="message.is_reply && message.reply_to_message"
+                  class="reply-preview cursor-pointer text-xs"
+                  @click="scrollToMessage(message.reply_to_message_id)"
+                >
+                  <p class="font-medium">
+                    {{ message.reply_to_message.direction === 'incoming' ? (contactsStore.currentContact?.profile_name || contactsStore.currentContact?.name || 'Customer') : 'You' }}
+                  </p>
+                  <p class="truncate">
+                    {{ getReplyPreviewContent(message) }}
+                  </p>
+                </div>
+                <!-- Template header media (image/video/document shown above template text) -->
+                <div v-if="message.message_type === 'template' && message.media_url" class="mb-2">
+                  <img
+                    v-if="message.media_mime_type?.startsWith('image/')"
+                    :src="getMediaUrl(message)"
+                    alt="Template header"
+                    class="max-w-[280px] max-h-[300px] rounded-lg cursor-pointer object-cover"
+                    @click="openMediaPreview(message)"
+                    @error="handleImageError($event)"
+                  />
+                  <video
+                    v-else-if="message.media_mime_type?.startsWith('video/')"
+                    :src="getMediaUrl(message)"
+                    controls
+                    class="max-w-[280px] max-h-[300px] rounded-lg"
+                  />
+                  <a
+                    v-else
+                    :href="getMediaUrl(message)"
+                    :download="message.media_filename || 'document'"
+                    class="flex items-center gap-2 px-3 py-2 bg-background/50 rounded-lg hover:bg-background/80 transition-colors"
+                  >
+                    <FileText class="h-5 w-5 text-muted-foreground" />
+                    <span class="text-sm truncate max-w-[200px]">{{ message.media_filename || 'Document' }}</span>
+                  </a>
+                </div>
+                <!-- Image message -->
+                <div v-else-if="message.message_type === 'image' && message.media_url" class="mb-2">
+                  <img
+                    v-if="!brokenMediaIds.has(message.id)"
+                    :src="getMediaUrl(message)"
+                    :alt="message.content?.body || 'Image'"
+                    class="max-w-[280px] max-h-[300px] rounded-lg cursor-pointer object-cover"
+                    @click="openMediaPreview(message)"
+                    @error="markMediaBroken(message)"
+                  />
+                  <MediaRetryButton
+                    v-else
+                    :message="message"
+                    :is-redownloading="isRedownloading(message)"
+                    @retry="retryMediaDownload(message)"
+                  />
+                </div>
+                <!-- Sticker message -->
+                <div v-else-if="message.message_type === 'sticker' && message.media_url" class="mb-2">
+                  <img
+                    v-if="!brokenMediaIds.has(message.id)"
+                    :src="getMediaUrl(message)"
+                    alt="Sticker"
+                    class="max-w-[128px] max-h-[128px] cursor-pointer"
+                    @click="openMediaPreview(message)"
+                    @error="markMediaBroken(message)"
+                  />
+                  <MediaRetryButton
+                    v-else
+                    :message="message"
+                    :is-redownloading="isRedownloading(message)"
+                    @retry="retryMediaDownload(message)"
+                  />
+                </div>
+                <!-- Video message -->
+                <div v-else-if="message.message_type === 'video' && message.media_url" class="mb-2">
+                  <video
+                    v-if="!brokenMediaIds.has(message.id)"
+                    :src="getMediaUrl(message)"
+                    controls
+                    class="max-w-[280px] max-h-[300px] rounded-lg"
+                    @error="markMediaBroken(message)"
+                  />
+                  <MediaRetryButton
+                    v-else
+                    :message="message"
+                    :is-redownloading="isRedownloading(message)"
+                    @retry="retryMediaDownload(message)"
+                  />
+                </div>
+                <!-- Audio message -->
+                <div v-else-if="message.message_type === 'audio' && message.media_url" class="mb-2">
+                  <audio
+                    :src="getMediaUrl(message)"
+                    controls
+                    class="max-w-[280px]"
+                    @error="handleMediaError($event, 'audio')"
+                  />
+                </div>
+                <!-- Document message -->
+                <div v-else-if="message.message_type === 'document' && message.media_url" class="mb-2">
+                  <a
+                    :href="getMediaUrl(message)"
+                    :download="message.media_filename || 'document'"
+                    class="flex items-center gap-2 px-3 py-2 bg-background/50 rounded-lg hover:bg-background/80 transition-colors"
+                  >
+                    <FileText class="h-5 w-5 text-muted-foreground" />
+                    <span class="text-sm truncate max-w-[200px]">
+                      {{ message.media_filename || 'Document' }}
+                    </span>
+                  </a>
+                </div>
+                <!-- Location message -->
+                <div v-else-if="message.message_type === 'location' && getLocationData(message)" class="mb-2">
+                  <a
+                    :href="getGoogleMapsUrl(getLocationData(message)!)"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="flex items-center gap-3 px-3 py-3 bg-background/50 rounded-lg hover:bg-background/80 transition-colors"
+                  >
+                    <div class="h-10 w-10 rounded-full bg-red-900/30 light:bg-red-100 flex items-center justify-center shrink-0">
+                      <MapPin class="h-5 w-5 text-red-500" />
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <p v-if="getLocationData(message)?.name" class="text-sm font-medium truncate">
+                        {{ getLocationData(message)?.name }}
+                      </p>
+                      <p v-else class="text-sm font-medium">Location</p>
+                      <p v-if="getLocationData(message)?.address" class="text-xs text-muted-foreground truncate">
+                        {{ getLocationData(message)?.address }}
+                      </p>
+                      <p class="text-xs text-muted-foreground">
+                        {{ getLocationData(message)?.latitude.toFixed(6) }}, {{ getLocationData(message)?.longitude.toFixed(6) }}
+                      </p>
+                    </div>
+                    <ExternalLink class="h-4 w-4 text-muted-foreground shrink-0" />
+                  </a>
+                </div>
+                <!-- Contacts message -->
+                <div v-else-if="message.message_type === 'contacts' && getContactsData(message).length > 0" class="mb-2 space-y-2">
+                  <div
+                    v-for="(contact, idx) in getContactsData(message)"
+                    :key="idx"
+                    class="flex items-center gap-3 px-3 py-2 bg-background/50 rounded-lg"
+                  >
+                    <div class="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                      <User class="h-5 w-5 text-primary" />
+                    </div>
+                    <div class="flex-1 min-w-0">
+                      <p class="text-sm font-medium truncate">{{ contact.name }}</p>
+                      <div v-if="contact.phones?.length" class="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Phone class="h-3 w-3" />
+                        <span class="truncate">{{ contact.phones.join(', ') }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <!-- Unsupported message -->
+                <div v-else-if="message.message_type === 'unsupported'" class="mb-2">
+                  <div class="flex items-center gap-2 px-3 py-2 bg-muted/50 rounded-lg text-muted-foreground">
+                    <AlertCircle class="h-4 w-4 shrink-0" />
+                    <span class="text-sm italic">{{ $t('chat.unsupportedMessage') }}</span>
+                  </div>
+                </div>
+                <!-- Button reply - WhatsApp style -->
+                <div v-if="message.message_type === 'button_reply'" class="button-reply-bubble">
+                  <span class="whitespace-pre-wrap break-words">{{ getMessageContent(message) }}</span>
+                  <span class="chat-bubble-time"><span>{{ formatMessageTime(message.created_at) }}</span></span>
+                </div>
+                <!-- Text content (for text messages or captions) -->
+                <span v-else-if="getMessageContent(message)" class="whitespace-pre-wrap break-words">{{ getMessageContent(message) }}<span class="chat-bubble-time"><span>{{ formatMessageTime(message.created_at) }}</span><component v-if="message.direction === 'outgoing'" :is="getMessageStatusIcon(message.status)" :class="['h-4 w-4 status-icon', getMessageStatusClass(message.status)]" /></span></span>
+                <!-- Fallback for media without URL -->
+                <span v-else-if="isMediaMessage(message) && !message.media_url" class="text-muted-foreground italic">[{{ message.message_type.charAt(0).toUpperCase() + message.message_type.slice(1) }}]<span class="chat-bubble-time"><span>{{ formatMessageTime(message.created_at) }}</span><component v-if="message.direction === 'outgoing'" :is="getMessageStatusIcon(message.status)" :class="['h-4 w-4 status-icon', getMessageStatusClass(message.status)]" /></span></span>
+                <!-- Interactive buttons - WhatsApp style -->
+                <div
+                  v-if="getInteractiveButtons(message).length > 0"
+                  class="interactive-buttons mt-2 -mx-2 -mb-1.5 border-t"
+                >
+                  <template v-for="(btn, index) in getInteractiveButtons(message)" :key="btn.id">
+                    <a
+                      v-if="btn.type === 'URL' && btn.url"
+                      :href="btn.url"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      :class="['py-2 text-sm text-center font-medium cursor-pointer flex items-center justify-center gap-1.5', index > 0 && 'border-t']"
+                    >
+                      <ExternalLink class="h-3.5 w-3.5" />
+                      {{ btn.title }}
+                    </a>
+                    <div
+                      v-else
+                      :class="['py-2 text-sm text-center font-medium cursor-pointer', index > 0 && 'border-t']"
+                    >
+                      {{ btn.title }}
+                    </div>
+                  </template>
+                </div>
+                <!-- CTA URL button - WhatsApp style -->
+                <a
+                  v-if="getCTAUrlData(message)"
+                  :href="getCTAUrlData(message)?.url"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="interactive-buttons mt-2 -mx-2 -mb-1.5 border-t block"
+                >
+                  <div class="py-2 text-sm text-center font-medium cursor-pointer flex items-center justify-center gap-1.5">
+                    <ExternalLink class="h-3.5 w-3.5" />
+                    {{ getCTAUrlData(message)?.button_text }}
+                  </div>
+                </a>
+                <!-- Voice call button - WhatsApp style, non-clickable in our chat -->
+                <div
+                  v-if="getVoiceCallData(message)"
+                  class="interactive-buttons mt-2 -mx-2 -mb-1.5 border-t"
+                >
+                  <div class="py-2 text-sm text-center font-medium flex items-center justify-center gap-1.5">
+                    <PhoneCall class="h-3.5 w-3.5" />
+                    {{ getVoiceCallData(message)?.display_text }}
+                  </div>
+                </div>
+                <!-- Flow button - WhatsApp style -->
+                <div
+                  v-if="getFlowButtonText(message)"
+                  class="interactive-buttons mt-2 -mx-2 -mb-1.5 border-t"
+                >
+                  <div class="py-2 text-sm text-center font-medium">
+                    {{ getFlowButtonText(message) }}
+                  </div>
+                </div>
+                <!-- Time for messages without text content -->
+                <span v-if="!getMessageContent(message) && !(isMediaMessage(message) && !message.media_url)" class="chat-bubble-time block clear-both">
+                  <span>{{ formatMessageTime(message.created_at) }}</span>
+                  <component
+                    v-if="message.direction === 'outgoing'"
+                    :is="getMessageStatusIcon(message.status)"
+                    :class="['h-4 w-4 status-icon', getMessageStatusClass(message.status)]"
+                  />
+                </span>
+                <!-- Reactions display -->
+                <div
+                  v-if="message.reactions && message.reactions.length > 0"
+                  class="reactions-display flex flex-wrap gap-1 mt-1"
+                >
+                  <span
+                    v-for="(reaction, idx) in message.reactions"
+                    :key="idx"
+                    class="reaction-badge"
+                    :title="reaction.from_phone || reaction.from_user || ''"
+                  >
+                    {{ reaction.emoji }}
+                  </span>
+                </div>
+                <!-- Failed message error (not for template messages) -->
+                <span
+                  v-if="message.status === 'failed' && message.direction === 'outgoing' && message.message_type !== 'template'"
+                  class="flex items-center gap-1 mt-1 text-xs text-destructive"
+                >
+                  <AlertCircle class="h-3 w-3" />
+                  <span>{{ message.error_message || 'Failed to send' }}</span>
+                </span>
+                <!-- Failed template message indicator (no retry) -->
+                <span
+                  v-if="message.status === 'failed' && message.direction === 'outgoing' && message.message_type === 'template'"
+                  class="flex items-center gap-1 mt-1 text-xs text-destructive"
+                >
+                  <AlertCircle class="h-3 w-3" />
+                  <span>{{ message.error_message || 'Failed to send' }}</span>
+                </span>
+              </div>
+              <!-- Action buttons for incoming messages -->
+              <div v-if="message.direction === 'incoming'" class="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity self-center ml-1">
+                <Popover :open="reactionPickerMessageId === message.id" @update:open="(open: boolean) => reactionPickerMessageId = open ? message.id : null">
+                  <PopoverTrigger as-child>
+                    <Button variant="ghost" size="icon" class="h-6 w-6">
+                      <SmilePlus class="h-3 w-3" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent side="top" class="w-auto p-2">
+                    <div class="flex gap-1">
+                      <button
+                        v-for="emoji in quickReactionEmojis"
+                        :key="emoji"
+                        class="text-lg hover:bg-muted p-1 rounded cursor-pointer"
+                        @click="sendReaction(message.id, emoji)"
+                      >
+                        {{ emoji }}
+                      </button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="h-6 w-6"
+                  @click="replyToMessage(message)"
+                >
+                  <Reply class="h-3 w-3" />
+                </Button>
+              </div>
+              <!-- Reply button for outgoing messages (shown on hover) -->
+              <div v-if="message.direction === 'outgoing'" class="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity self-center ml-1">
+                <Popover :open="reactionPickerMessageId === message.id" @update:open="(open: boolean) => reactionPickerMessageId = open ? message.id : null">
+                  <PopoverTrigger as-child>
+                    <Button variant="ghost" size="icon" class="h-6 w-6">
+                      <SmilePlus class="h-3 w-3" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent side="top" class="w-auto p-2">
+                    <div class="flex gap-1">
+                      <button
+                        v-for="emoji in quickReactionEmojis"
+                        :key="emoji"
+                        class="text-lg hover:bg-muted p-1 rounded cursor-pointer"
+                        @click="sendReaction(message.id, emoji)"
+                      >
+                        {{ emoji }}
+                      </button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="h-6 w-6"
+                  @click="replyToMessage(message)"
+                >
+                  <Reply class="h-3 w-3" />
+                </Button>
+                <Button
+                  v-if="message.status === 'failed' && message.message_type !== 'template'"
+                  variant="ghost"
+                  size="icon"
+                  class="h-6 w-6 text-destructive hover:text-destructive"
+                  :disabled="retryingMessageId === message.id"
+                  @click="retryMessage(message)"
+                  title="Retry sending"
+                >
+                  <Loader2 v-if="retryingMessageId === message.id" class="h-3 w-3 animate-spin" />
+                  <RotateCw v-else class="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+            </template>
+            <div ref="messagesEndRef" />
+          </div>
+        </ScrollArea>
+        </div>
+
+        <!-- Service window expired banner -->
+        <div
+          v-if="isServiceWindowExpired"
+          class="px-4 py-2.5 border-t border-red-500/20 bg-red-500/10 flex items-center gap-2"
+        >
+          <Clock class="h-4 w-4 text-red-500 shrink-0" />
+          <span class="text-sm text-red-500 flex-1">{{ $t('chat.serviceWindowExpired') }}</span>
+          <Button variant="outline" size="sm" class="border-red-500/30 text-red-500 hover:bg-red-500/10 shrink-0" @click="openTemplatePicker">
+            {{ $t('chat.sendTemplateAction') }}
+          </Button>
+        </div>
+
+        <!-- Reply indicator -->
+        <div
+          v-if="contactsStore.replyingTo"
+          class="px-4 py-2 border-t border-white/[0.08] light:border-gray-200 bg-white/[0.04] light:bg-gray-50 flex items-center justify-between"
+        >
+          <div class="flex-1 min-w-0">
+            <p class="text-xs font-medium text-white/50 light:text-gray-500">
+              Replying to {{ contactsStore.replyingTo.direction === 'incoming' ? (contactsStore.currentContact?.profile_name || contactsStore.currentContact?.name || 'Customer') : 'Yourself' }}
+            </p>
+            <p class="text-sm truncate text-white/70 light:text-gray-700">
+              {{ getMessageContent(contactsStore.replyingTo) || '[Media]' }}
+            </p>
+          </div>
+          <button class="w-6 h-6 rounded hover:bg-white/[0.08] light:hover:bg-gray-200 flex items-center justify-center shrink-0 transition-colors" @click="contactsStore.clearReplyingTo">
+            <X class="h-4 w-4 text-white/50 light:text-gray-500" />
+          </button>
+        </div>
+
+        <!-- Closed chat banner (shown when conversation is closed).
+             Admins/managers get a Reopen button so they can flip it back to
+             'open' without claiming ownership. -->
+        <div v-if="contactsStore.isChatClosed && !contactsStore.isPendingClaim"
+             class="flex items-center justify-center gap-3 p-4 border-t border-white/[0.08] light:border-gray-200 bg-[#0f0f10] light:bg-white">
+          <CheckCheck class="h-4 w-4 text-muted-foreground" />
+          <span class="text-sm text-muted-foreground">{{ $t('chat.conversationClosed') }}</span>
+          <Button v-if="contactsStore.canManageAllChats"
+                  variant="outline" size="sm" @click="handleReopen" class="ml-2 h-7 gap-1.5">
+            <RotateCw class="h-3.5 w-3.5" />
+            {{ $t('chat.reopenConversation') }}
+          </Button>
+        </div>
+
+        <!-- Message Input (hidden for unclaimed pending and closed conversations) -->
+        <div v-else-if="!contactsStore.isPendingClaim && !contactsStore.isChatClosed" class="p-4 border-t border-white/[0.08] light:border-gray-200 bg-[#0f0f10] light:bg-white">
+          <form @submit.prevent="sendMessage" class="flex items-center gap-2 p-2 rounded-xl bg-white/[0.06] light:bg-gray-100 border border-white/[0.08] light:border-gray-200">
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <span>
+                  <Popover v-model:open="emojiPickerOpen">
+                    <PopoverTrigger as-child>
+                      <button type="button" class="w-9 h-9 rounded-lg hover:bg-white/[0.08] light:hover:bg-gray-200 flex items-center justify-center transition-colors">
+                        <Smile class="w-[18px] h-[18px] text-white/40 light:text-gray-500" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent side="top" align="start" class="w-auto p-0">
+                      <EmojiPicker
+                        :native="true"
+                        :disable-skin-tones="true"
+                        :theme="isDark ? 'dark' : 'light'"
+                        @select="insertEmoji($event.i)"
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>{{ $t('chat.emoji') }}</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <span>
+                  <CannedResponsePicker
+                    :external-open="cannedPickerOpen"
+                    :external-search="cannedSearchQuery"
+                    @select="handleCannedSelect"
+                    @close="closeCannedPicker"
+                  />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>{{ $t('chat.cannedResponses') }}</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <span ref="templatePickerRef">
+                  <TemplatePicker
+                    :selected-account="selectedAccount"
+                    @select-with-params="handleTemplateWithParams"
+                  />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>{{ $t('chat.sendTemplate') }}</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <button type="button" class="w-9 h-9 rounded-lg hover:bg-white/[0.08] light:hover:bg-gray-200 flex items-center justify-center transition-colors" @click="openFilePicker">
+                  <Paperclip class="w-[18px] h-[18px] text-white/40 light:text-gray-500" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>{{ $t('chat.attachFile') }}</TooltipContent>
+            </Tooltip>
+            <input
+              ref="fileInputRef"
+              type="file"
+              accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.html,.htm,.zip,.rar,.7z,.md,.json,.xml,.rtf"
+              class="hidden"
+              @change="handleFileSelect"
+            />
+            <textarea
+              ref="messageInputRef"
+              v-model="messageInput"
+              :placeholder="$t('chat.typeMessage') + '...'"
+              rows="1"
+              class="flex-1 bg-transparent text-[14px] text-white light:text-gray-900 placeholder:text-white/30 light:placeholder:text-gray-400 focus:outline-none resize-none min-h-[36px] max-h-[120px] py-2 overflow-y-auto"
+              @keydown.enter.exact.prevent="sendMessage"
+              @input="autoResizeTextarea"
+            />
+            <button type="submit" class="w-9 h-9 rounded-lg bg-emerald-600 hover:bg-emerald-500 light:bg-emerald-500 light:hover:bg-emerald-600 flex items-center justify-center transition-colors disabled:opacity-50" :disabled="!messageInput.trim() || isSending">
+              <Send class="w-4 h-4 text-white" />
+            </button>
+          </form>
+        </div>
+      </template>
+    </div>
+
+    <!-- Notes Side Panel -->
+    <ConversationNotes
+      v-if="contactsStore.currentContact && isNotesPanelOpen"
+      :contact-id="contactsStore.currentContact.id"
+      @close="isNotesPanelOpen = false"
+    />
+
+    <!-- Contact Info Panel -->
+    <ContactInfoPanel
+      v-if="contactsStore.currentContact && isInfoPanelOpen"
+      :contact="contactsStore.currentContact"
+      :session-data="contactSessionData"
+      @close="isInfoPanelOpen = false"
+      @tags-updated="(tags) => contactsStore.updateContactTags(contactsStore.currentContact!.id, tags)"
+    />
+
+    <!-- Template Params Dialog -->
+    <Dialog v-model:open="templateDialogOpen">
+      <DialogContent class="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>{{ templateParamNames.length > 0 ? $t('chat.fillParameters') : $t('chat.preview') }}</DialogTitle>
+          <DialogDescription>
+            {{ selectedTemplate?.display_name || selectedTemplate?.name }}
+          </DialogDescription>
+        </DialogHeader>
+        <div class="py-4 space-y-3">
+          <!-- Header media upload -->
+          <HeaderMediaUpload
+            v-if="templateNeedsHeaderMedia"
+            :file="templateHeaderFile"
+            :preview-url="templateHeaderPreview"
+            :accept-types="templateHeaderAccept"
+            :label="selectedTemplate?.header_type === 'IMAGE' ? $t('chat.headerImage') : selectedTemplate?.header_type === 'VIDEO' ? $t('chat.headerVideo') : $t('chat.headerDocument')"
+            @change="handleTemplateHeaderFile"
+            @clear="clearTemplateHeaderMedia"
+          />
+
+          <div v-if="showHeaderParamInput" class="space-y-1">
+            <label class="text-sm font-medium flex items-center gap-1.5">
+              <span>{{ templateHeaderParamName }}</span>
+              <span class="text-[10px] uppercase tracking-wider text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                {{ $t('chat.headerParamBadge', 'Header') }}
+              </span>
+            </label>
+            <Input
+              v-model="templateHeaderParamValue"
+              :placeholder="templateHeaderParamName ?? ''"
+              class="h-9"
+            />
+          </div>
+          <div v-for="param in templateParamNames" :key="param" class="space-y-1">
+            <label class="text-sm font-medium">{{ param }}</label>
+            <Input
+              v-model="templateParamValues[param]"
+              :placeholder="param"
+              class="h-9"
+            />
+          </div>
+          <div v-for="(btnParam, idx) in templateButtonUrlParams" :key="`btn-${btnParam.index}`" class="space-y-1">
+            <label class="text-sm font-medium">
+              {{ btnParam.type === 'COPY_CODE' ? `Coupon Code (${btnParam.text})` : $t('chat.urlButtonParam', { button: btnParam.text }) }}
+            </label>
+            <Input
+              v-model="templateButtonUrlParams[idx].value"
+              :placeholder="btnParam.type === 'COPY_CODE' ? 'WELCOME10' : $t('chat.urlButtonParamPlaceholder')"
+              class="h-9"
+            />
+          </div>
+          <div v-if="templatePreview" class="space-y-1">
+            <label class="text-xs font-medium text-muted-foreground">{{ $t('chat.preview') }}</label>
+            <div class="chat-bubble chat-bubble-outgoing ml-auto" style="max-width: 100%;">
+              <img v-if="templateHeaderPreview" :src="templateHeaderPreview" class="rounded-lg mb-2 max-h-40 w-full object-cover" />
+              <span class="whitespace-pre-wrap break-words text-sm">{{ templatePreview }}</span>
+              <div
+                v-if="selectedTemplate?.buttons?.length"
+                class="interactive-buttons mt-2 -mx-2 -mb-1.5 border-t"
+              >
+                <div
+                  v-for="(btn, index) in selectedTemplate.buttons"
+                  :key="index"
+                  :class="['py-2 text-sm text-center font-medium', Number(index) > 0 && 'border-t']"
+                >
+                  {{ btn.text }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="flex justify-end gap-2">
+          <Button variant="outline" @click="templateDialogOpen = false">{{ $t('common.cancel') }}</Button>
+          <Button @click="sendTemplateMessage" :disabled="isSendingTemplate">
+            <Loader2 v-if="isSendingTemplate" class="h-4 w-4 mr-2 animate-spin" />
+            {{ $t('chat.send') }}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Canned Response Preview Dialog -->
+    <Dialog v-model:open="cannedDialogOpen">
+      <DialogContent class="max-w-sm">
+        <!-- DialogContent doesn't forward $attrs (multi-root via DialogPortal),
+             so wrap the body in a div carrying the stable id used by e2e. -->
+        <div id="canned-response-dialog">
+        <DialogHeader>
+          <DialogTitle>{{ cannedParamNames.length > 0 ? $t('chat.fillParameters') : $t('chat.preview') }}</DialogTitle>
+          <DialogDescription>
+            {{ selectedCannedResponse?.name }}
+          </DialogDescription>
+        </DialogHeader>
+        <div class="py-4 space-y-3">
+          <div v-for="param in cannedParamNames" :key="param" class="space-y-1">
+            <label class="text-sm font-medium" :for="`canned-response-param-${param}`">{{ param }}</label>
+            <Input
+              :id="`canned-response-param-${param}`"
+              v-model="cannedParamValues[param]"
+              :placeholder="param"
+              class="h-9 canned-response-param"
+            />
+          </div>
+          <div v-if="cannedPreview || cannedPreviewButtons.length" class="space-y-1">
+            <label class="text-xs font-medium text-muted-foreground">{{ $t('chat.preview') }}</label>
+            <div id="canned-response-preview" class="chat-bubble chat-bubble-outgoing ml-auto" style="max-width: 100%;">
+              <span v-if="cannedPreview" class="whitespace-pre-wrap break-words text-sm">{{ cannedPreview }}</span>
+              <PreviewButtonGroup
+                v-if="cannedPreviewButtons.length"
+                :buttons="cannedPreviewButtons"
+                disabled
+              />
+            </div>
+          </div>
+        </div>
+        <div class="flex justify-end gap-2">
+          <Button id="canned-response-cancel" variant="outline" @click="cannedDialogOpen = false">{{ $t('common.cancel') }}</Button>
+          <Button id="canned-response-send" :disabled="isSendingCanned" @click="sendCannedResponse">
+            <Loader2 v-if="isSendingCanned" class="h-4 w-4 mr-2 animate-spin" />
+            {{ $t('chat.send') }}
+          </Button>
+        </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Assign Contact Dialog -->
+    <Dialog v-model:open="isAssignDialogOpen" @update:open="(open) => !open && (assignSearchQuery = '')">
+      <DialogContent class="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>{{ $t('chat.assignContact') }}</DialogTitle>
+          <DialogDescription>
+            {{ $t('chat.assignContactDesc') }}
+          </DialogDescription>
+        </DialogHeader>
+        <div class="py-4 space-y-3">
+          <!-- Search input -->
+          <div class="relative">
+            <Search class="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              v-model="assignSearchQuery"
+              :placeholder="$t('chat.searchUsers') + '...'"
+              class="pl-9 h-9"
+            />
+          </div>
+          <Button
+            v-if="contactsStore.currentContact?.assigned_user_id"
+            variant="outline"
+            class="w-full justify-start"
+            @click="assignContactToUser(null); isAssignDialogOpen = false"
+          >
+            <UserMinus class="mr-2 h-4 w-4" />
+            {{ $t('chat.unassignContact') }}
+          </Button>
+          <Separator />
+          <ScrollArea class="max-h-[280px]">
+            <div class="space-y-1">
+              <Button
+                v-for="user in filteredAssignableUsers"
+                :key="user.id"
+                :variant="contactsStore.currentContact?.assigned_user_id === user.id ? 'secondary' : 'ghost'"
+                class="w-full justify-start"
+                @click="assignContactToUser(user.id); isAssignDialogOpen = false"
+              >
+                <User class="mr-2 h-4 w-4" />
+                <span>{{ user.full_name }}</span>
+                <Check
+                  v-if="contactsStore.currentContact?.assigned_user_id === user.id"
+                  class="ml-auto h-4 w-4 text-primary"
+                />
+                <Badge v-else variant="outline" class="ml-auto text-xs">
+                  {{ user.role?.name }}
+                </Badge>
+              </Button>
+              <p v-if="filteredAssignableUsers.length === 0" class="text-sm text-muted-foreground text-center py-4">
+                {{ $t('chat.noUsersFound') }}
+              </p>
+            </div>
+          </ScrollArea>
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Invite Collaborator Dialog -->
+    <Dialog v-model:open="isInviteDialogOpen">
+      <DialogContent class="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>{{ $t('chat.inviteCollaborator') }}</DialogTitle>
+          <DialogDescription>
+            {{ $t('chat.inviteCollaboratorDesc') }}
+          </DialogDescription>
+        </DialogHeader>
+        <div class="py-4 space-y-3">
+          <ScrollArea class="max-h-[280px]">
+            <div class="space-y-1">
+              <Button
+                v-for="user in filteredAssignableUsers"
+                :key="user.id"
+                :variant="contactsStore.currentContact?.collaborators?.some(c => c.user_id === user.id) ? 'secondary' : 'ghost'"
+                class="w-full justify-start"
+                @click="handleInvite(user.id); isInviteDialogOpen = false"
+              >
+                <User class="mr-2 h-4 w-4" />
+                <span>{{ user.full_name }}</span>
+                <Check
+                  v-if="contactsStore.currentContact?.collaborators?.some(c => c.user_id === user.id)"
+                  class="ml-auto h-4 w-4 text-primary"
+                />
+                <Badge v-else variant="outline" class="ml-auto text-xs">
+                  {{ user.role?.name }}
+                </Badge>
+              </Button>
+              <p v-if="filteredAssignableUsers.length === 0" class="text-sm text-muted-foreground text-center py-4">
+                {{ $t('chat.noUsersFound') }}
+              </p>
+            </div>
+          </ScrollArea>
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Media Preview Dialog -->
+    <Dialog v-model:open="isMediaDialogOpen">
+      <DialogContent class="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{{ $t('chat.sendMedia') }}</DialogTitle>
+          <DialogDescription>
+            {{ selectedFile?.name }}
+          </DialogDescription>
+        </DialogHeader>
+        <div class="py-4 space-y-4">
+          <!-- Image preview -->
+          <div v-if="selectedFile?.type.startsWith('image/') && filePreviewUrl" class="flex justify-center">
+            <img
+              :src="filePreviewUrl"
+              :alt="selectedFile.name"
+              class="max-w-full max-h-[300px] rounded-lg object-contain"
+            />
+          </div>
+          <!-- Video preview -->
+          <div v-else-if="selectedFile?.type.startsWith('video/') && filePreviewUrl" class="flex justify-center">
+            <video
+              :src="filePreviewUrl"
+              controls
+              class="max-w-full max-h-[300px] rounded-lg"
+            />
+          </div>
+          <!-- Audio preview -->
+          <div v-else-if="selectedFile?.type.startsWith('audio/')" class="flex justify-center">
+            <div class="flex items-center gap-3 px-4 py-3 bg-muted rounded-lg">
+              <div class="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                <Paperclip class="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p class="font-medium text-sm">{{ selectedFile.name }}</p>
+                <p class="text-xs text-muted-foreground">{{ $t('chat.audioFile') }}</p>
+              </div>
+            </div>
+          </div>
+          <!-- Document preview -->
+          <div v-else-if="selectedFile" class="flex justify-center">
+            <div class="flex items-center gap-3 px-4 py-3 bg-muted rounded-lg">
+              <div class="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                <FileText class="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p class="font-medium text-sm truncate max-w-[200px]">{{ selectedFile.name }}</p>
+                <p class="text-xs text-muted-foreground">
+                  {{ (selectedFile.size / 1024).toFixed(1) }} KB
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Caption input (not for audio) -->
+          <div v-if="selectedFile && !selectedFile.type.startsWith('audio/')">
+            <Textarea
+              v-model="mediaCaption"
+              :placeholder="$t('chat.mediaCaption') + '...'"
+              class="min-h-[60px] max-h-[100px] resize-none"
+              :rows="2"
+            />
+          </div>
+
+          <!-- Actions -->
+          <div class="flex justify-end gap-2">
+            <Button variant="outline" @click="closeMediaDialog" :disabled="isUploadingMedia">
+              {{ $t('common.cancel') }}
+            </Button>
+            <Button @click="sendMediaMessage" :disabled="isUploadingMedia">
+              <Send v-if="!isUploadingMedia" class="mr-2 h-4 w-4" />
+              <span v-if="isUploadingMedia">{{ $t('chat.sending') }}...</span>
+              <span v-else>{{ $t('chat.send') }}</span>
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Add Contact Dialog -->
+    <CreateContactDialog v-model:open="isAddContactOpen" @created="onContactCreated" />
+
+    <!-- Media burst download dialog -->
+    <MediaBurstDialog
+      v-model:open="isBurstDialogOpen"
+      :messages="recentBurst"
+      :is-downloading="isBurstDownloading"
+      :progress="burstProgress"
+      @zip="downloadAsZip(recentBurst)"
+      @separate="downloadSeparately(recentBurst)"
+    />
+  </div>
+</template>
+
+<style scoped>
+.sticky-date-enter-active,
+.sticky-date-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.sticky-date-enter-from,
+.sticky-date-leave-to {
+  opacity: 0;
+}
+</style>

@@ -1,0 +1,215 @@
+---
+title: Analytics
+description: Access dashboard and messaging analytics
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+The Analytics API provides access to messaging statistics, chatbot performance, and dashboard metrics.
+
+## Dashboard Stats
+
+Get an overview of key metrics for the dashboard.
+
+```bash
+GET /api/analytics/dashboard
+```
+
+### Query Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `account_id` | string | Filter by WhatsApp account |
+| `period` | string | Time period: `today`, `week`, `month`, `year` |
+
+### Response
+
+```json
+{
+  "status": "success",
+  "data": {
+    "contacts": {
+      "total": 5000,
+      "new_today": 25,
+      "new_this_week": 150,
+      "growth_percent": 12.5
+    },
+    "messages": {
+      "total": 50000,
+      "sent": 25000,
+      "received": 25000,
+      "today": 500
+    },
+    "campaigns": {
+      "total": 20,
+      "active": 2,
+      "completed_this_month": 5
+    },
+    "chatbot": {
+      "conversations_today": 100,
+      "auto_resolved": 75,
+      "transferred_to_agent": 25,
+      "resolution_rate": 75.0
+    }
+  }
+}
+```
+
+## Message Analytics
+
+Get detailed messaging statistics.
+
+```bash
+GET /api/analytics/messages
+```
+
+### Query Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `account_id` | string | Filter by WhatsApp account |
+| `start_date` | string | Start date (ISO 8601) |
+| `end_date` | string | End date (ISO 8601) |
+| `granularity` | string | `hour`, `day`, `week`, `month` |
+
+### Response
+
+```json
+{
+  "status": "success",
+  "data": {
+    "summary": {
+      "total_sent": 10000,
+      "total_received": 8000,
+      "total_delivered": 9800,
+      "total_read": 7500,
+      "total_failed": 200,
+      "delivery_rate": 98.0,
+      "read_rate": 76.5
+    },
+    "by_type": {
+      "text": 12000,
+      "image": 3000,
+      "template": 2500,
+      "document": 500
+    },
+    "timeline": [
+      {
+        "date": "2024-01-01",
+        "sent": 500,
+        "received": 400,
+        "delivered": 490,
+        "read": 350
+      },
+      {
+        "date": "2024-01-02",
+        "sent": 600,
+        "received": 450,
+        "delivered": 590,
+        "read": 400
+      }
+    ]
+  }
+}
+```
+
+## Chatbot Analytics
+
+Get chatbot performance metrics.
+
+```bash
+GET /api/analytics/chatbot
+```
+
+### Query Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `account_id` | string | Filter by WhatsApp account |
+| `start_date` | string | Start date (ISO 8601) |
+| `end_date` | string | End date (ISO 8601) |
+
+### Response
+
+```json
+{
+  "status": "success",
+  "data": {
+    "summary": {
+      "total_conversations": 1000,
+      "auto_resolved": 750,
+      "transferred_to_agent": 200,
+      "abandoned": 50,
+      "resolution_rate": 75.0,
+      "avg_messages_per_conversation": 5.2,
+      "avg_resolution_time_seconds": 120
+    },
+    "by_flow": [
+      {
+        "flow_name": "Order Status",
+        "conversations": 300,
+        "completion_rate": 85.0
+      },
+      {
+        "flow_name": "FAQ",
+        "conversations": 200,
+        "completion_rate": 92.0
+      }
+    ],
+    "top_keywords": [
+      {
+        "keyword": "order",
+        "count": 450
+      },
+      {
+        "keyword": "shipping",
+        "count": 230
+      },
+      {
+        "keyword": "return",
+        "count": 180
+      }
+    ],
+    "ai_usage": {
+      "total_requests": 500,
+      "avg_tokens_per_request": 250,
+      "total_tokens": 125000,
+      "estimated_cost": 2.50
+    }
+  }
+}
+```
+
+## Metrics Explained
+
+### Message Metrics
+
+| Metric | Description |
+|--------|-------------|
+| `delivery_rate` | Percentage of sent messages that were delivered |
+| `read_rate` | Percentage of delivered messages that were read |
+
+### Chatbot Metrics
+
+| Metric | Description |
+|--------|-------------|
+| `resolution_rate` | Percentage of conversations resolved without agent |
+| `avg_resolution_time` | Average time to resolve a conversation |
+| `completion_rate` | Percentage of started flows that were completed |
+
+<Aside type="tip">
+  Use analytics to identify popular topics and optimize your chatbot flows for better automation.
+</Aside>
+
+## Data Retention
+
+Analytics data is retained for:
+- Detailed (hourly): 30 days
+- Daily: 1 year
+- Monthly: Indefinitely
+
+<Aside type="note">
+  Historical data older than retention periods is aggregated and individual message-level details are not available.
+</Aside>

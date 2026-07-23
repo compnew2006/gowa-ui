@@ -1,0 +1,177 @@
+---
+title: Accounts
+description: Manage WhatsApp Business accounts
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+Accounts represent your WhatsApp Business API connections. Each account is linked to a phone number registered with Meta's WhatsApp Business Platform.
+
+## List Accounts
+
+Retrieve all connected WhatsApp accounts.
+
+```bash
+GET /api/accounts
+```
+
+### Response
+
+```json
+{
+  "status": "success",
+  "data": {
+    "items": [
+      {
+        "id": "uuid",
+        "name": "Main Business",
+        "phone_number": "+1234567890",
+        "phone_number_id": "123456789",
+        "business_account_id": "987654321",
+        "status": "active",
+        "created_at": "2024-01-01T00:00:00Z"
+      }
+    ]
+  }
+}
+```
+
+## Get Account
+
+Retrieve a single account.
+
+```bash
+GET /api/accounts/{id}
+```
+
+### Response
+
+```json
+{
+  "status": "success",
+  "data": {
+    "id": "uuid",
+    "name": "Main Business",
+    "phone_number": "+1234567890",
+    "phone_number_id": "123456789",
+    "business_account_id": "987654321",
+    "access_token": "EAAxxxx...",
+    "webhook_verify_token": "your_verify_token",
+    "status": "active",
+    "quality_rating": "GREEN",
+    "messaging_limit": "TIER_1K",
+    "created_at": "2024-01-01T00:00:00Z"
+  }
+}
+```
+
+## Create Account
+
+Connect a new WhatsApp Business account.
+
+```bash
+POST /api/accounts
+```
+
+### Request Body
+
+```json
+{
+  "name": "Support Line",
+  "phone_number_id": "123456789",
+  "business_account_id": "987654321",
+  "access_token": "EAAxxxx...",
+  "webhook_verify_token": "your_custom_verify_token"
+}
+```
+
+### Response
+
+```json
+{
+  "status": "success",
+  "data": {
+    "id": "uuid",
+    "name": "Support Line",
+    "status": "pending",
+    "created_at": "2024-01-01T00:00:00Z"
+  }
+}
+```
+
+## Update Account
+
+Update account settings.
+
+```bash
+PUT /api/accounts/{id}
+```
+
+### Request Body
+
+```json
+{
+  "name": "Customer Support",
+  "access_token": "EAAyyyy..."
+}
+```
+
+## Delete Account
+
+Remove a WhatsApp account connection.
+
+```bash
+DELETE /api/accounts/{id}
+```
+
+<Aside type="caution">
+  Deleting an account will remove all associated contacts, messages, and settings.
+</Aside>
+
+## Test Connection
+
+Verify the account connection with Meta.
+
+```bash
+POST /api/accounts/{id}/test
+```
+
+### Response
+
+```json
+{
+  "status": "success",
+  "data": {
+    "connected": true,
+    "phone_number": "+1234567890",
+    "display_phone_number": "(123) 456-7890",
+    "verified_name": "Your Business Name",
+    "quality_rating": "GREEN"
+  }
+}
+```
+
+## Account Status
+
+| Status | Description |
+|--------|-------------|
+| `pending` | Account created, awaiting verification |
+| `active` | Account is connected and working |
+| `disconnected` | Connection lost, needs reconnection |
+| `suspended` | Account suspended by Meta |
+
+## Quality Rating
+
+Meta assigns quality ratings based on message performance:
+
+| Rating | Description |
+|--------|-------------|
+| `GREEN` | High quality, no issues |
+| `YELLOW` | Some issues, review messages |
+| `RED` | Low quality, account at risk |
+
+<Aside type="tip">
+  Monitor your quality rating regularly. A RED rating can lead to messaging limits or account suspension.
+</Aside>

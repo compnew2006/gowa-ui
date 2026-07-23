@@ -1,0 +1,111 @@
+version: 2
+
+before:
+  hooks:
+    - bash -c "cd frontend && npm ci"
+    - bash -c "cd frontend && npm run build"
+    - rm -rf internal/frontend/dist/assets internal/frontend/dist/*.html internal/frontend/dist/*.svg internal/frontend/dist/*.mp3
+    - cp -r frontend/dist/. internal/frontend/dist/
+
+builds:
+  - id: whatomate
+    main: ./cmd/whatomate
+    binary: whatomate
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.Version={{.Version}}
+      - -X main.BuildTime={{.Date}}
+
+archives:
+  - id: whatomate
+    builds:
+      - whatomate
+    format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - Merge pull request
+      - Merge branch
+
+dockers:
+  - id: whatomate-amd64
+    goos: linux
+    goarch: amd64
+    image_templates:
+      - "{{ .Env.DOCKER_ORG }}/whatomate:{{ .Version }}-amd64"
+      - "{{ .Env.DOCKER_ORG }}/whatomate:latest-amd64"
+      - "ghcr.io/{{ .Env.GITHUB_ORG }}/whatomate:{{ .Version }}-amd64"
+      - "ghcr.io/{{ .Env.GITHUB_ORG }}/whatomate:latest-amd64"
+    dockerfile: docker/Dockerfile.goreleaser
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.source={{ .GitURL }}"
+    use: buildx
+
+  - id: whatomate-arm64
+    goos: linux
+    goarch: arm64
+    image_templates:
+      - "{{ .Env.DOCKER_ORG }}/whatomate:{{ .Version }}-arm64"
+      - "{{ .Env.DOCKER_ORG }}/whatomate:latest-arm64"
+      - "ghcr.io/{{ .Env.GITHUB_ORG }}/whatomate:{{ .Version }}-arm64"
+      - "ghcr.io/{{ .Env.GITHUB_ORG }}/whatomate:latest-arm64"
+    dockerfile: docker/Dockerfile.goreleaser
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.source={{ .GitURL }}"
+    use: buildx
+
+docker_manifests:
+  - name_template: "{{ .Env.DOCKER_ORG }}/whatomate:{{ .Version }}"
+    image_templates:
+      - "{{ .Env.DOCKER_ORG }}/whatomate:{{ .Version }}-amd64"
+      - "{{ .Env.DOCKER_ORG }}/whatomate:{{ .Version }}-arm64"
+
+  - name_template: "{{ .Env.DOCKER_ORG }}/whatomate:latest"
+    image_templates:
+      - "{{ .Env.DOCKER_ORG }}/whatomate:{{ .Version }}-amd64"
+      - "{{ .Env.DOCKER_ORG }}/whatomate:{{ .Version }}-arm64"
+
+  - name_template: "ghcr.io/{{ .Env.GITHUB_ORG }}/whatomate:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/{{ .Env.GITHUB_ORG }}/whatomate:{{ .Version }}-amd64"
+      - "ghcr.io/{{ .Env.GITHUB_ORG }}/whatomate:{{ .Version }}-arm64"
+
+  - name_template: "ghcr.io/{{ .Env.GITHUB_ORG }}/whatomate:latest"
+    image_templates:
+      - "ghcr.io/{{ .Env.GITHUB_ORG }}/whatomate:{{ .Version }}-amd64"
+      - "ghcr.io/{{ .Env.GITHUB_ORG }}/whatomate:{{ .Version }}-arm64"
+
+release:
+  github:
+    owner: shridarpatil
+    name: whatomate
+  draft: false
+  prerelease: auto
+  name_template: "v{{ .Version }}"

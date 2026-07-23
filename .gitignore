@@ -1,0 +1,62 @@
+# Binaries
+/server
+/whatomate
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Config with secrets
+config.toml
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Go workspace file
+go.work
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+frontend/.env.*.local
+
+# Playwright
+frontend/playwright-report/
+frontend/test-results/
+frontend/playwright/.cache/
+
+# Embedded frontend build (generated during build)
+internal/frontend/dist/*
+!internal/frontend/dist/.gitkeep
+
+# Logs
+*.log
+logs/
+
+# Temp files
+tmp/
+temp/
+uploads/
+audio/
+
+# Test results
+test-results/
+
+# Docker 
+docker/.env

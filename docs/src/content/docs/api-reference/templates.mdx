@@ -1,0 +1,318 @@
+---
+title: Templates
+description: Manage WhatsApp message templates
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+WhatsApp Message Templates are pre-approved message formats required for sending business-initiated messages. Templates must be approved by Meta before use.
+
+## List Templates
+
+Retrieve all templates for your account.
+
+```bash
+GET /api/templates
+```
+
+### Query Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `page` | integer | Page number (default: 1) |
+| `limit` | integer | Items per page (default: 20) |
+| `status` | string | Filter by status (APPROVED, PENDING, REJECTED) |
+| `category` | string | Filter by category (MARKETING, UTILITY, AUTHENTICATION) |
+| `account_id` | string | Filter by WhatsApp account |
+
+### Response
+
+```json
+{
+  "status": "success",
+  "data": {
+    "items": [
+      {
+        "id": "uuid",
+        "name": "order_confirmation",
+        "language": "en",
+        "status": "APPROVED",
+        "category": "UTILITY",
+        "components": [...],
+        "created_at": "2024-01-01T00:00:00Z"
+      }
+    ],
+    "total": 50,
+    "page": 1,
+    "limit": 20
+  }
+}
+```
+
+## Get Template
+
+Retrieve a single template by ID.
+
+```bash
+GET /api/templates/{id}
+```
+
+### Response
+
+```json
+{
+  "status": "success",
+  "data": {
+    "id": "uuid",
+    "name": "order_confirmation",
+    "language": "en",
+    "status": "APPROVED",
+    "category": "UTILITY",
+    "components": [
+      {
+        "type": "HEADER",
+        "format": "IMAGE"
+      },
+      {
+        "type": "BODY",
+        "text": "Hi {{1}}, your order #{{2}} has been confirmed!"
+      },
+      {
+        "type": "FOOTER",
+        "text": "Thank you for shopping with us"
+      },
+      {
+        "type": "BUTTONS",
+        "buttons": [
+          {
+            "type": "URL",
+            "text": "Track Order",
+            "url": "https://example.com/track/{{1}}"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+## Create Template
+
+Create a new template (submitted to Meta for approval).
+
+```bash
+POST /api/templates
+```
+
+### Request Body
+
+```json
+{
+  "account_id": "uuid",
+  "name": "welcome_message",
+  "language": "en",
+  "category": "MARKETING",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Welcome to our store, {{1}}! Use code {{2}} for 10% off your first order."
+    },
+    {
+      "type": "FOOTER",
+      "text": "Reply STOP to unsubscribe"
+    }
+  ]
+}
+```
+
+### Response
+
+```json
+{
+  "status": "success",
+  "data": {
+    "id": "uuid",
+    "name": "welcome_message",
+    "status": "PENDING",
+    "created_at": "2024-01-01T00:00:00Z"
+  }
+}
+```
+
+## Update Template
+
+Update an existing template.
+
+```bash
+PUT /api/templates/{id}
+```
+
+### Request Body
+
+```json
+{
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Welcome, {{1}}! Use code {{2}} for 15% off your first order."
+    }
+  ]
+}
+```
+
+## Delete Template
+
+Delete a template.
+
+```bash
+DELETE /api/templates/{id}
+```
+
+## Sync Templates
+
+Sync templates from Meta's WhatsApp Business API.
+
+```bash
+POST /api/templates/sync
+```
+
+### Request Body
+
+```json
+{
+  "account_id": "uuid"
+}
+```
+
+### Response
+
+```json
+{
+  "status": "success",
+  "data": {
+    "synced": 25,
+    "new": 3,
+    "updated": 5
+  }
+}
+```
+
+## Submit Template
+
+Submit a template for Meta approval.
+
+```bash
+POST /api/templates/{id}/publish
+```
+
+### Response
+
+```json
+{
+  "status": "success",
+  "data": {
+    "id": "uuid",
+    "status": "PENDING"
+  }
+}
+```
+
+## Template Components
+
+| Component | Description |
+|-----------|-------------|
+| `HEADER` | Optional header (text, image, video, or document) |
+| `BODY` | Main message content with variables |
+| `FOOTER` | Optional footer text |
+| `BUTTONS` | Call-to-action or quick reply buttons |
+
+## Template Variables
+
+### Positional Parameters
+
+Use `{{1}}`, `{{2}}`, etc. for dynamic content:
+
+```
+Hello {{1}}, your order #{{2}} is ready for pickup at {{3}}.
+```
+
+When creating templates with positional parameters, provide sample values:
+
+```json
+{
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Hello {{1}}, your order #{{2}} is ready!"
+    }
+  ],
+  "sample_values": [
+    { "component": "body", "index": 1, "value": "John" },
+    { "component": "body", "index": 2, "value": "12345" }
+  ]
+}
+```
+
+### Named Parameters
+
+Templates also support named parameters for better readability:
+
+```
+Hello {{customer_name}}, your order #{{order_id}} is ready for pickup at {{store_location}}.
+```
+
+When using named parameters, provide sample values with `param_name`:
+
+```json
+{
+  "parameter_format": "named",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Hello {{customer_name}}, your order #{{order_id}} is ready!"
+    }
+  ],
+  "sample_values": [
+    { "component": "body", "param_name": "customer_name", "value": "John" },
+    { "component": "body", "param_name": "order_id", "value": "12345" }
+  ]
+}
+```
+
+### URL Button Parameters
+
+Templates can include URL buttons with dynamic variables. For example, a "Track Order" button with URL `https://example.com/track/{{1}}`:
+
+```json
+{
+  "type": "BUTTONS",
+  "buttons": [
+    {
+      "type": "URL",
+      "text": "Track Order",
+      "url": "https://example.com/track/{{1}}",
+      "example": "https://example.com/track/12345"
+    }
+  ]
+}
+```
+
+When sending a template with dynamic URL buttons, provide the dynamic values via the `button_params` field in the [Send Template Message](/api-reference/messages/#send-template-message) endpoint. The key is the zero-based button index:
+
+```json
+{
+  "template_name": "order_shipped",
+  "template_params": { "1": "John", "2": "12345" },
+  "button_params": { "0": "12345" }
+}
+```
+
+<Aside type="note">
+  Whatomate automatically detects if your template uses named parameters (non-numeric placeholders) and sets the appropriate format when submitting to Meta.
+</Aside>
+
+<Aside type="caution">
+  Template approval can take from a few minutes to 24 hours. Rejected templates must be modified and resubmitted.
+</Aside>

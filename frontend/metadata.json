@@ -1,0 +1,6 @@
+{
+  "name": "Whatomate Frontend",
+  "description": "WhatsApp automation flow builder and messaging application built with Vue 3",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

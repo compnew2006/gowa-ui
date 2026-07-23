@@ -1,0 +1,66 @@
+services:
+  # Whatomate app
+  app:
+    image: shridh0r/whatomate:latest
+    container_name: whatomate_app
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    networks:
+      - whatomate
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+    volumes:
+      - ./uploads:/app/uploads:rw
+      - ./config.toml:/app/config.toml:ro
+    command: ["server", "-migrate", "-config", "/app/config.toml"]
+
+  # PostgreSQL database
+  db:
+    image: postgres:17-alpine
+    container_name: whatomate_db
+    restart: unless-stopped
+    networks:
+      - whatomate
+    ports:
+      - "127.0.0.1:5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-whatomate}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-whatomate}
+      POSTGRES_DB: ${POSTGRES_DB:-whatomate}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-whatomate} -d ${POSTGRES_DB:-whatomate}"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: whatomate_redis
+    restart: unless-stopped
+    networks:
+      - whatomate
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - redis-data:/data
+
+networks:
+  whatomate:
+
+volumes:
+  postgres-data:
+  redis-data:
