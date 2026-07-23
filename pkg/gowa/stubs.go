@@ -68,12 +68,6 @@ func (c *Client) DeleteProduct(ctx context.Context, account *whatsapp.Account, p
 	return whatsapp.ErrNotSupported
 }
 
-// --- Analytics (Meta-only) ---
-
-func (c *Client) GetAnalytics(ctx context.Context, account *whatsapp.Account, analyticsType whatsapp.AnalyticsType, req *whatsapp.AnalyticsRequest) (*whatsapp.MetaAnalyticsResponse, error) {
-	return nil, whatsapp.ErrNotSupported
-}
-
 // --- Business profile (Meta-only) ---
 
 func (c *Client) GetBusinessProfile(ctx context.Context, account *whatsapp.Account) (*whatsapp.BusinessProfile, error) {

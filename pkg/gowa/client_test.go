@@ -55,10 +55,6 @@ func TestClient_MetaOnlyMethodsReturnErrNotSupported(t *testing.T) {
 		_, err := c.FetchTemplates(ctx, account)
 		assert.ErrorIs(t, err, whatsapp.ErrNotSupported)
 	})
-	t.Run("GetAnalytics", func(t *testing.T) {
-		_, err := c.GetAnalytics(ctx, account, whatsapp.AnalyticsTypeMessaging, &whatsapp.AnalyticsRequest{})
-		assert.ErrorIs(t, err, whatsapp.ErrNotSupported)
-	})
 	t.Run("CreateCatalog", func(t *testing.T) {
 		_, err := c.CreateCatalog(ctx, account, "catalog")
 		assert.ErrorIs(t, err, whatsapp.ErrNotSupported)

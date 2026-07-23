@@ -17,7 +17,6 @@ type Capabilities struct {
 	Flows           bool // SendFlowMessage and flow CRUD
 	Calls           bool // voice_call interactive buttons, call permission, call events
 	Catalog         bool // catalog and product CRUD
-	Analytics       bool // GetAnalytics
 	BusinessProfile bool // GetBusinessProfile, UpdateBusinessProfile, UploadProfilePicture
 	MediaUpload     bool // two-step upload-then-send (Meta) vs inline multipart (GOWA)
 	Interactive     bool // interactive buttons, CTA URL, list messages
@@ -79,10 +78,6 @@ type Provider interface {
 	CreateProduct(ctx context.Context, account *Account, catalogID string, product *ProductInput) (string, error)
 	UpdateProduct(ctx context.Context, account *Account, productID string, product *ProductInput) error
 	DeleteProduct(ctx context.Context, account *Account, productID string) error
-
-	// --- Analytics (Meta-only) ---
-
-	GetAnalytics(ctx context.Context, account *Account, analyticsType AnalyticsType, req *AnalyticsRequest) (*MetaAnalyticsResponse, error)
 
 	// --- Business profile (Meta-only) ---
 
