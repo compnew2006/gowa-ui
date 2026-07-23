@@ -156,7 +156,7 @@ func TestE2E_GOWASendImage_MultipartNotTwoStep(t *testing.T) {
 
 	msgID, err := c.SendImageMessage(
 		context.Background(), account,
-		whatsapp.Recipient{Phone: "16505551234"}, mediaID, "Image caption",
+		whatsapp.Recipient{Phone: "16505551234"}, mediaID, "Image caption", "",
 	)
 	require.NoError(t, err)
 	assert.Equal(t, "GOWA_MSG_001", msgID)

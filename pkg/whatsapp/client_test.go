@@ -423,7 +423,7 @@ func TestClient_SendImageMessage(t *testing.T) {
 	account := testAccount(server.URL)
 	ctx := testutil.TestContext(t)
 
-	msgID, err := client.SendImageMessage(ctx, account, whatsapp.Recipient{Phone: "1234567890"}, "media123", "Test caption")
+	msgID, err := client.SendImageMessage(ctx, account, whatsapp.Recipient{Phone: "1234567890"}, "media123", "Test caption", "")
 
 	require.NoError(t, err)
 	assert.Equal(t, "wamid.img123", msgID)
@@ -458,7 +458,7 @@ func TestClient_SendDocumentMessage(t *testing.T) {
 	account := testAccount(server.URL)
 	ctx := testutil.TestContext(t)
 
-	msgID, err := client.SendDocumentMessage(ctx, account, whatsapp.Recipient{Phone: "1234567890"}, "media456", "report.pdf", "Monthly report")
+	msgID, err := client.SendDocumentMessage(ctx, account, whatsapp.Recipient{Phone: "1234567890"}, "media456", "report.pdf", "Monthly report", "")
 
 	require.NoError(t, err)
 	assert.Equal(t, "wamid.doc123", msgID)

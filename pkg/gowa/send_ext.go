@@ -11,7 +11,7 @@ import (
 // UploadMedia (sent as multipart) or a URL (sent as sticker_url).
 // GOWA endpoint: POST /send/sticker (multipart/form-data)
 func (c *Client) SendSticker(ctx context.Context, account *whatsapp.Account, rcpt whatsapp.Recipient, mediaID string) (string, error) {
-	return c.sendMedia(ctx, account, rcpt, mediaID, "", "sticker", "/send/sticker")
+	return c.sendMedia(ctx, account, rcpt, mediaID, "", "sticker", "/send/sticker", "")
 }
 
 // SendContact sends a contact card.

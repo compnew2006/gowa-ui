@@ -129,7 +129,7 @@ func TestClient_SendImageMessage_WithCachedBytes(t *testing.T) {
 	require.NoError(t, err)
 
 	// Send image using cached mediaID.
-	msgID, err := c.SendImageMessage(ctx, account, whatsapp.Recipient{Phone: "16505551234"}, mediaID, "My caption")
+	msgID, err := c.SendImageMessage(ctx, account, whatsapp.Recipient{Phone: "16505551234"}, mediaID, "My caption", "")
 	require.NoError(t, err)
 	assert.Equal(t, "3EB0TESTMSGID", msgID)
 
@@ -147,7 +147,7 @@ func TestClient_SendImageMessage_WithURL(t *testing.T) {
 
 	// Pass a URL as mediaID (not in cache → treated as URL).
 	url := "https://example.com/image.jpg"
-	msgID, err := c.SendImageMessage(context.Background(), testAccount("dev1"), whatsapp.Recipient{Phone: "16505551234"}, url, "Caption")
+	msgID, err := c.SendImageMessage(context.Background(), testAccount("dev1"), whatsapp.Recipient{Phone: "16505551234"}, url, "Caption", "")
 	require.NoError(t, err)
 	assert.Equal(t, "3EB0TESTMSGID", msgID)
 
@@ -158,6 +158,29 @@ func TestClient_SendImageMessage_WithURL(t *testing.T) {
 	require.NoError(t, json.Unmarshal(mock.lastBody, &body))
 	assert.Equal(t, url, body["image_url"])
 	assert.Equal(t, "Caption", body["caption"])
+	// reply_message_id must be omitted when not replying.
+	_, hasReply := body["reply_message_id"]
+	assert.False(t, hasReply, "reply_message_id must be omitted when empty")
+}
+
+// TestClient_SendImageMessage_WithReply verifies that the quoted-context
+// (reply_message_id) is threaded through the JSON body for media replies —
+// the silent-data-loss bug where media replies dropped the reply arg.
+func TestClient_SendImageMessage_WithReply(t *testing.T) {
+	t.Parallel()
+	mock := newMockGowaServer()
+	defer mock.close()
+
+	c := gowa.New(mock.url(), "", "")
+
+	url := "https://example.com/image.jpg"
+	msgID, err := c.SendImageMessage(context.Background(), testAccount("dev1"), whatsapp.Recipient{Phone: "16505551234"}, url, "Caption", "3EB0QUOTEDMSG")
+	require.NoError(t, err)
+	assert.Equal(t, "3EB0TESTMSGID", msgID)
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(mock.lastBody, &body))
+	assert.Equal(t, "3EB0QUOTEDMSG", body["reply_message_id"])
 }
 
 func TestClient_SendDocumentMessage(t *testing.T) {
@@ -167,7 +190,7 @@ func TestClient_SendDocumentMessage(t *testing.T) {
 
 	c := gowa.New(mock.url(), "", "")
 
-	msgID, err := c.SendDocumentMessage(context.Background(), testAccount("dev1"), whatsapp.Recipient{Phone: "16505551234"}, "https://example.com/doc.pdf", "report.pdf", "See attached")
+	msgID, err := c.SendDocumentMessage(context.Background(), testAccount("dev1"), whatsapp.Recipient{Phone: "16505551234"}, "https://example.com/doc.pdf", "report.pdf", "See attached", "")
 	require.NoError(t, err)
 	assert.Equal(t, "3EB0TESTMSGID", msgID)
 	assert.Equal(t, "/send/file", mock.lastPath)
@@ -180,7 +203,7 @@ func TestClient_SendAudioMessage(t *testing.T) {
 
 	c := gowa.New(mock.url(), "", "")
 
-	msgID, err := c.SendAudioMessage(context.Background(), testAccount("dev1"), whatsapp.Recipient{Phone: "16505551234"}, "https://example.com/audio.ogg")
+	msgID, err := c.SendAudioMessage(context.Background(), testAccount("dev1"), whatsapp.Recipient{Phone: "16505551234"}, "https://example.com/audio.ogg", "")
 	require.NoError(t, err)
 	assert.Equal(t, "3EB0TESTMSGID", msgID)
 	assert.Equal(t, "/send/audio", mock.lastPath)
@@ -193,7 +216,7 @@ func TestClient_SendVideoMessage(t *testing.T) {
 
 	c := gowa.New(mock.url(), "", "")
 
-	msgID, err := c.SendVideoMessage(context.Background(), testAccount("dev1"), whatsapp.Recipient{Phone: "16505551234"}, "https://example.com/video.mp4", "Video caption")
+	msgID, err := c.SendVideoMessage(context.Background(), testAccount("dev1"), whatsapp.Recipient{Phone: "16505551234"}, "https://example.com/video.mp4", "Video caption", "")
 	require.NoError(t, err)
 	assert.Equal(t, "3EB0TESTMSGID", msgID)
 	assert.Equal(t, "/send/video", mock.lastPath)

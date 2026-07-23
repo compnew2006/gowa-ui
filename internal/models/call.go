@@ -26,7 +26,6 @@ const (
 	CallStatusFailed       CallStatus = "failed"
 	CallStatusTransferring CallStatus = "transferring"
 	CallStatusInitiating   CallStatus = "initiating" // outgoing: offer sent, awaiting WA answer
-	CallStatusAccepted     CallStatus = "accepted"   // outgoing: consumer picked up
 )
 
 // DisconnectedBy indicates who ended the call

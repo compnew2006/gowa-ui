@@ -1,114 +1,83 @@
 ---
 title: Webhooks
-description: Receive real-time updates from WhatsApp
+description: Receive real-time updates from GOWA MultiDevice
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
 ## Overview
 
-Whatomate receives webhooks from Meta's WhatsApp Business API and processes them automatically. You can also configure your own webhook endpoints to receive notifications about message events.
+Whatomate receives inbound webhook events from a connected GOWA MultiDevice instance and processes them automatically. Each event is a single JSON `POST` to the GOWA webhook endpoint, signed with an HMAC over the raw request body. There is no GET challenge flow — verification is HMAC-only.
 
-## Meta Webhook Configuration
+## GOWA Webhook Configuration
 
-Whatomate exposes webhook endpoints that you configure in your Meta App settings:
-
-### Verification Endpoint
+Whatomate exposes two webhook paths. Point your GOWA instance (or a per-device `webhook_url`) at one of them:
 
 ```bash
-GET /api/webhook
+POST /api/gowa/webhook
+POST /api/gowa/webhook/{device_id}
 ```
 
-Meta sends a verification request when setting up webhooks:
+The first is the shared single endpoint: GOWA sends all devices' events there and the routing `device_id` is read from the payload. The second is the per-device variant (GOWA v8.10.0+): each device points to a unique path and the path `device_id` overrides the payload's `device_id`, which is more reliable since the payload field can be omitted when the JID can't be mapped.
 
-| Parameter | Description |
-|-----------|-------------|
-| `hub.mode` | Always "subscribe" |
-| `hub.verify_token` | Your configured verify token |
-| `hub.challenge` | Challenge string to return |
-
-### Event Endpoint
-
-```bash
-POST /api/webhook
-```
-
-All WhatsApp events are sent to this endpoint.
+The list of event types to forward is configurable per device via the `webhook_events` field (a comma-separated whitelist). An empty value means all events.
 
 ## Webhook Events
 
-### Incoming Message
-
-Triggered when a new message is received.
+The envelope is the same for every event. The top-level `event` field selects the payload schema; `device_id` identifies the connected account.
 
 ```json
 {
-  "object": "whatsapp_business_account",
-  "entry": [
-    {
-      "id": "WHATSAPP_BUSINESS_ACCOUNT_ID",
-      "changes": [
-        {
-          "value": {
-            "messaging_product": "whatsapp",
-            "metadata": {
-              "display_phone_number": "1234567890",
-              "phone_number_id": "PHONE_NUMBER_ID"
-            },
-            "contacts": [
-              {
-                "profile": {
-                  "name": "John Doe"
-                },
-                "wa_id": "1234567890"
-              }
-            ],
-            "messages": [
-              {
-                "from": "1234567890",
-                "id": "wamid.xxx",
-                "timestamp": "1234567890",
-                "type": "text",
-                "text": {
-                  "body": "Hello!"
-                }
-              }
-            ]
-          },
-          "field": "messages"
-        }
-      ]
-    }
-  ]
+  "event": "message",
+  "device_id": "628123456789@s.whatsapp.net",
+  "session_id": "01H...",
+  "payload": { ... }
 }
 ```
 
-### Message Status Update
+For non-message events the RFC3339/Unix timestamp lives at the top level (`timestamp`). For `message` events it lives inside `payload.timestamp`. Whatomate reads the right one based on `event`.
 
-Triggered when a message status changes.
+### Incoming Message
+
+Triggered when a new message is received (`event: "message"`). The payload mirrors the `MessagePayload` struct:
 
 ```json
 {
-  "object": "whatsapp_business_account",
-  "entry": [
-    {
-      "changes": [
-        {
-          "value": {
-            "statuses": [
-              {
-                "id": "wamid.xxx",
-                "status": "delivered",
-                "timestamp": "1234567890",
-                "recipient_id": "1234567890"
-              }
-            ]
-          },
-          "field": "messages"
-        }
-      ]
-    }
-  ]
+  "event": "message",
+  "device_id": "628123456789@s.whatsapp.net",
+  "payload": {
+    "id": "3EB0F1A2B3C4D5E6",
+    "chat_id": "16505551234@s.whatsapp.net",
+    "from": "16505551234@s.whatsapp.net",
+    "from_name": "John Doe",
+    "timestamp": "2024-01-01T12:00:00Z",
+    "is_from_me": false,
+    "body": "Hello!",
+    "replied_to_id": "3EB0A1B2C3D4E5F6",
+    "quoted_body": "See you at noon?"
+  }
+}
+```
+
+`replied_to_id` is the GOWA message id of the message being replied to, and `quoted_body` is the text of that original message. When the message is a reply, both are populated; otherwise both are omitted. Media messages carry polymorphic `image` / `video` / `audio` / `document` / `sticker` / `video_note` fields (a plain string path/URL, or an object with `path`/`url`, `caption`, `filename`). `chat_id` ending in `@g.us` marks a group; `@newsletter` marks a broadcast channel.
+
+When `is_from_me` is `true`, the message is an outgoing message sent from the connected phone and is recorded as a sent message rather than an incoming echo.
+
+### Message Receipt (Ack)
+
+Triggered when delivery/read receipts arrive (`event: "message.ack"`):
+
+```json
+{
+  "event": "message.ack",
+  "device_id": "628123456789@s.whatsapp.net",
+  "timestamp": "1704110400",
+  "payload": {
+    "ids": ["3EB0F1A2B3C4D5E6", "3EB0F1A2B3C4D5E7"],
+    "chat_id": "16505551234@s.whatsapp.net",
+    "from": "16505551234@s.whatsapp.net",
+    "receipt_type": "read"
+  }
 }
 ```
 
@@ -116,10 +85,97 @@ Triggered when a message status changes.
 
 | Status | Description |
 |--------|-------------|
-| `sent` | Message sent to WhatsApp servers |
 | `delivered` | Message delivered to recipient |
 | `read` | Message read by recipient |
-| `failed` | Message failed to deliver |
+| `failed` | Message failed to deliver (e.g. revoked) |
+
+### Chat Presence
+
+Typing and voice-recording indicators (`event: "chat_presence"`):
+
+```json
+{
+  "event": "chat_presence",
+  "device_id": "628123456789@s.whatsapp.net",
+  "payload": {
+    "from": "16505551234@s.whatsapp.net",
+    "chat_id": "16505551234@s.whatsapp.net",
+    "state": "composing",
+    "media": "",
+    "is_group": false
+  }
+}
+```
+
+`state` is `composing` or `paused`; `media` is `""` for text typing or `"audio"` for a voice recording.
+
+### Message Reaction
+
+A contact reacted to a message with an emoji (`event: "message.reaction"`). An empty `reaction` removes a previous reaction.
+
+```json
+{
+  "event": "message.reaction",
+  "device_id": "628123456789@s.whatsapp.net",
+  "payload": {
+    "reaction": "👍",
+    "reacted_message_id": "3EB0F1A2B3C4D5E6",
+    "from": "16505551234@s.whatsapp.net",
+    "chat_id": "16505551234@s.whatsapp.net"
+  }
+}
+```
+
+### Message Edited
+
+A contact edited a previously sent message (`event: "message.edited"`):
+
+```json
+{
+  "event": "message.edited",
+  "device_id": "628123456789@s.whatsapp.net",
+  "payload": {
+    "original_message_id": "3EB0F1A2B3C4D5E6",
+    "body": "Updated text",
+    "from": "16505551234@s.whatsapp.net",
+    "chat_id": "16505551234@s.whatsapp.net"
+  }
+}
+```
+
+### Message Revoked
+
+A contact unsent a message (`event: "message.revoked"`):
+
+```json
+{
+  "event": "message.revoked",
+  "device_id": "628123456789@s.whatsapp.net",
+  "payload": {
+    "revoked_message_id": "3EB0F1A2B3C4D5E6",
+    "from": "16505551234@s.whatsapp.net",
+    "chat_id": "16505551234@s.whatsapp.net"
+  }
+}
+```
+
+### Connection State
+
+GOWA sends this when a device connects, disconnects, or its connection state changes (`event: "connection"`):
+
+```json
+{
+  "event": "connection",
+  "device_id": "628123456789@s.whatsapp.net",
+  "payload": {
+    "event": "connected",
+    "reason": "",
+    "is_connected": true
+  }
+}
+```
+
+The inner `event` is one of `connected`, `disconnected`, `connecting`, or `logout`.
 
 ## WebSocket Events
 
@@ -142,6 +198,7 @@ ws.onmessage = (event) => {
 | `message:status` | Message status updated |
 | `contact:new` | New contact created |
 | `contact:updated` | Contact information updated |
+| `gowa_connection` | GOWA device connection state changed |
 
 ### Message Event Payload
 
@@ -165,23 +222,28 @@ ws.onmessage = (event) => {
 
 ### Webhook Verification
 
-Always verify webhook requests are from Meta:
+Every inbound GOWA webhook is verified by an HMAC signature over the raw request body:
 
-1. Check the `X-Hub-Signature-256` header
-2. Compute HMAC-SHA256 of the request body using your app secret
-3. Compare with the signature in the header
+1. Read the `X-Hub-Signature-256` header. Its format is `sha256={lowercase_hex_hmac}`.
+2. Compute HMAC-SHA256 over the exact raw request body (the bytes on the wire — not re-serialized JSON) using the account's `webhook_secret`.
+3. Compare the computed digest against the header value using a constant-time comparison.
 
-Whatomate handles this verification automatically.
+Whatomate performs this verification automatically and fail-closed: a missing or mismatched signature returns `403 Webhook verification failed`. To prevent device enumeration, the same generic error is returned whether the failure is a bad signature or an unknown device.
 
 <Aside type="caution">
-  Keep your webhook verify token and app secret secure. Never expose them in client-side code.
+  The HMAC is computed over the original raw body bytes. If a proxy or framework re-serializes the JSON before forwarding, the signature will no longer match. Preserve the body verbatim.
 </Aside>
+
+### Replay Protection
+
+Whatomate rejects webhooks whose timestamp is older than 5 minutes (or more than 5 minutes in the future, to tolerate clock skew in either direction). For non-message events the timestamp is read from the top-level envelope; for `message` events it is read from `payload.timestamp`. A stale or unparseable timestamp is rejected fail-closed, but Whatomate still responds `200` so GOWA does not retry.
 
 ### Rate Limiting
 
-Meta may send webhooks at high volumes during campaigns. Whatomate:
-- Processes webhooks asynchronously
-- Queues events in Redis for processing
+GOWA may send webhooks at high volumes during campaigns. Whatomate:
+
+- Processes webhooks asynchronously and responds `200` within GOWA's 10-second timeout
+- Queues events for processing
 - Handles duplicate events gracefully
 
 <Aside type="tip">

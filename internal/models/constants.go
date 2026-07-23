@@ -37,9 +37,6 @@ const (
 	MessageTypeTemplate    MessageType = "template"
 	MessageTypeInteractive MessageType = "interactive"
 	MessageTypeFlow        MessageType = "flow"
-	MessageTypeReaction    MessageType = "reaction"
-	MessageTypeLocation    MessageType = "location"
-	MessageTypeContact     MessageType = "contact"
 )
 
 // MessageStatus represents the delivery status of a message
@@ -78,10 +75,6 @@ type ResponseType string
 
 const (
 	ResponseTypeText     ResponseType = "text"
-	ResponseTypeTemplate ResponseType = "template"
-	ResponseTypeMedia    ResponseType = "media"
-	ResponseTypeFlow     ResponseType = "flow"
-	ResponseTypeScript   ResponseType = "script"
 	ResponseTypeTransfer ResponseType = "transfer"
 )
 
@@ -89,13 +82,7 @@ const (
 type FlowStepType string
 
 const (
-	FlowStepTypeText         FlowStepType = "text"
-	FlowStepTypeTemplate     FlowStepType = "template"
-	FlowStepTypeScript       FlowStepType = "script"
-	FlowStepTypeAPIFetch     FlowStepType = "api_fetch"
-	FlowStepTypeButtons      FlowStepType = "buttons"
-	FlowStepTypeTransfer     FlowStepType = "transfer"
-	FlowStepTypeWhatsAppFlow FlowStepType = "whatsapp_flow"
+	FlowStepTypeText FlowStepType = "text"
 )
 
 // SessionStatus represents chatbot session states
@@ -105,7 +92,6 @@ const (
 	SessionStatusActive    SessionStatus = "active"
 	SessionStatusCompleted SessionStatus = "completed"
 	SessionStatusCancelled SessionStatus = "cancelled"
-	SessionStatusTimeout   SessionStatus = "timeout"
 )
 
 // TransferStatus represents agent transfer states
@@ -145,18 +131,7 @@ const (
 type TemplateStatus string
 
 const (
-	TemplateStatusPending  TemplateStatus = "PENDING"
 	TemplateStatusApproved TemplateStatus = "APPROVED"
-	TemplateStatusRejected TemplateStatus = "REJECTED"
-)
-
-// TemplateCategory represents WhatsApp template categories
-type TemplateCategory string
-
-const (
-	TemplateCategoryMarketing      TemplateCategory = "MARKETING"
-	TemplateCategoryUtility        TemplateCategory = "UTILITY"
-	TemplateCategoryAuthentication TemplateCategory = "AUTHENTICATION"
 )
 
 // ContextType represents AI context types
@@ -171,15 +146,7 @@ const (
 type InputType string
 
 const (
-	InputTypeNone         InputType = "none"
-	InputTypeText         InputType = "text"
-	InputTypeNumber       InputType = "number"
-	InputTypeEmail        InputType = "email"
-	InputTypePhone        InputType = "phone"
-	InputTypeDate         InputType = "date"
-	InputTypeSelect       InputType = "select"
-	InputTypeButton       InputType = "button"
-	InputTypeWhatsAppFlow InputType = "whatsapp_flow"
+	InputTypeNone InputType = "none"
 )
 
 // AssignmentStrategy represents team assignment strategies
@@ -189,17 +156,6 @@ const (
 	AssignmentStrategyRoundRobin   AssignmentStrategy = "round_robin"
 	AssignmentStrategyLoadBalanced AssignmentStrategy = "load_balanced"
 	AssignmentStrategyManual       AssignmentStrategy = "manual"
-)
-
-// SSOProviderType represents supported SSO providers
-type SSOProviderType string
-
-const (
-	SSOProviderGoogle    SSOProviderType = "google"
-	SSOProviderMicrosoft SSOProviderType = "microsoft"
-	SSOProviderGitHub    SSOProviderType = "github"
-	SSOProviderFacebook  SSOProviderType = "facebook"
-	SSOProviderCustom    SSOProviderType = "custom"
 )
 
 // WebhookEvent represents webhook event types
