@@ -56,75 +56,6 @@ func testAcct() *whatsapp.Account {
 
 // --- Send extensions ---
 
-func TestSendSticker_PostsToStickerEndpoint(t *testing.T) {
-	t.Parallel()
-	mock := newMockAPIServer()
-	defer mock.close()
-	c := gowa.New(mock.url(), "", "")
-
-	_, err := c.SendSticker(context.Background(), testAcct(), whatsapp.Recipient{Phone: "123"}, "https://example.com/s.webp")
-	require.NoError(t, err)
-	assert.Equal(t, "/send/sticker", mock.lastPath)
-}
-
-func TestSendContact_SendsNameAndPhoneInBody(t *testing.T) {
-	t.Parallel()
-	mock := newMockAPIServer()
-	defer mock.close()
-	c := gowa.New(mock.url(), "", "")
-
-	_, err := c.SendContact(context.Background(), testAcct(), whatsapp.Recipient{Phone: "123"}, "John", "5551234")
-	require.NoError(t, err)
-	assert.Equal(t, "/send/contact", mock.lastPath)
-
-	var body map[string]string
-	require.NoError(t, json.Unmarshal(mock.lastBody, &body))
-	assert.Equal(t, "John", body["contact_name"])
-	assert.Equal(t, "5551234", body["contact_phone"])
-}
-
-func TestSendLocation_SendsCoordinatesInBody(t *testing.T) {
-	t.Parallel()
-	mock := newMockAPIServer()
-	defer mock.close()
-	c := gowa.New(mock.url(), "", "")
-
-	_, err := c.SendLocation(context.Background(), testAcct(), whatsapp.Recipient{Phone: "123"}, "37.7749", "-122.4194")
-	require.NoError(t, err)
-	assert.Equal(t, "/send/location", mock.lastPath)
-
-	var body map[string]string
-	require.NoError(t, json.Unmarshal(mock.lastBody, &body))
-	assert.Equal(t, "37.7749", body["latitude"])
-}
-
-func TestSendPoll_SendsQuestionAndMaxAnswer(t *testing.T) {
-	t.Parallel()
-	mock := newMockAPIServer()
-	defer mock.close()
-	c := gowa.New(mock.url(), "", "")
-
-	_, err := c.SendPoll(context.Background(), testAcct(), whatsapp.Recipient{Phone: "123"}, "Pick one?", []string{"A", "B", "C"}, 1)
-	require.NoError(t, err)
-	assert.Equal(t, "/send/poll", mock.lastPath)
-
-	var body map[string]any
-	require.NoError(t, json.Unmarshal(mock.lastBody, &body))
-	assert.Equal(t, "Pick one?", body["question"])
-	assert.Equal(t, float64(1), body["max_answer"])
-}
-
-func TestSendPresence_PostsToPresenceEndpoint(t *testing.T) {
-	t.Parallel()
-	mock := newMockAPIServer()
-	defer mock.close()
-	c := gowa.New(mock.url(), "", "")
-
-	err := c.SendPresence(context.Background(), testAcct(), "available")
-	require.NoError(t, err)
-	assert.Equal(t, "/send/presence", mock.lastPath)
-}
-
 func TestSendChatPresence_PostsToChatPresenceEndpoint(t *testing.T) {
 	t.Parallel()
 	mock := newMockAPIServer()
@@ -134,21 +65,6 @@ func TestSendChatPresence_PostsToChatPresenceEndpoint(t *testing.T) {
 	err := c.SendChatPresence(context.Background(), testAcct(), "123@s.whatsapp.net", "start")
 	require.NoError(t, err)
 	assert.Equal(t, "/send/chat-presence", mock.lastPath)
-}
-
-func TestUpdateMessage_SendsEditedTextToCorrectEndpoint(t *testing.T) {
-	t.Parallel()
-	mock := newMockAPIServer()
-	defer mock.close()
-	c := gowa.New(mock.url(), "", "")
-
-	err := c.UpdateMessage(context.Background(), testAcct(), "MSG123", "123@s.whatsapp.net", "edited text")
-	require.NoError(t, err)
-	assert.Equal(t, "/message/MSG123/update", mock.lastPath)
-
-	var body map[string]string
-	require.NoError(t, json.Unmarshal(mock.lastBody, &body))
-	assert.Equal(t, "edited text", body["message"])
 }
 
 // --- Device management ---
@@ -240,67 +156,6 @@ func TestGetLoginQR_ParsesQRLink(t *testing.T) {
 
 // --- User operations ---
 
-func TestGetUserInfo_ParsesVerifiedName(t *testing.T) {
-	t.Parallel()
-	mock := newMockAPIServer()
-	defer mock.close()
-	mock.respBody = `{"results":{"verified_name":"My Biz","status":"Online","picture_id":"p123"}}`
-	c := gowa.New(mock.url(), "", "")
-
-	info, err := c.GetUserInfo(context.Background(), "dev1")
-	require.NoError(t, err)
-	assert.Equal(t, "My Biz", info.VerifiedName)
-}
-
-func TestCheckUser_ParsesIsOnWhatsApp(t *testing.T) {
-	t.Parallel()
-	mock := newMockAPIServer()
-	defer mock.close()
-	mock.respBody = `{"results":{"is_on_whatsapp":true}}`
-	c := gowa.New(mock.url(), "", "")
-
-	onWA, err := c.CheckUser(context.Background(), "dev1", "16505551234")
-	require.NoError(t, err)
-	assert.True(t, onWA)
-}
-
-func TestSetPushName_PostsToPushnameEndpoint(t *testing.T) {
-	t.Parallel()
-	mock := newMockAPIServer()
-	defer mock.close()
-	c := gowa.New(mock.url(), "", "")
-
-	err := c.SetPushName(context.Background(), "dev1", "New Name")
-	require.NoError(t, err)
-	assert.Equal(t, "/user/pushname", mock.lastPath)
-}
-
-func TestGetMyContacts_ParsesContactList(t *testing.T) {
-	t.Parallel()
-	mock := newMockAPIServer()
-	defer mock.close()
-	mock.respBody = `{"results":{"data":[{"jid":"123@s.whatsapp.net","name":"Alice"}]}}`
-	c := gowa.New(mock.url(), "", "")
-
-	contacts, err := c.GetMyContacts(context.Background(), "dev1")
-	require.NoError(t, err)
-	require.Len(t, contacts, 1)
-	assert.Equal(t, "Alice", contacts[0].Name)
-}
-
-func TestGetMyGroups_ParsesGroupList(t *testing.T) {
-	t.Parallel()
-	mock := newMockAPIServer()
-	defer mock.close()
-	mock.respBody = `{"results":{"data":[{"JID":"group@g.us","Name":"My Group"}]}}`
-	c := gowa.New(mock.url(), "", "")
-
-	groups, err := c.GetMyGroups(context.Background(), "dev1")
-	require.NoError(t, err)
-	require.Len(t, groups, 1)
-	assert.Equal(t, "My Group", groups[0].Name)
-}
-
 func TestGetPrivacySettings_ParsesGroupAddSetting(t *testing.T) {
 	t.Parallel()
 	mock := newMockAPIServer()
@@ -315,66 +170,6 @@ func TestGetPrivacySettings_ParsesGroupAddSetting(t *testing.T) {
 
 // --- Group management ---
 
-func TestCreateGroup_ReturnsGroupID(t *testing.T) {
-	t.Parallel()
-	mock := newMockAPIServer()
-	defer mock.close()
-	mock.respBody = `{"results":{"group_id":"newgroup@g.us"}}`
-	c := gowa.New(mock.url(), "", "")
-
-	groupID, err := c.CreateGroup(context.Background(), "dev1", "Test Group", []string{"123@s.whatsapp.net"})
-	require.NoError(t, err)
-	assert.Equal(t, "newgroup@g.us", groupID)
-	assert.Equal(t, "/group", mock.lastPath)
-}
-
-func TestAddParticipants_ParsesParticipantStatus(t *testing.T) {
-	t.Parallel()
-	mock := newMockAPIServer()
-	defer mock.close()
-	mock.respBody = `{"results":[{"participant":"123@s.whatsapp.net","status":"success","message":"Added"}]}`
-	c := gowa.New(mock.url(), "", "")
-
-	results, err := c.AddParticipants(context.Background(), "dev1", "grp@g.us", []string{"123@s.whatsapp.net"})
-	require.NoError(t, err)
-	require.Len(t, results, 1)
-	assert.Equal(t, "success", results[0].Status)
-}
-
-func TestLeaveGroup_PostsToLeaveEndpoint(t *testing.T) {
-	t.Parallel()
-	mock := newMockAPIServer()
-	defer mock.close()
-	c := gowa.New(mock.url(), "", "")
-
-	err := c.LeaveGroup(context.Background(), "dev1", "grp@g.us")
-	require.NoError(t, err)
-	assert.Equal(t, "/group/leave", mock.lastPath)
-}
-
-func TestSetGroupName_PostsToNameEndpoint(t *testing.T) {
-	t.Parallel()
-	mock := newMockAPIServer()
-	defer mock.close()
-	c := gowa.New(mock.url(), "", "")
-
-	err := c.SetGroupName(context.Background(), "dev1", "grp@g.us", "New Name")
-	require.NoError(t, err)
-	assert.Equal(t, "/group/name", mock.lastPath)
-}
-
-func TestGetGroupInviteLink_ParsesInviteURL(t *testing.T) {
-	t.Parallel()
-	mock := newMockAPIServer()
-	defer mock.close()
-	mock.respBody = `{"results":{"invite_link":"https://chat.whatsapp.com/ABC","group_id":"grp@g.us"}}`
-	c := gowa.New(mock.url(), "", "")
-
-	link, err := c.GetGroupInviteLink(context.Background(), "dev1", "grp@g.us", false)
-	require.NoError(t, err)
-	assert.Equal(t, "https://chat.whatsapp.com/ABC", link.InviteLink)
-}
-
 func TestJoinGroupWithLink_PostsToJoinEndpoint(t *testing.T) {
 	t.Parallel()
 	mock := newMockAPIServer()
@@ -384,68 +179,6 @@ func TestJoinGroupWithLink_PostsToJoinEndpoint(t *testing.T) {
 	err := c.JoinGroupWithLink(context.Background(), "dev1", "https://chat.whatsapp.com/ABC")
 	require.NoError(t, err)
 	assert.Equal(t, "/group/join-with-link", mock.lastPath)
-}
-
-// --- Chat operations ---
-
-func TestListChats_ParsesChatsAndPagination(t *testing.T) {
-	t.Parallel()
-	mock := newMockAPIServer()
-	defer mock.close()
-	mock.respBody = `{"results":{"data":[{"jid":"123@s.whatsapp.net","name":"Alice"}],"pagination":{"limit":25,"offset":0,"total":1}}}`
-	c := gowa.New(mock.url(), "", "")
-
-	chats, page, err := c.ListChats(context.Background(), "dev1", gowa.ChatListParams{Limit: 25})
-	require.NoError(t, err)
-	require.Len(t, chats, 1)
-	assert.Equal(t, "Alice", chats[0].Name)
-	assert.Equal(t, 1, page.Total)
-}
-
-func TestGetChatHistory_ParsesMessageContent(t *testing.T) {
-	t.Parallel()
-	mock := newMockAPIServer()
-	defer mock.close()
-	mock.respBody = `{"results":{"data":[{"id":"MSG1","content":"Hello","is_from_me":false}],"pagination":{"limit":50,"offset":0,"total":1}}}`
-	c := gowa.New(mock.url(), "", "")
-
-	msgs, _, err := c.GetChatHistory(context.Background(), "dev1", "123@s.whatsapp.net", gowa.ChatHistoryParams{Limit: 50})
-	require.NoError(t, err)
-	require.Len(t, msgs, 1)
-	assert.Equal(t, "Hello", msgs[0].Content)
-}
-
-func TestPinChat_PostsToPinEndpoint(t *testing.T) {
-	t.Parallel()
-	mock := newMockAPIServer()
-	defer mock.close()
-	c := gowa.New(mock.url(), "", "")
-
-	err := c.PinChat(context.Background(), "dev1", "123@s.whatsapp.net", true)
-	require.NoError(t, err)
-	assert.Contains(t, mock.lastPath, "/pin")
-}
-
-func TestArchiveChat_PostsToArchiveEndpoint(t *testing.T) {
-	t.Parallel()
-	mock := newMockAPIServer()
-	defer mock.close()
-	c := gowa.New(mock.url(), "", "")
-
-	err := c.ArchiveChat(context.Background(), "dev1", "123@s.whatsapp.net", true)
-	require.NoError(t, err)
-	assert.Contains(t, mock.lastPath, "/archive")
-}
-
-func TestSetDisappearingTimer_PostsToDisappearingEndpoint(t *testing.T) {
-	t.Parallel()
-	mock := newMockAPIServer()
-	defer mock.close()
-	c := gowa.New(mock.url(), "", "")
-
-	err := c.SetDisappearingTimer(context.Background(), "dev1", "123@s.whatsapp.net", 86400)
-	require.NoError(t, err)
-	assert.Contains(t, mock.lastPath, "/disappearing")
 }
 
 // --- Call ---

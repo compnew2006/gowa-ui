@@ -188,25 +188,3 @@ func jsonEqual(a, b any) bool {
 	bj, _ := json.Marshal(b)
 	return string(aj) == string(bj)
 }
-
-// FormatFieldLabel converts snake_case field names to human-readable labels.
-func FormatFieldLabel(field string) string {
-	// Simple conversion: replace underscores with spaces, capitalize first letter
-	if field == "" {
-		return field
-	}
-	result := make([]byte, 0, len(field))
-	capitalize := true
-	for i := 0; i < len(field); i++ {
-		if field[i] == '_' {
-			result = append(result, ' ')
-			capitalize = true
-		} else if capitalize {
-			result = append(result, field[i]-32) // uppercase
-			capitalize = false
-		} else {
-			result = append(result, field[i])
-		}
-	}
-	return string(result)
-}

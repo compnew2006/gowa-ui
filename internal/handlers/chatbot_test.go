@@ -2782,7 +2782,7 @@ func TestApp_GetKeywordRule_ResponseFields(t *testing.T) {
 			Name:            "Full Rule",
 			Keywords:        []string{"keyword1", "keyword2"},
 			MatchType:       models.MatchTypeStartsWith,
-			ResponseType:    models.ResponseTypeTemplate,
+			ResponseType:    "template",
 			ResponseContent: models.JSONB{"template_name": "welcome_tpl", "lang": "en"},
 			Priority:        42,
 			IsEnabled:       true, // Create as enabled first
@@ -2809,7 +2809,7 @@ func TestApp_GetKeywordRule_ResponseFields(t *testing.T) {
 		assert.Equal(t, "Full Rule", resp.Data.Name)
 		assert.Equal(t, []string{"keyword1", "keyword2"}, resp.Data.Keywords)
 		assert.Equal(t, models.MatchTypeStartsWith, resp.Data.MatchType)
-		assert.Equal(t, models.ResponseTypeTemplate, resp.Data.ResponseType)
+		assert.Equal(t, models.ResponseType("template"), resp.Data.ResponseType)
 		assert.Equal(t, 42, resp.Data.Priority)
 		assert.False(t, resp.Data.Enabled)
 		assert.NotEmpty(t, resp.Data.CreatedAt)

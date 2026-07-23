@@ -69,7 +69,6 @@ const (
 	TypeChatReopened         = "chat_reopened"
 	TypeCollaboratorJoined   = "collaborator_joined"
 	TypeCollaboratorLeft     = "collaborator_left"
-	TypeCollaboratorsUpdated = "collaborators_updated"
 )
 
 // BroadcastMessage represents a message to be broadcast to clients
@@ -88,10 +87,4 @@ type AuthPayload struct {
 // SetContactPayload is the payload for set_contact messages from client
 type SetContactPayload struct {
 	ContactID string `json:"contact_id"`
-}
-
-// StatusUpdatePayload is the payload for status_update messages
-type StatusUpdatePayload struct {
-	MessageID string `json:"message_id"`
-	Status    string `json:"status"`
 }

@@ -25,25 +25,17 @@ type MessageExtensions interface {
 	// Body: { phone: chatJID }
 	RevokeMessage(ctx context.Context, account *whatsapp.Account, messageID, chatJID string) error
 
-	// DeleteMessage deletes a message locally (only for the connected account).
-	// GOWA endpoint: POST /message/{message_id}/delete
-	// Body: { phone: chatJID }
-	DeleteMessage(ctx context.Context, account *whatsapp.Account, messageID, chatJID string) error
-
-	// StarMessage stars a message.
-	// GOWA endpoint: POST /message/{message_id}/star
-	// Body: { phone: chatJID }
-	StarMessage(ctx context.Context, account *whatsapp.Account, messageID, chatJID string) error
+	// SendChatPresence sends a typing ("composing") indicator to a chat.
+	// action is "start" or "stop". The indicator is outbound-only: it renders
+	// on the recipient's WhatsApp client, not in the Whatomate UI.
+	// GOWA endpoint: POST /send/chat-presence
+	// Body: { phone: chatJID, action: "start"|"stop" }
+	SendChatPresence(ctx context.Context, account *whatsapp.Account, chatJID, action string) error
 
 	// UnstarMessage removes a star from a message.
 	// GOWA endpoint: POST /message/{message_id}/unstar
 	// Body: { phone: chatJID }
 	UnstarMessage(ctx context.Context, account *whatsapp.Account, messageID, chatJID string) error
-
-	// ForwardMessage forwards a message to another chat.
-	// GOWA endpoint: POST /message/{message_id}/forward
-	// Body: { phone: destJID }
-	ForwardMessage(ctx context.Context, account *whatsapp.Account, messageID, destJID string) error
 
 	// MarkMessageReadWithJID marks a message as read, providing the chat JID
 	// that GOWA requires. This is the preferred read-receipt method for GOWA
@@ -66,7 +58,7 @@ func (c *Client) SendReaction(ctx context.Context, account *whatsapp.Account, me
 	return err
 }
 
-// RevokeMessage unsends a message for everyone.
+// RevokeMessage unsends a message for everyone in the chat.
 func (c *Client) RevokeMessage(ctx context.Context, account *whatsapp.Account, messageID, chatJID string) error {
 	path := fmt.Sprintf("/message/%s/revoke", messageID)
 	body := map[string]any{"phone": toJID(chatJID)}
@@ -74,19 +66,14 @@ func (c *Client) RevokeMessage(ctx context.Context, account *whatsapp.Account, m
 	return err
 }
 
-// DeleteMessage deletes a message locally.
-func (c *Client) DeleteMessage(ctx context.Context, account *whatsapp.Account, messageID, chatJID string) error {
-	path := fmt.Sprintf("/message/%s/delete", messageID)
-	body := map[string]any{"phone": toJID(chatJID)}
-	_, err := c.doJSON(ctx, "POST", path, deviceID(account), body)
-	return err
-}
-
-// StarMessage stars a message.
-func (c *Client) StarMessage(ctx context.Context, account *whatsapp.Account, messageID, chatJID string) error {
-	path := fmt.Sprintf("/message/%s/star", messageID)
-	body := map[string]any{"phone": toJID(chatJID)}
-	_, err := c.doJSON(ctx, "POST", path, deviceID(account), body)
+// SendChatPresence sends a typing ("composing") indicator to a chat. action is
+// "start" or "stop"; the caller is responsible for validating the value.
+func (c *Client) SendChatPresence(ctx context.Context, account *whatsapp.Account, chatJID, action string) error {
+	body := map[string]any{
+		"phone":  toJID(chatJID),
+		"action": action,
+	}
+	_, err := c.doJSON(ctx, "POST", "/send/chat-presence", deviceID(account), body)
 	return err
 }
 
@@ -94,14 +81,6 @@ func (c *Client) StarMessage(ctx context.Context, account *whatsapp.Account, mes
 func (c *Client) UnstarMessage(ctx context.Context, account *whatsapp.Account, messageID, chatJID string) error {
 	path := fmt.Sprintf("/message/%s/unstar", messageID)
 	body := map[string]any{"phone": toJID(chatJID)}
-	_, err := c.doJSON(ctx, "POST", path, deviceID(account), body)
-	return err
-}
-
-// ForwardMessage forwards a message to another chat.
-func (c *Client) ForwardMessage(ctx context.Context, account *whatsapp.Account, messageID, destJID string) error {
-	path := fmt.Sprintf("/message/%s/forward", messageID)
-	body := map[string]any{"phone": toJID(destJID)}
 	_, err := c.doJSON(ctx, "POST", path, deviceID(account), body)
 	return err
 }

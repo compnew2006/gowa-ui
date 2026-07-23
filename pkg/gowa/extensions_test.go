@@ -45,36 +45,6 @@ func TestRevokeMessage_PostsToRevokeEndpoint(t *testing.T) {
 	assert.Equal(t, "/message/MSG456/revoke", mock.lastPath)
 }
 
-func TestDeleteMessage_AppendsJIDSuffixToPlainPhone(t *testing.T) {
-	t.Parallel()
-	mock := newGowaExtMockServer()
-	defer mock.close()
-
-	c := gowa.New(mock.url(), "", "")
-	account := &whatsapp.Account{ProviderType: "gowa", GowaDeviceID: "dev1"}
-
-	err := c.DeleteMessage(context.Background(), account, "MSG789", "628123")
-	require.NoError(t, err)
-	assert.Equal(t, "/message/MSG789/delete", mock.lastPath)
-
-	var body map[string]string
-	require.NoError(t, json.Unmarshal(mock.lastBody, &body))
-	assert.Equal(t, "628123@s.whatsapp.net", body["phone"], "plain phone gets JID suffix")
-}
-
-func TestStarMessage_PostsToStarEndpoint(t *testing.T) {
-	t.Parallel()
-	mock := newGowaExtMockServer()
-	defer mock.close()
-
-	c := gowa.New(mock.url(), "", "")
-	account := &whatsapp.Account{ProviderType: "gowa", GowaDeviceID: "dev1"}
-
-	err := c.StarMessage(context.Background(), account, "MSG001", "628123@s.whatsapp.net")
-	require.NoError(t, err)
-	assert.Equal(t, "/message/MSG001/star", mock.lastPath)
-}
-
 func TestUnstarMessage_PostsToUnstarEndpoint(t *testing.T) {
 	t.Parallel()
 	mock := newGowaExtMockServer()
@@ -86,23 +56,6 @@ func TestUnstarMessage_PostsToUnstarEndpoint(t *testing.T) {
 	err := c.UnstarMessage(context.Background(), account, "MSG001", "628123@s.whatsapp.net")
 	require.NoError(t, err)
 	assert.Equal(t, "/message/MSG001/unstar", mock.lastPath)
-}
-
-func TestForwardMessage_SendsTargetPhone(t *testing.T) {
-	t.Parallel()
-	mock := newGowaExtMockServer()
-	defer mock.close()
-
-	c := gowa.New(mock.url(), "", "")
-	account := &whatsapp.Account{ProviderType: "gowa", GowaDeviceID: "dev1"}
-
-	err := c.ForwardMessage(context.Background(), account, "MSG999", "628999@s.whatsapp.net")
-	require.NoError(t, err)
-	assert.Equal(t, "/message/MSG999/forward", mock.lastPath)
-
-	var body map[string]string
-	require.NoError(t, json.Unmarshal(mock.lastBody, &body))
-	assert.Equal(t, "628999@s.whatsapp.net", body["phone"])
 }
 
 func TestMarkMessageRead_PassesJIDAsPhoneField(t *testing.T) {

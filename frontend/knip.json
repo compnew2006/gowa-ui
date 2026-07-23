@@ -1,0 +1,15 @@
+{
+  "$schema": "https://unpkg.com/knip@latest/schema.json",
+  "entry": [
+    "src/main.ts",
+    "src/router/index.ts"
+  ],
+  "project": ["src/**", "e2e/**"],
+  "ignore": ["src/components/ui/**"],
+  "ignoreDependencies": [
+    "autoprefixer", "postcss", "tailwindcss",
+    "eslint-plugin-vue", "@vue/eslint-config-typescript",
+    "@vue/eslint-config-prettier", "@types/node",
+    "vite-plugin-compression", "pg", "@types/pg"
+  ]
+}

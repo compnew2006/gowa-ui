@@ -247,24 +247,6 @@ export const useTransfersStore = defineStore('transfers', () => {
     return false
   }
 
-  function removeTransfer(id: string) {
-    // Mark as synced via WebSocket
-    lastSyncedAt.value = Date.now()
-
-    const index = transfers.value.findIndex(t => t.id === id)
-    if (index !== -1) {
-      const transfer = transfers.value[index]
-      if (transfer.status === 'active' && !transfer.agent_id) {
-        if (transfer.team_id) {
-          teamQueueCounts.value[transfer.team_id] = Math.max(0, (teamQueueCounts.value[transfer.team_id] || 0) - 1)
-        } else {
-          generalQueueCount.value = Math.max(0, generalQueueCount.value - 1)
-        }
-      }
-      transfers.value.splice(index, 1)
-    }
-  }
-
   return {
     transfers,
     queueCount,
@@ -288,7 +270,6 @@ export const useTransfersStore = defineStore('transfers', () => {
     // CRUD
     addTransfer,
     updateTransfer,
-    removeTransfer,
     getActiveTransferForContact
   }
 })

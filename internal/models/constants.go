@@ -49,6 +49,12 @@ const (
 	MessageStatusRead      MessageStatus = "read"
 	MessageStatusFailed    MessageStatus = "failed"
 	MessageStatusReceived  MessageStatus = "received"
+
+	// MessageStatusRevoked marks a message that was unsent/deleted for
+	// everyone (GOWA revoke, "delete for everyone"). Both the inbound
+	// message.revoked webhook and the outbound revoke handler set this so
+	// the UI renders a consistent "[message revoked]" placeholder.
+	MessageStatusRevoked MessageStatus = "revoked"
 )
 
 // AIProvider represents supported AI providers

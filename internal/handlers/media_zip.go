@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -277,15 +276,4 @@ func addFileToZip(zw *zip.Writer, name, fullPath string) error {
 	defer f.Close()
 	_, err = io.Copy(w, f)
 	return err
-}
-
-// zipSniffContentType is a small helper retained for parity with ServeMedia's
-// sniffing when an entry's MIME type is unknown. It is unused for now but kept
-// to document the intent for future thumbnail/metadata work.
-func zipSniffContentType(data []byte) string {
-	n := len(data)
-	if n > 512 {
-		n = 512
-	}
-	return http.DetectContentType(data[:n])
 }

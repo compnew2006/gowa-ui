@@ -47,13 +47,3 @@ type Queue interface {
 type JobHandler interface {
 	HandleRecipientJob(ctx context.Context, job *RecipientJob) error
 }
-
-// Consumer defines the interface for consuming jobs from the queue
-type Consumer interface {
-	// Consume starts consuming jobs from the queue
-	// Returns when context is cancelled
-	Consume(ctx context.Context, handler JobHandler) error
-
-	// Close closes the consumer connection
-	Close() error
-}

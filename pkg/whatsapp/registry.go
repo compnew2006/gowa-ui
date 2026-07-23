@@ -1,7 +1,6 @@
 package whatsapp
 
 import (
-	"fmt"
 	"sync"
 )
 
@@ -50,16 +49,6 @@ func (r *Registry) Get(account *Account) Provider {
 		return r.getOrCreateGowa(account.GowaBaseURL, account.GowaDeviceID)
 	}
 
-	return r.meta
-}
-
-// GetByType returns the provider for a raw provider type string and optional
-// GOWA base URL. This is useful for code paths that don't have a full Account
-// (e.g. webhook routing).
-func (r *Registry) GetByType(providerType, gowaBaseURL, gowaDeviceID string) Provider {
-	if providerType == "gowa" {
-		return r.getOrCreateGowa(gowaBaseURL, gowaDeviceID)
-	}
 	return r.meta
 }
 
@@ -127,14 +116,4 @@ func RegisterGowaFactory(
 		user, pass := credentialResolver(baseURL)
 		return newClient(baseURL, user, pass)
 	}
-}
-
-// Meta returns the Meta provider (useful for code paths that always need Meta).
-func (r *Registry) Meta() Provider { return r.meta }
-
-// String returns a human-readable summary for debugging.
-func (r *Registry) String() string {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return fmt.Sprintf("Registry{meta=%T, gowa_instances=%d}", r.meta, len(r.gowa))
 }

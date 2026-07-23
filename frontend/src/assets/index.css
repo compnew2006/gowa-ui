@@ -143,11 +143,6 @@
   }
 }
 
-/* Consistent focus states */
-.focus-ring {
-  @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
-}
-
 /* Skip link for accessibility */
 .skip-link {
   @apply sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md;
@@ -176,10 +171,6 @@
 .glass {
   background: var(--glass-bg);
   border-color: var(--glass-border);
-}
-
-.glass-hover:hover {
-  background: var(--glass-bg-hover);
 }
 
 /* Static card with depth - use for non-clickable stat cards */
@@ -250,19 +241,6 @@
     0 25px 50px -12px rgba(0, 0, 0, 0.1),
     0 0 0 1px rgba(0, 0, 0, 0.05),
     0 0 30px -5px rgba(16, 185, 129, 0.1);
-}
-
-/* List item hover - for contact lists, menu items, etc */
-.list-item-hover {
-  @apply transition-all duration-200;
-}
-
-.list-item-hover:hover {
-  @apply bg-white/[0.08];
-}
-
-.light .list-item-hover:hover {
-  @apply bg-gray-100;
 }
 
 /* Chat background - dark-first */
@@ -576,41 +554,6 @@
   transform: scale(0.97);
 }
 
-/* Staggered list item entrance */
-@keyframes list-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-list-in {
-  animation: list-in 0.25s ease both;
-}
-
-/* Success checkmark pop */
-@keyframes pop-in {
-  0% {
-    opacity: 0;
-    transform: scale(0.5);
-  }
-  70% {
-    transform: scale(1.1);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-.animate-pop-in {
-  animation: pop-in 0.3s ease both;
-}
-
 /* Sidebar active indicator bar */
 .nav-active-indicator {
   position: relative;
@@ -677,61 +620,5 @@
 }
 
 .badge-pulse {
-  animation: badge-pulse 2s ease-in-out infinite;
-}
-
-/* Status dot for active badges */
-.badge-dot::before {
-  content: '';
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-  margin-right: 6px;
-  opacity: 0.8;
-}
-
-/* Avatar gradient ring */
-.avatar-ring {
-  position: relative;
-}
-
-.avatar-ring::after {
-  content: '';
-  position: absolute;
-  inset: -2px;
-  border-radius: 9999px;
-  background: linear-gradient(135deg, hsl(var(--primary)), hsl(160 84% 55%));
-  z-index: -1;
-}
-
-/* Online status dot */
-.avatar-status {
-  position: relative;
-}
-
-.avatar-status::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #22c55e;
-  border: 2px solid hsl(var(--background));
-  z-index: 1;
-}
-
-.avatar-status.offline::after {
-  background: #6b7280;
-}
-
-.avatar-status.away::after {
-  background: #f59e0b;
-}
-
-.avatar-status-pulse::after {
   animation: badge-pulse 2s ease-in-out infinite;
 }

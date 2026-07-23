@@ -314,21 +314,21 @@ export const messagesService = {
     return api.post('/messages/template', { contact_id: contactId, ...data })
   },
   sendReaction: (contactId: string, messageId: string, emoji: string) =>
-    api.post(`/contacts/${contactId}/messages/${messageId}/reaction`, { emoji })
+    api.post(`/contacts/${contactId}/messages/${messageId}/reaction`, { emoji }),
+  // GOWA-only: forwards a typing ("composing") indicator to the recipient.
+  // action is "start" or "stop". The backend 400s for non-GOWA accounts; the
+  // caller suppresses the resulting toast since typing is non-critical noise.
+  sendTyping: (contactId: string, action: 'start' | 'stop') =>
+    api.post(`/contacts/${contactId}/typing`, { action }),
+  // GOWA-only: unsends a message for everyone in the chat (delete-for-everyone).
+  revokeMessage: (contactId: string, messageId: string) =>
+    api.post(`/contacts/${contactId}/messages/${messageId}/revoke`)
 }
 
 export const templatesService = {
   list: (params?: { status?: string; category?: string; account?: string; search?: string; page?: number; limit?: number }) =>
     api.get<{ templates: any[]; total?: number }>('/templates', { params }),
-  get: (id: string) => api.get(`/templates/${id}`),
-  uploadMedia: (accountName: string, file: File) => {
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('account', accountName)
-    return api.post('/templates/upload-media', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    })
-  }
+  get: (id: string) => api.get(`/templates/${id}`)
 }
 
 export const flowsService = {
@@ -599,14 +599,7 @@ export const organizationService = {
     meta_app_id?: string
     meta_config_id?: string
     meta_app_secret?: string
-  }) => api.put('/org/settings', data),
-  uploadOrgAudio: (file: File, type: 'hold_music' | 'ringback') => {
-    const formData = new FormData()
-    formData.append('file', file)
-    return api.post(`/org/audio?type=${type}`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    })
-  }
+  }) => api.put('/org/settings', data)
 }
 
 // Organizations
@@ -796,7 +789,6 @@ export interface ActionResult {
 export const customActionsService = {
   list: (params?: { search?: string; page?: number; limit?: number }) =>
     api.get<{ custom_actions: CustomAction[]; total?: number }>('/custom-actions', { params }),
-  get: (id: string) => api.get<CustomAction>(`/custom-actions/${id}`),
   create: (data: {
     name: string
     icon?: string
@@ -991,5 +983,3 @@ export const gowaServersService = {
   setDeviceWebhook: (serverId: string, deviceId: string, data: { webhook_url: string; webhook_events: string; webhook_insecure_skip_verify?: boolean }) =>
     api.put(`/gowa/servers/${serverId}/devices/${encodeURIComponent(deviceId)}/webhook`, data),
 }
-
-export default api

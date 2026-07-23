@@ -98,15 +98,3 @@ func TestComputeChanges_FlattenedField_NoDiff(t *testing.T) {
 	changes := audit.ComputeChanges(old, updated)
 	assert.Empty(t, changes, "only the body sub-field is tracked; button changes are ignored")
 }
-
-func TestFormatFieldLabel(t *testing.T) {
-	cases := map[string]string{
-		"":                      "",
-		"name":                  "Name",
-		"phone_number":          "Phone Number",
-		"chatbot_reminder_sent": "Chatbot Reminder Sent",
-	}
-	for in, want := range cases {
-		assert.Equal(t, want, audit.FormatFieldLabel(in), "input=%q", in)
-	}
-}

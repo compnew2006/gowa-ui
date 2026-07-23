@@ -30,9 +30,6 @@ type Capabilities struct {
 // adapter wrappers. GOWA implements the same signatures, returning
 // ErrNotSupported for Meta-only operations.
 type Provider interface {
-	// Name returns the provider identifier ("meta" or "gowa").
-	Name() string
-
 	// Capabilities returns the feature set supported by this provider.
 	Capabilities() Capabilities
 

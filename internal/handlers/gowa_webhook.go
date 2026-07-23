@@ -659,15 +659,40 @@ func (a *App) processGowaRevoked(account *models.WhatsAppAccount, envelope *gowa
 
 	a.Log.Info("GOWA message revoked", "revoked_message_id", revoked.RevokedMessageID)
 
-	// Mark the message as revoked in the database.
+	// Mark the message as revoked in the database. We use a dedicated
+	// MessageStatusRevoked value (not "failed") so the UI can render a
+	// distinct "[message revoked]" placeholder instead of an error state,
+	// and so the outbound revoke handler can reuse the exact same status.
+	var msg models.Message
 	if err := a.DB.Model(&models.Message{}).
 		Where("whats_app_message_id = ? AND organization_id = ?", revoked.RevokedMessageID, account.OrganizationID).
 		Updates(map[string]any{
-			"status":  models.MessageStatusFailed,
+			"status":  models.MessageStatusRevoked,
 			"content": "[message revoked]",
 		}).Error; err != nil {
 		a.Log.Error("Failed to mark GOWA message as revoked",
 			"revoked_message_id", revoked.RevokedMessageID, "error", err)
+		return
+	}
+
+	// Broadcast the revoked status over WebSocket so every open client
+	// updates the bubble in real time. The existing status_update handler
+	// on the frontend keys off message_id, so we resolve the row first.
+	if err := a.DB.Where("whats_app_message_id = ? AND organization_id = ?",
+		revoked.RevokedMessageID, account.OrganizationID).
+		First(&msg).Error; err != nil {
+		return
+	}
+
+	if a.WSHub != nil {
+		a.WSHub.BroadcastToOrg(account.OrganizationID, websocket.WSMessage{
+			Type: websocket.TypeStatusUpdate,
+			Payload: map[string]any{
+				"message_id": msg.ID,
+				"contact_id": msg.ContactID,
+				"status":     models.MessageStatusRevoked,
+			},
+		})
 	}
 }
 

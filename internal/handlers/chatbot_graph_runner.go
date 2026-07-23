@@ -545,7 +545,10 @@ func evaluateConditionExpression(expression string, data models.JSONB) (bool, er
 func (a *App) execChatTiming(node *ChatNode, ctx *chatNodeCtx) (nodeOutcome, error) {
 	rawSchedule, _ := node.Config["schedule"].([]any)
 	outcome := evaluateTimingSchedule(time.Now(), rawSchedule, a.Log)
-	_ = ctx // ctx unused — included for symmetry with other executors
+	// ctx is intentionally unused: this executor ignores per-conversation
+	// context, but the signature matches the other exec* handlers so the node
+	// dispatch table can call them uniformly.
+	_ = ctx
 	return nodeOutcome{outcome: outcome}, nil
 }
 

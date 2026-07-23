@@ -26,7 +26,7 @@ export interface AppInfo {
 /**
  * Probe a server without the shared axios instance (no redirect side effects)
  */
-export async function probeServer(
+async function probeServer(
   baseUrl: string,
   username?: string,
   password?: string
@@ -154,12 +154,6 @@ export const useConnectionStore = defineStore('connection', () => {
     save()
   }
 
-  function markUnauthorized() {
-    if (status.value === 'connected') {
-      status.value = 'unauthorized'
-    }
-  }
-
   return {
     baseUrl,
     username,
@@ -167,7 +161,6 @@ export const useConnectionStore = defineStore('connection', () => {
     status,
     connect,
     boot,
-    disconnect,
-    markUnauthorized
+    disconnect
   }
 })

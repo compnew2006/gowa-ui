@@ -135,6 +135,3 @@ export const navigationSections: NavSection[] = [
     ]
   }
 ]
-
-// Flat list for backward compatibility (used by AppLayout computed)
-export const navigationItems: NavItem[] = navigationSections.flatMap(s => s.items)

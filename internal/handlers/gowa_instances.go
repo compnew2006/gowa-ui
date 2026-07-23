@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/url"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/shridarpatil/whatomate/pkg/gowa"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
+	"gorm.io/gorm"
 )
 
 // rebaseGowaQRLink fixes GOWA returning a qr_link with an internal host
@@ -311,6 +313,151 @@ func (a *App) ListGowaInstanceDevices(r *fastglue.Request) error {
 	return r.SendEnvelope(map[string]any{"devices": out})
 }
 
+// ensureGowaAccountOpts parameterizes ensureGowaAccountForDevice.
+type ensureGowaAccountOpts struct {
+	InstanceName  string // GowaInstance.Name, used to build a unique account name
+	BaseURL       string // GowaInstance.BaseURL
+	DeviceID      string // GOWA device id (becomes WhatsAppAccount.GowaDeviceID)
+	WebhookSecret string // HMAC secret (encrypted at rest)
+	PreferredName string // optional human label; defaults to InstanceName
+}
+
+// ensureGowaAccountForDevice creates the WhatsAppAccount row that the GOWA
+// webhook receiver needs to resolve a device (getGowaAccountByDeviceID). It is
+// idempotent on GowaDeviceID: if an account already exists for this device it
+// is returned unchanged. The per-org unique Name constraint (idx_wa_org_name)
+// is satisfied by suffixing; the device id is the real identity key.
+//
+// This mirrors App.CreateAccount's GOWA branch (accounts.go:159-181) but is
+// scoped to the GOWA-Servers provisioning path, which previously created the
+// device on the remote GOWA server without ever writing the account row.
+func (a *App) ensureGowaAccountForDevice(orgID, userID uuid.UUID, opts ensureGowaAccountOpts) (*models.WhatsAppAccount, error) {
+	// Idempotent: a device may already have an account (retry, re-provision).
+	var existing models.WhatsAppAccount
+	if err := a.DB.Where("organization_id = ? AND gowa_device_id = ?", orgID, opts.DeviceID).First(&existing).Error; err == nil {
+		a.decryptAccountSecrets(&existing)
+		return &existing, nil
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, fmt.Errorf("lookup existing gowa account: %w", err)
+	}
+
+	// Build a per-org unique Name. idx_wa_org_name requires uniqueness within
+	// an org, so suffix with the device id's short tail until free.
+	label := opts.PreferredName
+	if label == "" {
+		label = opts.InstanceName
+	}
+	if label == "" {
+		label = "gowa"
+	}
+	name := label
+	for i := 0; i < 8; i++ {
+		var count int64
+		if err := a.DB.Model(&models.WhatsAppAccount{}).
+			Where("organization_id = ? AND name = ?", orgID, name).
+			Count(&count).Error; err != nil {
+			return nil, fmt.Errorf("check gowa account name uniqueness: %w", err)
+		}
+		if count == 0 {
+			break
+		}
+		// e.g. "my-server-a3f9" — short suffix keeps it readable.
+		tail := opts.DeviceID
+		if len(tail) > 8 {
+			tail = tail[len(tail)-8:]
+		}
+		name = fmt.Sprintf("%s-%s-%d", label, tail, i+1)
+	}
+
+	account := models.WhatsAppAccount{
+		BaseModel:         models.BaseModel{},
+		OrganizationID:    orgID,
+		Name:              name,
+		ProviderType:      "gowa",
+		GowaBaseURL:       opts.BaseURL,
+		GowaDeviceID:      opts.DeviceID,
+		GowaWebhookSecret: opts.WebhookSecret,
+		Status:            "active",
+		CreatedByID:       &userID,
+		UpdatedByID:       &userID,
+	}
+	if err := a.encryptAccountSecrets(&account); err != nil {
+		return nil, fmt.Errorf("encrypt gowa webhook secret: %w", err)
+	}
+	if err := a.DB.Create(&account).Error; err != nil {
+		return nil, fmt.Errorf("create gowa whatsapp account: %w", err)
+	}
+	a.decryptAccountSecrets(&account)
+	return &account, nil
+}
+
+// SyncGowaInstanceDevice backfills the WhatsAppAccount row for a device that
+// already exists on the GOWA server but has no account row in whatomate
+// (e.g. devices created via the GOWA Servers UI before this fix). It reads the
+// device's current webhook config from GOWA so the stored secret matches what
+// GOWA is actually signing webhooks with.
+//
+// POST /api/gowa/servers/{id}/devices/{deviceId}/sync
+func (a *App) SyncGowaInstanceDevice(r *fastglue.Request) error {
+	orgID, userID, err := a.requireAuth(r, models.ResourceDevices, models.ActionWrite)
+	if err != nil {
+		return nil
+	}
+	bundle, ok := a.resolveGowaInstance(r, orgID)
+	if !ok {
+		return nil
+	}
+	deviceID := parseDeviceID(r)
+	if deviceID == "" {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "deviceId is required", nil, "")
+	}
+
+	// Pull the live webhook config so the stored secret is authoritative. If
+	// GOWA has no secret configured, generate one and push it so the account
+	// row and GOWA agree before any webhook arrives.
+	cfg, err := bundle.client.GetDeviceWebhook(context.Background(), deviceID)
+	if err != nil {
+		a.Log.Error("Failed to read GOWA device webhook during sync", "error", err, "device", deviceID)
+		return r.SendErrorEnvelope(fasthttp.StatusBadGateway, "Failed to read device webhook from GOWA", nil, "")
+	}
+	secret := cfg.WebhookSecret
+	if secret == "" {
+		secret = gowa.GenerateWebhookSecret()
+		webhookURL := bundle.instance.WebhookURL
+		if webhookURL == "" {
+			webhookURL = fmt.Sprintf("%s://%s%s", "http", r.RequestCtx.Host(), a.Config.GOWA.WebhookPath)
+		}
+		if _, err := bundle.client.SetDeviceWebhook(context.Background(), deviceID, gowa.WebhookConfig{
+			WebhookURL:    webhookURL,
+			WebhookSecret: secret,
+			WebhookEvents: "message,message.ack,chat_presence,connection,message.reaction,message.revoked,message.edited",
+		}); err != nil {
+			a.Log.Error("Failed to set GOWA device webhook during sync", "error", err, "device", deviceID)
+			return r.SendErrorEnvelope(fasthttp.StatusBadGateway, "Failed to set webhook on GOWA", nil, "")
+		}
+	}
+
+	account, err := a.ensureGowaAccountForDevice(orgID, userID, ensureGowaAccountOpts{
+		InstanceName:  bundle.instance.Name,
+		BaseURL:       bundle.instance.BaseURL,
+		DeviceID:      deviceID,
+		WebhookSecret: secret,
+	})
+	if err != nil {
+		a.Log.Error("Failed to backfill GOWA WhatsAppAccount", "error", err, "device", deviceID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to sync device", nil, "")
+	}
+
+	a.logAudit(orgID, userID, "devices", account.ID, models.AuditActionUpdated, nil, map[string]any{
+		"device_id": deviceID, "synced_account": true,
+	})
+	return r.SendEnvelope(map[string]any{
+		"device_id":    deviceID,
+		"account_id":   account.ID,
+		"account_name": account.Name,
+	})
+}
+
 // CreateGowaInstanceDevice provisions a new device on a GOWA instance (mirrors
 // the legacy GowaCreateDevice webhook/device-id generation).
 // POST /api/gowa/servers/{id}/devices  body: {"device_name": "..."}
@@ -352,13 +499,35 @@ func (a *App) CreateGowaInstanceDevice(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadGateway, "Failed to create device on GOWA", nil, "")
 	}
 
+	// Provision the matching WhatsAppAccount row so incoming webhooks for this
+	// device can resolve an account (getGowaAccountByDeviceID). Without it the
+	// webhook receiver returns 403 and no chat/message is ever stored, so the
+	// device appears connected but its chats never reach the inbox.
+	account, accountErr := a.ensureGowaAccountForDevice(orgID, userID, ensureGowaAccountOpts{
+		InstanceName:   bundle.instance.Name,
+		BaseURL:        bundle.instance.BaseURL,
+		DeviceID:       device.ID,
+		WebhookSecret:  webhookSecret,
+		PreferredName:  req.DeviceName,
+	})
+
 	a.logAudit(orgID, userID, "devices", uuid.Nil, models.AuditActionCreated, nil, map[string]any{
 		"device_id": device.ID, "instance": bundle.instance.Name, "base_url": bundle.instance.BaseURL,
 	})
-	return r.SendEnvelope(map[string]any{
+	resp := map[string]any{
 		"device_id":      device.ID,
 		"webhook_secret": webhookSecret,
-	})
+	}
+	if accountErr != nil {
+		// The device was created on GOWA but the account row was not. Surface
+		// the error so the operator can retry via the sync endpoint, but still
+		// return the device_id so QR pairing can proceed.
+		a.Log.Error("GOWA device provisioned but WhatsAppAccount row creation failed", "error", accountErr, "device_id", device.ID)
+		resp["account_error"] = accountErr.Error()
+	} else {
+		resp["account_id"] = account.ID
+	}
+	return r.SendEnvelope(resp)
 }
 
 // DeleteGowaInstanceDevice removes a device from a GOWA instance.

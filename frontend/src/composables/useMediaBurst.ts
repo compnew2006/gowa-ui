@@ -6,7 +6,7 @@ import type { Message } from '@/stores/contacts'
  * includes 'sticker' (a media-bearing type the chat renderer treats as media)
  * and 'template' when it has a media_url (header media).
  */
-export const BURST_MEDIA_TYPES = ['image', 'video', 'audio', 'document', 'sticker'] as const
+const BURST_MEDIA_TYPES = ['image', 'video', 'audio', 'document', 'sticker'] as const
 
 export interface UseMediaBurstOptions {
   /**
@@ -86,7 +86,7 @@ export function useMediaBurst(
 }
 
 /** Whether a message counts as media for burst purposes. */
-export function isBurstMedia(message: Message): boolean {
+function isBurstMedia(message: Message): boolean {
   return (BURST_MEDIA_TYPES as readonly string[]).includes(message.message_type)
 }
 

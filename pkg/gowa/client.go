@@ -46,9 +46,6 @@ func New(baseURL, username, password string) *Client {
 	}
 }
 
-// Name returns the provider identifier.
-func (c *Client) Name() string { return "gowa" }
-
 // Capabilities reports the GOWA feature set.
 // GOWA supports free-form messaging, media, interactive buttons (polls),
 // and read receipts. It does NOT support templates, flows, catalog,

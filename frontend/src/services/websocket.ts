@@ -86,7 +86,6 @@ class WebSocketService {
   private maxReconnectAttempts = 5
   private reconnectDelay = 1000
   private pingInterval: number | null = null
-  private isConnected = false
   private hasConnectedBefore = false
   private campaignStatsCallbacks: ((payload: any) => void)[] = []
   private getTokenFn: (() => Promise<string | null>) | null = null
@@ -120,7 +119,6 @@ class WebSocketService {
         this.send({ type: WS_TYPE_AUTH, payload: { token } })
 
         const isReconnection = this.hasConnectedBefore
-        this.isConnected = true
         this.hasConnectedBefore = true
         this.reconnectAttempts = 0
         this.startPing()
@@ -136,7 +134,6 @@ class WebSocketService {
       }
 
       this.ws.onclose = () => {
-        this.isConnected = false
         this.stopPing()
         this.handleReconnect()
       }
@@ -155,7 +152,6 @@ class WebSocketService {
       this.ws.close()
       this.ws = null
     }
-    this.isConnected = false
     this.reconnectAttempts = this.maxReconnectAttempts // Prevent reconnect
   }
 
@@ -637,10 +633,6 @@ class WebSocketService {
       description: 'Data has been refreshed',
       duration: 3000
     })
-  }
-
-  getIsConnected() {
-    return this.isConnected
   }
 }
 

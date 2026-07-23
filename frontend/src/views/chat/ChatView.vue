@@ -67,6 +67,7 @@ import {
   CheckCheck,
   Clock,
   AlertCircle,
+  Ban,
   User,
   UserPlus,
   UserMinus,
@@ -86,6 +87,7 @@ import {
   Globe,
   Code,
   RotateCw,
+  Trash2,
   Filter,
   StickyNote,
   Lock,
@@ -888,6 +890,9 @@ async function sendMessage() {
     messageInput.value = ''
     contactsStore.clearReplyingTo()
     resetTextareaHeight()
+    // Sending ends any active typing session so the recipient's "typing…"
+    // indicator clears as soon as the message lands.
+    stopTypingIndicator()
     await nextTick()
     scrollToBottom()
   } catch (error) {
@@ -1326,14 +1331,91 @@ async function sendTemplateMessage() {
 const reactionPickerMessageId = ref<string | null>(null)
 const quickReactionEmojis = ['👍', '❤️', '😂', '😮', '😢', '🙏']
 
+// --- GOWA typing indicator + revoke (delete-for-everyone) ---
+// Typing is GOWA-only: Meta Cloud API has no equivalent. We gate on the
+// selected account's provider_type so Meta accounts never spam a 400. The
+// action is outbound-only (it renders on the recipient's WhatsApp), so no
+// local UI state changes here — we just forward start/stop to the backend.
+const isCurrentAccountGowa = computed(() => {
+  const name = selectedAccount.value || contactsStore.currentContact?.whatsapp_account
+  if (!name) return false
+  const acct = orgAccounts.value.find((a: any) => a?.name === name)
+  return acct?.provider_type === 'gowa'
+})
+
+// Typing debounce state. On the first keystroke after idle we send "start";
+// after TYPING_STOP_DELAY ms of no input (or on send/blur) we send "stop".
+const TYPING_STOP_DELAY = 2000
+let typingStopTimer: ReturnType<typeof setTimeout> | null = null
+let typingIsActive = false
+
+function stopTypingIndicator() {
+  if (typingStopTimer) {
+    clearTimeout(typingStopTimer)
+    typingStopTimer = null
+  }
+  if (!typingIsActive) return
+  typingIsActive = false
+  const contactId = contactsStore.currentContact?.id
+  if (!contactId) return
+  messagesService.sendTyping(contactId, 'stop').catch(() => {
+    // Typing is best-effort; never surface an error toast (it would spam
+    // the agent on every idle transition).
+  })
+}
+
+function onTypingInput() {
+  if (!isCurrentAccountGowa.value) return
+  const contactId = contactsStore.currentContact?.id
+  if (!contactId) return
+  if (!typingIsActive) {
+    typingIsActive = true
+    messagesService.sendTyping(contactId, 'start').catch(() => { /* best-effort */ })
+  }
+  if (typingStopTimer) clearTimeout(typingStopTimer)
+  typingStopTimer = setTimeout(stopTypingIndicator, TYPING_STOP_DELAY)
+}
+
+// Revoke (delete-for-everyone). GOWA-only; the backend re-validates and 400s
+// for non-GOWA. The optimistic local status is reconciled by the status_update
+// WS broadcast the handler emits on success.
+const revokingMessageId = ref<string | null>(null)
+
+async function revokeMessage(message: Message) {
+  if (!contactsStore.currentContact || revokingMessageId.value) return
+  // Destructive, irreversible action — confirm before hitting GOWA.
+  if (!window.confirm(t('chat.revokeConfirm'))) return
+
+  revokingMessageId.value = message.id
+  try {
+    await messagesService.revokeMessage(contactsStore.currentContact.id, message.id)
+    // Optimistically swap the bubble for the revoked placeholder. The backend
+    // also broadcasts a status_update with status "revoked", which the WS
+    // handler routes through updateMessageStatus — so this just stays ahead.
+    contactsStore.updateMessageStatus(message.id, 'revoked')
+    toast.success(t('chat.messageRevoked'))
+  } catch (error) {
+    toast.error(getErrorMessage(error, t('chat.revokeFailed')))
+  } finally {
+    revokingMessageId.value = null
+  }
+}
+
 async function sendReaction(messageId: string, emoji: string) {
   if (!contactsStore.currentContact) return
+
+  // Toggle-off: if the current user already reacted with this same emoji,
+  // send an empty emoji to remove it (backend treats "" as "remove my reaction").
+  const userId = authStore.user?.id
+  const message = contactsStore.messages.find(m => m.id === messageId)
+  const myExisting = message?.reactions?.find(r => r.from_user === userId)
+  const emojiToSend = myExisting && myExisting.emoji === emoji ? '' : emoji
 
   try {
     const response = await messagesService.sendReaction(
       contactsStore.currentContact.id,
       messageId,
-      emoji
+      emojiToSend
     )
     // Update will come via WebSocket, but we can update locally for immediate feedback
     const data = response.data.data || response.data
@@ -2393,6 +2475,14 @@ async function sendMediaMessage() {
                 >
                   {{ message.sender_push_name || message.sender_phone }}
                 </span>
+                <!-- Revoked (delete-for-everyone) placeholder. Both the inbound
+                     message.revoked webhook and the outbound revoke handler set
+                     status "revoked", so a single render path covers both. -->
+                <span v-if="message.status === 'revoked'" class="block italic text-muted-foreground">
+                  <Ban class="inline h-3 w-3 mr-1 align-text-bottom" />
+                  {{ $t('chat.messageRevokedPlaceholder') }}
+                </span>
+                <template v-else>
                 <div
                   v-if="message.is_reply && message.reply_to_message"
                   class="reply-preview cursor-pointer text-xs"
@@ -2629,6 +2719,7 @@ async function sendMediaMessage() {
                     :class="['h-4 w-4 status-icon', getMessageStatusClass(message.status)]"
                   />
                 </span>
+                </template>
                 <!-- Reactions display -->
                 <div
                   v-if="message.reactions && message.reactions.length > 0"
@@ -2730,6 +2821,21 @@ async function sendMediaMessage() {
                 >
                   <Loader2 v-if="retryingMessageId === message.id" class="h-3 w-3 animate-spin" />
                   <RotateCw v-else class="h-3 w-3" />
+                </Button>
+                <!-- Revoke (delete-for-everyone). GOWA-only and only for sent
+                     outgoing messages that have a WhatsApp ID and aren't already
+                     revoked. The backend re-validates the GOWA guard. -->
+                <Button
+                  v-if="isCurrentAccountGowa && message.status !== 'revoked' && message.status !== 'failed' && message.wamid"
+                  variant="ghost"
+                  size="icon"
+                  class="h-6 w-6 text-muted-foreground hover:text-destructive"
+                  :disabled="revokingMessageId === message.id"
+                  :title="$t('chat.revoke')"
+                  @click="revokeMessage(message)"
+                >
+                  <Loader2 v-if="revokingMessageId === message.id" class="h-3 w-3 animate-spin" />
+                  <Trash2 v-else class="h-3 w-3" />
                 </Button>
               </div>
             </div>
@@ -2854,7 +2960,8 @@ async function sendMediaMessage() {
               rows="1"
               class="flex-1 bg-transparent text-[14px] text-white light:text-gray-900 placeholder:text-white/30 light:placeholder:text-gray-400 focus:outline-none resize-none min-h-[36px] max-h-[120px] py-2 overflow-y-auto"
               @keydown.enter.exact.prevent="sendMessage"
-              @input="autoResizeTextarea"
+              @input="autoResizeTextarea(); onTypingInput()"
+              @blur="stopTypingIndicator"
             />
             <button type="submit" class="w-9 h-9 rounded-lg bg-emerald-600 hover:bg-emerald-500 light:bg-emerald-500 light:hover:bg-emerald-600 flex items-center justify-center transition-colors disabled:opacity-50" :disabled="!messageInput.trim() || isSending">
               <Send class="w-4 h-4 text-white" />

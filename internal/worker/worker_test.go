@@ -287,7 +287,7 @@ func createMinimalCampaignData(t *testing.T, w *Worker, status models.CampaignSt
 		WhatsAppAccount: accountName,
 		Name:            "test_template_" + uniqueID,
 		Language:        "en",
-		Category:        string(models.TemplateCategoryMarketing),
+		Category:        "MARKETING",
 		Status:          string(models.TemplateStatusApproved),
 		BodyContent:     "Hello {{1}}!",
 	}

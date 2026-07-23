@@ -18,8 +18,6 @@ export const ASSIGNMENT_STRATEGIES = [
   { value: 'manual', label: 'Manual Queue', description: 'Agents manually pick up conversations' },
 ] as const
 
-export type AssignmentStrategy = typeof ASSIGNMENT_STRATEGIES[number]['value']
-
 // Role badge variants
 export const ROLE_BADGE_VARIANTS: Record<string, 'default' | 'secondary' | 'outline'> = {
   admin: 'default',

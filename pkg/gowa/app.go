@@ -15,13 +15,6 @@ type AppStatus struct {
 	JID         string `json:"jid"`
 }
 
-// AppDevice represents a device entry returned by GET /app/devices.
-type AppDevice struct {
-	Name   string `json:"name"`
-	Device string `json:"device"`
-	JID    string `json:"jid"`
-}
-
 // LoginWithCodeResponse contains the phone pairing code.
 type LoginWithCodeResponse struct {
 	PairCode string `json:"pair_code"`
@@ -47,13 +40,6 @@ type WebAuthnAssertion struct {
 		Signature         string `json:"signature"`
 		UserHandle        string `json:"userHandle,omitempty"`
 	} `json:"response"`
-}
-
-// HealthCheck pings the GOWA instance health endpoint.
-// GOWA endpoint: GET /health
-func (c *Client) HealthCheck(ctx context.Context) error {
-	_, err := c.doRaw(ctx, "GET", "/health", "")
-	return err
 }
 
 // LoginWithCode initiates a phone-code pairing (alternative to QR).
@@ -101,36 +87,6 @@ func (c *Client) SubmitPasskeyResponse(ctx context.Context, deviceID string, ass
 func (c *Client) ConfirmPasskey(ctx context.Context, deviceID string) error {
 	_, err := c.doJSON(ctx, "POST", "/app/passkey/confirm", deviceID, nil)
 	return err
-}
-
-// AppLogout logs out the active device (keeps the device slot).
-// GOWA endpoint: GET /app/logout
-func (c *Client) AppLogout(ctx context.Context, deviceID string) error {
-	_, err := c.doRaw(ctx, "GET", "/app/logout", deviceID)
-	return err
-}
-
-// AppReconnect reconnects to the WhatsApp server.
-// GOWA endpoint: GET /app/reconnect
-func (c *Client) AppReconnect(ctx context.Context, deviceID string) error {
-	_, err := c.doRaw(ctx, "GET", "/app/reconnect", deviceID)
-	return err
-}
-
-// AppListDevices returns all connected devices (app-level view).
-// GOWA endpoint: GET /app/devices
-func (c *Client) AppListDevices(ctx context.Context) ([]AppDevice, error) {
-	rawBody, err := c.doRaw(ctx, "GET", "/app/devices", "")
-	if err != nil {
-		return nil, err
-	}
-	var resp struct {
-		Results []AppDevice `json:"results"`
-	}
-	if err := json.Unmarshal(rawBody, &resp); err != nil {
-		return nil, fmt.Errorf("parse app devices response: %w", err)
-	}
-	return resp.Results, nil
 }
 
 // GetAppStatus retrieves the overall application connection status.

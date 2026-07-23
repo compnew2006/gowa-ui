@@ -57,7 +57,6 @@ func processForLoops(template string, data map[string]any) string {
 		}
 
 		// Extract loop parts
-		fullMatch := result[match[0]:match[1]]
 		itemVar := result[match[2]:match[3]]
 		arrayPath := result[match[4]:match[5]]
 		loopBody := result[match[6]:match[7]]
@@ -104,9 +103,6 @@ func processForLoops(template string, data map[string]any) string {
 
 		// Replace the for block with the output
 		result = result[:match[0]] + output.String() + result[match[1]:]
-
-		// If no output was generated (empty or non-array), the block is just removed
-		_ = fullMatch // used for debugging
 	}
 
 	return result

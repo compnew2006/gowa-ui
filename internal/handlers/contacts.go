@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/shridarpatil/whatomate/internal/models"
 	"github.com/shridarpatil/whatomate/internal/utils"
+	"github.com/shridarpatil/whatomate/internal/websocket"
 	"github.com/shridarpatil/whatomate/pkg/gowa"
 	"github.com/shridarpatil/whatomate/pkg/whatsapp"
 	"github.com/valyala/fasthttp"
@@ -1211,6 +1212,181 @@ func (a *App) sendWhatsAppReaction(account *models.WhatsAppAccount, contact *mod
 	}
 
 	a.Log.Info("Reaction sent successfully", "message_id", message.WhatsAppMessageID, "emoji", emoji)
+}
+
+// TypingRequest is the body for the typing-indicator endpoint.
+// action is "start" or "stop".
+type TypingRequest struct {
+	Action string `json:"action"`
+}
+
+// SendTypingIndicator forwards a typing ("composing") presence to the chat's
+// recipient via the GOWA send/chat-presence endpoint. This is GOWA-only: Meta
+// Cloud API has no equivalent, so non-GOWA accounts get a clean 400.
+// The indicator is outbound-only (it shows on the recipient's WhatsApp), so
+// no WebSocket event is broadcast back to the Whatomate UI.
+func (a *App) SendTypingIndicator(r *fastglue.Request) error {
+	orgID, _, err := a.getOrgAndUserID(r)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	contactID, err := parsePathUUID(r, "id", "contact")
+	if err != nil {
+		return nil
+	}
+
+	var req TypingRequest
+	if err := json.Unmarshal(r.RequestCtx.PostBody(), &req); err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid request body", nil, "")
+	}
+	// Normalize the action and reject anything that is not start/stop.
+	action := strings.ToLower(strings.TrimSpace(req.Action))
+	if action != "start" && action != "stop" {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, `action must be "start" or "stop"`, nil, "")
+	}
+
+	// Resolve contact (honoring per-user assignment scoping).
+	var contact models.Contact
+	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
+	query = a.scopeAssignedContact(query, uuid.Nil, orgID)
+	if err := query.First(&contact).Error; err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
+	}
+
+	account, err := a.resolveWhatsAppAccount(orgID, contact.WhatsAppAccount)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
+	}
+	if !account.IsGowa() {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Not supported for this account type", nil, "")
+	}
+
+	provider := a.resolveProvider(account)
+	gowaClient, ok := provider.(*gowa.Client)
+	if !ok {
+		return r.SendErrorEnvelope(fasthttp.StatusServiceUnavailable, "GOWA provider not available", nil, "")
+	}
+
+	// Derive the chat JID. For group contacts phone_number already holds the
+	// full @g.us JID; for 1:1 it is a bare phone that needs the suffix. This
+	// mirrors the read-receipt JID derivation in MarkContactRead.
+	chatJID := contact.PhoneNumber
+	if !strings.Contains(chatJID, "@") {
+		chatJID += "@s.whatsapp.net"
+	}
+
+	if err := gowaClient.SendChatPresence(context.Background(), account.ToWAAccount(), chatJID, action); err != nil {
+		a.Log.Error("GOWA typing indicator error", "error", err, "account", account.Name, "action", action)
+		return r.SendErrorEnvelope(fasthttp.StatusBadGateway, "Failed to send typing indicator", nil, "")
+	}
+
+	return r.SendEnvelope(map[string]any{"status": "ok", "action": action})
+}
+
+// RevokeMessageRequest is the (empty) body for the revoke endpoint. It exists
+// so future fields can be added without changing the handler signature; the
+// chat JID is derived server-side from the contact, never trusted from input.
+type RevokeMessageRequest struct{}
+
+// RevokeMessage unsends a message for everyone in the chat (GOWA-only) and
+// marks the local message row as revoked so the UI shows a "[message revoked]"
+// placeholder. It broadcasts a status_update over WebSocket so every open
+// client reflects the revoked state in real time. The status and content set
+// here mirror the inbound message.revoked webhook handler so the two paths
+// stay consistent.
+func (a *App) RevokeMessage(r *fastglue.Request) error {
+	orgID, _, err := a.getOrgAndUserID(r)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	contactID, err := parsePathUUID(r, "id", "contact")
+	if err != nil {
+		return nil
+	}
+	messageIDStr := r.RequestCtx.UserValue("message_id").(string)
+	messageID, err := uuid.Parse(messageIDStr)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid message ID", nil, "")
+	}
+
+	// Resolve the contact (assignment scoping applied).
+	var contact models.Contact
+	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
+	query = a.scopeAssignedContact(query, uuid.Nil, orgID)
+	if err := query.First(&contact).Error; err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
+	}
+
+	// Load the message scoped to the contact (mirrors SendReaction).
+	var message models.Message
+	if err := a.DB.Where("id = ? AND contact_id = ?", messageID, contactID).First(&message).Error; err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Message not found", nil, "")
+	}
+
+	// Only outgoing messages can be revoked by the connected account.
+	if message.Direction != models.DirectionOutgoing {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Only outgoing messages can be revoked", nil, "")
+	}
+	if message.WhatsAppMessageID == "" {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Message has no WhatsApp ID; cannot revoke", nil, "")
+	}
+
+	// Resolve the account from the message (authoritative) falling back to the
+	// contact's account, exactly like SendReaction.
+	revokeAccountName := message.WhatsAppAccount
+	if revokeAccountName == "" {
+		revokeAccountName = contact.WhatsAppAccount
+	}
+	account, err := a.resolveWhatsAppAccount(orgID, revokeAccountName)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
+	}
+	if !account.IsGowa() {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Not supported for this account type", nil, "")
+	}
+
+	provider := a.resolveProvider(account)
+	gowaClient, ok := provider.(*gowa.Client)
+	if !ok {
+		return r.SendErrorEnvelope(fasthttp.StatusServiceUnavailable, "GOWA provider not available", nil, "")
+	}
+
+	chatJID := contact.PhoneNumber
+	if !strings.Contains(chatJID, "@") {
+		chatJID += "@s.whatsapp.net"
+	}
+
+	if err := gowaClient.RevokeMessage(context.Background(), account.ToWAAccount(), message.WhatsAppMessageID, chatJID); err != nil {
+		a.Log.Error("GOWA revoke error", "error", err, "message_id", message.ID, "account", account.Name)
+		return r.SendErrorEnvelope(fasthttp.StatusBadGateway, "Failed to revoke message", nil, "")
+	}
+
+	// Persist the revoked status locally using the same values as the inbound
+	// message.revoked webhook so outbound and inbound stay consistent.
+	if err := a.DB.Model(&models.Message{}).Where("id = ?", message.ID).Updates(map[string]any{
+		"status":  models.MessageStatusRevoked,
+		"content": "[message revoked]",
+	}).Error; err != nil {
+		a.Log.Error("Failed to mark message as revoked after outbound revoke", "error", err, "message_id", message.ID)
+	}
+
+	// Broadcast a status_update so every open client swaps the bubble for the
+	// revoked placeholder in real time.
+	if a.WSHub != nil {
+		a.WSHub.BroadcastToOrg(orgID, websocket.WSMessage{
+			Type: websocket.TypeStatusUpdate,
+			Payload: map[string]any{
+				"message_id": message.ID,
+				"contact_id": message.ContactID,
+				"status":     models.MessageStatusRevoked,
+			},
+		})
+	}
+
+	return r.SendEnvelope(map[string]any{
+		"message_id": message.ID.String(),
+		"status":     models.MessageStatusRevoked,
+	})
 }
 
 // AssignContactRequest represents the request to assign a contact to a user

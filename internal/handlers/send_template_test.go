@@ -278,7 +278,7 @@ func TestApp_SendTemplateMessage(t *testing.T) {
 			WhatsAppAccount: "test-account",
 			Name:            "pending_template_" + uuid.New().String()[:8],
 			Language:        "en",
-			Status:          string(models.TemplateStatusPending),
+			Status:          "PENDING",
 			BodyContent:     "Some content",
 		}
 		require.NoError(t, app.DB.Create(tpl).Error)

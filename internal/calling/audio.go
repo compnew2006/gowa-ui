@@ -132,44 +132,6 @@ func (p *AudioPlayer) PlayFileLoop(filePath string) error {
 	}
 }
 
-// PlaySilence sends silence packets for the specified duration.
-// This keeps the RTP stream alive during pauses.
-func (p *AudioPlayer) PlaySilence(duration time.Duration) {
-	// Opus silence frame (a minimal valid Opus packet representing silence)
-	silence := []byte{0xF8, 0xFF, 0xFE}
-
-	const samplesPerFrame = 960
-
-	ticker := time.NewTicker(20 * time.Millisecond)
-	defer ticker.Stop()
-
-	deadline := time.After(duration)
-	for {
-		select {
-		case <-p.stop:
-			return
-		case <-deadline:
-			return
-		case <-ticker.C:
-			packet := &rtp.Packet{
-				Header: rtp.Header{
-					Version:        2,
-					PayloadType:    111,
-					SequenceNumber: p.sequenceNumber,
-					Timestamp:      p.timestamp,
-					SSRC:           1,
-				},
-				Payload: silence,
-			}
-			if err := p.track.WriteRTP(packet); err != nil {
-				return
-			}
-			p.sequenceNumber++
-			p.timestamp += samplesPerFrame
-		}
-	}
-}
-
 // readOpusPackets parses an OGG stream and returns individual Opus packets,
 // properly splitting multi-packet OGG pages using the segment table.
 // Header pages (OpusHead, OpusTags) are skipped.

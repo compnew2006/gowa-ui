@@ -105,16 +105,6 @@ export const useTeamsStore = defineStore('teams', () => {
     }
   }
 
-  async function fetchTeamMembers(teamId: string): Promise<TeamMember[]> {
-    try {
-      const response = await teamsService.listMembers(teamId)
-      return (response.data as any).data?.members || response.data?.members || []
-    } catch (err: any) {
-      error.value = err.response?.data?.message || 'Failed to fetch team members'
-      throw err
-    }
-  }
-
   async function addTeamMember(teamId: string, userId: string, role: 'manager' | 'agent' = 'agent'): Promise<TeamMember> {
     try {
       const response = await teamsService.addMember(teamId, { user_id: userId, role })
@@ -152,7 +142,6 @@ export const useTeamsStore = defineStore('teams', () => {
     createTeam,
     updateTeam,
     deleteTeam,
-    fetchTeamMembers,
     addTeamMember,
     removeTeamMember
   }

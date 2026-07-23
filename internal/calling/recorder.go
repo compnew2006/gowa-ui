@@ -113,13 +113,6 @@ func (r *CallRecorder) Stop() (string, int, error) {
 	return r.path, r.packetCount, r.writeErr
 }
 
-// PacketCount returns the number of packets written so far.
-func (r *CallRecorder) PacketCount() int {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.packetCount
-}
-
 // writeHeaders writes the two required OGG header pages:
 // Page 0: OpusHead (ID header)
 // Page 1: OpusTags (comment header)

@@ -83,7 +83,20 @@ func (a *App) RedownloadMedia(r *fastglue.Request) error {
 			"Re-download is only supported for GOWA accounts", nil, "")
 	}
 
-	chatJID := contact.PhoneNumber + "@s.whatsapp.net"
+	// Build the chat JID. Individual chats use "@s.whatsapp.net"; GROUP chats
+	// use "@g.us". Detect groups via the is_group_chat metadata flag, with the
+	// "120363" group-ID prefix as a fallback (same logic as ServeMedia's
+	// auto-recovery in media.go). Using the wrong suffix makes GOWA reject the
+	// JID with INVALID_JID.
+	isGroup := contact.Metadata != nil && contact.Metadata["is_group_chat"] == true
+	if !isGroup && strings.HasPrefix(contact.PhoneNumber, "120363") {
+		isGroup = true
+	}
+	suffix := "@s.whatsapp.net"
+	if isGroup {
+		suffix = "@g.us"
+	}
+	chatJID := contact.PhoneNumber + suffix
 
 	// Per-message cooldown (FR-014, FR-024, FR-025). The key is per-MESSAGE
 	// (not per-user) so any user's re-download blocks all others for the same

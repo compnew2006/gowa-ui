@@ -43,7 +43,8 @@ func TestE2E_GOWAAccountResolvesGOWAProvider(t *testing.T) {
 	}
 
 	provider := reg.Get(account)
-	assert.Equal(t, "gowa", provider.Name(), "GOWA account must route to GOWA provider")
+	_, ok := provider.(*gowa.Client)
+	assert.True(t, ok, "GOWA account must route to GOWA provider")
 	assert.False(t, provider.Capabilities().Templates)
 }
 
@@ -68,7 +69,8 @@ func TestE2E_MetaAccountResolvesMetaProvider(t *testing.T) {
 	}
 
 	provider := reg.Get(account)
-	assert.Equal(t, "meta", provider.Name(), "Meta account must route to Meta provider")
+	_, ok := provider.(*whatsapp.Client)
+	assert.True(t, ok, "Meta account must route to Meta provider")
 	assert.True(t, provider.Capabilities().Templates)
 }
 
@@ -93,8 +95,8 @@ func TestE2E_Registry_GOWADownReturnsErrorNotMetaFallback(t *testing.T) {
 	}
 
 	provider := reg.Get(account)
-	require.Equal(t, "gowa", provider.Name(),
-		"must resolve to GOWA provider even when server is down")
+	_, ok := provider.(*gowa.Client)
+	require.True(t, ok, "must resolve to GOWA provider even when server is down")
 
 	_, err := provider.SendTextMessage(
 		context.Background(),

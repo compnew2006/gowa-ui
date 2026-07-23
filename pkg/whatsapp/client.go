@@ -59,9 +59,6 @@ func NewWithBaseURL(log logf.Logger, baseURL string) *Client {
 	}
 }
 
-// Name returns the provider identifier for the Meta Cloud API client.
-func (c *Client) Name() string { return "meta" }
-
 // Capabilities reports the feature set supported by the Meta Cloud API.
 // Meta supports every optional feature in the Provider interface.
 func (c *Client) Capabilities() Capabilities {

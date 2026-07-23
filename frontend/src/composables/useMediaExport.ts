@@ -5,7 +5,7 @@ import type { Message } from '@/stores/contacts'
 import { getRequestHeaders } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 
-export interface RedownloadResult {
+interface RedownloadResult {
   ok: boolean
   /** Updated media fields to patch into the message, when ok. */
   mediaUrl?: string
@@ -147,7 +147,7 @@ function getBasePath(): string {
 }
 
 /** Per-file authenticated media URL (identical to ChatView.getMediaUrl). */
-export function mediaUrlFor(message: Message): string {
+function mediaUrlFor(message: Message): string {
   return `${getBasePath()}/api/media/${message.id}`
 }
 

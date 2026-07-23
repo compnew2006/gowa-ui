@@ -8,12 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestClient_Name(t *testing.T) {
-	t.Parallel()
-	c := whatsapp.New(testutil.NopLogger())
-	assert.Equal(t, "meta", c.Name())
-}
-
 func TestClient_Capabilities_AllTrue(t *testing.T) {
 	t.Parallel()
 	c := whatsapp.New(testutil.NopLogger())

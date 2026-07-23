@@ -10,12 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestClient_Name(t *testing.T) {
-	t.Parallel()
-	c := gowa.New("http://localhost:3000", "", "")
-	assert.Equal(t, "gowa", c.Name())
-}
-
 func TestClient_Capabilities(t *testing.T) {
 	t.Parallel()
 	c := gowa.New("http://localhost:3000", "", "")
