@@ -121,6 +121,35 @@ const authStore = useAuthStore()
 const usersStore = useUsersStore()
 const transfersStore = useTransfersStore()
 const tagsStore = useTagsStore()
+
+// Resizable contacts sidebar state
+const SIDEBAR_MIN_WIDTH = 260
+const SIDEBAR_MAX_WIDTH = 520
+const SIDEBAR_DEFAULT_WIDTH = 320 // matches the previous fixed `w-80`
+const sidebarWidth = ref(SIDEBAR_DEFAULT_WIDTH)
+const isResizingSidebar = ref(false)
+
+function startSidebarResize(e: MouseEvent) {
+  isResizingSidebar.value = true
+  const startX = e.clientX
+  const startWidth = sidebarWidth.value
+
+  function onMouseMove(e: MouseEvent) {
+    // Sidebar is on the left: dragging the right edge rightward widens it
+    const delta = e.clientX - startX
+    const newWidth = Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, startWidth + delta))
+    sidebarWidth.value = newWidth
+  }
+
+  function onMouseUp() {
+    isResizingSidebar.value = false
+    document.removeEventListener('mousemove', onMouseMove)
+    document.removeEventListener('mouseup', onMouseUp)
+  }
+
+  document.addEventListener('mousemove', onMouseMove)
+  document.addEventListener('mouseup', onMouseUp)
+}
 const notesStore = useNotesStore()
 const { isDark } = useColorMode()
 
@@ -1805,7 +1834,16 @@ async function sendMediaMessage() {
 <template>
   <div class="flex h-full bg-[#0a0a0b] light:bg-gray-50">
     <!-- Contacts List -->
-    <div class="w-80 border-r border-white/[0.08] light:border-gray-200 flex flex-col bg-[#0a0a0b] light:bg-white">
+    <div
+      class="border-r border-white/[0.08] light:border-gray-200 flex flex-col bg-[#0a0a0b] light:bg-white relative shrink-0"
+      :style="{ width: `${sidebarWidth}px` }"
+    >
+      <!-- Resize Handle (right edge of the sidebar) -->
+      <div
+        class="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-primary/20 active:bg-primary/30 z-10 -mr-px border-r border-transparent"
+        :class="{ 'bg-primary/30': isResizingSidebar }"
+        @mousedown="startSidebarResize"
+      />
       <!-- Search Header -->
       <div class="p-2 border-b border-white/[0.08] light:border-gray-200">
         <div class="flex items-center gap-2">
