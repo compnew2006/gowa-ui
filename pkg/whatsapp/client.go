@@ -400,29 +400,37 @@ func (c *Client) sendMediaMessage(ctx context.Context, account *Account, rcpt Re
 	return messageID, nil
 }
 
-// SendImageMessage sends an image message using a media ID
-func (c *Client) SendImageMessage(ctx context.Context, account *Account, rcpt Recipient, mediaID, caption string) (string, error) {
+// SendImageMessage sends an image message using a media ID. replyMessageID
+// is accepted to satisfy the Provider interface; Meta reply context for
+// media is not wired here (the GOWA client is the consumer of this param).
+func (c *Client) SendImageMessage(ctx context.Context, account *Account, rcpt Recipient, mediaID, caption, replyMessageID string) (string, error) {
 	return c.sendMediaMessage(ctx, account, rcpt, "image", map[string]any{
 		"id": mediaID, "caption": caption,
 	})
 }
 
-// SendDocumentMessage sends a document message using a media ID
-func (c *Client) SendDocumentMessage(ctx context.Context, account *Account, rcpt Recipient, mediaID, filename, caption string) (string, error) {
+// SendDocumentMessage sends a document message using a media ID. replyMessageID
+// is accepted to satisfy the Provider interface; Meta reply context for
+// media is not wired here.
+func (c *Client) SendDocumentMessage(ctx context.Context, account *Account, rcpt Recipient, mediaID, filename, caption, replyMessageID string) (string, error) {
 	return c.sendMediaMessage(ctx, account, rcpt, "document", map[string]any{
 		"id": mediaID, "filename": filename, "caption": caption,
 	})
 }
 
-// SendVideoMessage sends a video message using a media ID
-func (c *Client) SendVideoMessage(ctx context.Context, account *Account, rcpt Recipient, mediaID, caption string) (string, error) {
+// SendVideoMessage sends a video message using a media ID. replyMessageID
+// is accepted to satisfy the Provider interface; Meta reply context for
+// media is not wired here.
+func (c *Client) SendVideoMessage(ctx context.Context, account *Account, rcpt Recipient, mediaID, caption, replyMessageID string) (string, error) {
 	return c.sendMediaMessage(ctx, account, rcpt, "video", map[string]any{
 		"id": mediaID, "caption": caption,
 	})
 }
 
-// SendAudioMessage sends an audio message using a media ID
-func (c *Client) SendAudioMessage(ctx context.Context, account *Account, rcpt Recipient, mediaID string) (string, error) {
+// SendAudioMessage sends an audio message using a media ID. replyMessageID
+// is accepted to satisfy the Provider interface; Meta reply context for
+// media is not wired here.
+func (c *Client) SendAudioMessage(ctx context.Context, account *Account, rcpt Recipient, mediaID, replyMessageID string) (string, error) {
 	return c.sendMediaMessage(ctx, account, rcpt, "audio", map[string]any{
 		"id": mediaID,
 	})

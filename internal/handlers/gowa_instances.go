@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,6 +13,42 @@ import (
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 )
+
+// rebaseGowaQRLink fixes GOWA returning a qr_link with an internal host
+// (e.g. "http://localhost:3000/statics/...") that whatomate cannot reach.
+// It keeps the path+query but swaps the scheme/host onto the instance's
+// configured BaseURL, so DownloadMedia hits the server the user actually
+// configured. If qrLink is relative or already on the right host, it is
+// returned unchanged.
+func rebaseGowaQRLink(qrLink, baseURL string) string {
+	if qrLink == "" || baseURL == "" {
+		return qrLink
+	}
+	parsed, err := url.Parse(qrLink)
+	if err != nil || (parsed.IsAbs() && parsed.Host != "") {
+		// If it's already absolute, only rebase when the host differs from the
+		// configured base. This preserves the normal same-host case (where the
+		// returned link is already correct) and only intervenes on mismatches.
+		if err != nil {
+			return qrLink
+		}
+		base, bErr := url.Parse(baseURL)
+		if bErr != nil || base.Host == "" || base.Host == parsed.Host {
+			return qrLink
+		}
+		parsed.Scheme = base.Scheme
+		parsed.Host = base.Host
+		return parsed.String()
+	}
+	// Relative link: prefix the configured base URL.
+	base, err := url.Parse(baseURL)
+	if err != nil || base.Host == "" {
+		return qrLink
+	}
+	parsed.Scheme = base.Scheme
+	parsed.Host = base.Host
+	return parsed.String()
+}
 
 // gowaInstanceBundle holds the resolved DB instance and a live gowa.Client built
 // from its decrypted credentials.
@@ -376,9 +413,12 @@ func (a *App) GowaInstanceDeviceQR(r *fastglue.Request) error {
 		a.Log.Error("Failed to get GOWA login QR", "error", err, "device", deviceID)
 		return r.SendErrorEnvelope(fasthttp.StatusBadGateway, "Failed to get QR code from GOWA", nil, "")
 	}
-	qrData, err := bundle.client.DownloadMedia(ctx, qr.QRLink, "")
+	// GOWA returns a qr_link with its own internal host (often localhost:3000);
+	// rebase it onto the instance's configured BaseURL so whatomate can reach it.
+	qrLink := rebaseGowaQRLink(qr.QRLink, bundle.instance.BaseURL)
+	qrData, err := bundle.client.DownloadMedia(ctx, qrLink, "")
 	if err != nil {
-		a.Log.Error("Failed to download GOWA QR image", "error", err, "device", deviceID)
+		a.Log.Error("Failed to download GOWA QR image", "error", err, "device", deviceID, "qr_link", qrLink, "original", qr.QRLink, "base_url", bundle.instance.BaseURL)
 		return r.SendErrorEnvelope(fasthttp.StatusBadGateway, "Failed to download QR image", nil, "")
 	}
 	dataURI := fmt.Sprintf("data:image/png;base64,%s", base64.StdEncoding.EncodeToString(qrData))

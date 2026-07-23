@@ -1,6 +1,6 @@
-import { test, expect, request as playwrightRequest } from '@playwright/test'
+import { test, expect, request as playwrightRequest, type Page } from '@playwright/test'
 import { TablePage, DialogPage } from '../../pages'
-import { loginAsAdmin, login, createUserFixture, ApiHelper, TEST_USERS } from '../../helpers'
+import { loginAsAdmin, login, createUserFixture, generateUniqueEmail, verifyAuditLogged, ApiHelper, TEST_USERS } from '../../helpers'
 import {
   createTestScope,
   createUserWithPermissions,
@@ -8,6 +8,25 @@ import {
   SUPER_ADMIN,
   type TestUserHandle,
 } from '../../framework'
+
+// Read the column header's aria-sort attribute directly (the TablePage POM
+// exposes icon-based sort detection; aria-sort is the stronger, accessible
+// contract and toggling asc/desc on click is what we want to prove).
+async function getAriaSort(page: Page, column: string): Promise<'ascending' | 'descending' | null> {
+  const header = page.locator('thead th').filter({ hasText: column }).first()
+  if (await header.count() === 0) return null
+  const value = await header.getAttribute('aria-sort')
+  if (value === 'ascending' || value === 'descending') return value
+  return null
+}
+
+// Look up a user's id by email via the list API. The user id isn't surfaced in
+// the DOM after a dialog create, so we resolve it here for audit-log assertions.
+async function findUserIdByEmail(api: ApiHelper, email: string): Promise<string | null> {
+  const users = await api.getUsers()
+  const found = users.find((u) => u.email === email)
+  return found ? found.id : null
+}
 
 test.describe('Users Management', () => {
   let tablePage: TablePage
@@ -44,7 +63,7 @@ test.describe('Users Management', () => {
     await expect(dialogPage.dialog).toBeVisible()
   })
 
-  test('should create a new user', async ({ page }) => {
+  test('should create a new user', async ({ page, request }) => {
     const newUser = createUserFixture()
 
     await page.getByRole('button', { name: /^Add User$/i }).click()
@@ -61,6 +80,14 @@ test.describe('Users Management', () => {
     // Verify user appears in list
     await tablePage.search(newUser.email)
     await tablePage.expectRowExists(newUser.email)
+
+    // API side-channel: confirm the audit trail recorded the creation.
+    const api = new ApiHelper(request)
+    await api.login(SUPER_ADMIN.email, SUPER_ADMIN.password)
+    const userId = await findUserIdByEmail(api, newUser.email)
+    if (userId) {
+      await verifyAuditLogged(request, 'user', userId, 'created')
+    }
   })
 
   test('should show validation error for invalid email', async ({ page }) => {
@@ -77,7 +104,7 @@ test.describe('Users Management', () => {
     await expect(dialogPage.dialog).toBeVisible()
   })
 
-  test('should edit existing user', async ({ page }) => {
+  test('should edit existing user', async ({ page, request }) => {
     // First create a user to edit (still uses the create dialog)
     const user = createUserFixture()
 
@@ -90,17 +117,21 @@ test.describe('Users Management', () => {
     await dialogPage.submit()
     await dialogPage.waitForClose()
 
+    const api = new ApiHelper(request)
+    await api.login(SUPER_ADMIN.email, SUPER_ADMIN.password)
+
     // Open the detail page via the pencil icon
     await tablePage.search(user.email)
     await tablePage.editRow(user.email)
     await page.waitForURL(/\/settings\/users\/[a-f0-9-]+$/)
     await page.waitForLoadState('networkidle')
 
-    // Update Full Name on the detail page
+    // Update Full Name on the detail page.
+    // TODO(test-guard): expose fullNameInput on users POM — the detail-page
+    // form uses a label association, so getByLabel is far less brittle than the
+    // previous `div.space-y-1\.5:has(> label:has-text("Full Name")) input` chain.
     const updatedName = 'Updated User Name'
-    const nameInput = page
-      .locator('div.space-y-1\\.5:has(> label:has-text("Full Name")) input')
-      .first()
+    const nameInput = page.getByLabel('Full Name')
     await nameInput.fill(updatedName)
     await page.waitForTimeout(300)
 
@@ -110,6 +141,16 @@ test.describe('Users Management', () => {
     await saveBtn.click()
     await page.waitForLoadState('networkidle')
 
+    // API side-channel: confirm the audit trail recorded the update.
+    // NOTE: ARCHITECTURE.md "Audit-log assertions" + common-pitfalls table warn
+    // that on user update the audit diff records the preloaded relation's JSON
+    // tag (`role`), not the FK column (`role_id`). We therefore omit
+    // expectedFields entirely rather than asserting role_id, which would fail.
+    const userId = await findUserIdByEmail(api, user.email)
+    if (userId) {
+      await verifyAuditLogged(request, 'user', userId, 'updated')
+    }
+
     // Verify updated name via the list view
     await page.goto('/settings/users')
     await page.waitForLoadState('networkidle')
@@ -117,7 +158,7 @@ test.describe('Users Management', () => {
     await tablePage.expectRowExists(updatedName)
   })
 
-  test('should delete user', async ({ page }) => {
+  test('should delete user', async ({ page, request }) => {
     // First create a user to delete
     const user = createUserFixture({ fullName: 'User To Delete' })
 
@@ -130,6 +171,10 @@ test.describe('Users Management', () => {
     await dialogPage.submit()
     await dialogPage.waitForClose()
 
+    const api = new ApiHelper(request)
+    await api.login(SUPER_ADMIN.email, SUPER_ADMIN.password)
+    const userId = await findUserIdByEmail(api, user.email)
+
     // Search for the user
     await tablePage.search(user.email)
     await tablePage.expectRowExists(user.email)
@@ -141,19 +186,28 @@ test.describe('Users Management', () => {
     await tablePage.clearSearch()
     await tablePage.search(user.email)
     await tablePage.expectRowNotExists(user.email)
+
+    // API side-channel: confirm the audit trail recorded the deletion.
+    if (userId) {
+      await verifyAuditLogged(request, 'user', userId, 'deleted')
+    }
   })
 
   test('should cancel user creation', async ({ page }) => {
+    // Use a unique email rather than a hard-coded literal so repeated runs and
+    // parallel workers can't collide (ARCHITECTURE.md: never hard-code emails).
+    const email = generateUniqueEmail('cancelled')
+
     await page.getByRole('button', { name: /^Add User$/i }).click()
     await dialogPage.waitForOpen()
 
-    await dialogPage.fillField('Email', 'cancelled@test.com')
+    await dialogPage.fillField('Email', email)
     await dialogPage.cancel()
 
     await dialogPage.waitForClose()
     // User should not be created
-    await tablePage.search('cancelled@test.com')
-    await tablePage.expectRowNotExists('cancelled@test.com')
+    await tablePage.search(email)
+    await tablePage.expectRowNotExists(email)
   })
 })
 
@@ -314,22 +368,21 @@ test.describe('Users - Table Sorting', () => {
     await tablePage.expectSortDirection('User', 'asc')
   })
 
-  test('should sort by created date', async () => {
-    await tablePage.clickColumnHeader('Created')
-    const direction = await tablePage.getSortDirection('Created')
-    expect(direction).not.toBeNull()
-  })
+  test('users table sorts by Created, Status, and Role', async ({ page }) => {
+    // Collapsed from three near-identical tests (sort by Created / Status /
+    // Role). Each used to assert only that the sort indicator was non-null;
+    // this loop additionally asserts the aria-sort attribute toggles between
+    // ascending and descending on successive clicks.
+    for (const column of ['Created', 'Status', 'Role']) {
+      await tablePage.clickColumnHeader(column)
+      const firstSort = await getAriaSort(page, column)
+      expect(firstSort, `${column}: expected a sort direction after first click`).not.toBeNull()
 
-  test('should sort by status', async () => {
-    await tablePage.clickColumnHeader('Status')
-    const direction = await tablePage.getSortDirection('Status')
-    expect(direction).not.toBeNull()
-  })
-
-  test('should sort by role', async () => {
-    await tablePage.clickColumnHeader('Role')
-    const direction = await tablePage.getSortDirection('Role')
-    expect(direction).not.toBeNull()
+      await tablePage.clickColumnHeader(column)
+      const secondSort = await getAriaSort(page, column)
+      expect(secondSort, `${column}: expected a sort direction after second click`).not.toBeNull()
+      expect(secondSort, `${column}: sort should toggle on second click`).not.toEqual(firstSort)
+    }
   })
 
   test('should change sort column when clicking different header', async () => {

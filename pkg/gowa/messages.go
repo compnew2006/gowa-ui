@@ -31,31 +31,34 @@ func (c *Client) resolveMediaData(mediaID string) ([]byte, string, string, error
 
 // SendImageMessage sends an image. Because GOWA has no separate upload
 // endpoint, mediaID is either a key returned by UploadMedia (consumed
-// inline) or a URL passed as the image_url field.
-func (c *Client) SendImageMessage(ctx context.Context, account *whatsapp.Account, rcpt whatsapp.Recipient, mediaID, caption string) (string, error) {
-	return c.sendMedia(ctx, account, rcpt, mediaID, caption, "image", "/send/image")
+// inline) or a URL passed as the image_url field. replyMessageID, when
+// non-empty, quotes the referenced message (GOWA reply_message_id).
+func (c *Client) SendImageMessage(ctx context.Context, account *whatsapp.Account, rcpt whatsapp.Recipient, mediaID, caption, replyMessageID string) (string, error) {
+	return c.sendMedia(ctx, account, rcpt, mediaID, caption, "image", "/send/image", replyMessageID)
 }
 
 // SendVideoMessage sends a video message.
-func (c *Client) SendVideoMessage(ctx context.Context, account *whatsapp.Account, rcpt whatsapp.Recipient, mediaID, caption string) (string, error) {
-	return c.sendMedia(ctx, account, rcpt, mediaID, caption, "video", "/send/video")
+func (c *Client) SendVideoMessage(ctx context.Context, account *whatsapp.Account, rcpt whatsapp.Recipient, mediaID, caption, replyMessageID string) (string, error) {
+	return c.sendMedia(ctx, account, rcpt, mediaID, caption, "video", "/send/video", replyMessageID)
 }
 
 // SendAudioMessage sends an audio/voice message.
-func (c *Client) SendAudioMessage(ctx context.Context, account *whatsapp.Account, rcpt whatsapp.Recipient, mediaID string) (string, error) {
-	return c.sendMedia(ctx, account, rcpt, mediaID, "", "audio", "/send/audio")
+func (c *Client) SendAudioMessage(ctx context.Context, account *whatsapp.Account, rcpt whatsapp.Recipient, mediaID, replyMessageID string) (string, error) {
+	return c.sendMedia(ctx, account, rcpt, mediaID, "", "audio", "/send/audio", replyMessageID)
 }
 
 // SendDocumentMessage sends a document/file.
-func (c *Client) SendDocumentMessage(ctx context.Context, account *whatsapp.Account, rcpt whatsapp.Recipient, mediaID, filename, caption string) (string, error) {
-	return c.sendMedia(ctx, account, rcpt, mediaID, caption, "file", "/send/file")
+func (c *Client) SendDocumentMessage(ctx context.Context, account *whatsapp.Account, rcpt whatsapp.Recipient, mediaID, filename, caption, replyMessageID string) (string, error) {
+	return c.sendMedia(ctx, account, rcpt, mediaID, caption, "file", "/send/file", replyMessageID)
 }
 
 // sendMedia is the shared multipart/JSON sender for all media types.
 // If the mediaID was produced by UploadMedia it is in the in-memory cache
 // and is sent as a binary multipart field. Otherwise mediaID is treated as
-// a URL and sent as the *_url JSON field.
-func (c *Client) sendMedia(ctx context.Context, account *whatsapp.Account, rcpt whatsapp.Recipient, mediaID, caption, fileType, path string) (string, error) {
+// a URL and sent as the *_url JSON field. replyMessageID, when non-empty,
+// is forwarded as reply_message_id so the recipient sees the quoted
+// context (mirrors SendTextMessage's empty-omit behavior).
+func (c *Client) sendMedia(ctx context.Context, account *whatsapp.Account, rcpt whatsapp.Recipient, mediaID, caption, fileType, path, replyMessageID string) (string, error) {
 	phone := toJID(rcpt.Phone)
 	data, _, cachedFilename, err := c.resolveMediaData(mediaID)
 	if err != nil {
@@ -67,6 +70,9 @@ func (c *Client) sendMedia(ctx context.Context, account *whatsapp.Account, rcpt 
 		fields := map[string]string{"phone": phone}
 		if caption != "" {
 			fields["caption"] = caption
+		}
+		if replyMessageID != "" {
+			fields["reply_message_id"] = replyMessageID
 		}
 		fileField := fileType // "image", "video", "audio", "file"
 		fileName := cachedFilename
@@ -86,6 +92,9 @@ func (c *Client) sendMedia(ctx context.Context, account *whatsapp.Account, rcpt 
 	}
 	if caption != "" {
 		body["caption"] = caption
+	}
+	if replyMessageID != "" {
+		body["reply_message_id"] = replyMessageID
 	}
 	return c.doJSON(ctx, "POST", path, deviceID(account), body)
 }

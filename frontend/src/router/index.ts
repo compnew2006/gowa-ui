@@ -165,6 +165,18 @@ const router = createRouter({
           meta: { permission: 'accounts' }
         },
         {
+          path: 'settings/gowa-servers',
+          name: 'gowa-servers',
+          component: () => import('@/views/settings/GowaServersView.vue'),
+          meta: { permission: 'gowa_instances' }
+        },
+        {
+          path: 'settings/gowa-servers/:id',
+          name: 'gowa-server-detail',
+          component: () => import('@/views/settings/GowaServerDetailView.vue'),
+          meta: { permission: 'gowa_instances' }
+        },
+        {
           path: 'settings/canned-responses',
           name: 'canned-responses',
           component: () => import('@/views/settings/CannedResponsesView.vue'),
@@ -319,7 +331,8 @@ const navigationOrder = [
     { path: '/settings/api-keys', permission: 'api_keys' },
     { path: '/settings/webhooks', permission: 'webhooks' },
     { path: '/settings/custom-actions', permission: 'custom_actions' },
-    { path: '/settings/sso', permission: 'settings.sso' }
+    { path: '/settings/sso', permission: 'settings.sso' },
+    { path: '/settings/gowa-servers', permission: 'gowa_instances' }
   ]}
 ]
 

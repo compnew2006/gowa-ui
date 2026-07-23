@@ -39,10 +39,10 @@ type Provider interface {
 	// --- Core messaging (shared between Meta and GOWA) ---
 
 	SendTextMessage(ctx context.Context, account *Account, rcpt Recipient, text string, replyToMsgID ...string) (string, error)
-	SendImageMessage(ctx context.Context, account *Account, rcpt Recipient, mediaID, caption string) (string, error)
-	SendVideoMessage(ctx context.Context, account *Account, rcpt Recipient, mediaID, caption string) (string, error)
-	SendAudioMessage(ctx context.Context, account *Account, rcpt Recipient, mediaID string) (string, error)
-	SendDocumentMessage(ctx context.Context, account *Account, rcpt Recipient, mediaID, filename, caption string) (string, error)
+	SendImageMessage(ctx context.Context, account *Account, rcpt Recipient, mediaID, caption, replyMessageID string) (string, error)
+	SendVideoMessage(ctx context.Context, account *Account, rcpt Recipient, mediaID, caption, replyMessageID string) (string, error)
+	SendAudioMessage(ctx context.Context, account *Account, rcpt Recipient, mediaID, replyMessageID string) (string, error)
+	SendDocumentMessage(ctx context.Context, account *Account, rcpt Recipient, mediaID, filename, caption, replyMessageID string) (string, error)
 	UploadMedia(ctx context.Context, account *Account, data []byte, mimeType, filename string) (string, error)
 	MarkMessageRead(ctx context.Context, account *Account, messageID string) error
 

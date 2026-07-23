@@ -42,6 +42,8 @@ export const RESOURCE_LABELS: Record<string, string> = {
   apikeys: 'API Keys',
   roles: 'Roles',
   tags: 'Tags',
+  gowa_instances: 'GOWA Servers',
+  devices: 'Devices',
 } as const
 
 // Default pagination settings

@@ -42,7 +42,7 @@ test.describe('Tags Management', () => {
     await tagsPage.expectToast('required')
   })
 
-  test('should create a tag with each color', async ({ page, request }) => {
+  test('should create a tag with each color', async ({ request }) => {
     // Merged from "should create a new tag" and "should create a tag with
     // different color", which were near-duplicates (identical setup and
     // assertions, only the color value differed). This parameterized version
@@ -69,7 +69,7 @@ test.describe('Tags Management', () => {
     }
   })
 
-  test('should edit existing tag', async ({ page, request }) => {
+  test('should edit existing tag', async ({ request }) => {
     // First create a tag
     const tagName = scope.name('edit')
 
@@ -100,7 +100,7 @@ test.describe('Tags Management', () => {
     }
   })
 
-  test('should delete tag', async ({ page, request }) => {
+  test('should delete tag', async ({ request }) => {
     // First create a tag
     const tagName = scope.name('delete')
 

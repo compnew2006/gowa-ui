@@ -25,15 +25,11 @@ test.describe('Profile Page', () => {
     await expect(profilePage.changePasswordCard).toContainText('Change Password')
   })
 
-  test('should display user name', async () => {
+  // Rule 3: collapsed three near-duplicate label tests
+  // (display user name / email / role) into one.
+  test('should display user name, email, and role labels', async () => {
     await expect(profilePage.accountInfoCard).toContainText('Name')
-  })
-
-  test('should display user email', async () => {
     await expect(profilePage.accountInfoCard).toContainText('Email')
-  })
-
-  test('should display user role', async () => {
     await expect(profilePage.accountInfoCard).toContainText('Role')
   })
 })
@@ -47,21 +43,8 @@ test.describe('Password Change Form', () => {
     await profilePage.goto()
   })
 
-  test('should have current password field', async () => {
-    await expect(profilePage.currentPasswordInput).toBeVisible()
-  })
-
-  test('should have new password field', async () => {
-    await expect(profilePage.newPasswordInput).toBeVisible()
-  })
-
-  test('should have confirm password field', async () => {
-    await expect(profilePage.confirmPasswordInput).toBeVisible()
-  })
-
-  test('should have change password button', async () => {
-    await expect(profilePage.changePasswordButton).toBeVisible()
-  })
+  // removed: form-field-render tests (Rule 7); validation tests cover this surface.
+  // (was: have current/new/confirm password field, have change password button)
 
   test('should show validation error for mismatched passwords', async () => {
     await profilePage.fillPasswordForm('oldpassword', 'newpassword1', 'newpassword2')
@@ -75,36 +58,30 @@ test.describe('Password Change Form', () => {
     await profilePage.expectToast(/6 characters/i)
   })
 
-  test('should toggle current password visibility', async ({ page }) => {
-    await expect(profilePage.currentPasswordInput).toHaveAttribute('type', 'password')
+  // Rule 3: collapsed three near-duplicate visibility-toggle tests into
+  // one data-driven test over the three fields.
+  test('should toggle password field visibility for each field', async () => {
+    const fields: Array<{
+      name: 'current' | 'new' | 'confirm'
+      locator: () => import('@playwright/test').Locator
+    }> = [
+      { name: 'current', locator: () => profilePage.currentPasswordInput },
+      { name: 'new', locator: () => profilePage.newPasswordInput },
+      { name: 'confirm', locator: () => profilePage.confirmPasswordInput },
+    ]
 
-    const toggleBtn = profilePage.currentPasswordInput.locator('..').locator('button')
-    await toggleBtn.click()
-
-    await expect(profilePage.currentPasswordInput).toHaveAttribute('type', 'text')
+    for (const field of fields) {
+      const input = field.locator()
+      await expect(input).toHaveAttribute('type', 'password')
+      await profilePage.togglePasswordVisibility(field.name)
+      await expect(input).toHaveAttribute('type', 'text')
+    }
   })
 
-  test('should toggle new password visibility', async ({ page }) => {
-    await expect(profilePage.newPasswordInput).toHaveAttribute('type', 'password')
-
-    const toggleBtn = profilePage.newPasswordInput.locator('..').locator('button')
-    await toggleBtn.click()
-
-    await expect(profilePage.newPasswordInput).toHaveAttribute('type', 'text')
-  })
-
-  test('should toggle confirm password visibility', async ({ page }) => {
-    await expect(profilePage.confirmPasswordInput).toHaveAttribute('type', 'password')
-
-    const toggleBtn = profilePage.confirmPasswordInput.locator('..').locator('button')
-    await toggleBtn.click()
-
-    await expect(profilePage.confirmPasswordInput).toHaveAttribute('type', 'text')
-  })
-
-  test('should clear form after successful password change', async () => {
-    // This test would require knowing the current password
-    // Skipping actual submission but testing the form works
+  // Rule 4 + Rule 5: name claimed "clear form after successful password
+  // change" but the body never submitted — a misleading no-op. Renamed
+  // to reflect what it actually verifies: the form retains entered values.
+  test('should retain entered values in the password form', async () => {
     await profilePage.fillPasswordForm('test', 'newpass123', 'newpass123')
     await expect(profilePage.currentPasswordInput).toHaveValue('test')
     await expect(profilePage.newPasswordInput).toHaveValue('newpass123')
@@ -121,17 +98,8 @@ test.describe('Profile Page Labels', () => {
     await profilePage.goto()
   })
 
-  test('should show Current Password label', async () => {
-    await expect(profilePage.changePasswordCard.getByText('Current Password')).toBeVisible()
-  })
-
-  test('should show New Password label', async () => {
-    await expect(profilePage.changePasswordCard.getByText('New Password', { exact: true })).toBeVisible()
-  })
-
-  test('should show Confirm New Password label', async () => {
-    await expect(profilePage.changePasswordCard.getByText('Confirm New Password')).toBeVisible()
-  })
+  // removed: form-field-render tests (Rule 7); validation tests cover this surface.
+  // (was: Current/New/Confirm New Password label tests)
 
   test('should show password requirement hint', async () => {
     await expect(profilePage.changePasswordCard.getByText(/6 characters/i)).toBeVisible()

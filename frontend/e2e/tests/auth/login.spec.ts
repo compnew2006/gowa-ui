@@ -12,12 +12,12 @@ test.describe('Login', () => {
 
   // removed: form-render test (Rule 7); covered by login-success/error tests.
 
-  test('should login successfully with valid credentials', async ({ page }) => {
+  test('should login successfully with valid credentials', async () => {
     await loginPage.login(TEST_USERS.admin.email, TEST_USERS.admin.password)
     await loginPage.expectLoginSuccess()
   })
 
-  test('should show error with invalid credentials', async ({ page }) => {
+  test('should show error with invalid credentials', async () => {
     await loginPage.login('invalid@test.com', 'wrongpassword')
     await loginPage.expectLoginError()
   })

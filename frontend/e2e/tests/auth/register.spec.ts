@@ -95,19 +95,10 @@ test.describe('Register', () => {
     await expect(toast).toContainText('at least 8 characters')
   })
 
-  test('should navigate to login page from invitation required', async ({ page }) => {
-    await page.goto('/register')
-    await page.getByRole('link', { name: /Sign in/i }).click()
-    await expect(page).toHaveURL(/\/login/)
-  })
+  // removed: navigate-to-login-from-invitation-required test (Rule 7);
+  // pure vue-router navigation. The invitation-required gate itself is
+  // covered by `should show invitation required message without org param`.
 
-  test('should navigate to login page from registration form', async ({ page, request }) => {
-    const api = new ApiHelper(request)
-    const orgId = await createOrgForRegister(api, 'nav')
-    test.skip(!orgId, 'Failed to set up test organization')
-
-    await page.goto(`/register?org=${orgId}`)
-    await page.locator('a').filter({ hasText: /Sign in/i }).click()
-    await expect(page).toHaveURL(/\/login/)
-  })
+  // removed: navigate-to-login-from-registration-form test (Rule 7);
+  // pure vue-router navigation, not product logic.
 })

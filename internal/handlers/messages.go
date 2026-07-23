@@ -195,13 +195,13 @@ func (a *App) SendOutgoingMessage(ctx context.Context, req OutgoingMessageReques
 			// Send the appropriate media type
 			switch req.Type {
 			case models.MessageTypeImage:
-				return provider.SendImageMessage(sendCtx, waAccount, rcpt, mediaID, req.Caption)
+				return provider.SendImageMessage(sendCtx, waAccount, rcpt, mediaID, req.Caption, replyToMsgID)
 			case models.MessageTypeVideo:
-				return provider.SendVideoMessage(sendCtx, waAccount, rcpt, mediaID, req.Caption)
+				return provider.SendVideoMessage(sendCtx, waAccount, rcpt, mediaID, req.Caption, replyToMsgID)
 			case models.MessageTypeAudio:
-				return provider.SendAudioMessage(sendCtx, waAccount, rcpt, mediaID)
+				return provider.SendAudioMessage(sendCtx, waAccount, rcpt, mediaID, replyToMsgID)
 			default: // document
-				return provider.SendDocumentMessage(sendCtx, waAccount, rcpt, mediaID, req.MediaFilename, req.Caption)
+				return provider.SendDocumentMessage(sendCtx, waAccount, rcpt, mediaID, req.MediaFilename, req.Caption, replyToMsgID)
 			}
 
 		case models.MessageTypeInteractive:
