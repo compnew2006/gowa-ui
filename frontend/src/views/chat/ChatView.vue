@@ -195,11 +195,12 @@ const isUploadingMedia = ref(false)
 // Media burst: detect a flurry of incoming files and offer to collect them
 // together (ZIP) or separately. The burst is a living computed over the
 // reactive messages array — no timers, no watchers.
+const burstTimeMs = ref(1_800_000) // 30 minutes default, reactive — UI can adjust
 const {
   recentBurst,
   isCollectible,
   burstCount
-} = useMediaBurst(computed(() => contactsStore.messages))
+} = useMediaBurst(computed(() => contactsStore.messages), { maxGapMs: burstTimeMs })
 const {
   isDownloading: isBurstDownloading,
   progress: burstProgress,
@@ -3293,6 +3294,7 @@ async function sendMediaMessage() {
     <!-- Media burst download dialog -->
     <MediaBurstDialog
       v-model:open="isBurstDialogOpen"
+      v-model:burst-time-ms="burstTimeMs"
       :messages="recentBurst"
       :is-downloading="isBurstDownloading"
       :progress="burstProgress"

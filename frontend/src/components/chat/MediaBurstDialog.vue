@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { FileText, Film, Image as ImageIcon, Music, Download, Loader2, Package } from 'lucide-vue-next'
+import { FileText, Film, Image as ImageIcon, Music, Download, Loader2, Package, Printer, Plus, Minus, Clock } from 'lucide-vue-next'
 import {
   Dialog,
   DialogContent,
@@ -22,10 +22,13 @@ const props = defineProps<{
   isDownloading?: boolean
   /** `{ current, total }` progress for the active download. */
   progress?: { current: number; total: number }
+  /** Collection time window in milliseconds (reactive). */
+  burstTimeMs?: number
 }>()
 
 const emit = defineEmits<{
   (e: 'update:open', value: boolean): void
+  (e: 'update:burstTimeMs', value: number): void
   (e: 'zip'): void
   (e: 'separate'): void
 }>()
@@ -38,6 +41,11 @@ const open = computed({
 })
 
 const hasFiles = computed(() => props.messages.some((m) => !!m.media_url))
+
+const burstMinutes = computed({
+  get: () => (props.burstTimeMs ?? 1_800_000) / 60_000,
+  set: (v) => emit('update:burstTimeMs', Math.max(1, Math.min(120, v)) * 60_000)
+})
 
 function iconFor(message: Message) {
   switch (message.message_type) {
@@ -66,6 +74,10 @@ function progressLabel(): string {
   const p = props.progress ?? { current: 0, total: 0 }
   return t('chat.downloadingBurst', { current: p.current, total: p.total })
 }
+
+function printFile(message: Message) {
+  window.open(message.media_url, '_blank')
+}
 </script>
 
 <template>
@@ -78,6 +90,34 @@ function progressLabel(): string {
         </DialogTitle>
         <DialogDescription>{{ $t('chat.mediaBurstDesc') }}</DialogDescription>
       </DialogHeader>
+
+      <!-- Collection time window selector -->
+      <div class="flex items-center gap-3 px-1 py-2 rounded-lg bg-muted/30">
+        <Clock class="h-4 w-4 text-muted-foreground shrink-0" />
+        <span class="text-sm text-muted-foreground whitespace-nowrap">{{ $t('chat.collectTimeWindow') }}</span>
+        <div class="flex items-center gap-1 ml-auto">
+          <Button
+            variant="outline"
+            size="icon"
+            class="h-7 w-7"
+            :disabled="burstMinutes <= 1"
+            @click="burstMinutes = burstMinutes - 1"
+          >
+            <Minus class="h-3 w-3" />
+          </Button>
+          <span class="w-12 text-center text-sm font-medium tabular-nums">{{ burstMinutes }}</span>
+          <span class="text-xs text-muted-foreground -ml-1">{{ $t('chat.minutes') }}</span>
+          <Button
+            variant="outline"
+            size="icon"
+            class="h-7 w-7"
+            :disabled="burstMinutes >= 60"
+            @click="burstMinutes = burstMinutes + 1"
+          >
+            <Plus class="h-3 w-3" />
+          </Button>
+        </div>
+      </div>
 
       <ScrollArea class="max-h-[320px] -mx-2 px-2">
         <ul class="space-y-1.5">
@@ -94,6 +134,15 @@ function progressLabel(): string {
               </p>
             </div>
             <span class="shrink-0 text-xs text-muted-foreground">{{ timeFor(message) }}</span>
+            <Button
+              variant="ghost"
+              size="icon"
+              class="h-7 w-7 shrink-0 opacity-60 hover:opacity-100"
+              :title="$t('chat.printFile')"
+              @click="printFile(message)"
+            >
+              <Printer class="h-3.5 w-3.5" />
+            </Button>
           </li>
         </ul>
       </ScrollArea>
