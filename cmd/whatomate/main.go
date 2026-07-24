@@ -14,6 +14,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/shridarpatil/whatomate/internal/assignment"
 	"github.com/shridarpatil/whatomate/internal/calling"
+	"github.com/shridarpatil/whatomate/internal/chatlifecycle"
 	"github.com/shridarpatil/whatomate/internal/config"
 	"github.com/shridarpatil/whatomate/internal/database"
 	"github.com/shridarpatil/whatomate/internal/frontend"
@@ -273,6 +274,11 @@ func runServer(args []string) {
 	// Initialize shared assignment engine (used by both chat and call transfers)
 	assigner := assignment.New(db, rdb, lo)
 	app.Assigner = assigner
+
+	// Chat-lifecycle state machine: claim/release/close/reopen/join/leave and
+	// the audit + system-message + WS side effects they emit. The handlers in
+	// chat_lifecycle.go are thin HTTP adapters over this service.
+	app.ChatLifecycle = chatlifecycle.New(db, wsHub, lo)
 
 	// Initialize CallManager (per-org calling_enabled DB setting controls access)
 	app.CallManager = calling.NewManager(&cfg.Calling, s3Client, db, rdb, waClient, wsHub, assigner, lo)

@@ -2,40 +2,33 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
+	"github.com/shridarpatil/whatomate/internal/chatlifecycle"
 	"github.com/shridarpatil/whatomate/internal/models"
-	"github.com/shridarpatil/whatomate/internal/websocket"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 )
 
-// createSystemMessage creates a system message record in the conversation timeline.
+// createSystemMessage is a thin delegator to Service.CreateSystemMessage.
+//
+// It exists only so internal/handlers/chatbot_processor.go (which writes
+// "Conversation reopened by customer" on inbound messages) keeps compiling
+// during the gradual chat-lifecycle extraction. The chatbot processor is
+// explicitly out of scope for the P0 refactor (strangler) — its two call
+// sites (chatbot_processor.go:218,240) will migrate to ChatLifecycle
+// directly in a follow-up that also dedupes the duplicated reopen block.
+//
+// TODO(chat-lifecycle): migrate chatbot_processor.go to a.ChatLifecycle, then
+// delete this delegator.
 func (a *App) createSystemMessage(orgID, contactID uuid.UUID, content string, metadata models.JSONB) {
-	if metadata == nil {
-		metadata = models.JSONB{}
-	}
-	metadata["is_system_message"] = true
-
-	msg := &models.Message{
-		BaseModel:      models.BaseModel{ID: uuid.New()},
-		OrganizationID: orgID,
-		ContactID:      contactID,
-		Direction:      models.DirectionOutgoing,
-		MessageType:    models.MessageTypeText,
-		Content:        content,
-		Status:         models.MessageStatusSent,
-		Metadata:       metadata,
-	}
-	if err := a.DB.Create(msg).Error; err != nil {
-		a.Log.Error("Failed to create system message", "error", err, "contact_id", contactID)
-	}
+	a.ChatLifecycle.CreateSystemMessage(orgID, contactID, content, metadata)
 }
 
 // ClaimChat allows an agent to claim a pending (unassigned) conversation.
-// Route: PUT /api/contacts/{id}/claim
+// Thin HTTP adapter over Service.Claim. Route: PUT /api/contacts/{id}/claim
 // Permission: chat.assign:write
 func (a *App) ClaimChat(r *fastglue.Request) error {
 	orgID, userID, err := a.requireAuth(r, models.ResourceChatAssign, models.ActionWrite)
@@ -53,109 +46,52 @@ func (a *App) ClaimChat(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
 	}
 
-	// Closed conversations CAN be claimed — this reopens them.
-	// The claim will set status to open and assign the agent.
-
-	// Guard 2: already assigned to another agent
-	if contact.AssignedUserID != nil && *contact.AssignedUserID != userID {
-		// Check if user has collaborate permission (they should join instead)
-		hasCollaborate := a.HasPermission(userID, models.ResourceChatCollaborate, models.ActionWrite, orgID)
-		if hasCollaborate {
-			return a.joinAsCollaborator(r, &contact, userID, orgID)
-		}
-
-		var currentAgent models.User
-		agentName := "another agent"
-		if a.DB.First(&currentAgent, "id = ?", *contact.AssignedUserID).Error == nil {
-			agentName = currentAgent.FullName
-		}
-		return r.SendErrorEnvelope(fasthttp.StatusConflict,
-			fmt.Sprintf("This chat is already assigned to %s", agentName),
-			map[string]any{"current_agent": agentName, "can_join": hasCollaborate},
-			"already_assigned")
+	hasCollaborate := a.HasPermission(userID, models.ResourceChatCollaborate, models.ActionWrite, orgID)
+	outcome, agentName, otherAgentName, err := a.ChatLifecycle.Claim(r.RequestCtx, orgID, userID, &contact, hasCollaborate)
+	if err != nil {
+		a.Log.Error("Failed to claim chat", "error", err, "contact_id", contact.ID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to claim chat", nil, "")
 	}
 
-	// Guard 3: already assigned to self (idempotent)
-	if contact.AssignedUserID != nil && *contact.AssignedUserID == userID {
-		if contact.EffectiveStatus() != models.ChatStatusOpen {
-			contact.SetStatus(models.ChatStatusOpen)
-			a.DB.Model(&contact).Update("metadata", contact.Metadata)
+	switch outcome {
+	case chatlifecycle.ClaimConflictOther:
+		return r.SendErrorEnvelope(fasthttp.StatusConflict,
+			fmt.Sprintf("This chat is already assigned to %s", otherAgentName),
+			map[string]any{"current_agent": otherAgentName, "can_join": hasCollaborate},
+			"already_assigned")
+	case chatlifecycle.ClaimRerouteJoin:
+		// Assigned to another agent + caller has collaborate → join instead.
+		res, jerr := a.ChatLifecycle.Join(r.RequestCtx, orgID, userID, &contact)
+		if jerr != nil {
+			a.Log.Error("Failed to join chat", "error", jerr, "contact_id", contact.ID)
+			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to join chat", nil, "")
 		}
+		return r.SendEnvelope(map[string]any{
+			"contact_id":   contact.ID,
+			"collaborator": true,
+			"user_name":    res.UserName,
+		})
+	case chatlifecycle.ClaimAlreadySelf:
 		return r.SendEnvelope(map[string]any{
 			"contact_id": contact.ID,
 			"assigned":   true,
 			"message":    "Already assigned to you",
 		})
-	}
-
-	// Track if this is a reopen (was closed)
-	wasClosed := contact.EffectiveStatus() == models.ChatStatusClosed
-
-	// Capture pre-mutation values for the audit log BEFORE mutation. We cannot
-	// rely on a struct snapshot (`oldContact := contact`) for status, because
-	// status lives in the JSONB `Metadata` map, which the snapshot aliases — by
-	// the time we build the audit diff, the shared map has already been mutated.
-	oldStatus := string(contact.EffectiveStatus())
-	oldAssigned := contact.AssignedUserID
-
-	// Action: assign + set status to open
-	contact.AssignedUserID = &userID
-	contact.SetStatus(models.ChatStatusOpen)
-	if err := a.DB.Save(&contact).Error; err != nil {
-		a.Log.Error("Failed to claim chat", "error", err)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to claim chat", nil, "")
-	}
-
-	// Load agent name for system message
-	var agent models.User
-	agentName := "Unknown"
-	if a.DB.First(&agent, "id = ?", userID).Error == nil {
-		agentName = agent.FullName
-	}
-
-	// Different message for reopen vs claim
-	if wasClosed {
-		a.createSystemMessage(orgID, contact.ID,
-			fmt.Sprintf("🔔 %s reopened this conversation", agentName),
-			models.JSONB{"system_type": "chat_reopened", "agent_id": userID.String(), "agent_name": agentName})
-	} else {
-		a.createSystemMessage(orgID, contact.ID,
-			fmt.Sprintf("🔔 %s claimed this conversation", agentName),
-			models.JSONB{"system_type": "chat_claimed", "agent_id": userID.String(), "agent_name": agentName})
-	}
-
-	// Audit: extraChanges safeguard defeats the audit.LogAudit no-op-on-empty-diff.
-	// oldStatus/oldAssigned were captured BEFORE mutation so the recorded diff
-	// reflects the true pre-mutation state (status lives in JSONB metadata, so a
-	// struct snapshot would alias the already-mutated map).
-	a.logAudit(orgID, userID, "contact", contact.ID, models.AuditActionUpdated, nil, &contact,
-		map[string]any{
-			"chat_status":      map[string]any{"old": oldStatus, "new": string(models.ChatStatusOpen)},
-			"assigned_user_id": map[string]any{"old": oldAssigned, "new": &userID},
-		})
-
-	if a.WSHub != nil {
-		a.WSHub.BroadcastToOrg(orgID, websocket.WSMessage{
-			Type: websocket.TypeChatClaimed,
-			Payload: map[string]any{
-				"contact_id":       contact.ID.String(),
-				"assigned_to":      userID.String(),
-				"assigned_user_id": userID.String(),
-				"assigned_to_name": agentName,
-				"chat_status":      string(models.ChatStatusOpen),
-			},
+	default: // ClaimDone
+		return r.SendEnvelope(map[string]any{
+			"contact_id": contact.ID,
+			"assigned":   true,
+			"agent_name": agentName,
 		})
 	}
-
-	return r.SendEnvelope(map[string]any{
-		"contact_id": contact.ID,
-		"assigned":   true,
-		"agent_name": agentName,
-	})
 }
 
-// ReleaseChat returns an assigned (open) conversation to the pending pool.
-// It unassigns the current owner, sets status to pending, and clears collaborators.
+// ReleaseChat returns an assigned (open or closed) conversation to the pending
+// pool. Thin HTTP adapter over Service.Release: parse → auth → lookup → call
+// the service → map the typed result onto the HTTP envelope.
+//
+// All business rules (closed-chat policy, idempotency, collaborator clearing)
+// and side effects (system message, audit, WS broadcast) live in the service.
 // Route: PUT /api/contacts/{id}/release
 // Permission: chat.assign:write (caller must be the assignee or an admin/manager).
 func (a *App) ReleaseChat(r *fastglue.Request) error {
@@ -174,86 +110,36 @@ func (a *App) ReleaseChat(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
 	}
 
-	// Authorization: assignee or admin/manager (ghost-release).
+	// Authorization: assignee or admin/manager (ghost-release). The service
+	// double-checks this as defense-in-depth, but the HTTP-friendly error
+	// message is produced here so the response body stays user-facing.
 	isAssignee := contact.AssignedUserID != nil && *contact.AssignedUserID == userID
 	isAdminOrManager := a.HasPermission(userID, models.ResourceContacts, models.ActionWrite, orgID)
 	if !isAssignee && !isAdminOrManager {
 		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You are not allowed to release this chat", nil, "")
 	}
 
-	// Policy: only admins/managers may release a CLOSED chat. An agent assignee
-	// of a closed chat would otherwise silently transition closed → pending and
-	// lose the read-only/closed semantics. Mirrors the spec's closed-chat edge
-	// case ("Allowed only for admin/manager (the same actors who can reopen)").
-	if contact.EffectiveStatus() == models.ChatStatusClosed && !isAdminOrManager {
-		return r.SendErrorEnvelope(fasthttp.StatusForbidden,
-			"Only admins can release a closed chat — reopen it first", nil, "")
+	released, err := a.ChatLifecycle.Release(r.RequestCtx, orgID, userID, &contact, isAssignee, isAdminOrManager)
+	if err != nil {
+		switch {
+		case errors.Is(err, chatlifecycle.ErrClosedReleaseByAgent):
+			return r.SendErrorEnvelope(fasthttp.StatusForbidden,
+				"Only admins can release a closed chat — reopen it first", nil, "")
+		case errors.Is(err, chatlifecycle.ErrNotAuthorized):
+			return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You are not allowed to release this chat", nil, "")
+		default:
+			a.Log.Error("Failed to release chat", "error", err, "contact_id", contact.ID)
+			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to release chat", nil, "")
+		}
 	}
 
-	// Idempotent: already pending and unassigned — safe no-op success.
-	if contact.EffectiveStatus() == models.ChatStatusPending && contact.AssignedUserID == nil {
+	// Idempotent no-op: the chat was already pending + unassigned. Preserve
+	// the historical envelope shape (released:true + message) for clients.
+	if !released {
 		return r.SendEnvelope(map[string]any{
 			"contact_id": contact.ID,
 			"released":   true,
 			"message":    "Conversation is already pending",
-		})
-	}
-
-	// Capture pre-mutation values for the audit log BEFORE mutation. We cannot
-	// rely on a struct snapshot (`oldContact := contact`) for status, because
-	// status lives in the JSONB `Metadata` map, which the snapshot aliases — by
-	// the time we build the audit diff, the shared map has already been mutated.
-	oldStatus := string(contact.EffectiveStatus())
-	oldAssigned := contact.AssignedUserID
-
-	// Mutation: unassign + set pending + clear collaborators + bump last_message_at
-	// so the released chat re-sorts to the top of the Pending list (createSystemMessage
-	// only inserts a Message row; it does not touch Contact.last_message_at).
-	now := time.Now()
-	contact.AssignedUserID = nil
-	contact.SetStatus(models.ChatStatusPending)
-	contact.ClearCollaborators()
-	if err := a.DB.Model(&contact).Updates(map[string]any{
-		"assigned_user_id": nil,
-		"metadata":         contact.Metadata,
-		"last_message_at":  &now,
-	}).Error; err != nil {
-		a.Log.Error("Failed to release chat", "error", err)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to release chat", nil, "")
-	}
-	contact.LastMessageAt = &now
-
-	// Load agent name for system message.
-	var agent models.User
-	agentName := "Unknown"
-	if a.DB.First(&agent, "id = ?", userID).Error == nil {
-		agentName = agent.FullName
-	}
-
-	a.createSystemMessage(orgID, contact.ID,
-		fmt.Sprintf("🔔 %s released this conversation", agentName),
-		models.JSONB{"system_type": "chat_released", "agent_id": userID.String(), "agent_name": agentName})
-
-	// Audit: extraChanges safeguard defeats the audit.LogAudit no-op-on-empty-diff.
-	// oldStatus/oldAssigned were captured BEFORE mutation so the recorded diff
-	// reflects the true pre-mutation state (status lives in JSONB metadata, so a
-	// struct snapshot would alias the already-mutated map).
-	a.logAudit(orgID, userID, "contact", contact.ID, models.AuditActionUpdated, nil, &contact,
-		map[string]any{
-			"chat_status":      map[string]any{"old": oldStatus, "new": string(models.ChatStatusPending)},
-			"assigned_user_id": map[string]any{"old": oldAssigned, "new": nil},
-		})
-
-	if a.WSHub != nil {
-		a.WSHub.BroadcastToOrg(orgID, websocket.WSMessage{
-			Type: websocket.TypeChatReleased,
-			Payload: map[string]any{
-				"contact_id":     contact.ID.String(),
-				"released_by":    userID.String(),
-				"chat_status":    string(models.ChatStatusPending),
-				"collaborators":  []any{}, // cleared server-side — include so clients don't show stale collabs
-				"last_message_at": now.Format(time.RFC3339Nano),
-			},
 		})
 	}
 
@@ -264,9 +150,9 @@ func (a *App) ReleaseChat(r *fastglue.Request) error {
 	})
 }
 
-// JoinChat allows a user with chat.collaborate:write to join an assigned conversation.
-// Route: POST /api/contacts/{id}/join
-// Permission: chat.collaborate:write
+// JoinChat allows a user with chat.collaborate:write to join an assigned
+// conversation. Thin adapter over Service.Join.
+// Route: POST /api/contacts/{id}/join  Permission: chat.collaborate:write
 func (a *App) JoinChat(r *fastglue.Request) error {
 	orgID, userID, err := a.requireAuth(r, models.ResourceChatCollaborate, models.ActionWrite)
 	if err != nil {
@@ -283,29 +169,29 @@ func (a *App) JoinChat(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
 	}
 
-	// Already the primary owner?
-	if contact.AssignedUserID != nil && *contact.AssignedUserID == userID {
-		return r.SendEnvelope(map[string]any{
-			"message": "You are the primary owner of this conversation",
-		})
+	res, err := a.ChatLifecycle.Join(r.RequestCtx, orgID, userID, &contact)
+	if err != nil {
+		a.Log.Error("Failed to join chat", "error", err, "contact_id", contact.ID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to join chat", nil, "")
 	}
 
-	// Already a collaborator?
-	if contact.IsCollaborator(userID.String()) {
+	switch res.Outcome {
+	case chatlifecycle.JoinAlreadyOwner:
+		return r.SendEnvelope(map[string]any{"message": "You are the primary owner of this conversation"})
+	case chatlifecycle.JoinAlreadyCollaborator:
+		return r.SendEnvelope(map[string]any{"message": "You are already a collaborator"})
+	default:
 		return r.SendEnvelope(map[string]any{
-			"message": "You are already a collaborator",
+			"contact_id":   contact.ID,
+			"collaborator": true,
+			"user_name":    res.UserName,
 		})
 	}
-
-	return a.joinAsCollaborator(r, &contact, userID, orgID)
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // InviteCollaborator allows a manager/admin to add another agent as a
-// collaborator to a conversation.
-// Route: POST /api/contacts/{id}/collaborators/{user_id}
-// Permission: chat.collaborate:write
-// ─────────────────────────────────────────────────────────────────────────────
+// collaborator. Thin adapter over Service.Invite.
+// Route: POST /api/contacts/{id}/collaborators/{user_id}  Permission: chat.collaborate:write
 func (a *App) InviteCollaborator(r *fastglue.Request) error {
 	orgID, userID, err := a.requireAuth(r, models.ResourceChatCollaborate, models.ActionWrite)
 	if err != nil {
@@ -328,130 +214,30 @@ func (a *App) InviteCollaborator(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
 	}
 
-	// Verify target user exists in same org
-	var targetUser models.User
-	if err := a.DB.Where("id = ? AND organization_id = ?", targetUserID, orgID).First(&targetUser).Error; err != nil {
+	res, err := a.ChatLifecycle.Invite(r.RequestCtx, orgID, userID, targetUserID, &contact)
+	if err != nil {
+		// Service returns a wrapped "target user not found" error.
+		a.Log.Error("Failed to invite collaborator", "error", err, "contact_id", contact.ID)
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "User not found", nil, "")
 	}
 
-	// Can't invite the owner (they're already the owner)
-	if contact.AssignedUserID != nil && *contact.AssignedUserID == targetUserID {
+	switch res.Outcome {
+	case chatlifecycle.InviteAlreadyOwner:
+		return r.SendEnvelope(map[string]any{"message": "User is already the primary owner"})
+	case chatlifecycle.InviteAlreadyCollaborator:
+		return r.SendEnvelope(map[string]any{"message": "User is already a collaborator"})
+	default:
 		return r.SendEnvelope(map[string]any{
-			"message": "User is already the primary owner",
+			"contact_id":   contact.ID,
+			"collaborator": true,
+			"user_name":    res.TargetName,
 		})
 	}
-
-	// Already a collaborator?
-	if contact.IsCollaborator(targetUserIDStr) {
-		return r.SendEnvelope(map[string]any{
-			"message": "User is already a collaborator",
-		})
-	}
-
-	// Load inviter name
-	var inviter models.User
-	inviterName := "Unknown"
-	if a.DB.First(&inviter, "id = ?", userID).Error == nil {
-		inviterName = inviter.FullName
-	}
-
-	targetRole := ""
-	if targetUser.RoleID != nil {
-		var role models.CustomRole
-		if a.DB.First(&role, "id = ?", *targetUser.RoleID).Error == nil {
-			targetRole = role.Name
-		}
-	}
-
-	contact.AddCollaborator(models.Collaborator{
-		UserID:   targetUserIDStr,
-		Name:     targetUser.FullName,
-		Role:     targetRole,
-		JoinedAt: time.Now(),
-	})
-	if err := a.DB.Model(&contact).Update("metadata", contact.Metadata).Error; err != nil {
-		a.Log.Error("Failed to invite collaborator", "error", err)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to invite collaborator", nil, "")
-	}
-
-	a.createSystemMessage(orgID, contact.ID,
-		fmt.Sprintf("🔔 %s was added to the conversation by %s", targetUser.FullName, inviterName),
-		models.JSONB{
-			"system_type": "collaborator_joined",
-			"agent_id":    targetUserIDStr,
-			"invited_by":  userID.String(),
-		})
-
-	if a.WSHub != nil {
-		a.WSHub.BroadcastToOrg(orgID, websocket.WSMessage{
-			Type: websocket.TypeCollaboratorJoined,
-			Payload: map[string]any{
-				"contact_id": contact.ID.String(),
-				"user_id":    targetUserIDStr,
-				"user_name":  targetUser.FullName,
-				"user_role":  targetRole,
-			},
-		})
-	}
-
-	return r.SendEnvelope(map[string]any{
-		"contact_id":   contact.ID,
-		"collaborator": true,
-		"user_name":    targetUser.FullName,
-	})
 }
 
-// joinAsCollaborator is the shared logic for joining a conversation as collaborator.
-func (a *App) joinAsCollaborator(r *fastglue.Request, contact *models.Contact, userID, orgID uuid.UUID) error {
-	var user models.User
-	userName := "Unknown"
-	userRole := ""
-	if a.DB.First(&user, "id = ?", userID).Error == nil {
-		userName = user.FullName
-		if user.RoleID != nil {
-			var role models.CustomRole
-			if a.DB.First(&role, "id = ?", *user.RoleID).Error == nil {
-				userRole = role.Name
-			}
-		}
-	}
-
-	contact.AddCollaborator(models.Collaborator{
-		UserID:   userID.String(),
-		Name:     userName,
-		Role:     userRole,
-		JoinedAt: time.Now(),
-	})
-	if err := a.DB.Model(contact).Update("metadata", contact.Metadata).Error; err != nil {
-		a.Log.Error("Failed to join chat", "error", err)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to join chat", nil, "")
-	}
-
-	a.createSystemMessage(orgID, contact.ID,
-		fmt.Sprintf("🔔 %s joined the conversation", userName),
-		models.JSONB{"system_type": "collaborator_joined", "agent_id": userID.String()})
-
-	if a.WSHub != nil {
-		a.WSHub.BroadcastToOrg(orgID, websocket.WSMessage{
-			Type: websocket.TypeCollaboratorJoined,
-			Payload: map[string]any{
-				"contact_id": contact.ID.String(),
-				"user_id":    userID.String(),
-				"user_name":  userName,
-				"user_role":  userRole,
-			},
-		})
-	}
-
-	return r.SendEnvelope(map[string]any{
-		"contact_id":   contact.ID,
-		"collaborator": true,
-		"user_name":    userName,
-	})
-}
-
-// LeaveChat removes the requesting user from the collaborators list.
-// If the user is the primary owner and the last participant, the conversation is closed.
+// LeaveChat removes the requesting user from the conversation. Thin adapter
+// over Service.Leave. If the owner is the last participant, the conversation
+// is closed; if collaborators remain, ownership is transferred.
 // Route: DELETE /api/contacts/{id}/join
 func (a *App) LeaveChat(r *fastglue.Request) error {
 	orgID, userID, err := a.getOrgAndUserID(r)
@@ -471,8 +257,6 @@ func (a *App) LeaveChat(r *fastglue.Request) error {
 
 	isOwner := contact.AssignedUserID != nil && *contact.AssignedUserID == userID
 	isCollaborator := contact.IsCollaborator(userID.String())
-	// Admins/managers ghost-view chats: they are not persisted as collaborators,
-	// but they must be able to Leave (ghost-exit) and Close without joining first.
 	isAdminOrManager := a.HasPermission(userID, models.ResourceContacts, models.ActionWrite, orgID)
 
 	if !isOwner && !isCollaborator && !isAdminOrManager {
@@ -480,114 +264,36 @@ func (a *App) LeaveChat(r *fastglue.Request) error {
 			"You are not a participant in this conversation", nil, "")
 	}
 
-	// Admin/manager ghost-exit: not a real participant, so just return success
-	// without modifying the conversation's collaborators or status.
-	if !isOwner && !isCollaborator && isAdminOrManager {
+	res, err := a.ChatLifecycle.Leave(r.RequestCtx, orgID, userID, &contact, isOwner, isCollaborator, isAdminOrManager)
+	if err != nil {
+		a.Log.Error("Failed to leave chat", "error", err, "contact_id", contact.ID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to leave chat", nil, "")
+	}
+
+	switch res.Outcome {
+	case chatlifecycle.LeaveGhostExit:
 		return r.SendEnvelope(map[string]any{
 			"contact_id": contact.ID,
 			"left":       true,
 			"ghost_exit": true,
 		})
-	}
-
-	var user models.User
-	userName := "Unknown"
-	if a.DB.First(&user, "id = ?", userID).Error == nil {
-		userName = user.FullName
-	}
-
-	// If owner is leaving: check if there are other collaborators
-	if isOwner {
-		collaborators := contact.GetCollaborators()
-		if len(collaborators) == 0 {
-			// Last participant leaving → close the conversation
-			contact.AssignedUserID = nil
-			contact.ClearCollaborators()
-			contact.SetStatus(models.ChatStatusClosed)
-			a.DB.Model(&contact).Updates(map[string]any{
-				"assigned_user_id": nil,
-				"metadata":         contact.Metadata,
-			})
-
-			a.createSystemMessage(orgID, contact.ID,
-				fmt.Sprintf("🔔 %s closed this conversation", userName),
-				models.JSONB{"system_type": "chat_closed", "agent_id": userID.String()})
-
-			if a.WSHub != nil {
-				a.WSHub.BroadcastToOrg(orgID, websocket.WSMessage{
-					Type: websocket.TypeChatClosed,
-					Payload: map[string]any{
-						"contact_id":  contact.ID.String(),
-						"chat_status": string(models.ChatStatusClosed),
-						"closed":      true,
-					},
-				})
-			}
-
-			return r.SendEnvelope(map[string]any{
-				"contact_id": contact.ID,
-				"left":       true,
-				"closed":     true,
-			})
-		}
-		// Owner leaves but collaborators remain — transfer ownership to first collaborator
-		newOwnerID, _ := uuid.Parse(collaborators[0].UserID)
-		contact.AssignedUserID = &newOwnerID
-		contact.RemoveCollaborator(collaborators[0].UserID)
-		a.DB.Model(&contact).Updates(map[string]any{
-			"assigned_user_id": newOwnerID,
-			"metadata":         contact.Metadata,
+	case chatlifecycle.LeaveClosedChat:
+		return r.SendEnvelope(map[string]any{
+			"contact_id": contact.ID,
+			"left":       true,
+			"closed":     true,
 		})
-
-		a.createSystemMessage(orgID, contact.ID,
-			fmt.Sprintf("🔔 %s left the conversation. Ownership transferred to %s", userName, collaborators[0].Name),
-			models.JSONB{"system_type": "collaborator_left", "agent_id": userID.String()})
-
-		if a.WSHub != nil {
-			a.WSHub.BroadcastToOrg(orgID, websocket.WSMessage{
-				Type: websocket.TypeCollaboratorLeft,
-				Payload: map[string]any{
-					"contact_id": contact.ID.String(),
-					"user_id":    userID.String(),
-					"user_name":  userName,
-				},
-			})
-		}
-
+	default: // LeaveOwnershipTransferred, LeaveCollaboratorRemoved
 		return r.SendEnvelope(map[string]any{
 			"contact_id": contact.ID,
 			"left":       true,
 		})
 	}
-
-	// Regular collaborator leaving
-	contact.RemoveCollaborator(userID.String())
-	a.DB.Model(&contact).Update("metadata", contact.Metadata)
-
-	a.createSystemMessage(orgID, contact.ID,
-		fmt.Sprintf("🔔 %s left the conversation", userName),
-		models.JSONB{"system_type": "collaborator_left", "agent_id": userID.String()})
-
-	if a.WSHub != nil {
-		a.WSHub.BroadcastToOrg(orgID, websocket.WSMessage{
-			Type: websocket.TypeCollaboratorLeft,
-			Payload: map[string]any{
-				"contact_id": contact.ID.String(),
-				"user_id":    userID.String(),
-				"user_name":  userName,
-			},
-		})
-	}
-
-	return r.SendEnvelope(map[string]any{
-		"contact_id": contact.ID,
-		"left":       true,
-	})
 }
 
-// RemoveCollaborator allows a manager/admin to remove a collaborator from a conversation.
-// Route: DELETE /api/contacts/{id}/collaborators/{user_id}
-// Permission: chat.collaborate:write
+// RemoveCollaborator allows a manager/admin to remove a collaborator.
+// Thin adapter over Service.RemoveCollaborator.
+// Route: DELETE /api/contacts/{id}/collaborators/{user_id}  Permission: chat.collaborate:write
 func (a *App) RemoveCollaborator(r *fastglue.Request) error {
 	orgID, userID, err := a.requireAuth(r, models.ResourceChatCollaborate, models.ActionWrite)
 	if err != nil {
@@ -610,65 +316,31 @@ func (a *App) RemoveCollaborator(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
 	}
 
-	// Cannot remove the primary owner
-	if contact.AssignedUserID != nil && *contact.AssignedUserID == targetUserID {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest,
-			"Cannot remove the primary owner. Unassign the conversation instead.", nil, "")
-	}
-
-	if !contact.IsCollaborator(targetUserIDStr) {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest,
-			"User is not a collaborator on this conversation", nil, "")
-	}
-
-	// Load names for system message
-	var targetUser models.User
-	targetName := "Unknown"
-	if a.DB.First(&targetUser, "id = ?", targetUserID).Error == nil {
-		targetName = targetUser.FullName
-	}
-
-	var manager models.User
-	managerName := "Unknown"
-	if a.DB.First(&manager, "id = ?", userID).Error == nil {
-		managerName = manager.FullName
-	}
-
-	contact.RemoveCollaborator(targetUserIDStr)
-	a.DB.Model(&contact).Update("metadata", contact.Metadata)
-
-	a.createSystemMessage(orgID, contact.ID,
-		fmt.Sprintf("🔔 %s was removed from the conversation by %s", targetName, managerName),
-		models.JSONB{
-			"system_type": "collaborator_removed",
-			"agent_id":    targetUserIDStr,
-			"removed_by":  userID.String(),
-		})
-
-	if a.WSHub != nil {
-		a.WSHub.BroadcastToOrg(orgID, websocket.WSMessage{
-			Type: websocket.TypeCollaboratorLeft,
-			Payload: map[string]any{
-				"contact_id": contact.ID.String(),
-				"user_id":    targetUserIDStr,
-				"user_name":  targetName,
-				"removed":    true,
-			},
-		})
+	res, err := a.ChatLifecycle.RemoveCollaborator(r.RequestCtx, orgID, userID, targetUserID, &contact)
+	if err != nil {
+		switch {
+		case errors.Is(err, chatlifecycle.ErrCannotRemoveOwner):
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest,
+				"Cannot remove the primary owner. Unassign the conversation instead.", nil, "")
+		case errors.Is(err, chatlifecycle.ErrNotCollaborator):
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest,
+				"User is not a collaborator on this conversation", nil, "")
+		default:
+			a.Log.Error("Failed to remove collaborator", "error", err, "contact_id", contact.ID)
+			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to remove collaborator", nil, "")
+		}
 	}
 
 	return r.SendEnvelope(map[string]any{
 		"contact_id":   contact.ID,
 		"removed":      true,
-		"removed_user": targetName,
+		"removed_user": res.TargetName,
 	})
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CloseChat closes an open conversation. Only the assigned agent or a
-// manager/admin (chat.collaborate:write) can close it.
+// CloseChat closes an open conversation. Thin adapter over Service.Close.
+// Only the assigned agent, a collaborator, or a manager/admin may close.
 // Route: PUT /api/contacts/{id}/close
-// ─────────────────────────────────────────────────────────────────────────────
 func (a *App) CloseChat(r *fastglue.Request) error {
 	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
@@ -685,7 +357,6 @@ func (a *App) CloseChat(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
 	}
 
-	// Only the assigned agent or a manager/admin can close
 	isOwner := contact.AssignedUserID != nil && *contact.AssignedUserID == userID
 	isCollaborator := contact.IsCollaborator(userID.String())
 	hasCollaboratePerm := a.HasPermission(userID, models.ResourceChatCollaborate, models.ActionWrite, orgID)
@@ -695,43 +366,15 @@ func (a *App) CloseChat(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Insufficient permissions", nil, "")
 	}
 
-	// Guard: already closed
-	if contact.EffectiveStatus() == models.ChatStatusClosed {
-		return r.SendEnvelope(map[string]any{
-			"contact_id": contact.ID,
-			"message":    "Conversation is already closed",
-		})
-	}
-
-	// Load agent name for system message
-	var agent models.User
-	agentName := "Unknown"
-	if a.DB.First(&agent, "id = ?", userID).Error == nil {
-		agentName = agent.FullName
-	}
-
-	// Close the conversation
-	contact.SetStatus(models.ChatStatusClosed)
-	if err := a.DB.Model(&contact).Update("metadata", contact.Metadata).Error; err != nil {
-		a.Log.Error("Failed to close chat", "error", err)
+	if err := a.ChatLifecycle.Close(r.RequestCtx, orgID, userID, &contact); err != nil {
+		if errors.Is(err, chatlifecycle.ErrAlreadyClosed) {
+			return r.SendEnvelope(map[string]any{
+				"contact_id": contact.ID,
+				"message":    "Conversation is already closed",
+			})
+		}
+		a.Log.Error("Failed to close chat", "error", err, "contact_id", contact.ID)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to close chat", nil, "")
-	}
-
-	a.createSystemMessage(orgID, contact.ID,
-		fmt.Sprintf("🔔 %s closed this conversation", agentName),
-		models.JSONB{"system_type": "chat_closed", "agent_id": userID.String()})
-
-	if a.WSHub != nil {
-		a.WSHub.BroadcastToOrg(orgID, websocket.WSMessage{
-			Type: websocket.TypeChatClosed,
-			Payload: map[string]any{
-				"contact_id":       contact.ID.String(),
-				"chat_status":      string(models.ChatStatusClosed),
-				"closed":           true,
-				"assigned_user_id": "",
-				"assigned_to":      "",
-			},
-		})
 	}
 
 	return r.SendEnvelope(map[string]any{
@@ -740,14 +383,9 @@ func (a *App) CloseChat(r *fastglue.Request) error {
 	})
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
 // ReopenChat reopens a closed conversation WITHOUT assigning it to the caller.
-// Only managers/admins (contacts:write) can reopen — agents must Claim to take
-// ownership. Per spec §3: "To view again, user must click [Reopen Conversation].
-// This sets status='open'." The last_closed_at timestamp is preserved so the
-// per-agent unread-count logic (created_at > last_closed_at) stays correct.
+// Thin adapter over Service.Reopen. Admin/manager only (contacts:write).
 // Route: PUT /api/contacts/{id}/reopen
-// ─────────────────────────────────────────────────────────────────────────────
 func (a *App) ReopenChat(r *fastglue.Request) error {
 	orgID, userID, err := a.requireAuth(r, models.ResourceContacts, models.ActionWrite)
 	if err != nil {
@@ -764,41 +402,17 @@ func (a *App) ReopenChat(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
 	}
 
-	// Idempotent: already open
-	if contact.EffectiveStatus() == models.ChatStatusOpen {
+	reopened, err := a.ChatLifecycle.Reopen(r.RequestCtx, orgID, userID, &contact)
+	if err != nil {
+		a.Log.Error("Failed to reopen chat", "error", err, "contact_id", contact.ID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to reopen chat", nil, "")
+	}
+
+	if !reopened {
 		return r.SendEnvelope(map[string]any{
 			"contact_id": contact.ID,
 			"reopened":   false,
 			"message":    "Conversation is already open",
-		})
-	}
-
-	contact.SetStatus(models.ChatStatusOpen)
-	if err := a.DB.Model(&contact).Update("metadata", contact.Metadata).Error; err != nil {
-		a.Log.Error("Failed to reopen chat", "error", err)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to reopen chat", nil, "")
-	}
-
-	var admin models.User
-	adminName := "Unknown"
-	if a.DB.First(&admin, "id = ?", userID).Error == nil {
-		adminName = admin.FullName
-	}
-
-	a.createSystemMessage(orgID, contact.ID,
-		fmt.Sprintf("🔔 %s reopened this conversation", adminName),
-		models.JSONB{"system_type": "chat_reopened", "agent_id": userID.String()})
-
-	if a.WSHub != nil {
-		a.WSHub.BroadcastToOrg(orgID, websocket.WSMessage{
-			Type: websocket.TypeChatReopened,
-			Payload: map[string]any{
-				"contact_id":  contact.ID.String(),
-				"chat_status": string(models.ChatStatusOpen),
-				"reopened":    true,
-				"by":          userID.String(),
-				"by_name":     adminName,
-			},
 		})
 	}
 
@@ -809,11 +423,8 @@ func (a *App) ReopenChat(r *fastglue.Request) error {
 }
 
 // BulkReleaseChats releases many conversations back to the pending pool in one
-// request (M4). It is the batch equivalent of ReleaseChat. Auth mirrors Release
-// Chat (chat.assign:write) plus a per-item ownership/role check inside the loop,
-// so an agent can bulk-release their own chats and an admin/manager can bulk-
-// release any. Returns the list of successfully released contact IDs and the
-// list of failures (id + reason) so the UI can report partial outcomes.
+// request. Thin adapter over Service.BulkRelease — the body parse + cap stay
+// here, the per-item loop (auth, policy, mutation, audit, WS) lives in the service.
 // Route: POST /api/contacts/bulk-release  Body: { "contact_ids": ["<uuid>", ...] }
 func (a *App) BulkReleaseChats(r *fastglue.Request) error {
 	orgID, userID, err := a.requireAuth(r, models.ResourceChatAssign, models.ActionWrite)
@@ -821,8 +432,6 @@ func (a *App) BulkReleaseChats(r *fastglue.Request) error {
 		return nil
 	}
 
-	// Parse the contact_ids array from the JSON body. fastglue exposes the
-	// underlying fasthttp request; read the body bytes and unmarshal.
 	var req struct {
 		ContactIDs []string `json:"contact_ids"`
 	}
@@ -840,104 +449,12 @@ func (a *App) BulkReleaseChats(r *fastglue.Request) error {
 	}
 
 	isAdminOrManager := a.HasPermission(userID, models.ResourceContacts, models.ActionWrite, orgID)
-
-	releasedIDs := make([]string, 0, len(req.ContactIDs))
-	failed := make([]map[string]any, 0)
-	seen := make(map[string]bool, len(req.ContactIDs))
-
-	// Load the agent name once for all system messages in this batch.
-	var agent models.User
-	agentName := "Unknown"
-	if a.DB.First(&agent, "id = ?", userID).Error == nil {
-		agentName = agent.FullName
-	}
-
-	for _, rawID := range req.ContactIDs {
-		// De-dup: a repeated id in the array is a no-op after the first.
-		if seen[rawID] {
-			continue
-		}
-		seen[rawID] = true
-
-		contactID, err := uuid.Parse(rawID)
-		if err != nil {
-			failed = append(failed, map[string]any{"contact_id": rawID, "reason": "invalid uuid"})
-			continue
-		}
-
-		var contact models.Contact
-		if err := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID).First(&contact).Error; err != nil {
-			failed = append(failed, map[string]any{"contact_id": rawID, "reason": "not found"})
-			continue
-		}
-
-		// Per-item authorization: assignee or admin/manager.
-		isAssignee := contact.AssignedUserID != nil && *contact.AssignedUserID == userID
-		if !isAssignee && !isAdminOrManager {
-			failed = append(failed, map[string]any{"contact_id": rawID, "reason": "not authorized"})
-			continue
-		}
-
-		// Closed chats: admin/manager only (mirrors single ReleaseChat policy G2).
-		if contact.EffectiveStatus() == models.ChatStatusClosed && !isAdminOrManager {
-			failed = append(failed, map[string]any{"contact_id": rawID, "reason": "closed chat requires admin"})
-			continue
-		}
-
-		// Idempotent: skip silently if already pending+unassigned.
-		if contact.EffectiveStatus() == models.ChatStatusPending && contact.AssignedUserID == nil {
-			releasedIDs = append(releasedIDs, contact.ID.String())
-			continue
-		}
-
-		oldStatus := string(contact.EffectiveStatus())
-		oldAssigned := contact.AssignedUserID
-
-		now := time.Now()
-		contact.AssignedUserID = nil
-		contact.SetStatus(models.ChatStatusPending)
-		contact.ClearCollaborators()
-		if err := a.DB.Model(&contact).Updates(map[string]any{
-			"assigned_user_id": nil,
-			"metadata":         contact.Metadata,
-			"last_message_at":  &now,
-		}).Error; err != nil {
-			a.Log.Error("Failed to release chat in bulk", "error", err, "contact_id", contact.ID)
-			failed = append(failed, map[string]any{"contact_id": rawID, "reason": "persist failed"})
-			continue
-		}
-		contact.LastMessageAt = &now
-
-		a.createSystemMessage(orgID, contact.ID,
-			fmt.Sprintf("🔔 %s released this conversation", agentName),
-			models.JSONB{"system_type": "chat_released", "agent_id": userID.String(), "agent_name": agentName})
-
-		a.logAudit(orgID, userID, "contact", contact.ID, models.AuditActionUpdated, nil, &contact,
-			map[string]any{
-				"chat_status":      map[string]any{"old": oldStatus, "new": string(models.ChatStatusPending)},
-				"assigned_user_id": map[string]any{"old": oldAssigned, "new": nil},
-			})
-
-		if a.WSHub != nil {
-			a.WSHub.BroadcastToOrg(orgID, websocket.WSMessage{
-				Type: websocket.TypeChatReleased,
-				Payload: map[string]any{
-					"contact_id":      contact.ID.String(),
-					"released_by":     userID.String(),
-					"chat_status":     string(models.ChatStatusPending),
-					"collaborators":   []any{},
-					"last_message_at": now.Format(time.RFC3339Nano),
-				},
-			})
-		}
-
-		releasedIDs = append(releasedIDs, contact.ID.String())
-	}
+	result := a.ChatLifecycle.BulkRelease(r.RequestCtx, orgID, userID, req.ContactIDs, isAdminOrManager)
 
 	return r.SendEnvelope(map[string]any{
-		"released_ids": releasedIDs,
-		"released":     releasedIDs,
-		"failed":       failed,
+		"released_ids": result.ReleasedIDs,
+		"released":     result.ReleasedIDs,
+		"failed":       result.Failed,
 		"requested":    len(req.ContactIDs),
 	})
 }

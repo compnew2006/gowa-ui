@@ -3,6 +3,7 @@ package handlers_test
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/shridarpatil/whatomate/internal/handlers"
@@ -59,13 +60,24 @@ func claimContactForTest(t *testing.T, app *handlers.App, c *models.Contact, ass
 // countAuditEntriesFor returns the number of audit_log rows for a given
 // (resource_type, resource_id). Used to assert the extraChanges safeguard held
 // — without it, audit.LogAudit silently drops the entry.
+// countAuditEntriesFor returns the audit_log row count for a (resource_type,
+// resource_id) pair. It polls briefly because audit.LogAudit writes
+// asynchronously in a detached goroutine (internal/audit/audit.go:146) — a
+// read immediately after the handler returns can race the write, which
+// became visible after the chat-lifecycle extraction shifted call timing.
 func countAuditEntriesFor(t *testing.T, app *handlers.App, resourceType string, resourceID uuid.UUID) int64 {
 	t.Helper()
-	var n int64
-	require.NoError(t, app.DB.Model(&models.AuditLog{}).
-		Where("resource_type = ? AND resource_id = ?", resourceType, resourceID).
-		Count(&n).Error)
-	return n
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		var n int64
+		require.NoError(t, app.DB.Model(&models.AuditLog{}).
+			Where("resource_type = ? AND resource_id = ?", resourceType, resourceID).
+			Count(&n).Error)
+		if n > 0 || time.Now().After(deadline) {
+			return n
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 // createAssignAgent makes a user whose role grants chat.assign:write (the

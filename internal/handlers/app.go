@@ -10,6 +10,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/shridarpatil/whatomate/internal/assignment"
 	"github.com/shridarpatil/whatomate/internal/calling"
+	"github.com/shridarpatil/whatomate/internal/chatlifecycle"
 	"github.com/shridarpatil/whatomate/internal/config"
 	"github.com/shridarpatil/whatomate/internal/queue"
 	"github.com/shridarpatil/whatomate/internal/storage"
@@ -39,6 +40,11 @@ type App struct {
 	HTTPClient *http.Client
 	// Assigner provides shared team-based agent assignment (used by both chat and call transfers)
 	Assigner *assignment.Assigner
+	// ChatLifecycle owns the chat conversation state machine (claim/release/
+	// close/reopen/join/leave/invite/remove) and its audit + system-message +
+	// WS side effects. Handlers in chat_lifecycle.go are thin HTTP adapters
+	// over this service. Nil only in tests that don't exercise chat lifecycle.
+	ChatLifecycle *chatlifecycle.Service
 	// CallManager handles WebRTC call sessions (nil when calling is disabled)
 	CallManager *calling.Manager
 	// TTS generates audio from text for IVR greetings (nil when not configured)

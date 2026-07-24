@@ -1,7 +1,7 @@
 {
   "cmd/whatomate/main.go": {
-    "mtime": 1784928788.2473001,
-    "ast_hash": "04ca3651ca4d06af7fcb555d43efb222",
+    "mtime": 1784930219.7652633,
+    "ast_hash": "57be25ae3bc2a72ba5a76e1d06ea5089",
     "semantic_hash": ""
   },
   "docs/astro.config.mjs": {
@@ -2750,9 +2750,9 @@
     "semantic_hash": "bb5b95d162f0499cabaa74d6b0472a27"
   },
   "internal/handlers/app.go": {
-    "mtime": 1783960683.0,
-    "ast_hash": "d24978b2ba6ba5435e4f596435b907b3",
-    "semantic_hash": "d24978b2ba6ba5435e4f596435b907b3"
+    "mtime": 1784930171.1273496,
+    "ast_hash": "ce4153d888522e470b9179a76c42cf30",
+    "semantic_hash": ""
   },
   "internal/handlers/audit_logs.go": {
     "mtime": 1783960683.0,
@@ -2830,8 +2830,8 @@
     "semantic_hash": "e63abf49705d6e0c2a4ac1e953b90edc"
   },
   "internal/handlers/chat_lifecycle.go": {
-    "mtime": 1784928788.2495909,
-    "ast_hash": "3712db39a158ef3b3c1cc8b6cfa7f657",
+    "mtime": 1784930550.6418934,
+    "ast_hash": "f3c3abd8159d73604d18a93ef130bde5",
     "semantic_hash": ""
   },
   "internal/handlers/chatbot.go": {
@@ -3150,9 +3150,9 @@
     "semantic_hash": "1f2f1d0459e6a3a20bb17daa5a0f29ca"
   },
   "internal/handlers/testhelpers_test.go": {
-    "mtime": 1783960683.0,
-    "ast_hash": "8ee00facc9aee73a9e8f93cf80336220",
-    "semantic_hash": "8ee00facc9aee73a9e8f93cf80336220"
+    "mtime": 1784930319.587654,
+    "ast_hash": "2f5f4a426638e0f2c6a5de1beaa1dff1",
+    "semantic_hash": ""
   },
   "internal/handlers/users.go": {
     "mtime": 1783960683.0,
@@ -4090,8 +4090,23 @@
     "semantic_hash": "d7d75de40d0e945cc08f792a0e42fd97"
   },
   "internal/handlers/chat_lifecycle_release_test.go": {
-    "mtime": 1784928707.524667,
-    "ast_hash": "21b8e65c38d8a987afd24de1344b980b",
+    "mtime": 1784930601.9440517,
+    "ast_hash": "4858266ebd79ef4cd450890516018a2f",
+    "semantic_hash": ""
+  },
+  "internal/chatlifecycle/service.go": {
+    "mtime": 1784930403.0140114,
+    "ast_hash": "1ab25cc83e253507a6158dec52a6d3fa",
+    "semantic_hash": ""
+  },
+  "internal/chatlifecycle/service_test.go": {
+    "mtime": 1784930664.667502,
+    "ast_hash": "a690c5f79c2fd805b2aaae7d99342301",
+    "semantic_hash": ""
+  },
+  ".zcode/plans/plan-sess_7aae5d37-3202-4a0f-ba3e-6794a3f04ca2.md": {
+    "mtime": 1784929926.6323874,
+    "ast_hash": "a1f85f93bba489590f73555d7aea02ed",
     "semantic_hash": ""
   }
 }
