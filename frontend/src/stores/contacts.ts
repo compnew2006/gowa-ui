@@ -117,10 +117,25 @@ export const useContactsStore = defineStore('contacts', () => {
   const replyingTo = ref<Message | null>(null)
   const accountFilter = ref<string | null>(null)
 
-  // Pending/Me tab selector for the chat sidebar. Default 'me' so the agent
-  // lands on their own active conversations first; they can switch to 'pending'
-  // to pick up unassigned ones.
-  const activeListTab = ref<'pending' | 'me'>('me')
+  // Pending/Me/All tab selector for the chat sidebar. Persisted to localStorage
+  // (M2) so the agent's preference survives reloads. 'all' is admin/manager-only.
+  // Default falls back to the stored value if it is still valid for the user's
+  // current role; otherwise 'pending' (the unassigned queue — the entry point
+  // for picking up work per the original requirement).
+  const VALID_TABS = ['pending', 'me', 'all'] as const
+  type ListTab = typeof VALID_TABS[number]
+  function loadStoredTab(): ListTab {
+    const stored = typeof localStorage !== 'undefined'
+      ? localStorage.getItem('whatomate.chat.activeListTab') as ListTab | null
+      : null
+    return stored && (VALID_TABS as readonly string[]).includes(stored) ? stored : 'pending'
+  }
+  const activeListTab = ref<ListTab>(loadStoredTab())
+  // Persist tab choice (M2). `watch` re-fires on every change, so the stored
+  // value always mirrors the live one.
+  watch(activeListTab, (tab) => {
+    try { localStorage.setItem('whatomate.chat.activeListTab', tab) } catch { /* quota / private mode */ }
+  })
 
   // Contacts pagination
   const contactsPage = ref(1)
@@ -150,26 +165,93 @@ export const useContactsStore = defineStore('contacts', () => {
     })
   })
 
-  // ─── Pending / Me tab membership (client-side filtering per D4) ───
-  // Membership is derived from ASSIGNMENT, which is the source of truth — not
-  // from the stored `chat_status` string. The backend's EffectiveStatus()
+  // ─── Pending / Me / All tab membership (client-side filtering per D4) ───
+  // Membership is derived from ASSIGNMENT (the source of truth) plus the explicit
+  // `chat_status` for the closed-state check. The backend's EffectiveStatus()
   // defaults to "open" for legacy rows that never had chat_status set, so a
-  // filter on `chat_status === 'pending'` would silently hide the bulk of
-  // existing unassigned conversations. Assignment is always accurate.
-  //   pending → not assigned to anyone (awaiting a claim)
-  //   me      → assigned to the current user
-  // Chats assigned to OTHER agents appear in neither tab.
+  // filter on `chat_status === 'pending'` alone would hide most legacy
+  // unassigned chats. We therefore treat "pending" as `!assigned && !closed`.
+  //   pending → not assigned to anyone AND not closed (awaiting a claim)
+  //   me      → assigned to the current user (closed or not — owner sees their own)
+  //   all     → every contact regardless of assignment (admin/manager only, M1).
+  //             Chats assigned to OTHER agents live here, tagged with the agent.
   const pendingContacts = computed(() =>
-    sortedContacts.value.filter(c => !c.assigned_user_id)
+    sortedContacts.value.filter(c => !c.assigned_user_id && c.chat_status !== 'closed')
   )
   const myContacts = computed(() =>
     sortedContacts.value.filter(c => c.assigned_user_id === authStore.user?.id)
   )
+  const allContacts = computed(() => sortedContacts.value)
   const pendingCount = computed(() => pendingContacts.value.length)
   const myCount = computed(() => myContacts.value.length)
-  const displayedContacts = computed(() =>
-    activeListTab.value === 'pending' ? pendingContacts.value : myContacts.value
-  )
+  const allCount = computed(() => allContacts.value.length)
+
+  // When the active tab becomes invalid for the user's role (e.g. they were on
+  // 'all' and lost admin), fall back to 'pending'. This is reactive, so a
+  // role change immediately corrects the tab without a reload.
+  const canSeeAllTab = computed(() => authStore.hasPermission('contacts', 'write'))
+  watch(canSeeAllTab, (allowed) => {
+    if (!allowed && activeListTab.value === 'all') activeListTab.value = 'pending'
+  })
+
+  // The list to render in the sidebar for the active tab.
+  const displayedContacts = computed(() => {
+    switch (activeListTab.value) {
+      case 'me': return myContacts.value
+      case 'all': return canSeeAllTab.value ? allContacts.value : pendingContacts.value
+      case 'pending':
+      default: return pendingContacts.value
+    }
+  })
+
+  // ─── Cross-tab search fallback (M3) ───
+  // When a search is active, the user is looking for a specific contact
+  // regardless of which tab they are on. We search across ALL loaded contacts
+  // (not just the active tab) and surface a hint when the query has hits in
+  // other tabs but not the current one, so a "missing" result is explained.
+  const searchResultsAcrossTabs = computed(() => {
+    const q = normalizeContactSearch(searchQuery.value)
+    if (!q) return null // no active search → caller should use displayedContacts
+    const needle = q.toLowerCase()
+    const matches = sortedContacts.value.filter(c =>
+      (c.name?.toLowerCase().includes(needle)) ||
+      (c.phone_number?.toLowerCase().includes(needle)) ||
+      (c.assigned_user_name?.toLowerCase().includes(needle))
+    )
+    return matches
+  })
+  // Contacts to actually render when a search is active; otherwise the active
+  // tab's list. The view consumes this single computed.
+  const visibleContacts = computed(() => {
+    if (searchQuery.value.trim()) {
+      const r = searchResultsAcrossTabs.value
+      if (r && r.length) return r
+      return [] // search active, no matches
+    }
+    return displayedContacts.value
+  })
+  // True when the current search query has hits in OTHER tabs but not the
+  // current one — drives the "found in: Me" hint in the view.
+  const searchHint = computed<{ show: boolean; tabs: ListTab[] } | null>(() => {
+    const q = searchQuery.value.trim()
+    if (!q) return null
+    const r = searchResultsAcrossTabs.value ?? []
+    if (!r.length) return null
+    const inPending = r.some(c => !c.assigned_user_id && c.chat_status !== 'closed')
+    const inMe = r.some(c => c.assigned_user_id === authStore.user?.id)
+    const inOthers = r.some(c => c.assigned_user_id && c.assigned_user_id !== authStore.user?.id)
+    const current = activeListTab.value
+    const currentHasHits =
+      (current === 'pending' && inPending) ||
+      (current === 'me' && inMe) ||
+      (current === 'all')
+    if (currentHasHits) return null
+    const tabs: ListTab[] = []
+    if (inPending) tabs.push('pending')
+    if (inMe) tabs.push('me')
+    if (inOthers && canSeeAllTab.value) tabs.push('all')
+    return { show: tabs.length > 0, tabs }
+  })
 
   // ─── Chat lifecycle computed properties ───
   const pendingMessageCount = ref(0)
@@ -558,6 +640,9 @@ export const useContactsStore = defineStore('contacts', () => {
 
   // Release a conversation back to the pending pool. Mirrors claimChat's shape:
   // PUT, optimistic local update of status/assignment, then re-fetch messages.
+  // Also clears collaborators locally (G4) — the backend wipes them on release
+  // and broadcasts an empty collaborators array, but the optimistic update must
+  // match so the UI does not flash stale collaborator avatars.
   async function releaseChat(contactId: string) {
     const response = await api.put(`/contacts/${contactId}/release`)
     const data = response.data.data || response.data
@@ -566,15 +651,67 @@ export const useContactsStore = defineStore('contacts', () => {
       contact.assigned_user_id = undefined
       contact.assigned_user_name = undefined
       contact.chat_status = 'pending'
+      contact.collaborators = []
     }
     if (currentContact.value?.id === contactId) {
       currentContact.value.assigned_user_id = undefined
       currentContact.value.assigned_user_name = undefined
       currentContact.value.chat_status = 'pending'
+      currentContact.value.collaborators = []
       // Re-fetch messages to show the system message immediately
       await fetchMessages(contactId)
     }
     return data
+  }
+
+  // Bulk release (M4). Releases many conversations back to pending in one call.
+  // Server-side loop (the endpoint accepts an array of contact IDs) so we get a
+  // single audit batch and one WS broadcast per chat. Used by the sidebar
+  // multi-select mode. Returns per-id results so the UI can report partial fails.
+  const bulkReleaseInProgress = ref(false)
+  const selectedContactIds = ref<Set<string>>(new Set())
+  const bulkSelectMode = ref(false)
+
+  function toggleBulkSelect(contactId: string) {
+    if (selectedContactIds.value.has(contactId)) {
+      selectedContactIds.value.delete(contactId)
+    } else {
+      selectedContactIds.value.add(contactId)
+    }
+    // Trigger reactivity for Set mutation.
+    selectedContactIds.value = new Set(selectedContactIds.value)
+  }
+  function clearBulkSelection() {
+    selectedContactIds.value = new Set()
+    bulkSelectMode.value = false
+  }
+
+  async function bulkReleaseChats(contactIds: string[]) {
+    if (!contactIds.length) return { released: 0, failed: 0 }
+    bulkReleaseInProgress.value = true
+    try {
+      const response = await api.post('/contacts/bulk-release', { contact_ids: contactIds })
+      const data = response.data.data || response.data
+      const releasedIds: string[] = data?.released_ids || data?.released || []
+      // Optimistically apply the same local mutation as releaseChat for each
+      // successfully released chat. Failed ones keep their current state.
+      for (const id of releasedIds) {
+        const c = contacts.value.find(x => x.id === id)
+        if (c) {
+          c.assigned_user_id = undefined
+          c.assigned_user_name = undefined
+          c.chat_status = 'pending'
+          c.collaborators = []
+        }
+      }
+      clearBulkSelection()
+      return {
+        released: releasedIds.length,
+        failed: contactIds.length - releasedIds.length,
+      }
+    } finally {
+      bulkReleaseInProgress.value = false
+    }
   }
 
   async function joinChat(contactId: string) {
@@ -661,13 +798,26 @@ export const useContactsStore = defineStore('contacts', () => {
     replyingTo,
     filteredContacts,
     sortedContacts,
-    // Pending / Me tabs
+    // Pending / Me / All tabs
     activeListTab,
     pendingContacts,
     myContacts,
+    allContacts,
     pendingCount,
     myCount,
+    allCount,
+    canSeeAllTab,
     displayedContacts,
+    // Cross-tab search (M3)
+    visibleContacts,
+    searchHint,
+    // Bulk release (M4)
+    bulkSelectMode,
+    selectedContactIds,
+    bulkReleaseInProgress,
+    toggleBulkSelect,
+    clearBulkSelection,
+    bulkReleaseChats,
     // Chat lifecycle
     pendingMessageCount,
     isPendingClaim,

@@ -1,8 +1,8 @@
 {
   "cmd/whatomate/main.go": {
-    "mtime": 1784871946.896664,
-    "ast_hash": "7d382eef1d71ece96e59cc3517c1c6fb",
-    "semantic_hash": "7d382eef1d71ece96e59cc3517c1c6fb"
+    "mtime": 1784928788.2473001,
+    "ast_hash": "04ca3651ca4d06af7fcb555d43efb222",
+    "semantic_hash": ""
   },
   "docs/astro.config.mjs": {
     "mtime": 1783960683.0,
@@ -2190,14 +2190,14 @@
     "semantic_hash": "bdb27bf81940efa5c72bb0fd187562c5"
   },
   "frontend/src/i18n/locales/ar.json": {
-    "mtime": 1784872299.541054,
-    "ast_hash": "5b932cc8f1926906ce6496291df2a228",
-    "semantic_hash": "5b932cc8f1926906ce6496291df2a228"
+    "mtime": 1784928788.2478743,
+    "ast_hash": "169082346f1774f1b455fce11296e866",
+    "semantic_hash": ""
   },
   "frontend/src/i18n/locales/en.json": {
-    "mtime": 1784872299.5390015,
-    "ast_hash": "bd5dcbe5dee87de4534429caf01a8830",
-    "semantic_hash": "bd5dcbe5dee87de4534429caf01a8830"
+    "mtime": 1784928788.248431,
+    "ast_hash": "ab0de1cc13fedcd1aa3e7eabbf4966ac",
+    "semantic_hash": ""
   },
   "frontend/src/lib/api-error.ts": {
     "mtime": 1784764258.0,
@@ -2245,9 +2245,9 @@
     "semantic_hash": ""
   },
   "frontend/src/services/websocket.ts": {
-    "mtime": 1784858135.9408803,
-    "ast_hash": "36d156756e5ea34a80d5421193e4c68c",
-    "semantic_hash": "36d156756e5ea34a80d5421193e4c68c"
+    "mtime": 1784928788.2487862,
+    "ast_hash": "86fbbb9d80df907fac53bf09c40eeb07",
+    "semantic_hash": ""
   },
   "frontend/src/stores/auth.ts": {
     "mtime": 1784764258.0,
@@ -2260,9 +2260,9 @@
     "semantic_hash": "a19dfb7f1058360d07526577724c5d77"
   },
   "frontend/src/stores/contacts.ts": {
-    "mtime": 1784859602.5565307,
-    "ast_hash": "4833ec5a15a9570f13701dd030555238",
-    "semantic_hash": "4833ec5a15a9570f13701dd030555238"
+    "mtime": 1784928788.2489796,
+    "ast_hash": "a3e102bdbf5d3fe9e5a70f43f9283c99",
+    "semantic_hash": ""
   },
   "frontend/src/stores/gowaServers.ts": {
     "mtime": 1784780244.84356,
@@ -2335,9 +2335,9 @@
     "semantic_hash": "5a9c390e7cfcc758ceed65374a90a075"
   },
   "frontend/src/views/chat/ChatView.vue": {
-    "mtime": 1784864322.2999742,
-    "ast_hash": "58f4f0ee47fd900e685f56ec8bcc55b5",
-    "semantic_hash": "58f4f0ee47fd900e685f56ec8bcc55b5"
+    "mtime": 1784928788.2493293,
+    "ast_hash": "4f5f0db6c21eff912fe39c0fb4d96a7e",
+    "semantic_hash": ""
   },
   "frontend/src/views/chatbot/AIContextDetailView.vue": {
     "mtime": 1784764258.0,
@@ -2830,9 +2830,9 @@
     "semantic_hash": "e63abf49705d6e0c2a4ac1e953b90edc"
   },
   "internal/handlers/chat_lifecycle.go": {
-    "mtime": 1784858887.341904,
-    "ast_hash": "c7b8267fb964e76af0dcde9d59dfecc3",
-    "semantic_hash": "c7b8267fb964e76af0dcde9d59dfecc3"
+    "mtime": 1784928788.2495909,
+    "ast_hash": "3712db39a158ef3b3c1cc8b6cfa7f657",
+    "semantic_hash": ""
   },
   "internal/handlers/chatbot.go": {
     "mtime": 1784870766.0305126,
@@ -4088,5 +4088,10 @@
     "mtime": 1784871913.3433282,
     "ast_hash": "d7d75de40d0e945cc08f792a0e42fd97",
     "semantic_hash": "d7d75de40d0e945cc08f792a0e42fd97"
+  },
+  "internal/handlers/chat_lifecycle_release_test.go": {
+    "mtime": 1784928707.524667,
+    "ast_hash": "21b8e65c38d8a987afd24de1344b980b",
+    "semantic_hash": ""
   }
 }

@@ -545,18 +545,26 @@ class WebSocketService {
     // Release moves a chat back to pending and unassigns the owner. Idempotent:
     // only mutate when the local state differs so the optimistic update from
     // releaseChat and this broadcast don't double-apply.
+    // Also clears collaborators (G4) — the backend wipes them and now includes
+    // an empty array in the payload. We apply it regardless of idempotency on
+    // status because stale collaborators are wrong even if status already matches.
+    const clearCollaborators = Array.isArray(payload.collaborators) && payload.collaborators.length === 0
     const c = store.contacts.find(c => c.id === payload.contact_id)
-    if (c && (c.chat_status !== 'pending' || c.assigned_user_id)) {
+    if (c && (c.chat_status !== 'pending' || c.assigned_user_id || clearCollaborators)) {
       c.chat_status = payload.chat_status || 'pending'
       c.assigned_user_id = undefined
       c.assigned_user_name = ''
+      if (clearCollaborators) c.collaborators = []
+      if (payload.last_message_at) c.last_message_at = payload.last_message_at
     }
     const current = store.currentContact
     if (current && current.id === payload.contact_id) {
-      if (current.chat_status !== 'pending' || current.assigned_user_id) {
+      if (current.chat_status !== 'pending' || current.assigned_user_id || clearCollaborators) {
         current.chat_status = payload.chat_status || 'pending'
         current.assigned_user_id = undefined
         current.assigned_user_name = ''
+        if (clearCollaborators) current.collaborators = []
+        if (payload.last_message_at) current.last_message_at = payload.last_message_at
       }
       // Re-fetch messages to show the release system message immediately
       store.fetchMessages(payload.contact_id)

@@ -21,6 +21,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Spinner } from '@/components/ui/spinner'
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Tooltip,
   TooltipContent,
@@ -97,7 +98,8 @@ import {
   Info,
   LogOut,
   Ghost,
-  Megaphone
+  Megaphone,
+  RotateCcw
 } from 'lucide-vue-next'
 import { getInitials, getAvatarGradient } from '@/lib/utils'
 import { useColorMode } from '@/composables/useColorMode'
@@ -469,6 +471,50 @@ async function handleReopen() {
     await contactsStore.reopenChat(contactsStore.currentContact.id)
   } catch {
     console.error('Failed to reopen chat')
+  }
+}
+
+// ─── Pending/Me/All tab keyboard navigation (M5 a11y) ───
+// Arrow Left/Right move focus between tabs and activate them, mirroring the
+// WAI-ARIA tabs pattern. Home/End jump to first/last. The roving tabindex on
+// the buttons themselves handles the rest.
+const tabStripRef = ref<HTMLElement | null>(null)
+const TAB_ORDER: Array<'pending' | 'me' | 'all'> = ['pending', 'me', 'all']
+function visibleTabOrder(): Array<'pending' | 'me' | 'all'> {
+  return TAB_ORDER.filter(t => t !== 'all' || contactsStore.canSeeAllTab)
+}
+function onTabKeydown(e: KeyboardEvent) {
+  const order = visibleTabOrder()
+  const idx = order.indexOf(contactsStore.activeListTab as any)
+  if (idx === -1) return
+  let next = idx
+  if (e.key === 'ArrowRight') next = (idx + 1) % order.length
+  else if (e.key === 'ArrowLeft') next = (idx - 1 + order.length) % order.length
+  else if (e.key === 'Home') next = 0
+  else if (e.key === 'End') next = order.length - 1
+  else return
+  e.preventDefault()
+  contactsStore.activeListTab = order[next]
+  nextTick(() => {
+    const el = tabStripRef.value?.querySelector<HTMLButtonElement>(`#tab-${order[next]}`)
+    el?.focus()
+  })
+}
+function tabLabel(tab: 'pending' | 'me' | 'all'): string {
+  return tab === 'pending' ? t('chat.tabPending')
+    : tab === 'me' ? t('chat.tabMe')
+    : t('chat.tabAll')
+}
+
+// Bulk release (M4). Wraps the store action with the standard try/catch +
+// error log used by the other lifecycle handlers.
+async function handleBulkRelease() {
+  const ids = Array.from(contactsStore.selectedContactIds)
+  if (!ids.length) return
+  try {
+    await contactsStore.bulkReleaseChats(ids)
+  } catch {
+    console.error('Failed to bulk release chats')
   }
 }
 
@@ -2019,6 +2065,28 @@ async function sendMediaMessage() {
               <X class="h-3.5 w-3.5" />
             </button>
           </div>
+          <!-- Bulk-select toggle (M4). Available to anyone who can release
+               (chat.assign:write). Toggles multi-select mode on the list so the
+               agent can release several chats at once. -->
+          <Tooltip v-if="canAssignContacts">
+            <TooltipTrigger as-child>
+              <Button
+                variant="ghost"
+                size="icon"
+                :aria-label="$t('chat.bulkSelect')"
+                :class="[
+                  'h-8 w-8 shrink-0 transition-colors',
+                  contactsStore.bulkSelectMode
+                    ? 'text-amber-400 bg-amber-500/10'
+                    : 'text-white/40 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100'
+                ]"
+                @click="contactsStore.bulkSelectMode = !contactsStore.bulkSelectMode; if (!contactsStore.bulkSelectMode) contactsStore.clearBulkSelection()"
+              >
+                <CheckCheck class="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{{ $t('chat.bulkSelect') }}</TooltipContent>
+          </Tooltip>
           <!-- Add Contact -->
           <Tooltip v-if="canWriteContacts">
             <TooltipTrigger as-child>
@@ -2120,28 +2188,48 @@ async function sendMediaMessage() {
           </label>
         </div>
 
-        <!-- Me / Pending tab strip — drives the sidebar list (client-side filter per D4). -->
-        <div class="grid grid-cols-2 gap-1 rounded-lg bg-white/[0.04] light:bg-gray-100 p-1 mt-2">
+        <!-- Pending / Me / All tab strip — drives the sidebar list.
+             All tab is admin/manager-only (M1) and shows chats assigned to other
+             agents too. Full a11y (M5): role=tablist + arrow-key navigation. -->
+        <div
+          ref="tabStripRef"
+          role="tablist"
+          aria-label="$t('chat.conversationTabs')"
+          class="grid gap-1 rounded-lg bg-white/[0.04] light:bg-gray-100 p-1 mt-2"
+          :class="contactsStore.canSeeAllTab ? 'grid-cols-3' : 'grid-cols-2'"
+          @keydown="onTabKeydown"
+        >
           <button
+            v-if="contactsStore.canSeeAllTab"
+            type="button"
+            role="tab"
+            :id="'tab-all'"
+            :aria-selected="contactsStore.activeListTab === 'all'"
+            :tabindex="contactsStore.activeListTab === 'all' ? 0 : -1"
             :class="[
               'rounded-md py-1.5 text-xs font-medium whitespace-nowrap transition-all inline-flex items-center justify-center gap-1.5',
-              contactsStore.activeListTab === 'me'
+              contactsStore.activeListTab === 'all'
                 ? 'bg-emerald-600 text-white shadow-sm'
                 : 'text-white/60 hover:text-white/90 hover:bg-white/[0.06] light:text-gray-600 light:hover:text-gray-800 light:hover:bg-gray-200'
             ]"
-            @click="contactsStore.activeListTab = 'me'"
+            @click="contactsStore.activeListTab = 'all'"
           >
-            {{ $t('chat.tabMe') }}
+            {{ $t('chat.tabAll') }}
             <span
               :class="[
                 'inline-flex items-center justify-center min-w-[1.25rem] h-4 px-1 rounded-full text-[10px] font-semibold tabular-nums',
-                contactsStore.activeListTab === 'me'
+                contactsStore.activeListTab === 'all'
                   ? 'bg-white/25 text-white'
                   : 'bg-white/[0.08] text-white/60 light:bg-gray-300 light:text-gray-700'
               ]"
-            >{{ contactsStore.myCount }}</span>
+            >{{ contactsStore.allCount }}</span>
           </button>
           <button
+            type="button"
+            role="tab"
+            :id="'tab-pending'"
+            :aria-selected="contactsStore.activeListTab === 'pending'"
+            :tabindex="contactsStore.activeListTab === 'pending' ? 0 : -1"
             :class="[
               'rounded-md py-1.5 text-xs font-medium whitespace-nowrap transition-all inline-flex items-center justify-center gap-1.5',
               contactsStore.activeListTab === 'pending'
@@ -2160,21 +2248,69 @@ async function sendMediaMessage() {
               ]"
             >{{ contactsStore.pendingCount }}</span>
           </button>
+          <button
+            type="button"
+            role="tab"
+            :id="'tab-me'"
+            :aria-selected="contactsStore.activeListTab === 'me'"
+            :tabindex="contactsStore.activeListTab === 'me' ? 0 : -1"
+            :class="[
+              'rounded-md py-1.5 text-xs font-medium whitespace-nowrap transition-all inline-flex items-center justify-center gap-1.5',
+              contactsStore.activeListTab === 'me'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'text-white/60 hover:text-white/90 hover:bg-white/[0.06] light:text-gray-600 light:hover:text-gray-800 light:hover:bg-gray-200'
+            ]"
+            @click="contactsStore.activeListTab = 'me'"
+          >
+            {{ $t('chat.tabMe') }}
+            <span
+              :class="[
+                'inline-flex items-center justify-center min-w-[1.25rem] h-4 px-1 rounded-full text-[10px] font-semibold tabular-nums',
+                contactsStore.activeListTab === 'me'
+                  ? 'bg-white/25 text-white'
+                  : 'bg-white/[0.08] text-white/60 light:bg-gray-300 light:text-gray-700'
+              ]"
+            >{{ contactsStore.myCount }}</span>
+          </button>
         </div>
       </div>
 
       <!-- Contacts -->
       <ScrollArea :ref="(el: any) => contactsScroll.scrollAreaRef.value = el" orientation="vertical" class="flex-1">
         <div class="py-1 w-full">
+          <!-- Cross-tab search hint (M3): the query matched contacts in other
+               tabs but not the current one. Surface where the hits live so the
+               empty list is explained instead of looking broken. -->
+          <div v-if="contactsStore.searchHint?.show" class="px-3 py-2 mx-1 mb-1 rounded-md bg-blue-500/10 text-blue-300 light:bg-blue-50 light:text-blue-700 text-xs flex items-center gap-1.5">
+            <Search class="h-3.5 w-3.5 flex-shrink-0" />
+            <span class="flex-1">{{ $t('chat.foundInTabs') }}</span>
+            <button
+              v-for="tab in contactsStore.searchHint.tabs"
+              :key="tab"
+              type="button"
+              class="underline hover:text-blue-200 light:hover:text-blue-900"
+              @click="contactsStore.activeListTab = tab"
+            >{{ tabLabel(tab) }}</button>
+          </div>
+
           <div
-            v-for="contact in contactsStore.displayedContacts"
+            v-for="contact in contactsStore.visibleContacts"
             :key="contact.id"
             :class="[
               'flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-white/[0.04] light:hover:bg-gray-50 transition-colors',
               contactsStore.currentContact?.id === contact.id && 'bg-white/[0.08] light:bg-gray-100'
             ]"
-            @click="handleContactClick(contact)"
+            @click="contactsStore.bulkSelectMode ? contactsStore.toggleBulkSelect(contact.id) : handleContactClick(contact)"
           >
+            <!-- Bulk-select checkbox (M4). Only rendered in select mode; the
+                 row click handler above also toggles selection in that mode. -->
+            <Checkbox
+              v-if="contactsStore.bulkSelectMode"
+              :model-value="contactsStore.selectedContactIds.has(contact.id)"
+              class="h-4 w-4 flex-shrink-0"
+              @update:model-value="contactsStore.toggleBulkSelect(contact.id)"
+              @click.stop
+            />
             <Avatar class="h-9 w-9 ring-2 ring-white/[0.1] light:ring-gray-200">
               <AvatarImage :src="contact.avatar_url" />
               <AvatarFallback :class="'text-xs bg-gradient-to-br text-white ' + getAvatarGradient(contact.name || contact.phone_number)">
@@ -2204,8 +2340,20 @@ async function sendMediaMessage() {
                 </span>
               </div>
               <div class="flex items-center justify-between gap-2">
-                <p class="flex-1 min-w-0 text-xs text-white/50 light:text-gray-500 truncate">
+                <p class="flex-1 min-w-0 text-xs text-white/50 light:text-gray-500 truncate flex items-center gap-1">
                   {{ contact.phone_number }}
+                  <!-- M1: assigned-agent tag. Shows on the 'all' tab (and anywhere
+                       a chat is assigned to someone other than the viewer) so an
+                       admin can see who owns each conversation at a glance, and a
+                       fellow agent can see who to collaborate with. -->
+                  <span
+                    v-if="contact.assigned_user_name && contact.assigned_user_id !== authStore.user?.id"
+                    class="inline-flex items-center gap-0.5 ml-1 px-1.5 py-0.5 rounded text-[9px] font-medium bg-emerald-500/15 text-emerald-300 light:bg-emerald-100 light:text-emerald-700 truncate max-w-[90px]"
+                    :title="$t('chat.assignedTo') + ' ' + contact.assigned_user_name"
+                  >
+                    <User class="h-2.5 w-2.5 flex-shrink-0" />
+                    <span class="truncate">{{ contact.assigned_user_name }}</span>
+                  </span>
                 </p>
                 <Badge v-if="contact.whatsapp_account" class="flex-shrink-0 h-4 text-[9px] bg-violet-500/20 text-violet-400 light:bg-violet-100 light:text-violet-700">
                   {{ contact.whatsapp_account }}
@@ -2222,12 +2370,35 @@ async function sendMediaMessage() {
             <Loader2 class="h-5 w-5 mx-auto animate-spin text-white/40 light:text-gray-400" />
           </div>
 
-          <div v-if="contactsStore.displayedContacts.length === 0" class="p-3 text-center text-white/40 light:text-gray-500">
+          <div v-if="contactsStore.visibleContacts.length === 0 && !contactsStore.searchQuery.trim()" class="p-3 text-center text-white/40 light:text-gray-500">
             <User class="h-6 w-6 mx-auto mb-1.5 opacity-50" />
             <p class="text-sm">{{ $t('chat.noContacts') }}</p>
           </div>
+          <div v-else-if="contactsStore.visibleContacts.length === 0 && contactsStore.searchQuery.trim()" class="p-3 text-center text-white/40 light:text-gray-500">
+            <Search class="h-6 w-6 mx-auto mb-1.5 opacity-50" />
+            <p class="text-sm">{{ $t('chat.noSearchResults') }}</p>
+          </div>
         </div>
       </ScrollArea>
+
+      <!-- Bulk-action bar (M4). Slides in when bulk-select mode is on. -->
+      <div v-if="contactsStore.bulkSelectMode" class="flex items-center justify-between gap-2 px-3 py-2 border-t border-white/[0.08] light:border-gray-200 bg-[#0f0f10] light:bg-white">
+        <span class="text-xs text-white/60 light:text-gray-600">
+          {{ $t('chat.bulkSelected', { count: contactsStore.selectedContactIds.size }) }}
+        </span>
+        <div class="flex items-center gap-1">
+          <Button size="sm" variant="ghost" class="h-7 text-xs" :disabled="contactsStore.bulkReleaseInProgress" @click="contactsStore.clearBulkSelection()">
+            {{ $t('chat.cancel') }}
+          </Button>
+          <Button size="sm" variant="ghost" class="h-7 text-xs hover:text-amber-400 hover:bg-amber-500/10"
+                  :disabled="contactsStore.selectedContactIds.size === 0 || contactsStore.bulkReleaseInProgress"
+                  @click="handleBulkRelease">
+            <Loader2 v-if="contactsStore.bulkReleaseInProgress" class="h-3 w-3 mr-1 animate-spin" />
+            <RotateCcw v-else class="h-3 w-3 mr-1" />
+            {{ $t('chat.releasedConversation') }}
+          </Button>
+        </div>
+      </div>
     </div>
 
     <!-- Chat Area -->
@@ -2308,16 +2479,31 @@ async function sendMediaMessage() {
                   <Ghost class="h-3.5 w-3.5" />
                 </div>
               </div>
-              <!-- Release button: assignee OR admin/manager on an open chat.
-                   Returns the conversation to pending without closing it.
+              <!-- Release button: assignee (on an open chat) OR admin/manager on any
+                   non-pending chat. Closed chats are admin/manager-only per the spec
+                   edge case (D3 fix): an agent assignee of a closed chat must NOT see
+                   Release — they would otherwise silently transition closed → pending.
                    RotateCcw = "send back / undo claim", distinct from Leave. -->
-              <Button v-if="contactsStore.isAssignedToMe || (contactsStore.isAdminOrManager && !contactsStore.isPendingClaim && !contactsStore.isChatClosed)"
+              <Button v-if="(contactsStore.isAssignedToMe && !contactsStore.isChatClosed) || (contactsStore.isAdminOrManager && !contactsStore.isPendingClaim && !contactsStore.isChatClosed)"
                       variant="ghost" size="sm"
                       class="h-8 gap-1.5 px-3 text-xs text-white/60 hover:text-amber-400 hover:bg-amber-500/10 light:text-gray-500"
                       @click="handleRelease">
                 <RotateCcw class="h-3.5 w-3.5" />
                 {{ $t('chat.releasedConversation') }}
               </Button>
+              <!-- Reopen + Release (admin/manager on a closed chat): closed chats
+                   cannot be released directly; reopen first, then release. -->
+              <Tooltip v-if="contactsStore.isChatClosed && contactsStore.isAdminOrManager">
+                <TooltipTrigger as-child>
+                  <Button variant="ghost" size="sm"
+                          class="h-8 gap-1.5 px-3 text-xs text-white/60 hover:text-amber-400 hover:bg-amber-500/10 light:text-gray-500"
+                          @click="handleReopen">
+                    <RotateCcw class="h-3.5 w-3.5" />
+                    {{ $t('chat.releasedConversation') }}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{{ $t('chat.releaseClosedHint') }}</TooltipContent>
+              </Tooltip>
               <!-- Leave button: collaborators (not owner) OR admin/manager ghost-exit.
                    Last participant → label swaps to "Leave & Close".
                    LogOut = "exit the conversation". -->

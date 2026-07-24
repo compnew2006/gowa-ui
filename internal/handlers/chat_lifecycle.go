@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -180,6 +181,15 @@ func (a *App) ReleaseChat(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You are not allowed to release this chat", nil, "")
 	}
 
+	// Policy: only admins/managers may release a CLOSED chat. An agent assignee
+	// of a closed chat would otherwise silently transition closed → pending and
+	// lose the read-only/closed semantics. Mirrors the spec's closed-chat edge
+	// case ("Allowed only for admin/manager (the same actors who can reopen)").
+	if contact.EffectiveStatus() == models.ChatStatusClosed && !isAdminOrManager {
+		return r.SendErrorEnvelope(fasthttp.StatusForbidden,
+			"Only admins can release a closed chat — reopen it first", nil, "")
+	}
+
 	// Idempotent: already pending and unassigned — safe no-op success.
 	if contact.EffectiveStatus() == models.ChatStatusPending && contact.AssignedUserID == nil {
 		return r.SendEnvelope(map[string]any{
@@ -196,17 +206,22 @@ func (a *App) ReleaseChat(r *fastglue.Request) error {
 	oldStatus := string(contact.EffectiveStatus())
 	oldAssigned := contact.AssignedUserID
 
-	// Mutation: unassign + set pending + clear collaborators.
+	// Mutation: unassign + set pending + clear collaborators + bump last_message_at
+	// so the released chat re-sorts to the top of the Pending list (createSystemMessage
+	// only inserts a Message row; it does not touch Contact.last_message_at).
+	now := time.Now()
 	contact.AssignedUserID = nil
 	contact.SetStatus(models.ChatStatusPending)
 	contact.ClearCollaborators()
 	if err := a.DB.Model(&contact).Updates(map[string]any{
 		"assigned_user_id": nil,
 		"metadata":         contact.Metadata,
+		"last_message_at":  &now,
 	}).Error; err != nil {
 		a.Log.Error("Failed to release chat", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to release chat", nil, "")
 	}
+	contact.LastMessageAt = &now
 
 	// Load agent name for system message.
 	var agent models.User
@@ -233,9 +248,11 @@ func (a *App) ReleaseChat(r *fastglue.Request) error {
 		a.WSHub.BroadcastToOrg(orgID, websocket.WSMessage{
 			Type: websocket.TypeChatReleased,
 			Payload: map[string]any{
-				"contact_id":  contact.ID.String(),
-				"released_by": userID.String(),
-				"chat_status": string(models.ChatStatusPending),
+				"contact_id":     contact.ID.String(),
+				"released_by":    userID.String(),
+				"chat_status":    string(models.ChatStatusPending),
+				"collaborators":  []any{}, // cleared server-side — include so clients don't show stale collabs
+				"last_message_at": now.Format(time.RFC3339Nano),
 			},
 		})
 	}
@@ -788,5 +805,139 @@ func (a *App) ReopenChat(r *fastglue.Request) error {
 	return r.SendEnvelope(map[string]any{
 		"contact_id": contact.ID,
 		"reopened":   true,
+	})
+}
+
+// BulkReleaseChats releases many conversations back to the pending pool in one
+// request (M4). It is the batch equivalent of ReleaseChat. Auth mirrors Release
+// Chat (chat.assign:write) plus a per-item ownership/role check inside the loop,
+// so an agent can bulk-release their own chats and an admin/manager can bulk-
+// release any. Returns the list of successfully released contact IDs and the
+// list of failures (id + reason) so the UI can report partial outcomes.
+// Route: POST /api/contacts/bulk-release  Body: { "contact_ids": ["<uuid>", ...] }
+func (a *App) BulkReleaseChats(r *fastglue.Request) error {
+	orgID, userID, err := a.requireAuth(r, models.ResourceChatAssign, models.ActionWrite)
+	if err != nil {
+		return nil
+	}
+
+	// Parse the contact_ids array from the JSON body. fastglue exposes the
+	// underlying fasthttp request; read the body bytes and unmarshal.
+	var req struct {
+		ContactIDs []string `json:"contact_ids"`
+	}
+	bodyBytes := r.RequestCtx.PostBody()
+	if len(bodyBytes) > 0 {
+		if err := json.Unmarshal(bodyBytes, &req); err != nil {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid request body", nil, "")
+		}
+	}
+	if len(req.ContactIDs) == 0 {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "contact_ids is required and must be non-empty", nil, "")
+	}
+	if len(req.ContactIDs) > 500 {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Cannot release more than 500 chats at once", nil, "")
+	}
+
+	isAdminOrManager := a.HasPermission(userID, models.ResourceContacts, models.ActionWrite, orgID)
+
+	releasedIDs := make([]string, 0, len(req.ContactIDs))
+	failed := make([]map[string]any, 0)
+	seen := make(map[string]bool, len(req.ContactIDs))
+
+	// Load the agent name once for all system messages in this batch.
+	var agent models.User
+	agentName := "Unknown"
+	if a.DB.First(&agent, "id = ?", userID).Error == nil {
+		agentName = agent.FullName
+	}
+
+	for _, rawID := range req.ContactIDs {
+		// De-dup: a repeated id in the array is a no-op after the first.
+		if seen[rawID] {
+			continue
+		}
+		seen[rawID] = true
+
+		contactID, err := uuid.Parse(rawID)
+		if err != nil {
+			failed = append(failed, map[string]any{"contact_id": rawID, "reason": "invalid uuid"})
+			continue
+		}
+
+		var contact models.Contact
+		if err := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID).First(&contact).Error; err != nil {
+			failed = append(failed, map[string]any{"contact_id": rawID, "reason": "not found"})
+			continue
+		}
+
+		// Per-item authorization: assignee or admin/manager.
+		isAssignee := contact.AssignedUserID != nil && *contact.AssignedUserID == userID
+		if !isAssignee && !isAdminOrManager {
+			failed = append(failed, map[string]any{"contact_id": rawID, "reason": "not authorized"})
+			continue
+		}
+
+		// Closed chats: admin/manager only (mirrors single ReleaseChat policy G2).
+		if contact.EffectiveStatus() == models.ChatStatusClosed && !isAdminOrManager {
+			failed = append(failed, map[string]any{"contact_id": rawID, "reason": "closed chat requires admin"})
+			continue
+		}
+
+		// Idempotent: skip silently if already pending+unassigned.
+		if contact.EffectiveStatus() == models.ChatStatusPending && contact.AssignedUserID == nil {
+			releasedIDs = append(releasedIDs, contact.ID.String())
+			continue
+		}
+
+		oldStatus := string(contact.EffectiveStatus())
+		oldAssigned := contact.AssignedUserID
+
+		now := time.Now()
+		contact.AssignedUserID = nil
+		contact.SetStatus(models.ChatStatusPending)
+		contact.ClearCollaborators()
+		if err := a.DB.Model(&contact).Updates(map[string]any{
+			"assigned_user_id": nil,
+			"metadata":         contact.Metadata,
+			"last_message_at":  &now,
+		}).Error; err != nil {
+			a.Log.Error("Failed to release chat in bulk", "error", err, "contact_id", contact.ID)
+			failed = append(failed, map[string]any{"contact_id": rawID, "reason": "persist failed"})
+			continue
+		}
+		contact.LastMessageAt = &now
+
+		a.createSystemMessage(orgID, contact.ID,
+			fmt.Sprintf("🔔 %s released this conversation", agentName),
+			models.JSONB{"system_type": "chat_released", "agent_id": userID.String(), "agent_name": agentName})
+
+		a.logAudit(orgID, userID, "contact", contact.ID, models.AuditActionUpdated, nil, &contact,
+			map[string]any{
+				"chat_status":      map[string]any{"old": oldStatus, "new": string(models.ChatStatusPending)},
+				"assigned_user_id": map[string]any{"old": oldAssigned, "new": nil},
+			})
+
+		if a.WSHub != nil {
+			a.WSHub.BroadcastToOrg(orgID, websocket.WSMessage{
+				Type: websocket.TypeChatReleased,
+				Payload: map[string]any{
+					"contact_id":      contact.ID.String(),
+					"released_by":     userID.String(),
+					"chat_status":     string(models.ChatStatusPending),
+					"collaborators":   []any{},
+					"last_message_at": now.Format(time.RFC3339Nano),
+				},
+			})
+		}
+
+		releasedIDs = append(releasedIDs, contact.ID.String())
+	}
+
+	return r.SendEnvelope(map[string]any{
+		"released_ids": releasedIDs,
+		"released":     releasedIDs,
+		"failed":       failed,
+		"requested":    len(req.ContactIDs),
 	})
 }
