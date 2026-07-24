@@ -2240,9 +2240,9 @@
     "semantic_hash": "abbb89d81dcaf59620dc4e6bb7986dea"
   },
   "frontend/src/services/api.ts": {
-    "mtime": 1784872078.825084,
-    "ast_hash": "02737f03cab5fa8a7bd11ff889c5ba02",
-    "semantic_hash": "02737f03cab5fa8a7bd11ff889c5ba02"
+    "mtime": 1784905479.9791563,
+    "ast_hash": "a29d60dc246befcfdd89733d5215bf82",
+    "semantic_hash": ""
   },
   "frontend/src/services/websocket.ts": {
     "mtime": 1784858135.9408803,
