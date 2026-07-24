@@ -2156,11 +2156,15 @@ async function sendMediaMessage() {
                   :title="contact.name || contact.phone_number"
                 >
                   {{ contact.name || contact.phone_number }}
-                  <Badge v-if="contact.is_group_chat" class="ml-1 h-4 text-[9px] align-middle bg-blue-500/20 text-blue-400 light:bg-blue-100 light:text-blue-700">
-                    {{ $t('chat.group') }}
-                  </Badge>
+                  <!-- Groups and newsletters are mutually exclusive categories.
+                       A @newsletter JID is never a group. Prefer the newsletter
+                       badge when is_newsletter is set (legacy contacts may carry
+                       both flags from before the mutual-exclusivity fix). -->
                   <Badge v-if="contact.is_newsletter" class="ml-1 h-4 text-[9px] align-middle bg-amber-500/20 text-amber-400 light:bg-amber-100 light:text-amber-700">
                     {{ $t('chat.newsletter') }}
+                  </Badge>
+                  <Badge v-else-if="contact.is_group_chat" class="ml-1 h-4 text-[9px] align-middle bg-blue-500/20 text-blue-400 light:bg-blue-100 light:text-blue-700">
+                    {{ $t('chat.group') }}
                   </Badge>
                 </p>
                 <span class="flex-shrink-0 text-[11px] text-white/40 light:text-gray-500">

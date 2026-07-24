@@ -628,8 +628,21 @@ func (a *App) SyncGowaInstanceDeviceContacts(r *fastglue.Request) error {
 				contact.Metadata = models.JSONB{}
 				needsMetaUpdate = true
 			}
+			// Groups and newsletters are mutually exclusive. Setting one clears
+			// the other so legacy contacts that carry both flags self-heal.
+			otherKey := ""
+			if metaKey == "is_group_chat" {
+				otherKey = "is_newsletter"
+			} else if metaKey == "is_newsletter" {
+				otherKey = "is_group_chat"
+			}
+			_, hasOther := contact.Metadata[otherKey]
 			if contact.Metadata[metaKey] != true {
 				contact.Metadata[metaKey] = true
+				needsMetaUpdate = true
+			}
+			if hasOther {
+				delete(contact.Metadata, otherKey)
 				needsMetaUpdate = true
 			}
 			if needsMetaUpdate {
@@ -810,8 +823,21 @@ func (a *App) SyncGowaInstanceMessages(r *fastglue.Request) error {
 				contact.Metadata = models.JSONB{}
 				needsMetaUpdate = true
 			}
+			// Groups and newsletters are mutually exclusive. Setting one clears
+			// the other so legacy contacts that carry both flags self-heal.
+			otherKey := ""
+			if metaKey == "is_group_chat" {
+				otherKey = "is_newsletter"
+			} else if metaKey == "is_newsletter" {
+				otherKey = "is_group_chat"
+			}
+			_, hasOther := contact.Metadata[otherKey]
 			if contact.Metadata[metaKey] != true {
 				contact.Metadata[metaKey] = true
+				needsMetaUpdate = true
+			}
+			if hasOther {
+				delete(contact.Metadata, otherKey)
 				needsMetaUpdate = true
 			}
 			if needsMetaUpdate {

@@ -295,7 +295,12 @@ async function updateContactTags(tags: string[]) {
           </Avatar>
           <h4 class="font-medium flex items-center gap-2 justify-center">
             {{ contact.name || contact.phone_number }}
-            <Badge v-if="contact.is_group_chat" class="h-5 text-[10px] bg-blue-500/20 text-blue-500 light:bg-blue-100 light:text-blue-700">
+            <!-- Newsletter takes precedence over group (mutually exclusive;
+                 legacy contacts may carry both flags). -->
+            <Badge v-if="contact.is_newsletter" class="h-5 text-[10px] bg-amber-500/20 text-amber-500 light:bg-amber-100 light:text-amber-700">
+              {{ t('chat.newsletter') }}
+            </Badge>
+            <Badge v-else-if="contact.is_group_chat" class="h-5 text-[10px] bg-blue-500/20 text-blue-500 light:bg-blue-100 light:text-blue-700">
               {{ t('chat.group') }}
             </Badge>
           </h4>

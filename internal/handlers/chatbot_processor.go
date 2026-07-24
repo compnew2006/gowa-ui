@@ -180,8 +180,19 @@ func (a *App) processIncomingMessageFull(phoneNumberID string, msg IncomingTextM
 		if contact.Metadata == nil {
 			contact.Metadata = models.JSONB{}
 		}
-		if contact.Metadata[metaKey] != true {
+		// Groups and newsletters are mutually exclusive. Setting one clears the
+		// other so legacy contacts that carry both flags (written before the
+		// mutual-exclusivity fix) self-heal on the next message.
+		otherKey := ""
+		if metaKey == "is_group_chat" {
+			otherKey = "is_newsletter"
+		} else if metaKey == "is_newsletter" {
+			otherKey = "is_group_chat"
+		}
+		_, hasOther := contact.Metadata[otherKey]
+		if contact.Metadata[metaKey] != true || hasOther {
 			contact.Metadata[metaKey] = true
+			delete(contact.Metadata, otherKey)
 			a.DB.Model(contact).Update("metadata", contact.Metadata)
 		}
 	}
