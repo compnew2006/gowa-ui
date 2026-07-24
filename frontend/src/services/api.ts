@@ -213,7 +213,11 @@ export const contactsService = {
   updateTags: (id: string, tags: string[]) =>
     api.put(`/contacts/${id}/tags`, { tags }),
   getSessionData: (id: string) => api.get(`/contacts/${id}/session-data`),
-  markRead: (id: string) => api.post(`/contacts/${encodeURIComponent(id)}/mark-read`)
+  markRead: (id: string) => api.post(`/contacts/${encodeURIComponent(id)}/mark-read`),
+  // Fetches the contact's current WhatsApp profile picture on demand and
+  // returns the freshly-cached avatar_url. Used as a lazy refresh for chats
+  // that were created before a GOWA contact sync (no avatar_url yet).
+  refreshAvatar: (id: string) => api.get<{ avatar_url: string }>(`/contacts/${id}/avatar`)
 }
 
 // Generic Import/Export Service

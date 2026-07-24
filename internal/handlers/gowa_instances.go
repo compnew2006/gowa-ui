@@ -591,12 +591,13 @@ func (a *App) SyncGowaInstanceDeviceContacts(r *fastglue.Request) error {
 		}
 		name := strings.TrimSpace(ch.Name)
 
-		isGroup := strings.HasSuffix(jid, "@g.us") || strings.HasSuffix(jid, "@newsletter")
+		isGroup := strings.HasSuffix(jid, "@g.us")
+		isNewsletter := strings.HasSuffix(jid, "@newsletter")
 		// Match the webhook convention: group/newsletter chats are keyed by their
 		// full JID (the @g.us/@newsletter suffix is part of the identity), while
 		// 1:1 chats use the bare phone digits.
 		identity := jid
-		if !isGroup {
+		if !isGroup && !isNewsletter {
 			identity = gowa.PhoneFromJID(jid)
 			if identity == "" {
 				continue
@@ -610,22 +611,30 @@ func (a *App) SyncGowaInstanceDeviceContacts(r *fastglue.Request) error {
 		}
 		touched++
 
-		// Set group metadata to match how the webhook path marks group chats
-		// (chatbot_processor.go:169-177), so the contact list renders the group
-		// badge consistently. We only need to write when it isn't already set.
+		// Set group/newsletter metadata to match how the webhook path marks
+		// these chats (chatbot_processor.go), so the contact list renders the
+		// correct badge consistently. Groups and newsletters are distinct
+		// categories — a @newsletter JID is NOT a group. We only write when the
+		// flag isn't already set.
+		metaKey := ""
 		if isGroup {
+			metaKey = "is_group_chat"
+		} else if isNewsletter {
+			metaKey = "is_newsletter"
+		}
+		if metaKey != "" {
 			needsMetaUpdate := false
 			if contact.Metadata == nil {
 				contact.Metadata = models.JSONB{}
 				needsMetaUpdate = true
 			}
-			if contact.Metadata["is_group_chat"] != true {
-				contact.Metadata["is_group_chat"] = true
+			if contact.Metadata[metaKey] != true {
+				contact.Metadata[metaKey] = true
 				needsMetaUpdate = true
 			}
 			if needsMetaUpdate {
 				if err := a.DB.Model(contact).Update("metadata", contact.Metadata).Error; err != nil {
-					a.Log.Error("Failed to set group metadata during GOWA sync", "error", err, "jid", jid)
+					a.Log.Error("Failed to set chat metadata during GOWA sync", "error", err, "jid", jid)
 				}
 			}
 		}
@@ -641,6 +650,14 @@ func (a *App) SyncGowaInstanceDeviceContacts(r *fastglue.Request) error {
 				a.Log.Error("Failed to stamp whats_app_account during GOWA sync", "error", err, "jid", jid)
 			}
 		}
+
+		// Populate the contact's WhatsApp profile picture (or group icon) so
+		// the chat list shows real avatars instead of colored initials. This
+		// is best-effort and skips contacts that already have an avatar_url,
+		// keeping re-syncs cheap. Done here rather than per-webhook because the
+		// sync already iterates every chat and GOWA's /user/avatar is a
+		// per-contact round-trip we don't want on every inbound message.
+		a.refreshContactAvatar(bundle.client, account, contact, deviceID, false)
 
 		if isNew {
 			created++
@@ -747,9 +764,10 @@ func (a *App) SyncGowaInstanceMessages(r *fastglue.Request) error {
 			continue
 		}
 
-		isGroup := strings.HasSuffix(jid, "@g.us") || strings.HasSuffix(jid, "@newsletter")
+		isGroup := strings.HasSuffix(jid, "@g.us")
+		isNewsletter := strings.HasSuffix(jid, "@newsletter")
 		identity := jid
-		if !isGroup {
+		if !isGroup && !isNewsletter {
 			identity = gowa.PhoneFromJID(jid)
 			if identity == "" {
 				continue
@@ -776,6 +794,29 @@ func (a *App) SyncGowaInstanceMessages(r *fastglue.Request) error {
 		// Stamp the owning account name if empty (mirrors /sync-contacts).
 		if contact.WhatsAppAccount == "" {
 			a.DB.Model(contact).Update("whatsapp_account", account.Name)
+		}
+
+		// Stamp group/newsletter metadata if not already set (mirrors
+		// /sync-contacts). Groups and newsletters are distinct categories.
+		metaKey := ""
+		if isGroup {
+			metaKey = "is_group_chat"
+		} else if isNewsletter {
+			metaKey = "is_newsletter"
+		}
+		if metaKey != "" {
+			needsMetaUpdate := false
+			if contact.Metadata == nil {
+				contact.Metadata = models.JSONB{}
+				needsMetaUpdate = true
+			}
+			if contact.Metadata[metaKey] != true {
+				contact.Metadata[metaKey] = true
+				needsMetaUpdate = true
+			}
+			if needsMetaUpdate {
+				a.DB.Model(contact).Update("metadata", contact.Metadata)
+			}
 		}
 
 		// Bulk-insert messages, skipping any whose whats_app_message_id already

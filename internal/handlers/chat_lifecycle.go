@@ -90,6 +90,13 @@ func (a *App) ClaimChat(r *fastglue.Request) error {
 	// Track if this is a reopen (was closed)
 	wasClosed := contact.EffectiveStatus() == models.ChatStatusClosed
 
+	// Capture pre-mutation values for the audit log BEFORE mutation. We cannot
+	// rely on a struct snapshot (`oldContact := contact`) for status, because
+	// status lives in the JSONB `Metadata` map, which the snapshot aliases — by
+	// the time we build the audit diff, the shared map has already been mutated.
+	oldStatus := string(contact.EffectiveStatus())
+	oldAssigned := contact.AssignedUserID
+
 	// Action: assign + set status to open
 	contact.AssignedUserID = &userID
 	contact.SetStatus(models.ChatStatusOpen)
@@ -109,12 +116,22 @@ func (a *App) ClaimChat(r *fastglue.Request) error {
 	if wasClosed {
 		a.createSystemMessage(orgID, contact.ID,
 			fmt.Sprintf("🔔 %s reopened this conversation", agentName),
-			models.JSONB{"system_type": "chat_reopened", "agent_id": userID.String()})
+			models.JSONB{"system_type": "chat_reopened", "agent_id": userID.String(), "agent_name": agentName})
 	} else {
 		a.createSystemMessage(orgID, contact.ID,
 			fmt.Sprintf("🔔 %s claimed this conversation", agentName),
-			models.JSONB{"system_type": "chat_claimed", "agent_id": userID.String()})
+			models.JSONB{"system_type": "chat_claimed", "agent_id": userID.String(), "agent_name": agentName})
 	}
+
+	// Audit: extraChanges safeguard defeats the audit.LogAudit no-op-on-empty-diff.
+	// oldStatus/oldAssigned were captured BEFORE mutation so the recorded diff
+	// reflects the true pre-mutation state (status lives in JSONB metadata, so a
+	// struct snapshot would alias the already-mutated map).
+	a.logAudit(orgID, userID, "contact", contact.ID, models.AuditActionUpdated, nil, &contact,
+		map[string]any{
+			"chat_status":      map[string]any{"old": oldStatus, "new": string(models.ChatStatusOpen)},
+			"assigned_user_id": map[string]any{"old": oldAssigned, "new": &userID},
+		})
 
 	if a.WSHub != nil {
 		a.WSHub.BroadcastToOrg(orgID, websocket.WSMessage{
@@ -133,6 +150,100 @@ func (a *App) ClaimChat(r *fastglue.Request) error {
 		"contact_id": contact.ID,
 		"assigned":   true,
 		"agent_name": agentName,
+	})
+}
+
+// ReleaseChat returns an assigned (open) conversation to the pending pool.
+// It unassigns the current owner, sets status to pending, and clears collaborators.
+// Route: PUT /api/contacts/{id}/release
+// Permission: chat.assign:write (caller must be the assignee or an admin/manager).
+func (a *App) ReleaseChat(r *fastglue.Request) error {
+	orgID, userID, err := a.requireAuth(r, models.ResourceChatAssign, models.ActionWrite)
+	if err != nil {
+		return nil
+	}
+
+	contactID, err := parsePathUUID(r, "id", "contact")
+	if err != nil {
+		return nil
+	}
+
+	var contact models.Contact
+	if err := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID).First(&contact).Error; err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
+	}
+
+	// Authorization: assignee or admin/manager (ghost-release).
+	isAssignee := contact.AssignedUserID != nil && *contact.AssignedUserID == userID
+	isAdminOrManager := a.HasPermission(userID, models.ResourceContacts, models.ActionWrite, orgID)
+	if !isAssignee && !isAdminOrManager {
+		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You are not allowed to release this chat", nil, "")
+	}
+
+	// Idempotent: already pending and unassigned — safe no-op success.
+	if contact.EffectiveStatus() == models.ChatStatusPending && contact.AssignedUserID == nil {
+		return r.SendEnvelope(map[string]any{
+			"contact_id": contact.ID,
+			"released":   true,
+			"message":    "Conversation is already pending",
+		})
+	}
+
+	// Capture pre-mutation values for the audit log BEFORE mutation. We cannot
+	// rely on a struct snapshot (`oldContact := contact`) for status, because
+	// status lives in the JSONB `Metadata` map, which the snapshot aliases — by
+	// the time we build the audit diff, the shared map has already been mutated.
+	oldStatus := string(contact.EffectiveStatus())
+	oldAssigned := contact.AssignedUserID
+
+	// Mutation: unassign + set pending + clear collaborators.
+	contact.AssignedUserID = nil
+	contact.SetStatus(models.ChatStatusPending)
+	contact.ClearCollaborators()
+	if err := a.DB.Model(&contact).Updates(map[string]any{
+		"assigned_user_id": nil,
+		"metadata":         contact.Metadata,
+	}).Error; err != nil {
+		a.Log.Error("Failed to release chat", "error", err)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to release chat", nil, "")
+	}
+
+	// Load agent name for system message.
+	var agent models.User
+	agentName := "Unknown"
+	if a.DB.First(&agent, "id = ?", userID).Error == nil {
+		agentName = agent.FullName
+	}
+
+	a.createSystemMessage(orgID, contact.ID,
+		fmt.Sprintf("🔔 %s released this conversation", agentName),
+		models.JSONB{"system_type": "chat_released", "agent_id": userID.String(), "agent_name": agentName})
+
+	// Audit: extraChanges safeguard defeats the audit.LogAudit no-op-on-empty-diff.
+	// oldStatus/oldAssigned were captured BEFORE mutation so the recorded diff
+	// reflects the true pre-mutation state (status lives in JSONB metadata, so a
+	// struct snapshot would alias the already-mutated map).
+	a.logAudit(orgID, userID, "contact", contact.ID, models.AuditActionUpdated, nil, &contact,
+		map[string]any{
+			"chat_status":      map[string]any{"old": oldStatus, "new": string(models.ChatStatusPending)},
+			"assigned_user_id": map[string]any{"old": oldAssigned, "new": nil},
+		})
+
+	if a.WSHub != nil {
+		a.WSHub.BroadcastToOrg(orgID, websocket.WSMessage{
+			Type: websocket.TypeChatReleased,
+			Payload: map[string]any{
+				"contact_id":  contact.ID.String(),
+				"released_by": userID.String(),
+				"chat_status": string(models.ChatStatusPending),
+			},
+		})
+	}
+
+	return r.SendEnvelope(map[string]any{
+		"contact_id":  contact.ID,
+		"released":    true,
+		"chat_status": "pending",
 	})
 }
 

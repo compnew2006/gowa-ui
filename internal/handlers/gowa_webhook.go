@@ -186,15 +186,22 @@ func (a *App) processGowaMessage(account *models.WhatsAppAccount, envelope *gowa
 	// by the @g.us / @newsletter JID), not the individual sender — mirroring
 	// processGowaOutgoingMessage which prefers ChatID first. The actual sender
 	// is carried separately so the bubble can show who sent it inside the group.
-	var isGroup bool
+	// Groups (@g.us) and newsletters (@newsletter) are tracked as separate
+	// categories: isGroup vs isNewsletter. A newsletter is NOT a group.
+	var isGroup, isNewsletter bool
 	var senderName, senderJID string
-	if msg.IsGroup() || msg.IsNewsletter() {
+	if msg.IsGroup() {
 		isGroup = true
+	}
+	if msg.IsNewsletter() {
+		isNewsletter = true
+	}
+	if isGroup || isNewsletter {
 		senderName = msg.FromName
 		senderJID = msg.From
 	}
 	fromPhone := gowa.PhoneFromJID(msg.From)
-	if isGroup {
+	if isGroup || isNewsletter {
 		fromPhone = gowa.PhoneFromJID(msg.ChatID)
 	}
 
@@ -313,18 +320,18 @@ func (a *App) processGowaMessage(account *models.WhatsAppAccount, envelope *gowa
 	}
 
 	// Feed into the existing pipeline. For group/newsletter messages, the
-	// sender's name (msg.FromName) must NOT be used as the group contact's
-	// profileName — that would overwrite the group/channel name with whoever
-	// sent the latest message. GetOrCreateContact updates profile_name whenever
-	// a non-empty value is passed and differs from the stored value, so for
-	// groups we pass "" to leave the existing group name untouched (it was set
-	// when the contact was first created, or via a separate group-name lookup).
-	// The actual per-message sender is carried via senderName/senderJID.
+	// sender's name (msg.FromName) must NOT be used as the group/newsletter
+	// contact's profileName — that would overwrite the group/channel name with
+	// whoever sent the latest message. GetOrCreateContact updates profile_name
+	// whenever a non-empty value is passed and differs from the stored value, so
+	// for groups/newsletters we pass "" to leave the existing name untouched (it
+	// was set when the contact was first created, or via a separate name
+	// lookup). The actual per-message sender is carried via senderName/senderJID.
 	profileName := msg.FromName
-	if isGroup {
+	if isGroup || isNewsletter {
 		profileName = ""
 	}
-	a.processIncomingMessage(envelope.DeviceID, incoming, profileName, isGroup, senderName, senderJID)
+	a.processIncomingMessage(envelope.DeviceID, incoming, profileName, isGroup, isNewsletter, senderName, senderJID)
 }
 
 // processGowaOutgoingMessage handles messages sent from the connected phone
@@ -351,14 +358,21 @@ func (a *App) processGowaOutgoingMessage(account *models.WhatsAppAccount, msg *g
 	}
 
 	// Mark group/newsletter contacts consistently with the incoming path so the
-	// contact list and info panel display the group badge regardless of which
-	// path created the contact.
-	if msg.IsGroup() || msg.IsNewsletter() {
+	// contact list and info panel display the correct badge regardless of which
+	// path created the contact. Groups and newsletters are distinct categories:
+	// a @newsletter JID sets is_newsletter, NOT is_group_chat.
+	var metaKey string
+	if msg.IsGroup() {
+		metaKey = "is_group_chat"
+	} else if msg.IsNewsletter() {
+		metaKey = "is_newsletter"
+	}
+	if metaKey != "" {
 		if contact.Metadata == nil {
 			contact.Metadata = models.JSONB{}
 		}
-		if contact.Metadata["is_group_chat"] != true {
-			contact.Metadata["is_group_chat"] = true
+		if contact.Metadata[metaKey] != true {
+			contact.Metadata[metaKey] = true
 			a.DB.Model(contact).Update("metadata", contact.Metadata)
 		}
 	}

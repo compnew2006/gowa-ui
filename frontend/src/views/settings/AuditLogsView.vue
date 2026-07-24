@@ -167,6 +167,7 @@ onMounted(async () => {
                       <SelectItem value="campaign">Campaign</SelectItem>
                       <SelectItem value="chatbot_settings">Chatbot Settings</SelectItem>
                       <SelectItem value="chatbot_flow">Chatbot Flow</SelectItem>
+                      <SelectItem value="contact">Contact</SelectItem>
                       <SelectItem value="ivr_flow">IVR Flow</SelectItem>
                       <SelectItem value="keyword_rule">Keyword Rule</SelectItem>
                       <SelectItem value="team">Team</SelectItem>

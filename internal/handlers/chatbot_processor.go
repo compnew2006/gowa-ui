@@ -134,13 +134,14 @@ type IncomingTextMessage struct {
 }
 
 // processIncomingMessageFull processes incoming WhatsApp messages with chatbot logic
-func (a *App) processIncomingMessageFull(phoneNumberID string, msg IncomingTextMessage, profileName string, isGroup bool, senderName, senderJID string) {
+func (a *App) processIncomingMessageFull(phoneNumberID string, msg IncomingTextMessage, profileName string, isGroup, isNewsletter bool, senderName, senderJID string) {
 	a.Log.Info("Processing incoming message",
 		"phone_number_id", phoneNumberID,
 		"from", msg.From,
 		"type", msg.Type,
 		"profile_name", profileName,
 		"is_group", isGroup,
+		"is_newsletter", isNewsletter,
 	)
 
 	// Find the WhatsApp account by phone_number_id (use cache)
@@ -165,17 +166,25 @@ func (a *App) processIncomingMessageFull(phoneNumberID string, msg IncomingTextM
 		return
 	}
 
-	// Mark the contact as a group if this is a group message. The contact's
-	// phone_number already holds the @g.us JID (set by processGowaMessage).
+	// Mark the contact's category. Groups (@g.us) set is_group_chat; newsletters
+	// (@newsletter) set is_newsletter. The two are mutually exclusive — a
+	// newsletter is NOT a group. The contact's phone_number already holds the
+	// full @g.us / @newsletter JID (set by processGowaMessage).
+	metaKey := ""
 	if isGroup {
+		metaKey = "is_group_chat"
+	} else if isNewsletter {
+		metaKey = "is_newsletter"
+	}
+	if metaKey != "" {
 		if contact.Metadata == nil {
 			contact.Metadata = models.JSONB{}
 		}
-		if contact.Metadata["is_group_chat"] != true {
-				contact.Metadata["is_group_chat"] = true
-				a.DB.Model(contact).Update("metadata", contact.Metadata)
-			}
+		if contact.Metadata[metaKey] != true {
+			contact.Metadata[metaKey] = true
+			a.DB.Model(contact).Update("metadata", contact.Metadata)
 		}
+	}
 
 	// Set chat_status to pending for unassigned conversations (new or reopened).
 	// If the conversation was closed and the customer sends a new message, reopen as pending.

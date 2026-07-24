@@ -20,6 +20,7 @@ import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Spinner } from '@/components/ui/spinner'
 import { Separator } from '@/components/ui/separator'
+import { Switch } from '@/components/ui/switch'
 import {
   Tooltip,
   TooltipContent,
@@ -279,7 +280,6 @@ let stickyDateTimeout: ReturnType<typeof setTimeout> | null = null
 const emojiPickerOpen = ref(false)
 
 // Template picker state
-const templatePickerRef = ref<HTMLElement | null>(null)
 const templateDialogOpen = ref(false)
 const selectedTemplate = ref<any>(null)
 const templateParamNames = ref<string[]>([])
@@ -316,11 +316,6 @@ const isCurrentAccountGowa = computed(() => {
   const acct = orgAccounts.value.find((a: any) => a?.name === name)
   return acct?.provider_type === 'gowa'
 })
-
-function openTemplatePicker() {
-  const btn = templatePickerRef.value?.querySelector('button')
-  btn?.click()
-}
 
 // Add contact dialog state
 const isAddContactOpen = ref(false)
@@ -421,6 +416,17 @@ async function handleLeave() {
     await contactsStore.leaveChat(contactsStore.currentContact.id)
   } catch {
     console.error('Failed to leave chat')
+  }
+}
+
+// Release returns the conversation to pending without closing it. Mirrors
+// handleLeave's shape (currentContact guard + try/catch).
+async function handleRelease() {
+  if (!contactsStore.currentContact) return
+  try {
+    await contactsStore.releaseChat(contactsStore.currentContact.id)
+  } catch {
+    console.error('Failed to release chat')
   }
 }
 
@@ -1652,6 +1658,51 @@ function getMessageContent(message: Message): string {
   return '[Message]'
 }
 
+// ─── System-message i18n (D3) ───
+// The six single-actor system types are localized via chat.system.* keys with
+// {agent} interpolation. collaborator_removed is deliberately excluded because
+// it carries two actors (the removed user as agent_id and the manager as
+// removed_by) — a single {agent} would silently drop the manager, so it falls
+// back to getMessageContent which preserves both names from the legacy content.
+const SYSTEM_MESSAGE_TYPES = new Set([
+  'chat_claimed',
+  'chat_released',
+  'chat_closed',
+  'chat_reopened',
+  'collaborator_joined',
+  'collaborator_left',
+])
+
+// extractAgentFromLegacy pulls the agent name out of the legacy "🔔 <name> ..."
+// system-message content strings written before metadata.agent_name existed.
+// Returns '' when no name can be parsed so the caller can fall back to the
+// raw content (acceptable degraded behavior, never a crash).
+function extractAgentFromLegacy(content: any): string {
+  let text = ''
+  if (typeof content === 'string') {
+    text = content
+  } else if (content && typeof content === 'object') {
+    text = content.body || ''
+  }
+  if (!text) return ''
+  // Matches "🔔 Jane Doe claimed/released/closed/...". Captures the name up to
+  // the verb that follows it. Tolerates the leading bell emoji + spaces.
+  const m = text.match(/^🔔\s+(.+?)\s+(?:claimed|released|closed|reopened|joined|left|was|leaves)/i)
+  return m ? m[1].trim() : ''
+}
+
+function getSystemMessageText(message: Message): string {
+  const systemType = message.metadata?.system_type
+  if (systemType && SYSTEM_MESSAGE_TYPES.has(systemType)) {
+    const agent =
+      (message.metadata?.agent_name as string | undefined) ||
+      extractAgentFromLegacy(message.content) ||
+      ''
+    return t(`chat.system.${systemType}`, { agent })
+  }
+  return getMessageContent(message)
+}
+
 interface LocationData {
   latitude: number
   longitude: number
@@ -2009,13 +2060,72 @@ async function sendMediaMessage() {
             <X class="h-3 w-3 ml-1" />
           </TagBadge>
         </div>
+        <!-- Visibility toggles: show/hide group & newsletter chats -->
+        <div class="flex items-center gap-3 mt-2">
+          <label class="flex items-center gap-1.5 cursor-pointer select-none text-xs text-white/60 light:text-gray-600">
+            <Switch
+              :checked="!contactsStore.hideGroupChats"
+              @update:checked="(v: boolean) => (contactsStore.hideGroupChats = !v)"
+            />
+            <span>👥 {{ $t('chat.showGroups') }}</span>
+          </label>
+          <label class="flex items-center gap-1.5 cursor-pointer select-none text-xs text-white/60 light:text-gray-600">
+            <Switch
+              :checked="!contactsStore.hideNewsletterChats"
+              @update:checked="(v: boolean) => (contactsStore.hideNewsletterChats = !v)"
+            />
+            <span>📢 {{ $t('chat.showNewsletters') }}</span>
+          </label>
+        </div>
+
+        <!-- Me / Pending tab strip — drives the sidebar list (client-side filter per D4). -->
+        <div class="inline-flex items-center gap-1 rounded-lg bg-white/[0.06] light:bg-gray-100 p-1 mt-2">
+          <button
+            :class="[
+              'rounded-md px-3 py-1 text-xs font-medium whitespace-nowrap transition-all inline-flex items-center gap-1.5',
+              contactsStore.activeListTab === 'me'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'bg-white/[0.08] text-white/60 hover:text-white/90 hover:bg-white/[0.12] light:bg-gray-200 light:text-gray-600 light:hover:text-gray-800 light:hover:bg-gray-300'
+            ]"
+            @click="contactsStore.activeListTab = 'me'"
+          >
+            {{ $t('chat.tabMe') }}
+            <span
+              :class="[
+                'inline-flex items-center justify-center min-w-[1.25rem] h-4 px-1 rounded-full text-[10px] font-semibold',
+                contactsStore.activeListTab === 'me'
+                  ? 'bg-white/25 text-white'
+                  : 'bg-white/[0.08] text-white/60 light:bg-gray-300 light:text-gray-700'
+              ]"
+            >{{ contactsStore.myCount }}</span>
+          </button>
+          <button
+            :class="[
+              'rounded-md px-3 py-1 text-xs font-medium whitespace-nowrap transition-all inline-flex items-center gap-1.5',
+              contactsStore.activeListTab === 'pending'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'bg-white/[0.08] text-white/60 hover:text-white/90 hover:bg-white/[0.12] light:bg-gray-200 light:text-gray-600 light:hover:text-gray-800 light:hover:bg-gray-300'
+            ]"
+            @click="contactsStore.activeListTab = 'pending'"
+          >
+            {{ $t('chat.tabPending') }}
+            <span
+              :class="[
+                'inline-flex items-center justify-center min-w-[1.25rem] h-4 px-1 rounded-full text-[10px] font-semibold',
+                contactsStore.activeListTab === 'pending'
+                  ? 'bg-white/25 text-white'
+                  : 'bg-white/[0.08] text-white/60 light:bg-gray-300 light:text-gray-700'
+              ]"
+            >{{ contactsStore.pendingCount }}</span>
+          </button>
+        </div>
       </div>
 
       <!-- Contacts -->
       <ScrollArea :ref="(el: any) => contactsScroll.scrollAreaRef.value = el" orientation="vertical" class="flex-1">
         <div class="py-1 w-full">
           <div
-            v-for="contact in contactsStore.sortedContacts"
+            v-for="contact in contactsStore.displayedContacts"
             :key="contact.id"
             :class="[
               'flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-white/[0.04] light:hover:bg-gray-50 transition-colors',
@@ -2038,6 +2148,9 @@ async function sendMediaMessage() {
                   {{ contact.name || contact.phone_number }}
                   <Badge v-if="contact.is_group_chat" class="ml-1 h-4 text-[9px] align-middle bg-blue-500/20 text-blue-400 light:bg-blue-100 light:text-blue-700">
                     {{ $t('chat.group') }}
+                  </Badge>
+                  <Badge v-if="contact.is_newsletter" class="ml-1 h-4 text-[9px] align-middle bg-amber-500/20 text-amber-400 light:bg-amber-100 light:text-amber-700">
+                    {{ $t('chat.newsletter') }}
                   </Badge>
                 </p>
                 <span class="flex-shrink-0 text-[11px] text-white/40 light:text-gray-500">
@@ -2063,7 +2176,7 @@ async function sendMediaMessage() {
             <Loader2 class="h-5 w-5 mx-auto animate-spin text-white/40 light:text-gray-400" />
           </div>
 
-          <div v-if="contactsStore.sortedContacts.length === 0" class="p-3 text-center text-white/40 light:text-gray-500">
+          <div v-if="contactsStore.displayedContacts.length === 0" class="p-3 text-center text-white/40 light:text-gray-500">
             <User class="h-6 w-6 mx-auto mb-1.5 opacity-50" />
             <p class="text-sm">{{ $t('chat.noContacts') }}</p>
           </div>
@@ -2155,6 +2268,13 @@ async function sendMediaMessage() {
                       variant="ghost" size="sm" @click="handleLeave" class="text-xs">
                 <LogOut class="mr-1 h-3 w-3" />
                 {{ contactsStore.isLastParticipant ? $t('chat.leaveAndClose') : $t('chat.leaveConversation') }}
+              </Button>
+              <!-- Release button: assignee OR admin/manager on an open chat.
+                   Returns the conversation to pending without closing it. -->
+              <Button v-if="contactsStore.isAssignedToMe || (contactsStore.isAdminOrManager && !contactsStore.isPendingClaim && !contactsStore.isChatClosed)"
+                      variant="ghost" size="sm" @click="handleRelease" class="text-xs">
+                <LogOut class="mr-1 h-3 w-3" />
+                {{ $t('chat.releasedConversation') }}
               </Button>
             </div>
 
@@ -2442,7 +2562,7 @@ async function sendMediaMessage() {
                 class="flex items-center justify-center my-3 w-full animate-fade-in"
               >
                 <div class="px-3.5 py-1 bg-white/[0.04] light:bg-gray-200/60 rounded-full text-[11px] text-white/45 light:text-gray-500 font-medium max-w-[85%] text-center select-none border-none shadow-none">
-                  {{ getMessageContent(message) }}
+                  {{ getSystemMessageText(message) }}
                 </div>
               </div>
 
@@ -2912,7 +3032,7 @@ async function sendMediaMessage() {
             </Tooltip>
             <Tooltip>
               <TooltipTrigger as-child>
-                <span ref="templatePickerRef">
+                <span>
                   <TemplatePicker
                     :selected-account="selectedAccount"
                     @select-with-params="handleTemplateWithParams"

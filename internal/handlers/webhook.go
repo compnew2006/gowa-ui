@@ -326,8 +326,8 @@ func (a *App) WebhookHandler(r *fastglue.Request) error {
 				}
 
 				// Process message asynchronously.
-				// Meta Cloud API is always 1:1 (no group context at this layer).
-				go a.processIncomingMessage(phoneNumberID, msg, profileName, false, "", "")
+				// Meta Cloud API is always 1:1 (no group/newsletter context at this layer).
+				go a.processIncomingMessage(phoneNumberID, msg, profileName, false, false, "", "")
 			}
 
 			// Process status updates
@@ -346,7 +346,7 @@ func (a *App) WebhookHandler(r *fastglue.Request) error {
 	return r.SendEnvelope(map[string]string{"status": "ok"})
 }
 
-func (a *App) processIncomingMessage(phoneNumberID string, msg IncomingTextMessage, profileName string, isGroup bool, senderName, senderJID string) {
+func (a *App) processIncomingMessage(phoneNumberID string, msg IncomingTextMessage, profileName string, isGroup, isNewsletter bool, senderName, senderJID string) {
 	defer func() {
 		if r := recover(); r != nil {
 			a.Log.Error("Panic recovered in processIncomingMessage", "panic", r, "phone_id", phoneNumberID, "message_id", msg.ID)
@@ -363,7 +363,7 @@ func (a *App) processIncomingMessage(phoneNumberID string, msg IncomingTextMessa
 	}
 
 	// Process the message with chatbot logic
-	a.processIncomingMessageFull(phoneNumberID, msg, profileName, isGroup, senderName, senderJID)
+	a.processIncomingMessageFull(phoneNumberID, msg, profileName, isGroup, isNewsletter, senderName, senderJID)
 }
 
 func (a *App) processStatusUpdate(phoneNumberID string, status WebhookStatus) {

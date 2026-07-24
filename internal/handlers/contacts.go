@@ -45,6 +45,7 @@ type ContactResponse struct {
 	ServiceWindowOpen  bool                  `json:"service_window_open"`
 	MarketingOptOut    bool                  `json:"marketing_opt_out"`
 	IsGroupChat        bool                  `json:"is_group_chat"`
+	IsNewsletter       bool                  `json:"is_newsletter"`
 	ChatStatus         string                `json:"chat_status,omitempty"`
 	Collaborators      []models.Collaborator `json:"collaborators,omitempty"`
 	CreatedAt          time.Time             `json:"created_at"`
@@ -71,6 +72,7 @@ type MessageResponse struct {
 	Reactions        []ReactionInfo       `json:"reactions,omitempty"`
 	WhatsAppAccount  string               `json:"whatsapp_account,omitempty"`
 	IsGroupChat      bool                 `json:"is_group_chat"`
+	IsNewsletter     bool                 `json:"is_newsletter"`
 	SenderPhone      string               `json:"sender_phone,omitempty"`
 	SenderPushName   string               `json:"sender_push_name,omitempty"`
 	Metadata         models.JSONB         `json:"metadata,omitempty"`
@@ -190,6 +192,7 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 			PhoneNumber:        phoneNumber,
 			Name:               profileName,
 			ProfileName:        profileName,
+			AvatarURL:          c.AvatarURL,
 			Status:             "active",
 			Tags:               tags,
 			Metadata:           c.Metadata,
@@ -212,6 +215,7 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 			ServiceWindowOpen: serviceWindowOpen,
 			MarketingOptOut:   c.MarketingOptOut,
 			IsGroupChat:       c.Metadata != nil && c.Metadata["is_group_chat"] == true,
+			IsNewsletter:      c.Metadata != nil && c.Metadata["is_newsletter"] == true,
 			ChatStatus:        string(c.EffectiveStatus()),
 			Collaborators:     a.filterCollaboratorsForViewer(c.GetCollaborators(), userID, orgID),
 			CreatedAt:         c.CreatedAt,
@@ -277,6 +281,57 @@ func (a *App) GetContact(r *fastglue.Request) error {
 	response := a.buildContactResponse(&contact, orgID, userID)
 
 	return r.SendEnvelope(response)
+}
+
+// RefreshContactAvatar fetches the contact's current WhatsApp profile picture
+// (or group icon) on demand and returns the freshly-cached avatar_url. This is
+// the lazy refresh path for contacts created before a GOWA contact sync (e.g.
+// via an inbound message) or whose picture changed after the last sync. The
+// response is always 200 with the current avatar_url (possibly empty when the
+// contact has no picture or no GOWA provider is available); the frontend
+// initials fallback covers the empty case.
+//
+// GET /api/contacts/{id}/avatar
+func (a *App) RefreshContactAvatar(r *fastglue.Request) error {
+	orgID, userID, err := a.getOrgAndUserID(r)
+	if err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+	}
+	contactID, err := parsePathUUID(r, "id", "contact")
+	if err != nil {
+		return nil
+	}
+
+	var contact models.Contact
+	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
+	query = a.scopeAssignedContact(query, userID, orgID)
+	if err := query.First(&contact).Error; err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
+	}
+
+	// Resolve the owning account. Without one we can't reach GOWA, so return
+	// whatever avatar_url is already cached (may be empty).
+	if contact.WhatsAppAccount == "" {
+		return r.SendEnvelope(map[string]any{"avatar_url": contact.AvatarURL})
+	}
+	var account models.WhatsAppAccount
+	if err := a.DB.Where("name = ? AND organization_id = ?", contact.WhatsAppAccount, orgID).First(&account).Error; err != nil {
+		a.Log.Warn("Contact avatar refresh: account not found", "account", contact.WhatsAppAccount, "contact", contact.ID)
+		return r.SendEnvelope(map[string]any{"avatar_url": contact.AvatarURL})
+	}
+	a.decryptAccountSecrets(&account)
+
+	// GOWA accounts: fetch via the GOWA client. Meta Cloud API has no per-
+	// contact profile-picture fetch, so non-GOWA accounts just return the
+	// cached URL (empty today; Meta's business_profile picture is a different
+	// field handled elsewhere).
+	if account.IsGowa() {
+		provider := a.resolveProvider(&account)
+		gowaClient, _ := provider.(*gowa.Client)
+		a.refreshContactAvatar(gowaClient, &account, &contact, account.GowaDeviceID, true)
+	}
+
+	return r.SendEnvelope(map[string]any{"avatar_url": contact.AvatarURL})
 }
 
 // GetMessages returns messages for a contact
@@ -454,6 +509,7 @@ func (a *App) buildMessagesResponse(messages []models.Message) []MessageResponse
 			IsReply:         m.IsReply,
 			WhatsAppAccount: m.WhatsAppAccount,
 			IsGroupChat:     m.Metadata != nil && m.Metadata["is_group_chat"] == true,
+			IsNewsletter:    m.Metadata != nil && m.Metadata["is_newsletter"] == true,
 			SenderPhone:     metadataString(m.Metadata, "sender_phone"),
 			SenderPushName:  metadataString(m.Metadata, "sender_push_name"),
 			Metadata:        m.Metadata,
@@ -1212,11 +1268,12 @@ func (a *App) sendWhatsAppReaction(account *models.WhatsAppAccount, contact *mod
 // TypingRequest is the body for the typing-indicator endpoint.
 // gowaChatJID builds the WhatsApp JID for a GOWA API call from a contact.
 // Group contacts (metadata is_group_chat, or phone_number starting with the
-// WhatsApp group-ID prefix 120362/120363) need the "@g.us" suffix; 1:1 chats
+// WhatsApp group-ID prefix 120362/120363) need the "@g.us" suffix; newsletter
+// contacts (metadata is_newsletter) need the "@newsletter" suffix; 1:1 chats
 // use "@s.whatsapp.net". If the phone already contains "@" it is returned
-// unchanged. Centralizing this fixes group send/revoke/typing/reaction/read —
-// previously each call site hardcoded "@s.whatsapp.net" and GOWA rejected
-// group JIDs with "is not on whatsapp".
+// unchanged. Centralizing this fixes group/newsletter send/revoke/typing/
+// reaction/read — previously each call site hardcoded "@s.whatsapp.net" and
+// GOWA rejected group JIDs with "is not on whatsapp".
 func gowaChatJID(contact *models.Contact) string {
 	if contact == nil {
 		return ""
@@ -1224,6 +1281,10 @@ func gowaChatJID(contact *models.Contact) string {
 	phone := contact.PhoneNumber
 	if phone == "" || strings.Contains(phone, "@") {
 		return phone
+	}
+	isNewsletter := contact.Metadata != nil && contact.Metadata["is_newsletter"] == true
+	if isNewsletter {
+		return phone + "@newsletter"
 	}
 	isGroup := contact.Metadata != nil && contact.Metadata["is_group_chat"] == true
 	if !isGroup && (strings.HasPrefix(phone, "120362") || strings.HasPrefix(phone, "120363")) {
@@ -1233,6 +1294,81 @@ func gowaChatJID(contact *models.Contact) string {
 		return phone + "@g.us"
 	}
 	return phone + "@s.whatsapp.net"
+}
+
+// avatarFetchTimeout caps how long a single profile-picture lookup may take.
+// GOWA's /user/avatar is usually fast, but a hung device shouldn't stall a
+// whole contact sync or the lazy avatar endpoint.
+const avatarFetchTimeout = 8 * time.Second
+
+// refreshContactAvatar fetches the contact's WhatsApp profile picture (or group
+// icon) via the GOWA client and persists it onto the contact row. It is
+// best-effort: any error (no GOWA provider, network failure, the contact has
+// hidden their picture, etc.) is logged and ignored so callers can keep
+// processing other contacts. The fetched URL is cached on the contact's
+// avatar_url column; callers pass force=false to skip contacts that already
+// have an avatar (avoiding a GOWA round-trip on every sync).
+//
+// client may be nil for non-GOWA accounts (the caller decides whether to
+// resolve one); in that case the function is a no-op.
+func (a *App) refreshContactAvatar(client *gowa.Client, account *models.WhatsAppAccount, contact *models.Contact, deviceID string, force bool) bool {
+	if client == nil || contact == nil || account == nil || !account.IsGowa() {
+		return false
+	}
+	// Skip the round-trip when we already have a URL and the caller didn't ask
+	// for a forced refresh (e.g. user clicked "refresh avatar").
+	if !force && contact.AvatarURL != "" {
+		return false
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), avatarFetchTimeout)
+	defer cancel()
+
+	// GOWA's /user/avatar?phone= accepts either a bare phone or a full JID.
+	// For groups/newsletters the JID (…@g.us / …@newsletter) is what resolves
+	// the group icon, so we reuse the same JID builder as send/reaction paths.
+	phone := contact.PhoneNumber
+	if isGroupContact(contact) {
+		phone = gowaChatJID(contact)
+	}
+	if phone == "" {
+		return false
+	}
+
+	avatar, err := client.GetUserAvatar(ctx, deviceID, phone)
+	if err != nil {
+		a.Log.Debug("Could not fetch WhatsApp avatar",
+			"contact_id", contact.ID, "phone", phone, "error", err)
+		return false
+	}
+	if avatar == nil || avatar.URL == "" || avatar.URL == contact.AvatarURL {
+		return false
+	}
+
+	if err := a.DB.Model(contact).Update("avatar_url", avatar.URL).Error; err != nil {
+		a.Log.Error("Failed to persist contact avatar_url",
+			"contact_id", contact.ID, "error", err)
+		return false
+	}
+	contact.AvatarURL = avatar.URL
+	return true
+}
+
+// isGroupContact reports whether the contact represents a WhatsApp group or
+// newsletter (its phone_number carries the @g.us/@newsletter JID suffix or the
+// 120362/120363 group-ID prefix, or it was flagged via metadata).
+func isGroupContact(contact *models.Contact) bool {
+	if contact == nil {
+		return false
+	}
+	if contact.Metadata != nil && (contact.Metadata["is_group_chat"] == true || contact.Metadata["is_newsletter"] == true) {
+		return true
+	}
+	p := contact.PhoneNumber
+	if strings.Contains(p, "@g.us") || strings.Contains(p, "@newsletter") {
+		return true
+	}
+	return strings.HasPrefix(p, "120362") || strings.HasPrefix(p, "120363")
 }
 
 // action is "start" or "stop".
@@ -1938,6 +2074,7 @@ func (a *App) buildContactResponse(contact *models.Contact, orgID, viewerUserID 
 		PhoneNumber:        phoneNumber,
 		Name:               profileName,
 		ProfileName:        profileName,
+		AvatarURL:          contact.AvatarURL,
 		Status:             "active",
 		Tags:               tags,
 		Metadata:           contact.Metadata,
@@ -1951,6 +2088,7 @@ func (a *App) buildContactResponse(contact *models.Contact, orgID, viewerUserID 
 		ServiceWindowOpen:  serviceWindowOpen,
 		MarketingOptOut:    contact.MarketingOptOut,
 		IsGroupChat:        contact.Metadata != nil && contact.Metadata["is_group_chat"] == true,
+		IsNewsletter:       contact.Metadata != nil && contact.Metadata["is_newsletter"] == true,
 		ChatStatus:         string(contact.EffectiveStatus()),
 		Collaborators:      a.filterCollaboratorsForViewer(contact.GetCollaborators(), viewerUserID, orgID),
 		CreatedAt:          contact.CreatedAt,

@@ -367,6 +367,11 @@ type Contact struct {
 	OrganizationID     uuid.UUID  `gorm:"type:uuid;index;not null" json:"organization_id"`
 	PhoneNumber        string     `gorm:"size:50;not null" json:"phone_number"`
 	ProfileName        string     `gorm:"size:255" json:"profile_name"`
+	// AvatarURL is the contact's WhatsApp profile picture (or group icon),
+	// fetched via the GOWA /user/avatar endpoint. Empty when the contact has
+	// no picture, hasn't been synced yet, or the provider doesn't expose one —
+	// the UI falls back to colored initials in that case.
+	AvatarURL          string     `gorm:"size:2048" json:"avatar_url"`
 	WhatsAppAccount    string     `gorm:"size:100;index" json:"whatsapp_account"` // References WhatsAppAccount.Name
 	AssignedUserID     *uuid.UUID `gorm:"type:uuid;index" json:"assigned_user_id,omitempty"`
 	LastMessageAt      *time.Time `json:"last_message_at,omitempty"`

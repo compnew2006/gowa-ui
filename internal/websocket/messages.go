@@ -67,6 +67,7 @@ const (
 	TypeChatClaimed          = "chat_claimed"
 	TypeChatClosed           = "chat_closed"
 	TypeChatReopened         = "chat_reopened"
+	TypeChatReleased         = "chat_released"
 	TypeCollaboratorJoined   = "collaborator_joined"
 	TypeCollaboratorLeft     = "collaborator_left"
 )

@@ -26,7 +26,6 @@ export interface Contact {
   metadata: Record<string, any>
   last_message_at?: string
   last_inbound_at?: string
-  service_window_open?: boolean
   unread_count: number
   assigned_user_id?: string
   assigned_user_name?: string
@@ -118,6 +117,11 @@ export const useContactsStore = defineStore('contacts', () => {
   const replyingTo = ref<Message | null>(null)
   const accountFilter = ref<string | null>(null)
 
+  // Pending/Me tab selector for the chat sidebar. Default 'me' so the agent
+  // lands on their own active conversations first; they can switch to 'pending'
+  // to pick up unassigned ones.
+  const activeListTab = ref<'pending' | 'me'>('me')
+
   // Contacts pagination
   const contactsPage = ref(1)
   const contactsLimit = ref(50)
@@ -130,12 +134,42 @@ export const useContactsStore = defineStore('contacts', () => {
   const filteredContacts = computed(() => contacts.value)
 
   const sortedContacts = computed(() => {
-    return [...filteredContacts.value].sort((a, b) => {
+    let list = [...filteredContacts.value]
+    // Apply sidebar visibility filters. is_newsletter may be undefined for
+    // older data — treat that as "not a newsletter" (falsy).
+    if (hideGroupChats.value) {
+      list = list.filter(c => !c.is_group_chat)
+    }
+    if (hideNewsletterChats.value) {
+      list = list.filter(c => !c.is_newsletter)
+    }
+    return list.sort((a, b) => {
       const dateA = a.last_message_at ? new Date(a.last_message_at).getTime() : 0
       const dateB = b.last_message_at ? new Date(b.last_message_at).getTime() : 0
       return dateB - dateA
     })
   })
+
+  // ─── Pending / Me tab membership (client-side filtering per D4) ───
+  // Membership is derived from ASSIGNMENT, which is the source of truth — not
+  // from the stored `chat_status` string. The backend's EffectiveStatus()
+  // defaults to "open" for legacy rows that never had chat_status set, so a
+  // filter on `chat_status === 'pending'` would silently hide the bulk of
+  // existing unassigned conversations. Assignment is always accurate.
+  //   pending → not assigned to anyone (awaiting a claim)
+  //   me      → assigned to the current user
+  // Chats assigned to OTHER agents appear in neither tab.
+  const pendingContacts = computed(() =>
+    sortedContacts.value.filter(c => !c.assigned_user_id)
+  )
+  const myContacts = computed(() =>
+    sortedContacts.value.filter(c => c.assigned_user_id === authStore.user?.id)
+  )
+  const pendingCount = computed(() => pendingContacts.value.length)
+  const myCount = computed(() => myContacts.value.length)
+  const displayedContacts = computed(() =>
+    activeListTab.value === 'pending' ? pendingContacts.value : myContacts.value
+  )
 
   // ─── Chat lifecycle computed properties ───
   const pendingMessageCount = ref(0)
@@ -400,13 +434,11 @@ export const useContactsStore = defineStore('contacts', () => {
       if (message.direction === 'incoming') {
         contact.unread_count++
         contact.last_inbound_at = message.created_at
-        contact.service_window_open = true
       }
     }
     // Also update currentContact if it matches
     if (currentContact.value && currentContact.value.id === message.contact_id && message.direction === 'incoming') {
       currentContact.value.last_inbound_at = message.created_at
-      currentContact.value.service_window_open = true
     }
 
     // Skip adding to messages array if account filter is active and doesn't match
@@ -437,7 +469,31 @@ export const useContactsStore = defineStore('contacts', () => {
     replyingTo.value = null // Clear reply state when switching contacts
     if (contact) {
       contact.unread_count = 0
+      // Lazily fetch the contact's WhatsApp profile picture when it isn't
+      // cached yet (e.g. the chat was created by an inbound message before a
+      // GOWA contact sync). Best-effort: failures are swallowed so the chat
+      // still opens — the initials fallback covers the no-avatar case.
+      refreshAvatar(contact.id).catch(() => {})
     }
+  }
+
+  // refreshAvatar asks the backend to (re)fetch the contact's WhatsApp profile
+  // picture and updates the cached contact rows with the returned avatar_url.
+  // It returns the fetched URL (possibly empty when the contact has no
+  // picture or no GOWA provider is available).
+  async function refreshAvatar(contactId: string): Promise<string> {
+    const res = await contactsService.refreshAvatar(contactId)
+    const avatarUrl = (res.data as any)?.avatar_url ?? ''
+    // Patch both the list entry and the active contact so the avatar appears
+    // without a full refetch.
+    const inList = contacts.value.find((c) => c.id === contactId)
+    if (inList && inList.avatar_url !== avatarUrl) {
+      inList.avatar_url = avatarUrl
+    }
+    if (currentContact.value?.id === contactId && currentContact.value.avatar_url !== avatarUrl) {
+      currentContact.value = { ...currentContact.value, avatar_url: avatarUrl }
+    }
+    return avatarUrl
   }
 
   function setAccountFilter(account: string | null) {
@@ -494,6 +550,27 @@ export const useContactsStore = defineStore('contacts', () => {
       currentContact.value.assigned_user_id = authStore.user?.id
       currentContact.value.assigned_user_name = authStore.user?.full_name || ''
       currentContact.value.chat_status = 'open'
+      // Re-fetch messages to show the system message immediately
+      await fetchMessages(contactId)
+    }
+    return data
+  }
+
+  // Release a conversation back to the pending pool. Mirrors claimChat's shape:
+  // PUT, optimistic local update of status/assignment, then re-fetch messages.
+  async function releaseChat(contactId: string) {
+    const response = await api.put(`/contacts/${contactId}/release`)
+    const data = response.data.data || response.data
+    const contact = contacts.value.find(c => c.id === contactId)
+    if (contact) {
+      contact.assigned_user_id = undefined
+      contact.assigned_user_name = undefined
+      contact.chat_status = 'pending'
+    }
+    if (currentContact.value?.id === contactId) {
+      currentContact.value.assigned_user_id = undefined
+      currentContact.value.assigned_user_name = undefined
+      currentContact.value.chat_status = 'pending'
       // Re-fetch messages to show the system message immediately
       await fetchMessages(contactId)
     }
@@ -579,9 +656,18 @@ export const useContactsStore = defineStore('contacts', () => {
     hasMoreMessages,
     searchQuery,
     selectedTags,
+    hideGroupChats,
+    hideNewsletterChats,
     replyingTo,
     filteredContacts,
     sortedContacts,
+    // Pending / Me tabs
+    activeListTab,
+    pendingContacts,
+    myContacts,
+    pendingCount,
+    myCount,
+    displayedContacts,
     // Chat lifecycle
     pendingMessageCount,
     isPendingClaim,
@@ -595,6 +681,7 @@ export const useContactsStore = defineStore('contacts', () => {
     isAdminOrManager,
     isLastParticipant,
     claimChat,
+    releaseChat,
     closeChat,
     reopenChat,
     joinChat,
@@ -616,6 +703,7 @@ export const useContactsStore = defineStore('contacts', () => {
     addMessage,
     updateMessageStatus,
     setCurrentContact,
+    refreshAvatar,
     clearMessages,
     setAccountFilter,
     setReplyingTo,

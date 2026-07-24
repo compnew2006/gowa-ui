@@ -72,6 +72,7 @@ const WS_TYPE_CONVERSATION_NOTE_DELETED = 'conversation_note_deleted'
 const WS_TYPE_CHAT_CLAIMED = 'chat_claimed'
 const WS_TYPE_CHAT_CLOSED = 'chat_closed'
 const WS_TYPE_CHAT_REOPENED = 'chat_reopened'
+const WS_TYPE_CHAT_RELEASED = 'chat_released'
 const WS_TYPE_COLLABORATOR_JOINED = 'collaborator_joined'
 const WS_TYPE_COLLABORATOR_LEFT = 'collaborator_left'
 
@@ -208,6 +209,9 @@ class WebSocketService {
           break
         case WS_TYPE_CHAT_REOPENED:
           this.handleChatReopened(store, message.payload)
+          break
+        case WS_TYPE_CHAT_RELEASED:
+          this.handleChatReleased(store, message.payload)
           break
         case WS_TYPE_COLLABORATOR_JOINED:
           this.handleCollaboratorJoined(store, message.payload)
@@ -533,6 +537,28 @@ class WebSocketService {
     const current = store.currentContact
     if (current && current.id === payload.contact_id) {
       current.chat_status = payload.chat_status || 'open'
+      store.fetchMessages(payload.contact_id)
+    }
+  }
+
+  private handleChatReleased(store: ReturnType<typeof useContactsStore>, payload: any) {
+    // Release moves a chat back to pending and unassigns the owner. Idempotent:
+    // only mutate when the local state differs so the optimistic update from
+    // releaseChat and this broadcast don't double-apply.
+    const c = store.contacts.find(c => c.id === payload.contact_id)
+    if (c && (c.chat_status !== 'pending' || c.assigned_user_id)) {
+      c.chat_status = payload.chat_status || 'pending'
+      c.assigned_user_id = undefined
+      c.assigned_user_name = ''
+    }
+    const current = store.currentContact
+    if (current && current.id === payload.contact_id) {
+      if (current.chat_status !== 'pending' || current.assigned_user_id) {
+        current.chat_status = payload.chat_status || 'pending'
+        current.assigned_user_id = undefined
+        current.assigned_user_name = ''
+      }
+      // Re-fetch messages to show the release system message immediately
       store.fetchMessages(payload.contact_id)
     }
   }

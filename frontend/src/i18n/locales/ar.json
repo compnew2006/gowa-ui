@@ -336,6 +336,8 @@
     "addReaction": "إضافة تفاعل",
     "filterByTags": "تصفية حسب الأوسمة",
     "noTagsAvailable": "لا توجد أوسمة متاحة",
+    "showGroups": "المجموعات",
+    "showNewsletters": "النشرات",
     "paused": "متوقف مؤقتاً",
     "assignedTo": "مسند إلى",
     "unassigned": "غير مسند",
@@ -438,8 +440,6 @@
     "urlButtonParam": "زر الرابط \"{button}\" - قيمة متغيرة",
     "urlButtonParamPlaceholder": "أدخل قيمة الرابط المتغيرة",
     "preview": "معاينة",
-    "serviceWindowExpired": "انتهت نافذة المراسلة لمدة 24 ساعة. لا يمكن إرسال سوى رسائل القوالب حتى يرد العميل.",
-    "sendTemplateAction": "إرسال قالب",
     "collectFiles": "جمع الملفات",
     "filesJustIn": "وصلت {count} ملفات",
     "mediaBurstTitle": "جمع الملفات الواردة",
@@ -478,7 +478,18 @@
     "reopenConversation": "إعادة فتح المحادثة",
     "reopenHint": "هذه المحادثة مغلقة. أعد فتحها لمتابعة المحادثة.",
     "inviteCollaborator": "دعوة مساعد",
-    "inviteCollaboratorDesc": "إضافة وكيل للمحادثة كمساعد"
+    "inviteCollaboratorDesc": "إضافة وكيل للمحادثة كمساعد",
+    "tabPending": "قيد الانتظار",
+    "tabMe": "محادثاتي",
+    "releasedConversation": "تحرير",
+    "system": {
+      "chat_claimed": "{agent} استلم هذه المحادثة",
+      "chat_released": "{agent} حرر هذه المحادثة",
+      "chat_closed": "{agent} أغلق هذه المحادثة",
+      "chat_reopened": "{agent} أعاد فتح هذه المحادثة",
+      "collaborator_joined": "{agent} انضم إلى المحادثة",
+      "collaborator_left": "{agent} غادر المحادثة"
+    }
   },
   "contacts": {
     "title": "جهات الاتصال",

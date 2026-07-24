@@ -336,6 +336,8 @@
     "addReaction": "Add reaction",
     "filterByTags": "Filter by tags",
     "noTagsAvailable": "No tags available",
+    "showGroups": "Groups",
+    "showNewsletters": "Newsletters",
     "paused": "Paused",
     "assignedTo": "Assigned to",
     "unassigned": "Unassigned",
@@ -438,8 +440,6 @@
     "urlButtonParam": "URL Button \"{button}\" - dynamic value",
     "urlButtonParamPlaceholder": "Enter dynamic URL value",
     "preview": "Preview",
-    "serviceWindowExpired": "The 24-hour messaging window has expired. Only template messages can be sent until the customer replies.",
-    "sendTemplateAction": "Send Template",
     "collectFiles": "Collect files",
     "filesJustIn": "{count} files just in",
     "collectTimeWindow": "Time window",
@@ -458,6 +458,7 @@
     "mediaGone": "This file is no longer available",
     "mediaGoneDesc": "The media has expired on the provider and cannot be recovered.",
     "group": "Group",
+    "newsletter": "Newsletter",
     "chatNotClaimed": "This conversation is not claimed",
     "claimToViewMessages": "Claim this conversation to view messages",
     "messagesWaiting": "messages waiting for you",
@@ -481,7 +482,18 @@
     "reopenConversation": "Reopen Conversation",
     "reopenHint": "This conversation is closed. Reopen it to continue chatting.",
     "inviteCollaborator": "Invite Collaborator",
-    "inviteCollaboratorDesc": "Add an agent to this conversation as a collaborator"
+    "inviteCollaboratorDesc": "Add an agent to this conversation as a collaborator",
+    "tabPending": "Pending",
+    "tabMe": "Me",
+    "releasedConversation": "Release",
+    "system": {
+      "chat_claimed": "{agent} claimed this conversation",
+      "chat_released": "{agent} released this conversation",
+      "chat_closed": "{agent} closed this conversation",
+      "chat_reopened": "{agent} reopened this conversation",
+      "collaborator_joined": "{agent} joined the conversation",
+      "collaborator_left": "{agent} left the conversation"
+    }
   },
   "contacts": {
     "title": "Contacts",

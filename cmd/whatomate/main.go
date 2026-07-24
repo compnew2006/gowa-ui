@@ -744,6 +744,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.GET("/api/contacts", app.ListContacts)
 	g.POST("/api/contacts", app.CreateContact)
 	g.GET("/api/contacts/{id}", app.GetContact)
+	g.GET("/api/contacts/{id}/avatar", app.RefreshContactAvatar)
 	g.PUT("/api/contacts/{id}", app.UpdateContact)
 	g.DELETE("/api/contacts/{id}", app.DeleteContact)
 	g.PUT("/api/contacts/{id}/assign", app.AssignContact)
@@ -752,6 +753,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 
 	// Chat Lifecycle
 	g.PUT("/api/contacts/{id}/claim", app.ClaimChat)
+	g.PUT("/api/contacts/{id}/release", app.ReleaseChat)
 	g.PUT("/api/contacts/{id}/close", app.CloseChat)
 	g.PUT("/api/contacts/{id}/reopen", app.ReopenChat)
 	g.POST("/api/contacts/{id}/join", app.JoinChat)

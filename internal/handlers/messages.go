@@ -525,6 +525,7 @@ func (a *App) broadcastNewMessage(orgID uuid.UUID, msg *models.Message, contact 
 		"updated_at":       msg.UpdatedAt,
 		"is_reply":         msg.IsReply,
 		"is_group_chat":    contact.Metadata != nil && contact.Metadata["is_group_chat"] == true,
+		"is_newsletter":    contact.Metadata != nil && contact.Metadata["is_newsletter"] == true,
 	}
 
 	// Per-message sender for group conversations (empty for 1:1).
