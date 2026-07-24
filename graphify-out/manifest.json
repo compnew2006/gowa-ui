@@ -3665,9 +3665,9 @@
     "semantic_hash": "ce4cbcf5d0c5e156ce4f83899bace623"
   },
   ".serena/project.yml": {
-    "mtime": 1784776465.9036872,
-    "ast_hash": "5426965f18e04b6eaa03e206abd977a5",
-    "semantic_hash": "5426965f18e04b6eaa03e206abd977a5"
+    "mtime": 1784874533.4825912,
+    "ast_hash": "92a861d7320ea08e4136fe38880bc32a",
+    "semantic_hash": "92a861d7320ea08e4136fe38880bc32a"
   },
   ".zcode/plans/plan-sess_8407074c-7b37-40a5-98c6-8dad97d0154c.md": {
     "mtime": 1784784591.027006,
@@ -4052,12 +4052,12 @@
   "docs/src/assets/logo-dark.svg": {
     "mtime": 1783960683.0,
     "ast_hash": "e6dbd585b5dfbef9187684b21d6a8a09",
-    "semantic_hash": ""
+    "semantic_hash": "e6dbd585b5dfbef9187684b21d6a8a09"
   },
   "docs/src/assets/logo-light.svg": {
     "mtime": 1783960683.0,
     "ast_hash": "47198980c5e616ea994d61380619f6f2",
-    "semantic_hash": ""
+    "semantic_hash": "47198980c5e616ea994d61380619f6f2"
   },
   "frontend/public/favicon.svg": {
     "mtime": 1784764258.0,

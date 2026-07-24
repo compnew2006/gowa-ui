@@ -1,4 +1,5 @@
 import axios, { type AxiosInstance, type AxiosError, type InternalAxiosRequestConfig } from 'axios'
+import { toast } from 'vue-sonner'
 
 // Get base path from server-injected config or fallback
 const basePath = ((window as any).__BASE_PATH__ ?? '').replace(/\/$/, '')
@@ -135,9 +136,9 @@ api.interceptors.response.use(
         return api(originalRequest)
       } catch {
         // Refresh failed (token expired/invalid, e.g. after a server restart)
-        // — notify waiting requests, clear the local session, and redirect to
-        // login once. Guard against multiple concurrent 401s each triggering a
-        // redirect, which would flood the console and history.
+        // — notify waiting requests, clear the local session, tell the user,
+        // and redirect to login once. Guard against multiple concurrent 401s
+        // each triggering a redirect/toast, which would flood the console.
         onRefreshComplete(false)
         isRefreshing = false
 
@@ -149,6 +150,13 @@ api.interceptors.response.use(
         // expire). Removing whm_csrf avoids the next login attempt inheriting a
         // mismatched token.
         document.cookie = 'whm_csrf=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT; SameSite=Lax'
+
+        // Tell the user why they are being sent to the login page. Locale-aware
+        // so the message matches the active UI language.
+        if (!window.location.pathname.endsWith('/login')) {
+          const isAr = document.documentElement.lang === 'ar'
+          toast.error(isAr ? 'انتهت جلستك. يرجى تسجيل الدخول من جديد.' : 'Your session has expired. Please log in again.')
+        }
 
         // Redirect once, even if many requests fail simultaneously.
         if (!window.location.pathname.endsWith('/login')) {
