@@ -1976,8 +1976,18 @@ async function sendMediaMessage() {
             <Input
               v-model="contactsStore.searchQuery"
               :placeholder="$t('chat.searchContacts') + '...'"
-              class="pl-8 h-8 text-sm bg-white/[0.04] border-white/[0.1] text-white placeholder:text-white/40 light:bg-gray-50 light:border-gray-200 light:text-gray-900 light:placeholder:text-gray-400"
+              class="pl-8 pr-8 h-8 text-sm bg-white/[0.04] border-white/[0.1] text-white placeholder:text-white/40 light:bg-gray-50 light:border-gray-200 light:text-gray-900 light:placeholder:text-gray-400"
             />
+            <!-- Clear search button: shown only when there is a query -->
+            <button
+              v-if="contactsStore.searchQuery"
+              type="button"
+              :aria-label="$t('chat.clearSearch')"
+              class="absolute right-2 top-1/2 -translate-y-1/2 h-5 w-5 flex items-center justify-center rounded-full text-white/40 hover:text-white hover:bg-white/[0.1] light:text-gray-400 light:hover:text-gray-700 light:hover:bg-gray-200 transition-colors"
+              @click="contactsStore.searchQuery = ''"
+            >
+              <X class="h-3.5 w-3.5" />
+            </button>
           </div>
           <!-- Add Contact -->
           <Tooltip v-if="canWriteContacts">

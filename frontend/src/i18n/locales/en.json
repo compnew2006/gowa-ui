@@ -345,6 +345,7 @@
     "transfer": "Transfer",
     "resume": "Resume",
     "searchContacts": "Search contacts",
+    "clearSearch": "Clear search",
     "loadingOlderMessages": "Loading older messages",
     "assignContact": "Assign Contact",
     "assignContactDesc": "Select a team member to assign this contact to.",
