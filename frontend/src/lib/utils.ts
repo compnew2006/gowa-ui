@@ -94,3 +94,18 @@ export function formatLabel(key: string): string {
     .replace(/\b\w/g, c => c.toUpperCase())
 }
 
+// Formats a price stored in minor units (cents) into a currency string.
+// e.g. formatPrice(1999, 'USD') -> "$19.99"
+export function formatPrice(cents: number | null | undefined, currency = 'USD'): string {
+  if (cents === null || cents === undefined || isNaN(cents)) return '—'
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: 2,
+    }).format(cents / 100)
+  } catch {
+    return `${(cents / 100).toFixed(2)} ${currency}`
+  }
+}
+

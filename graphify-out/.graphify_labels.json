@@ -357,16 +357,5 @@
   "355": "profile_extras.go",
   "356": "campaign-templates.spec.ts",
   "357": "Context",
-  "358": "Mutex",
-  "359": "ResponseWriter",
-  "360": "AgentTransfer",
-  "361": "Message",
-  "362": "Team",
-  "363": "TeamMember",
-  "364": "ChatbotSettings",
-  "365": "RawMessage",
-  "366": "AIContext",
-  "367": "ChatbotFlow",
-  "368": "KeywordRule",
-  "369": "Permission"
+  "364": "ChatbotSettings"
 }

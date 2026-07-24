@@ -18,7 +18,8 @@ import {
   Shield,
   Tags,
   ScrollText,
-  Server
+  Server,
+  ShoppingCart
 } from 'lucide-vue-next'
 import type { Component } from 'vue'
 
@@ -105,7 +106,7 @@ export const navigationSections: NavSection[] = [
   },
   {
     label: '',
-    permissions: ['settings.general', 'settings.chatbot', 'accounts', 'contacts', 'canned_responses', 'tags', 'teams', 'users', 'roles', 'api_keys', 'webhooks', 'custom_actions', 'settings.sso', 'audit_logs', 'gowa_instances'],
+    permissions: ['settings.general', 'settings.chatbot', 'accounts', 'contacts', 'canned_responses', 'tags', 'teams', 'users', 'roles', 'api_keys', 'webhooks', 'custom_actions', 'settings.sso', 'audit_logs', 'gowa_instances', 'catalogs'],
     pinBottom: true,
     items: [
       {
@@ -113,12 +114,13 @@ export const navigationSections: NavSection[] = [
         path: '/settings',
         icon: Settings,
         permission: 'settings.general',
-        childPermissions: ['settings.general', 'settings.chatbot', 'accounts', 'contacts', 'canned_responses', 'tags', 'teams', 'users', 'roles', 'api_keys', 'webhooks', 'custom_actions', 'settings.sso', 'audit_logs', 'gowa_instances'],
+        childPermissions: ['settings.general', 'settings.chatbot', 'accounts', 'contacts', 'canned_responses', 'tags', 'teams', 'users', 'roles', 'api_keys', 'webhooks', 'custom_actions', 'settings.sso', 'audit_logs', 'gowa_instances', 'catalogs'],
         children: [
           { name: 'nav.general', path: '/settings', icon: Settings, permission: 'settings.general' },
           { name: 'nav.chatbot', path: '/settings/chatbot', icon: Bot, permission: 'settings.chatbot' },
           { name: 'nav.accounts', path: '/settings/accounts', icon: Users, permission: 'accounts' },
           { name: 'nav.contacts', path: '/settings/contacts', icon: Contact, permission: 'contacts' },
+          { name: 'nav.catalogs', path: '/settings/catalogs', icon: ShoppingCart, permission: 'catalogs' },
           { name: 'nav.cannedResponses', path: '/settings/canned-responses', icon: MessageSquareText, permission: 'canned_responses' },
           { name: 'nav.tags', path: '/settings/tags', icon: Tags, permission: 'tags' },
           { name: 'nav.teams', path: '/settings/teams', icon: Users, permission: 'teams' },

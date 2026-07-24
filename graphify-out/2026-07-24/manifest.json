@@ -1,7 +1,7 @@
 {
   "cmd/whatomate/main.go": {
-    "mtime": 1784870766.0314362,
-    "ast_hash": "a34d08b80c250dca7fa1f42366e5bc5d",
+    "mtime": 1784871946.896664,
+    "ast_hash": "7d382eef1d71ece96e59cc3517c1c6fb",
     "semantic_hash": ""
   },
   "docs/astro.config.mjs": {
@@ -615,9 +615,9 @@
     "semantic_hash": "b1bfb226da1f13d945b5d3b17292673f"
   },
   "frontend/src/components/layout/navigation.ts": {
-    "mtime": 1784842798.1177094,
-    "ast_hash": "06be11fc4483c3d2402422bbbb56cee0",
-    "semantic_hash": "06be11fc4483c3d2402422bbbb56cee0"
+    "mtime": 1784872226.217799,
+    "ast_hash": "9fb4a7a0bae46426511622b51eaa96c0",
+    "semantic_hash": ""
   },
   "frontend/src/components/roles/PermissionMatrix.vue": {
     "mtime": 1784764258.0,
@@ -735,9 +735,9 @@
     "semantic_hash": "61c027184c75d4bf2422ee40fa7f9146"
   },
   "frontend/src/components/shared/index.ts": {
-    "mtime": 1784782969.7103007,
-    "ast_hash": "084b4e0ba1c0ad2299e3dd5c6d6b28d9",
-    "semantic_hash": "084b4e0ba1c0ad2299e3dd5c6d6b28d9"
+    "mtime": 1784872418.9715948,
+    "ast_hash": "e2e0eba2eb55af450c16f4c766805998",
+    "semantic_hash": ""
   },
   "frontend/src/components/shared/types.ts": {
     "mtime": 1784764258.0,
@@ -2190,14 +2190,14 @@
     "semantic_hash": "bdb27bf81940efa5c72bb0fd187562c5"
   },
   "frontend/src/i18n/locales/ar.json": {
-    "mtime": 1784860524.7307112,
-    "ast_hash": "e363f88081b87eae9afaf43fd0fc6a87",
-    "semantic_hash": "e363f88081b87eae9afaf43fd0fc6a87"
+    "mtime": 1784872299.541054,
+    "ast_hash": "5b932cc8f1926906ce6496291df2a228",
+    "semantic_hash": ""
   },
   "frontend/src/i18n/locales/en.json": {
-    "mtime": 1784860454.3642204,
-    "ast_hash": "b48710c6b7a06ec1d1fe1cf4c0a4240a",
-    "semantic_hash": "b48710c6b7a06ec1d1fe1cf4c0a4240a"
+    "mtime": 1784872299.5390015,
+    "ast_hash": "bd5dcbe5dee87de4534429caf01a8830",
+    "semantic_hash": ""
   },
   "frontend/src/lib/api-error.ts": {
     "mtime": 1784764258.0,
@@ -2225,9 +2225,9 @@
     "semantic_hash": "438b196474fbb46df1f4c43a6c006f6b"
   },
   "frontend/src/lib/utils.ts": {
-    "mtime": 1784782809.5888133,
-    "ast_hash": "a3b1ceb89e3b010e84f9e893f9983f49",
-    "semantic_hash": "a3b1ceb89e3b010e84f9e893f9983f49"
+    "mtime": 1784872192.842936,
+    "ast_hash": "574120749438525be46a2c4a42fcaac2",
+    "semantic_hash": ""
   },
   "frontend/src/main.ts": {
     "mtime": 1784764258.0,
@@ -2235,14 +2235,14 @@
     "semantic_hash": "cd6d383a515e1ccfdc3ea876340ed9b7"
   },
   "frontend/src/router/index.ts": {
-    "mtime": 1784842809.3561552,
-    "ast_hash": "cfb77f7c7985aa43c1e6f4a2a0eb79be",
-    "semantic_hash": "cfb77f7c7985aa43c1e6f4a2a0eb79be"
+    "mtime": 1784872264.771574,
+    "ast_hash": "abbb89d81dcaf59620dc4e6bb7986dea",
+    "semantic_hash": ""
   },
   "frontend/src/services/api.ts": {
-    "mtime": 1784858135.940723,
-    "ast_hash": "e52fd36181e624977f595ddc00f6c14f",
-    "semantic_hash": "e52fd36181e624977f595ddc00f6c14f"
+    "mtime": 1784872078.825084,
+    "ast_hash": "02737f03cab5fa8a7bd11ff889c5ba02",
+    "semantic_hash": ""
   },
   "frontend/src/services/websocket.ts": {
     "mtime": 1784858135.9408803,
@@ -2825,8 +2825,8 @@
     "semantic_hash": "05676eb9f7e7391e45418610c84b16e1"
   },
   "internal/handlers/catalog_test.go": {
-    "mtime": 1784870941.8834124,
-    "ast_hash": "e2e70d66cedd52fc05b7d97740d93a57",
+    "mtime": 1784871954.9988773,
+    "ast_hash": "e63abf49705d6e0c2a4ac1e953b90edc",
     "semantic_hash": ""
   },
   "internal/handlers/chat_lifecycle.go": {
@@ -4067,6 +4067,26 @@
   "AGENTS.md": {
     "mtime": 1784868975.4773495,
     "ast_hash": "25aa3e2de65c52d5ae6279cb7e921ffa",
+    "semantic_hash": ""
+  },
+  "frontend/src/views/settings/CatalogDetailView.vue": {
+    "mtime": 1784872608.9501066,
+    "ast_hash": "8ecc0432b9115ff455b8f29d19aaa941",
+    "semantic_hash": ""
+  },
+  "frontend/src/views/settings/CatalogsView.vue": {
+    "mtime": 1784872474.999706,
+    "ast_hash": "dcbfbd6e004245169b125330e9ff9801",
+    "semantic_hash": ""
+  },
+  "internal/handlers/catalog.go": {
+    "mtime": 1784871932.5041413,
+    "ast_hash": "8559b81319d182949e49d90ef8fbe24b",
+    "semantic_hash": ""
+  },
+  ".zcode/plans/plan-sess_43c7ac18-30f2-47cd-8ede-b93690078eb4.md": {
+    "mtime": 1784871913.3433282,
+    "ast_hash": "d7d75de40d0e945cc08f792a0e42fd97",
     "semantic_hash": ""
   }
 }

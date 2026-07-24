@@ -1010,3 +1010,53 @@ export const gowaServersService = {
   setDeviceWebhook: (serverId: string, deviceId: string, data: { webhook_url: string; webhook_events: string; webhook_insecure_skip_verify?: boolean }) =>
     api.put(`/gowa/servers/${serverId}/devices/${encodeURIComponent(deviceId)}/webhook`, data),
 }
+
+// ---- Catalogs & Products ----
+export interface Catalog {
+  id: string
+  meta_catalog_id: string
+  whatsapp_account: string
+  name: string
+  is_active: boolean
+  product_count: number
+  created_at: string
+  updated_at: string
+  products?: CatalogProduct[]
+}
+
+export interface CatalogProduct {
+  id: string
+  meta_product_id: string
+  name: string
+  description: string
+  price: number
+  currency: string
+  url: string
+  image_url: string
+  retailer_id: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export const catalogsService = {
+  list: (params?: { whatsapp_account?: string }) =>
+    api.get<{ catalogs: Catalog[] }>('/catalogs', { params }),
+  get: (id: string) => api.get<Catalog>(`/catalogs/${id}`),
+  create: (data: { whatsapp_account: string; name: string }) =>
+    api.post<Catalog>('/catalogs', data),
+  delete: (id: string) => api.delete(`/catalogs/${id}`),
+  sync: (data: { whatsapp_account: string }) =>
+    api.post<{ message: string; synced: number; total: number }>('/catalogs/sync', data),
+  listProducts: (catalogId: string) =>
+    api.get<{ products: CatalogProduct[] }>(`/catalogs/${catalogId}/products`),
+  createProduct: (catalogId: string, data: Partial<CatalogProduct>) =>
+    api.post<CatalogProduct>(`/catalogs/${catalogId}/products`, data),
+}
+
+export const productsService = {
+  get: (id: string) => api.get<CatalogProduct>(`/products/${id}`),
+  update: (id: string, data: Partial<CatalogProduct>) =>
+    api.put<CatalogProduct>(`/products/${id}`, data),
+  delete: (id: string) => api.delete(`/products/${id}`),
+}

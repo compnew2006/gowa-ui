@@ -165,6 +165,18 @@ const router = createRouter({
           meta: { permission: 'accounts' }
         },
         {
+          path: 'settings/catalogs',
+          name: 'catalogs',
+          component: () => import('@/views/settings/CatalogsView.vue'),
+          meta: { permission: 'catalogs' }
+        },
+        {
+          path: 'settings/catalogs/:id',
+          name: 'catalog-detail',
+          component: () => import('@/views/settings/CatalogDetailView.vue'),
+          meta: { permission: 'catalogs' }
+        },
+        {
           path: 'settings/gowa-servers',
           name: 'gowa-servers',
           component: () => import('@/views/settings/GowaServersView.vue'),
@@ -322,6 +334,7 @@ const navigationOrder = [
     { path: '/settings', permission: 'settings.general' },
     { path: '/settings/chatbot', permission: 'settings.chatbot' },
     { path: '/settings/accounts', permission: 'accounts' },
+    { path: '/settings/catalogs', permission: 'catalogs' },
     { path: '/settings/canned-responses', permission: 'canned_responses' },
     { path: '/settings/contacts', permission: 'contacts' },
     { path: '/settings/tags', permission: 'tags' },

@@ -796,6 +796,18 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.GET("/api/templates", app.ListTemplates)
 	g.GET("/api/templates/{id}", app.GetTemplate)
 
+	// Catalogs & Products
+	g.GET("/api/catalogs", app.ListCatalogs)
+	g.POST("/api/catalogs", app.CreateCatalog)
+	g.GET("/api/catalogs/{id}", app.GetCatalog)
+	g.DELETE("/api/catalogs/{id}", app.DeleteCatalog)
+	g.POST("/api/catalogs/sync", app.SyncCatalogs)
+	g.GET("/api/catalogs/{id}/products", app.ListCatalogProducts)
+	g.POST("/api/catalogs/{id}/products", app.CreateCatalogProduct)
+	g.GET("/api/products/{id}", app.GetCatalogProduct)
+	g.PUT("/api/products/{id}", app.UpdateCatalogProduct)
+	g.DELETE("/api/products/{id}", app.DeleteCatalogProduct)
+
 	// WhatsApp Flows
 	g.GET("/api/flows", app.ListFlows)
 	g.POST("/api/flows", app.CreateFlow)
