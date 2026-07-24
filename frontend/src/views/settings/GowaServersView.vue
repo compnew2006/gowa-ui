@@ -120,12 +120,12 @@ async function confirmDelete() {
     <PageHeader
       :title="$t('gowaServers.title', 'GOWA Servers')"
       :icon="Server"
-      icon-gradient="bg-gradient-to-br from-blue-500 to-indigo-600 shadow-blue-500/20"
+      icon-gradient="bg-gradient-to-br from-emerald-500 to-green-600 shadow-emerald-500/20"
       back-link="/settings"
       :breadcrumbs="breadcrumbs"
     >
       <template #actions>
-        <Button v-if="canWrite" size="sm" class="bg-blue-600 hover:bg-blue-700 text-white font-medium" @click="openCreate">
+        <Button v-if="canWrite" size="sm" class="bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-sm" @click="openCreate">
           <Plus class="h-4 w-4 mr-1.5" />
           {{ $t('gowaServers.addServer', 'Add GOWA Server') }}
         </Button>
@@ -161,7 +161,7 @@ async function confirmDelete() {
               item-name="servers"
             >
               <template #empty-action>
-                <Button v-if="canWrite" size="lg" class="bg-blue-600 hover:bg-blue-700 text-white" @click="openCreate">
+                <Button v-if="canWrite" size="lg" class="bg-emerald-600 hover:bg-emerald-700 text-white" @click="openCreate">
                   <Plus class="mr-2 h-5 w-5" />
                   {{ $t('gowaServers.addServer', 'Add GOWA Server') }}
                 </Button>
@@ -169,8 +169,8 @@ async function confirmDelete() {
 
               <template #cell-name="{ item: s }">
                 <RouterLink :to="`/settings/gowa-servers/${s.id}`" class="flex items-center gap-3 text-inherit no-underline hover:opacity-80">
-                  <div class="h-9 w-9 rounded-full bg-blue-500/10 flex items-center justify-center flex-shrink-0">
-                    <Server class="h-4 w-4 text-blue-500" />
+                  <div class="h-9 w-9 rounded-full bg-emerald-500/10 flex items-center justify-center flex-shrink-0">
+                    <Server class="h-4 w-4 text-emerald-500" />
                   </div>
                   <span class="font-medium truncate text-sm">{{ s.name }}</span>
                 </RouterLink>
@@ -181,7 +181,7 @@ async function confirmDelete() {
               </template>
 
               <template #cell-creds="{ item: s }">
-                <Badge v-if="s.has_credentials" variant="outline" class="border-green-600 text-green-600">
+                <Badge v-if="s.has_credentials" variant="outline" class="border-emerald-600 text-emerald-600">
                   <CheckCircle2 class="h-3 w-3 mr-1" /> {{ $t('gowaServers.hasCredentials', 'Credentials set') }}
                 </Badge>
                 <Badge v-else variant="outline" class="border-amber-600 text-amber-600">
@@ -190,7 +190,7 @@ async function confirmDelete() {
               </template>
 
               <template #cell-status="{ item: s }">
-                <Badge v-if="s.is_active" variant="outline" class="border-green-600 text-green-600">{{ $t('gowaServers.isActive', 'Active') }}</Badge>
+                <Badge v-if="s.is_active" variant="outline" class="border-emerald-600 text-emerald-600">{{ $t('gowaServers.isActive', 'Active') }}</Badge>
                 <Badge v-else variant="outline" class="text-muted-foreground">Inactive</Badge>
               </template>
 

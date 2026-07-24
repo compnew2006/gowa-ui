@@ -159,13 +159,6 @@ async function confirmDelete() {
                 {{ $t('accounts.serverConnection', 'Server Connection') }}
               </TabsTrigger>
             </TabsList>
-
-            <RouterLink to="/settings/accounts/new" v-if="canWrite">
-              <Button size="sm" class="bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-sm">
-                <Plus class="h-4 w-4 mr-1.5" />
-                {{ $t('accounts.addAccount', 'Add Account') }}
-              </Button>
-            </RouterLink>
           </div>
 
           <TabsContent value="accounts" class="space-y-6 mt-0">
@@ -231,13 +224,13 @@ async function confirmDelete() {
                   </template>
 
                   <template #cell-status="{ item: account }">
-                    <Badge v-if="account.gowa_connected === true" variant="outline" class="border-green-600 text-green-600 bg-green-500/10">
+                    <Badge v-if="account.gowa_connected === true" variant="outline" class="border-emerald-600 text-emerald-600 bg-emerald-500/10">
                       <CheckCircle2 class="h-3 w-3 mr-1" /> Connected
                     </Badge>
                     <Badge v-else-if="account.gowa_connected === false" variant="outline" class="border-amber-600 text-amber-600 bg-amber-500/10">
                       Disconnected
                     </Badge>
-                    <Badge v-else variant="outline" :class="account.status === 'active' ? 'border-green-600 text-green-600' : ''">
+                    <Badge v-else variant="outline" :class="account.status === 'active' ? 'border-emerald-600 text-emerald-600' : ''">
                       {{ account.status }}
                     </Badge>
                   </template>

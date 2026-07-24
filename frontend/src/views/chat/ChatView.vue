@@ -96,7 +96,8 @@ import {
   Users,
   Info,
   LogOut,
-  Ghost
+  Ghost,
+  Megaphone
 } from 'lucide-vue-next'
 import { getInitials, getAvatarGradient } from '@/lib/utils'
 import { useColorMode } from '@/composables/useColorMode'
@@ -129,8 +130,29 @@ const tagsStore = useTagsStore()
 const SIDEBAR_MIN_WIDTH = 260
 const SIDEBAR_MAX_WIDTH = 520
 const SIDEBAR_DEFAULT_WIDTH = 320 // matches the previous fixed `w-80`
+// Reserve this much room for the chat panel (header + composer) so the sidebar
+// can never starve the conversation area on narrow viewports.
+const SIDEBAR_MIN_CHAT_ROOM = 360
 const sidebarWidth = ref(SIDEBAR_DEFAULT_WIDTH)
 const isResizingSidebar = ref(false)
+
+// Effective max sidebar width for the current viewport: never wider than
+// SIDEBAR_MAX_WIDTH, and never so wide that the chat panel is starved below
+// SIDEBAR_MIN_CHAT_ROOM. This is what prevents the header controls from being
+// pushed off-screen on narrow windows.
+function sidebarEffectiveMax(): number {
+  if (typeof window === 'undefined') return SIDEBAR_MAX_WIDTH
+  // The chat view lives in <main>, which sits beside the app nav rail
+  // (~64px collapsed / ~256px expanded). Subtract a conservative 80px for the
+  // nav so the clamp holds on collapsed layouts too.
+  const mainWidth = Math.max(0, window.innerWidth - 80)
+  return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, mainWidth - SIDEBAR_MIN_CHAT_ROOM))
+}
+
+function clampSidebarToViewport() {
+  const max = sidebarEffectiveMax()
+  if (sidebarWidth.value > max) sidebarWidth.value = max
+}
 
 function startSidebarResize(e: MouseEvent) {
   isResizingSidebar.value = true
@@ -138,9 +160,11 @@ function startSidebarResize(e: MouseEvent) {
   const startWidth = sidebarWidth.value
 
   function onMouseMove(e: MouseEvent) {
-    // Sidebar is on the left: dragging the right edge rightward widens it
+    // Sidebar is on the left: dragging the right edge rightward widens it.
+    // Clamp against the viewport-aware max so the chat panel keeps room.
     const delta = e.clientX - startX
-    const newWidth = Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, startWidth + delta))
+    const max = sidebarEffectiveMax()
+    const newWidth = Math.min(max, Math.max(SIDEBAR_MIN_WIDTH, startWidth + delta))
     sidebarWidth.value = newWidth
   }
 
@@ -614,6 +638,11 @@ onMounted(async () => {
     authStore.restoreSession()
   }
 
+  // Keep the sidebar from overflowing on the current viewport (fixes header
+  // controls being pushed off-screen / unclickable on narrow windows).
+  clampSidebarToViewport()
+  window.addEventListener('resize', clampSidebarToViewport)
+
   await contactsStore.fetchContacts()
 
   // Setup infinite scroll for contacts list
@@ -685,6 +714,7 @@ onUnmounted(() => {
   if (stickyDateTimeout) clearTimeout(stickyDateTimeout)
   document.removeEventListener('visibilitychange', onUserActive)
   window.removeEventListener('focus', onUserActive)
+  window.removeEventListener('resize', clampSidebarToViewport)
 })
 
 function updateStickyDate(scrollContainer: HTMLElement) {
@@ -1959,7 +1989,7 @@ async function sendMediaMessage() {
   <div class="flex h-full bg-[#0a0a0b] light:bg-gray-50">
     <!-- Contacts List -->
     <div
-      class="border-r border-white/[0.08] light:border-gray-200 flex flex-col bg-[#0a0a0b] light:bg-white relative shrink-0"
+      class="chat-sidebar border-r border-white/[0.08] light:border-gray-200 flex flex-col bg-[#0a0a0b] light:bg-white relative"
       :style="{ width: `${sidebarWidth}px` }"
     >
       <!-- Resize Handle (right edge of the sidebar) -->
@@ -2071,38 +2101,40 @@ async function sendMediaMessage() {
           </TagBadge>
         </div>
         <!-- Visibility toggles: show/hide group & newsletter chats -->
-        <div class="flex items-center gap-3 mt-2">
+        <div class="flex items-center gap-4 mt-2">
           <label class="flex items-center gap-1.5 cursor-pointer select-none text-xs text-white/60 light:text-gray-600">
             <Switch
               :checked="!contactsStore.hideGroupChats"
               @update:checked="(v: boolean) => (contactsStore.hideGroupChats = !v)"
             />
-            <span>👥 {{ $t('chat.showGroups') }}</span>
+            <Users class="h-3.5 w-3.5 opacity-70" />
+            <span>{{ $t('chat.showGroups') }}</span>
           </label>
           <label class="flex items-center gap-1.5 cursor-pointer select-none text-xs text-white/60 light:text-gray-600">
             <Switch
               :checked="!contactsStore.hideNewsletterChats"
               @update:checked="(v: boolean) => (contactsStore.hideNewsletterChats = !v)"
             />
-            <span>📢 {{ $t('chat.showNewsletters') }}</span>
+            <Megaphone class="h-3.5 w-3.5 opacity-70" />
+            <span>{{ $t('chat.showNewsletters') }}</span>
           </label>
         </div>
 
         <!-- Me / Pending tab strip — drives the sidebar list (client-side filter per D4). -->
-        <div class="inline-flex items-center gap-1 rounded-lg bg-white/[0.06] light:bg-gray-100 p-1 mt-2">
+        <div class="grid grid-cols-2 gap-1 rounded-lg bg-white/[0.04] light:bg-gray-100 p-1 mt-2">
           <button
             :class="[
-              'rounded-md px-3 py-1 text-xs font-medium whitespace-nowrap transition-all inline-flex items-center gap-1.5',
+              'rounded-md py-1.5 text-xs font-medium whitespace-nowrap transition-all inline-flex items-center justify-center gap-1.5',
               contactsStore.activeListTab === 'me'
                 ? 'bg-emerald-600 text-white shadow-sm'
-                : 'bg-white/[0.08] text-white/60 hover:text-white/90 hover:bg-white/[0.12] light:bg-gray-200 light:text-gray-600 light:hover:text-gray-800 light:hover:bg-gray-300'
+                : 'text-white/60 hover:text-white/90 hover:bg-white/[0.06] light:text-gray-600 light:hover:text-gray-800 light:hover:bg-gray-200'
             ]"
             @click="contactsStore.activeListTab = 'me'"
           >
             {{ $t('chat.tabMe') }}
             <span
               :class="[
-                'inline-flex items-center justify-center min-w-[1.25rem] h-4 px-1 rounded-full text-[10px] font-semibold',
+                'inline-flex items-center justify-center min-w-[1.25rem] h-4 px-1 rounded-full text-[10px] font-semibold tabular-nums',
                 contactsStore.activeListTab === 'me'
                   ? 'bg-white/25 text-white'
                   : 'bg-white/[0.08] text-white/60 light:bg-gray-300 light:text-gray-700'
@@ -2111,17 +2143,17 @@ async function sendMediaMessage() {
           </button>
           <button
             :class="[
-              'rounded-md px-3 py-1 text-xs font-medium whitespace-nowrap transition-all inline-flex items-center gap-1.5',
+              'rounded-md py-1.5 text-xs font-medium whitespace-nowrap transition-all inline-flex items-center justify-center gap-1.5',
               contactsStore.activeListTab === 'pending'
                 ? 'bg-emerald-600 text-white shadow-sm'
-                : 'bg-white/[0.08] text-white/60 hover:text-white/90 hover:bg-white/[0.12] light:bg-gray-200 light:text-gray-600 light:hover:text-gray-800 light:hover:bg-gray-300'
+                : 'text-white/60 hover:text-white/90 hover:bg-white/[0.06] light:text-gray-600 light:hover:text-gray-800 light:hover:bg-gray-200'
             ]"
             @click="contactsStore.activeListTab = 'pending'"
           >
             {{ $t('chat.tabPending') }}
             <span
               :class="[
-                'inline-flex items-center justify-center min-w-[1.25rem] h-4 px-1 rounded-full text-[10px] font-semibold',
+                'inline-flex items-center justify-center min-w-[1.25rem] h-4 px-1 rounded-full text-[10px] font-semibold tabular-nums',
                 contactsStore.activeListTab === 'pending'
                   ? 'bg-white/25 text-white'
                   : 'bg-white/[0.08] text-white/60 light:bg-gray-300 light:text-gray-700'
@@ -2167,7 +2199,7 @@ async function sendMediaMessage() {
                     {{ $t('chat.group') }}
                   </Badge>
                 </p>
-                <span class="flex-shrink-0 text-[11px] text-white/40 light:text-gray-500">
+                <span class="flex-shrink-0 text-[11px] text-white/40 light:text-gray-500 tabular-nums">
                   {{ formatContactTime(contact.last_message_at) }}
                 </span>
               </div>
@@ -2178,7 +2210,7 @@ async function sendMediaMessage() {
                 <Badge v-if="contact.whatsapp_account" class="flex-shrink-0 h-4 text-[9px] bg-violet-500/20 text-violet-400 light:bg-violet-100 light:text-violet-700">
                   {{ contact.whatsapp_account }}
                 </Badge>
-                <Badge v-if="contact.unread_count > 0" class="flex-shrink-0 h-5 text-[10px] bg-emerald-500/20 text-emerald-400 light:bg-emerald-100 light:text-emerald-700">
+                <Badge v-if="contact.unread_count > 0" class="flex-shrink-0 h-5 text-[10px] tabular-nums bg-emerald-500 text-white light:bg-emerald-600 light:text-white">
                   {{ contact.unread_count }}
                 </Badge>
               </div>
@@ -2199,7 +2231,7 @@ async function sendMediaMessage() {
     </div>
 
     <!-- Chat Area -->
-    <div class="flex-1 flex flex-col bg-[#0f0f10] light:bg-gray-50">
+    <div class="flex-1 min-w-0 flex flex-col bg-[#0f0f10] light:bg-gray-50">
       <!-- No Contact Selected -->
       <div
         v-if="!contactsStore.currentContact"
@@ -2239,10 +2271,10 @@ async function sendMediaMessage() {
                   {{ $t('chat.conversationClosed') }}
                 </Badge>
                 <Badge v-if="activeTransferId" class="text-[10px] h-5 bg-orange-500/20 text-orange-400 light:bg-orange-100 light:text-orange-700">
-                  Paused
+                  {{ $t('chat.paused') }}
                 </Badge>
                 <Badge v-if="contactsStore.currentContact?.marketing_opt_out" class="text-[10px] h-5 bg-red-500/20 text-red-400 light:bg-red-100 light:text-red-700" :title="$t('chat.marketingOptOut')">
-                  {{ $t('chat.marketingOptOut', 'Marketing Opt-out') }}
+                  {{ $t('chat.marketingOptOut') }}
                 </Badge>
               </div>
               <p class="text-[11px] text-white/50 light:text-gray-500">
@@ -2276,21 +2308,33 @@ async function sendMediaMessage() {
                   <Ghost class="h-3.5 w-3.5" />
                 </div>
               </div>
-              <!-- Leave button: collaborators (not owner) OR admin/manager ghost-exit.
-                   Last participant → label swaps to "Leave & Close". -->
-              <Button v-if="(contactsStore.isCollaborator && !contactsStore.isAssignedToMe) || (contactsStore.isAdminOrManager && !contactsStore.isPendingClaim && !contactsStore.isChatClosed)"
-                      variant="ghost" size="sm" @click="handleLeave" class="text-xs">
-                <LogOut class="mr-1 h-3 w-3" />
-                {{ contactsStore.isLastParticipant ? $t('chat.leaveAndClose') : $t('chat.leaveConversation') }}
-              </Button>
               <!-- Release button: assignee OR admin/manager on an open chat.
-                   Returns the conversation to pending without closing it. -->
+                   Returns the conversation to pending without closing it.
+                   RotateCcw = "send back / undo claim", distinct from Leave. -->
               <Button v-if="contactsStore.isAssignedToMe || (contactsStore.isAdminOrManager && !contactsStore.isPendingClaim && !contactsStore.isChatClosed)"
-                      variant="ghost" size="sm" @click="handleRelease" class="text-xs">
-                <LogOut class="mr-1 h-3 w-3" />
+                      variant="ghost" size="sm"
+                      class="h-8 gap-1.5 px-3 text-xs text-white/60 hover:text-amber-400 hover:bg-amber-500/10 light:text-gray-500"
+                      @click="handleRelease">
+                <RotateCcw class="h-3.5 w-3.5" />
                 {{ $t('chat.releasedConversation') }}
               </Button>
+              <!-- Leave button: collaborators (not owner) OR admin/manager ghost-exit.
+                   Last participant → label swaps to "Leave & Close".
+                   LogOut = "exit the conversation". -->
+              <Button v-if="(contactsStore.isCollaborator && !contactsStore.isAssignedToMe) || (contactsStore.isAdminOrManager && !contactsStore.isPendingClaim && !contactsStore.isChatClosed)"
+                      variant="ghost" size="sm"
+                      class="h-8 gap-1.5 px-3 text-xs text-white/60 hover:text-red-400 hover:bg-red-500/10 light:text-gray-500"
+                      @click="handleLeave">
+                <LogOut class="h-3.5 w-3.5" />
+                {{ contactsStore.isLastParticipant ? $t('chat.leaveAndClose') : $t('chat.leaveConversation') }}
+              </Button>
             </div>
+
+            <!-- Divider between participant actions and chat actions -->
+            <div
+              v-if="(contactsStore.currentContact?.collaborators?.length || contactsStore.isAdminOrManager) && (contactsStore.isAssignedToMe || contactsStore.isCollaborator || contactsStore.isAdminOrManager)"
+              class="h-5 w-px bg-white/[0.08] light:bg-gray-200 mx-1"
+            />
 
             <!-- Invite collaborator button (managers/admins only, on open chats) -->
             <Tooltip v-if="contactsStore.canCollaborate && contactsStore.currentContact?.chat_status === 'open' && !contactsStore.isPendingClaim">
@@ -2489,15 +2533,16 @@ async function sendMediaMessage() {
 
           <!-- Claim screen: pending unassigned conversation -->
           <div v-if="contactsStore.isPendingClaim"
-               class="flex flex-col items-center justify-center h-full px-6 text-center">
-            <div class="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-amber-500/10 ring-1 ring-amber-500/20">
-              <Lock class="h-10 w-10 text-amber-500" />
+               class="flex flex-col items-center justify-center h-full max-w-md mx-auto px-6 text-center">
+            <div class="mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-amber-500/10 ring-1 ring-amber-500/20">
+              <Lock class="h-8 w-8 text-amber-500" />
             </div>
-            <h3 class="text-lg font-semibold text-foreground mb-2">{{ $t('chat.chatNotClaimed') }}</h3>
-            <p class="text-sm text-muted-foreground mb-1">{{ $t('chat.claimToViewMessages') }}</p>
-            <p class="text-2xl font-bold text-amber-500 mb-6">
-              {{ contactsStore.pendingMessageCount }} {{ $t('chat.messagesWaiting') }}
-            </p>
+            <h3 class="text-base font-semibold text-foreground mb-1.5">{{ $t('chat.chatNotClaimed') }}</h3>
+            <p class="text-sm text-muted-foreground mb-4 max-w-[36ch]">{{ $t('chat.claimToViewMessages') }}</p>
+            <div v-if="contactsStore.pendingMessageCount > 0" class="flex items-baseline gap-1.5 mb-6">
+              <span class="text-2xl font-bold text-amber-500 tabular-nums">{{ contactsStore.pendingMessageCount }}</span>
+              <span class="text-xs text-muted-foreground">{{ $t('chat.messagesWaiting') }}</span>
+            </div>
             <Button size="lg" :disabled="isClaiming" @click="handleClaim" class="gap-2">
               <Hand class="h-5 w-5" />
               {{ isClaiming ? $t('common.loading') : $t('chat.claimChat') }}
@@ -2508,26 +2553,26 @@ async function sendMediaMessage() {
                Admins/managers bypass this — they can view closed content
                instantly (spec §1.A + §3: "Admin can still see content? YES"). -->
           <div v-else-if="contactsStore.isChatClosed && !contactsStore.canManageAllChats"
-               class="flex flex-col items-center justify-center h-full px-6 text-center">
-            <div class="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-gray-500/10 ring-1 ring-gray-500/20">
-              <CheckCheck class="h-10 w-10 text-gray-400" />
+               class="flex flex-col items-center justify-center h-full max-w-md mx-auto px-6 text-center">
+            <div class="mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-gray-500/10 ring-1 ring-gray-500/20">
+              <CheckCheck class="h-8 w-8 text-gray-400" />
             </div>
-            <h3 class="text-lg font-semibold text-foreground mb-2">{{ $t('chat.conversationClosed') }}</h3>
-            <p class="text-sm text-muted-foreground mb-6">{{ $t('chat.reopenHint') }}</p>
+            <h3 class="text-base font-semibold text-foreground mb-1.5">{{ $t('chat.conversationClosed') }}</h3>
+            <p class="text-sm text-muted-foreground mb-6 max-w-[36ch]">{{ $t('chat.reopenHint') }}</p>
             <Button size="lg" :disabled="isClaiming" @click="handleClaim" class="gap-2">
               <Hand class="h-5 w-5" />
               {{ isClaiming ? $t('common.loading') : $t('chat.reopenConversation') }}
             </Button>
           </div>
 
-          <!-- Join screen: assigned to another agent — only for agents (not managers/admins who can see everything) -->
+          <!-- Join screen: assigned to another agent — only for agents (not managers/admins who see everything) -->
           <div v-else-if="contactsStore.isAssignedToOther && !contactsStore.isCollaborator && contactsStore.canCollaborate && !contactsStore.canManageAllChats"
-               class="flex flex-col items-center justify-center h-full px-6 text-center">
-            <div class="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-blue-500/10 ring-1 ring-blue-500/20">
-              <Users class="h-10 w-10 text-blue-500" />
+               class="flex flex-col items-center justify-center h-full max-w-md mx-auto px-6 text-center">
+            <div class="mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-blue-500/10 ring-1 ring-blue-500/20">
+              <Users class="h-8 w-8 text-blue-500" />
             </div>
-            <h3 class="text-lg font-semibold mb-2">{{ $t('chat.assignedToAnother') }}</h3>
-            <p class="text-sm text-muted-foreground mb-6">{{ $t('chat.joinAsCollaboratorHint') }}</p>
+            <h3 class="text-base font-semibold text-foreground mb-1.5">{{ $t('chat.assignedToAnother') }}</h3>
+            <p class="text-sm text-muted-foreground mb-6 max-w-[36ch]">{{ $t('chat.joinAsCollaboratorHint') }}</p>
             <Button size="lg" :disabled="isJoining" @click="handleJoin" class="gap-2">
               <UserPlus class="h-5 w-5" />
               {{ isJoining ? $t('common.loading') : $t('chat.joinAsCollaborator') }}
@@ -2564,8 +2609,8 @@ async function sendMediaMessage() {
                   v-if="newMessagesCount > 0 && message.id === firstUnreadId"
                   class="flex items-center justify-center my-4"
                 >
-                  <div class="px-3 py-1 bg-white/[0.06] light:bg-gray-200 rounded-full text-[11px] text-white/40 light:text-gray-600 font-medium">
-                    {{ newMessagesCount }} {{ newMessagesCount === 1 ? $t('chat.unreadMessage', 'unread message') : $t('chat.unreadMessages', 'unread messages') }}
+                  <div class="px-3 py-1 bg-emerald-500/15 light:bg-emerald-100 rounded-full text-[11px] text-emerald-400 light:text-emerald-700 font-medium tabular-nums">
+                    {{ newMessagesCount }} {{ newMessagesCount === 1 ? $t('chat.unreadMessage') : $t('chat.unreadMessages') }}
                   </div>
                 </div>
 
@@ -3429,5 +3474,26 @@ async function sendMediaMessage() {
 .sticky-date-enter-from,
 .sticky-date-leave-to {
   opacity: 0;
+}
+
+/* The contacts sidebar must shrink with the viewport instead of pushing the
+   header controls (tabs, toggles, search) off-screen on narrow windows.
+   - min-width: 0 lets the flex item shrink below its content's intrinsic size.
+   - flex-shrink allows it to give ground to the chat panel. The inline width
+     style (sidebarWidth) is the *preferred* size, not a floor. */
+.chat-sidebar {
+  min-width: 0;
+  flex-shrink: 1;
+  /* Never let the user-driven width exceed the usable area, even mid-resize
+     before the JS clamp fires. 38vw is a generous ceiling that still leaves
+     the chat panel the majority of the screen. */
+  max-width: 42vw;
+}
+
+@media (min-width: 1024px) {
+  .chat-sidebar {
+    /* On roomy desktops, the sidebar can be wider relative to the viewport. */
+    max-width: 46vw;
+  }
 }
 </style>

@@ -293,7 +293,7 @@ func (a *App) GetContact(r *fastglue.Request) error {
 //
 // GET /api/contacts/{id}/avatar
 func (a *App) RefreshContactAvatar(r *fastglue.Request) error {
-	orgID, userID, err := a.getOrgAndUserID(r)
+	orgID, _, err := a.getOrgAndUserID(r)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 	}
@@ -302,10 +302,15 @@ func (a *App) RefreshContactAvatar(r *fastglue.Request) error {
 		return nil
 	}
 
+	// The avatar endpoint returns a (cached) profile picture URL — not private
+	// conversation content — so it is scoped to the organization only. Applying
+	// scopeAssignedContact here caused a 404 for any contact an agent can see
+	// in their sidebar but isn't formally assigned/collaborating on (e.g. a
+	// pending chat before claim, or a newsletter the admin surfaced). The
+	// agent still sees the cached avatar; only the live GOWA re-fetch below is
+	// gated by having a resolvable owning account.
 	var contact models.Contact
-	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
-	query = a.scopeAssignedContact(query, userID, orgID)
-	if err := query.First(&contact).Error; err != nil {
+	if err := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID).First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
 	}
 

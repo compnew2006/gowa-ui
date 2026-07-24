@@ -44,7 +44,8 @@ const hasFiles = computed(() => props.messages.some((m) => !!m.media_url))
 
 const burstMinutes = computed({
   get: () => (props.burstTimeMs ?? 1_800_000) / 60_000,
-  set: (v) => emit('update:burstTimeMs', Math.max(1, Math.min(120, v)) * 60_000)
+  // Clamp 1–60 to match the +/- button limits (button disables at >= 60).
+  set: (v) => emit('update:burstTimeMs', Math.max(1, Math.min(60, v)) * 60_000)
 })
 
 function iconFor(message: Message) {
@@ -92,10 +93,10 @@ function printFile(message: Message) {
       </DialogHeader>
 
       <!-- Collection time window selector -->
-      <div class="flex items-center gap-3 px-1 py-2 rounded-lg bg-muted/30">
+      <div class="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-muted/30">
         <Clock class="h-4 w-4 text-muted-foreground shrink-0" />
         <span class="text-sm text-muted-foreground whitespace-nowrap">{{ $t('chat.collectTimeWindow') }}</span>
-        <div class="flex items-center gap-1 ml-auto">
+        <div class="flex items-center gap-1.5 ml-auto">
           <Button
             variant="outline"
             size="icon"
@@ -105,8 +106,8 @@ function printFile(message: Message) {
           >
             <Minus class="h-3 w-3" />
           </Button>
-          <span class="w-12 text-center text-sm font-medium tabular-nums">{{ burstMinutes }}</span>
-          <span class="text-xs text-muted-foreground -ml-1">{{ $t('chat.minutes') }}</span>
+          <span class="w-6 text-center text-sm font-medium tabular-nums">{{ burstMinutes }}</span>
+          <span class="text-xs text-muted-foreground whitespace-nowrap">{{ $t('chat.minutes') }}</span>
           <Button
             variant="outline"
             size="icon"

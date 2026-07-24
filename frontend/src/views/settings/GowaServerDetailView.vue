@@ -40,7 +40,7 @@ import {
   Trash2,
   LogOut,
   RefreshCw,
-  RefreshCcw,
+  DownloadCloud,
   Webhook,
   Loader2,
   CheckCircle2,
@@ -107,7 +107,7 @@ function stateClass(state: string): string {
     case "logged_in":
       return "border-emerald-600 text-emerald-600 bg-emerald-500/10";
     case "connected":
-      return "border-sky-600 text-sky-600 bg-sky-500/10";
+      return "border-emerald-600 text-emerald-600 bg-emerald-500/10";
     case "connecting":
       return "border-amber-600 text-amber-600 bg-amber-500/10";
     default:
@@ -445,7 +445,7 @@ async function confirmDelete() {
         store.currentServer?.name || t('gowaServers.title', 'GOWA Servers')
       "
       :icon="Server"
-      icon-gradient="bg-gradient-to-br from-blue-500 to-indigo-600 shadow-blue-500/20"
+      icon-gradient="bg-gradient-to-br from-emerald-500 to-green-600 shadow-emerald-500/20"
       back-link="/settings/gowa-servers"
       :breadcrumbs="breadcrumbs"
     >
@@ -453,7 +453,7 @@ async function confirmDelete() {
         <Button
           v-if="canWriteDevices"
           size="sm"
-          class="bg-blue-600 hover:bg-blue-700 text-white"
+          class="bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-sm"
           @click="openCreate"
         >
           <Plus class="h-4 w-4 mr-1.5" />
@@ -540,7 +540,8 @@ async function confirmDelete() {
                     </Badge>
                   </div>
 
-                  <div class="flex flex-wrap gap-1.5">
+                  <!-- Primary actions: connection lifecycle + delete (most important per device) -->
+                  <div class="flex flex-wrap items-center gap-1.5">
                     <Button
                       v-if="canWriteDevices && !d.is_connected"
                       size="sm"
@@ -570,51 +571,60 @@ async function confirmDelete() {
                       {{ $t("gowaServers.reconnect", "Reconnect") }}
                     </Button>
                     <Button
-                      v-if="canWriteDevices"
-                      size="sm"
-                      variant="ghost"
-                      @click="syncDevice(d)"
-                      :disabled="statusLoading"
-                    >
-                      <RefreshCcw class="h-3.5 w-3.5 mr-1" />
-                      {{ $t("gowaServers.sync", "Sync") }}
-                    </Button>
-                    <Button
-                      v-if="canWriteDevices && d.is_connected"
-                      size="sm"
-                      variant="ghost"
-                      @click="syncDeviceContacts(d)"
-                      :disabled="statusLoading"
-                    >
-                      <Contact class="h-3.5 w-3.5 mr-1" />
-                      {{ $t("gowaServers.syncContacts", "Sync Contacts") }}
-                    </Button>
-                    <Button
-                      v-if="canWriteDevices && d.is_connected"
-                      size="sm"
-                      variant="ghost"
-                      @click="logout(d)"
-                    >
-                      <LogOut class="h-3.5 w-3.5 mr-1" />
-                      {{ $t("gowaServers.logout", "Logout") }}
-                    </Button>
-                    <Button
-                      v-if="canWriteDevices"
-                      size="sm"
-                      variant="ghost"
-                      @click="openWebhook(d)"
-                    >
-                      <Webhook class="h-3.5 w-3.5 mr-1" />
-                      {{ $t("gowaServers.webhook", "Webhook") }}
-                    </Button>
-                    <Button
                       v-if="canDeleteDevices"
                       size="sm"
                       variant="ghost"
-                      class="text-destructive"
+                      class="text-destructive hover:bg-destructive/10 ml-auto"
                       @click="openDelete(d)"
                     >
                       <Trash2 class="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+
+                  <!-- Secondary actions: sync, webhook, logout (lower frequency) -->
+                  <div
+                    v-if="canWriteDevices"
+                    class="flex flex-wrap items-center gap-1 pt-2 border-t border-border/40"
+                  >
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      class="h-7 px-2 text-xs text-muted-foreground"
+                      :disabled="statusLoading"
+                      @click="syncDevice(d)"
+                    >
+                      <DownloadCloud class="h-3 w-3 mr-1" />
+                      {{ $t("gowaServers.sync", "Sync") }}
+                    </Button>
+                    <Button
+                      v-if="d.is_connected"
+                      size="sm"
+                      variant="ghost"
+                      class="h-7 px-2 text-xs text-muted-foreground"
+                      :disabled="statusLoading"
+                      @click="syncDeviceContacts(d)"
+                    >
+                      <Contact class="h-3 w-3 mr-1" />
+                      {{ $t("gowaServers.syncContacts", "Sync Contacts") }}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      class="h-7 px-2 text-xs text-muted-foreground"
+                      @click="openWebhook(d)"
+                    >
+                      <Webhook class="h-3 w-3 mr-1" />
+                      {{ $t("gowaServers.webhook", "Webhook") }}
+                    </Button>
+                    <Button
+                      v-if="d.is_connected"
+                      size="sm"
+                      variant="ghost"
+                      class="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
+                      @click="logout(d)"
+                    >
+                      <LogOut class="h-3 w-3 mr-1" />
+                      {{ $t("gowaServers.logout", "Logout") }}
                     </Button>
                   </div>
                 </CardContent>
