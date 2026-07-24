@@ -317,16 +317,6 @@ const isCurrentAccountGowa = computed(() => {
   return acct?.provider_type === 'gowa'
 })
 
-// Service window state. The 24-hour customer-service window is a Meta Cloud
-// API restriction only — GOWA (multi-device) accounts can message freely at any
-// time, so the expired-window banner must never show for them.
-const isServiceWindowExpired = computed(() => {
-  const contact = contactsStore.currentContact
-  if (!contact) return false
-  if (isCurrentAccountGowa.value) return false
-  return contact.service_window_open === false
-})
-
 function openTemplatePicker() {
   const btn = templatePickerRef.value?.querySelector('button')
   btn?.click()
@@ -2058,6 +2048,9 @@ async function sendMediaMessage() {
                 <p class="flex-1 min-w-0 text-xs text-white/50 light:text-gray-500 truncate">
                   {{ contact.phone_number }}
                 </p>
+                <Badge v-if="contact.whatsapp_account" class="flex-shrink-0 h-4 text-[9px] bg-violet-500/20 text-violet-400 light:bg-violet-100 light:text-violet-700">
+                  {{ contact.whatsapp_account }}
+                </Badge>
                 <Badge v-if="contact.unread_count > 0" class="flex-shrink-0 h-5 text-[10px] bg-emerald-500/20 text-emerald-400 light:bg-emerald-100 light:text-emerald-700">
                   {{ contact.unread_count }}
                 </Badge>
@@ -2465,7 +2458,8 @@ async function sendMediaMessage() {
               <div
                 :class="[
                   'chat-bubble',
-                  message.direction === 'outgoing' ? 'chat-bubble-outgoing' : 'chat-bubble-incoming'
+                  message.direction === 'outgoing' ? 'chat-bubble-outgoing' : 'chat-bubble-incoming',
+                  message.status === 'revoked' && 'chat-bubble-revoked'
                 ]"
               >
                 <!-- Reply preview (if this message is replying to another) -->
@@ -2479,7 +2473,7 @@ async function sendMediaMessage() {
                 <!-- Revoked (delete-for-everyone) placeholder. Both the inbound
                      message.revoked webhook and the outbound revoke handler set
                      status "revoked", so a single render path covers both. -->
-                <span v-if="message.status === 'revoked'" class="block italic text-muted-foreground">
+                <span v-if="message.status === 'revoked'" class="block italic text-red-400 light:text-red-500">
                   <Ban class="inline h-3 w-3 mr-1 align-text-bottom" />
                   {{ $t('chat.messageRevokedPlaceholder') }}
                 </span>
@@ -2844,18 +2838,6 @@ async function sendMediaMessage() {
             <div ref="messagesEndRef" />
           </div>
         </ScrollArea>
-        </div>
-
-        <!-- Service window expired banner -->
-        <div
-          v-if="isServiceWindowExpired"
-          class="px-4 py-2.5 border-t border-red-500/20 bg-red-500/10 flex items-center gap-2"
-        >
-          <Clock class="h-4 w-4 text-red-500 shrink-0" />
-          <span class="text-sm text-red-500 flex-1">{{ $t('chat.serviceWindowExpired') }}</span>
-          <Button variant="outline" size="sm" class="border-red-500/30 text-red-500 hover:bg-red-500/10 shrink-0" @click="openTemplatePicker">
-            {{ $t('chat.sendTemplateAction') }}
-          </Button>
         </div>
 
         <!-- Reply indicator -->

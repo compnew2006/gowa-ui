@@ -33,6 +33,7 @@ export interface Contact {
   whatsapp_account?: string
   marketing_opt_out?: boolean
   is_group_chat?: boolean
+  is_newsletter?: boolean
   chat_status?: 'pending' | 'open' | 'closed'
   collaborators?: Collaborator[]
   created_at: string
@@ -109,6 +110,11 @@ export const useContactsStore = defineStore('contacts', () => {
   const hasMoreMessages = ref(false)
   const searchQuery = ref('')
   const selectedTags = ref<string[]>([])
+  // Sidebar visibility toggles. Default false (show everything) preserves the
+  // pre-existing behavior. Toggling true hides the matching chats from the
+  // sortedContacts list (and thus from the sidebar).
+  const hideGroupChats = ref(false)
+  const hideNewsletterChats = ref(false)
   const replyingTo = ref<Message | null>(null)
   const accountFilter = ref<string | null>(null)
 
