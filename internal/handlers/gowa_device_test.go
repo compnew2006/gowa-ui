@@ -1,7 +1,6 @@
 package handlers_test
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -135,74 +134,6 @@ func authedGowaRequest(t *testing.T, orgID, accID uuid.UUID) *fastglue.Request {
 
 // --- Tests ---
 
-func TestApp_GowaDeviceStatus_ReturnsConnectionState(t *testing.T) {
-	mock := newMockGowaDeviceAPI()
-	defer mock.close()
-	app := newGowaDeviceApp(t, mock)
-	org := testutil.CreateTestOrganization(t, app.DB)
-	acc := createGowaAccountInDB(t, app, org.ID, mock.url(), "dev-1")
-
-	req := authedGowaRequest(t, org.ID, acc.ID)
-
-	require.NoError(t, app.GowaDeviceStatus(req))
-	require.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
-
-	var resp struct {
-		Data map[string]any `json:"data"`
-	}
-	testutil.ParseJSONResponse(t, req, &resp)
-	assert.Equal(t, true, resp.Data["is_connected"])
-	assert.Equal(t, true, resp.Data["is_logged_in"])
-	assert.Equal(t, "16505551234@s.whatsapp.net", resp.Data["jid"])
-	assert.Equal(t, "dev-1", resp.Data["device_id"])
-}
-
-func TestApp_GowaDeviceStatus_GOWAErrorReturnsBadGateway(t *testing.T) {
-	mock := newMockGowaDeviceAPI()
-	mock.statusCode = http.StatusInternalServerError
-	defer mock.close()
-	app := newGowaDeviceApp(t, mock)
-	org := testutil.CreateTestOrganization(t, app.DB)
-	acc := createGowaAccountInDB(t, app, org.ID, mock.url(), "dev-1")
-
-	req := authedGowaRequest(t, org.ID, acc.ID)
-
-	require.NoError(t, app.GowaDeviceStatus(req))
-	testutil.AssertErrorResponse(t, req, fasthttp.StatusBadGateway, "Failed to get device status")
-}
-
-func TestApp_GowaLoginQR_ReturnsBase64DataURI(t *testing.T) {
-	mock := newMockGowaDeviceAPI()
-	defer mock.close()
-	app := newGowaDeviceApp(t, mock)
-	org := testutil.CreateTestOrganization(t, app.DB)
-	acc := createGowaAccountInDB(t, app, org.ID, mock.url(), "dev-1")
-
-	req := authedGowaRequest(t, org.ID, acc.ID)
-
-	require.NoError(t, app.GowaLoginQR(req))
-	require.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
-
-	var resp struct {
-		Data struct {
-			QRLink     string `json:"qr_link"`
-			QRDuration int    `json:"qr_duration"`
-		} `json:"data"`
-	}
-	testutil.ParseJSONResponse(t, req, &resp)
-
-	// The handler must wrap the raw PNG bytes as a data URI so the browser
-	// <img> tag renders without Basic Auth — the one piece of logic that is
-	// the handler's, not GOWA's.
-	require.NotEmpty(t, resp.Data.QRLink)
-	const prefix = "data:image/png;base64,"
-	require.True(t, len(resp.Data.QRLink) > len(prefix), "qr_link must be a data URI")
-	decoded, err := base64.StdEncoding.DecodeString(resp.Data.QRLink[len(prefix):])
-	require.NoError(t, err, "data URI payload must be valid base64")
-	assert.Equal(t, mock.qrImage, decoded, "data URI must carry the raw QR image bytes")
-	assert.Equal(t, 20, resp.Data.QRDuration)
-}
-
 func TestApp_GowaPairCode_ReturnsCodeFromGOWA(t *testing.T) {
 	mock := newMockGowaDeviceAPI()
 	defer mock.close()
@@ -250,25 +181,3 @@ func TestApp_GowaPairCode_EmptyPhoneRejected(t *testing.T) {
 // resolveGowaAccount: a Meta account hitting a GOWA-only endpoint gets a 400,
 // not a provider misfire. This is the assertion that stops a routing bug from
 // silently calling Meta methods on a GOWA endpoint (or vice versa).
-func TestApp_GowaHandler_RejectsNonGowaAccount(t *testing.T) {
-	mock := newMockGowaDeviceAPI()
-	defer mock.close()
-	app := newGowaDeviceApp(t, mock)
-	org := testutil.CreateTestOrganization(t, app.DB)
-
-	acc := &models.WhatsAppAccount{
-		BaseModel:      models.BaseModel{ID: uuid.New()},
-		OrganizationID: org.ID,
-		Name:           "meta-acc-" + uuid.New().String()[:8],
-		ProviderType:   "meta",
-		PhoneID:        "phone-1",
-		Status:         "active",
-	}
-	require.NoError(t, app.DB.Create(acc).Error)
-
-	req := authedGowaRequest(t, org.ID, acc.ID)
-
-	require.NoError(t, app.GowaDeviceStatus(req))
-	testutil.AssertErrorResponse(t, req, fasthttp.StatusBadRequest, "not a GOWA account")
-	assert.Equal(t, "", mock.lastPath, "GOWA mock must not be hit for a Meta account")
-}

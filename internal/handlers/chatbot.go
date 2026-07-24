@@ -1345,55 +1345,8 @@ func (a *App) DeleteAIContext(r *fastglue.Request) error {
 }
 
 // ListChatbotSessions lists chatbot sessions
-func (a *App) ListChatbotSessions(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
-	}
-
-	status := string(r.RequestCtx.QueryArgs().Peek("status"))
-
-	query := a.DB.Where("organization_id = ?", orgID).
-		Preload("Contact").
-		Order("last_activity_at DESC")
-
-	if status != "" {
-		query = query.Where("status = ?", status)
-	}
-
-	var sessions []models.ChatbotSession
-	if err := query.Limit(100).Find(&sessions).Error; err != nil {
-		a.Log.Error("Failed to fetch sessions", "error", err)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to fetch sessions", nil, "")
-	}
-
-	return r.SendEnvelope(map[string]any{
-		"sessions": sessions,
-	})
-}
 
 // GetChatbotSession gets a single chatbot session with messages
-func (a *App) GetChatbotSession(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
-	}
-
-	id, err := parsePathUUID(r, "id", "session")
-	if err != nil {
-		return nil
-	}
-
-	var session models.ChatbotSession
-	if err := a.DB.Where("id = ? AND organization_id = ?", id, orgID).
-		Preload("Contact").
-		Preload("Messages").
-		First(&session).Error; err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Session not found", nil, "")
-	}
-
-	return r.SendEnvelope(session)
-}
 
 // getChatbotStats returns chatbot statistics for an organization
 func (a *App) getChatbotStats(orgID uuid.UUID) ChatbotStatsResponse {

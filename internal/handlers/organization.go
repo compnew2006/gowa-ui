@@ -370,24 +370,6 @@ func (a *App) ListOrganizations(r *fastglue.Request) error {
 }
 
 // GetCurrentOrganization returns the current user's organization details
-func (a *App) GetCurrentOrganization(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
-	}
-
-	var org models.Organization
-	if err := a.DB.Where("id = ?", orgID).First(&org).Error; err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Organization not found", nil, "")
-	}
-
-	return r.SendEnvelope(OrganizationResponse{
-		ID:        org.ID,
-		Name:      org.Name,
-		Slug:      org.Slug,
-		CreatedAt: org.CreatedAt.Format("2006-01-02T15:04:05Z"),
-	})
-}
 
 // CreateOrganizationRequest represents the request body for creating an organization
 type CreateOrganizationRequest struct {
@@ -505,41 +487,6 @@ type MemberResponse struct {
 }
 
 // ListOrganizationMembers returns all members of the current organization
-func (a *App) ListOrganizationMembers(r *fastglue.Request) error {
-	orgID, _, err := a.requireAuth(r, models.ResourceOrganizations, models.ActionRead)
-	if err != nil {
-		return nil
-	}
-
-	pg := parsePagination(r)
-	search := string(r.RequestCtx.QueryArgs().Peek("search"))
-
-	baseQuery := a.DB.Table("user_organizations").
-		Joins("LEFT JOIN users ON users.id = user_organizations.user_id AND users.deleted_at IS NULL").
-		Joins("LEFT JOIN custom_roles ON custom_roles.id = user_organizations.role_id AND custom_roles.deleted_at IS NULL").
-		Where("user_organizations.organization_id = ? AND user_organizations.deleted_at IS NULL", orgID)
-
-	if search != "" {
-		baseQuery = baseQuery.Where("users.full_name ILIKE ? OR users.email ILIKE ?", "%"+search+"%", "%"+search+"%")
-	}
-
-	var total int64
-	baseQuery.Count(&total)
-
-	var response []MemberResponse
-	if err := pg.Apply(baseQuery.
-		Select(`user_organizations.id, user_organizations.user_id, user_organizations.organization_id,
-			user_organizations.role_id, user_organizations.is_default, user_organizations.created_at,
-			users.email, users.full_name, users.is_active,
-			custom_roles.name AS role_name`).
-		Order("user_organizations.created_at DESC")).
-		Scan(&response).Error; err != nil {
-		a.Log.Error("Failed to list organization members", "error", err)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to list members", nil, "")
-	}
-
-	return r.SendEnvelope(listEnvelope("members", response, total, pg))
-}
 
 // AddMemberRequest represents the request body for adding a member to an organization
 type AddMemberRequest struct {
@@ -616,37 +563,6 @@ func (a *App) AddOrganizationMember(r *fastglue.Request) error {
 }
 
 // RemoveOrganizationMember removes a user from the current organization
-func (a *App) RemoveOrganizationMember(r *fastglue.Request) error {
-	orgID, userID, err := a.requireAuth(r, models.ResourceOrganizations, models.ActionAssign)
-	if err != nil {
-		return nil
-	}
-
-	targetUserID, err := parsePathUUID(r, "member_id", "member")
-	if err != nil {
-		return nil
-	}
-
-	// Cannot remove self
-	if targetUserID == userID {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Cannot remove yourself from the organization", nil, "")
-	}
-
-	result := a.DB.Where("user_id = ? AND organization_id = ?", targetUserID, orgID).
-		Delete(&models.UserOrganization{})
-	if result.Error != nil {
-		a.Log.Error("Failed to remove organization member", "error", result.Error)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to remove member", nil, "")
-	}
-	if result.RowsAffected == 0 {
-		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Member not found in this organization", nil, "")
-	}
-
-	// Invalidate removed user's permission cache
-	a.InvalidateUserPermissionsCache(targetUserID)
-
-	return r.SendEnvelope(map[string]string{"message": "Member removed successfully"})
-}
 
 // UpdateMemberRoleRequest represents the request body for updating a member's role
 type UpdateMemberRoleRequest struct {
@@ -654,46 +570,3 @@ type UpdateMemberRoleRequest struct {
 }
 
 // UpdateOrganizationMemberRole updates a member's role in the current organization
-func (a *App) UpdateOrganizationMemberRole(r *fastglue.Request) error {
-	orgID, _, err := a.requireAuth(r, models.ResourceOrganizations, models.ActionAssign)
-	if err != nil {
-		return nil
-	}
-
-	targetUserID, err := parsePathUUID(r, "member_id", "member")
-	if err != nil {
-		return nil
-	}
-
-	var req UpdateMemberRoleRequest
-	if err := a.decodeRequest(r, &req); err != nil {
-		return nil
-	}
-
-	if req.RoleID == uuid.Nil {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "role_id is required", nil, "")
-	}
-
-	// Validate role exists and belongs to org
-	var role models.CustomRole
-	if err := a.DB.Where("id = ? AND organization_id = ?", req.RoleID, orgID).First(&role).Error; err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid role", nil, "")
-	}
-
-	// Update the user's role in this org
-	result := a.DB.Model(&models.UserOrganization{}).
-		Where("user_id = ? AND organization_id = ?", targetUserID, orgID).
-		Update("role_id", req.RoleID)
-	if result.Error != nil {
-		a.Log.Error("Failed to update member role", "error", result.Error)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update member role", nil, "")
-	}
-	if result.RowsAffected == 0 {
-		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Member not found in this organization", nil, "")
-	}
-
-	// Invalidate permission cache
-	a.InvalidateUserPermissionsCache(targetUserID)
-
-	return r.SendEnvelope(map[string]string{"message": "Member role updated successfully"})
-}

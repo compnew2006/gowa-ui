@@ -236,61 +236,6 @@ func TestApp_UpdateOrganizationSettings_InvalidJSON(t *testing.T) {
 
 // --- GetCurrentOrganization Tests ---
 
-func TestApp_GetCurrentOrganization_Success(t *testing.T) {
-	t.Parallel()
-
-	app := newTestApp(t)
-	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("get-current-org")))
-
-	req := testutil.NewGETRequest(t)
-	testutil.SetAuthContext(req, org.ID, user.ID)
-
-	err := app.GetCurrentOrganization(req)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
-
-	var resp struct {
-		Data handlers.OrganizationResponse `json:"data"`
-	}
-	err = json.Unmarshal(testutil.GetResponseBody(req), &resp)
-	require.NoError(t, err)
-
-	assert.Equal(t, org.ID, resp.Data.ID)
-	assert.Equal(t, org.Name, resp.Data.Name)
-	assert.Equal(t, org.Slug, resp.Data.Slug)
-	assert.NotEmpty(t, resp.Data.CreatedAt)
-}
-
-func TestApp_GetCurrentOrganization_Unauthorized(t *testing.T) {
-	t.Parallel()
-
-	app := newTestApp(t)
-
-	req := testutil.NewGETRequest(t)
-	// No auth context set
-
-	err := app.GetCurrentOrganization(req)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusUnauthorized, testutil.GetResponseStatusCode(req))
-}
-
-func TestApp_GetCurrentOrganization_NotFound(t *testing.T) {
-	t.Parallel()
-
-	app := newTestApp(t)
-	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("get-org-404")))
-
-	// Set auth context with a non-existent organization ID
-	req := testutil.NewGETRequest(t)
-	testutil.SetAuthContext(req, uuid.New(), user.ID)
-
-	err := app.GetCurrentOrganization(req)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusNotFound, testutil.GetResponseStatusCode(req))
-}
-
 // --- Calling Config in Organization Settings Tests ---
 
 func TestApp_GetOrganizationSettings_CallingDefaults(t *testing.T) {

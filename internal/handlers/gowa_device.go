@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -55,49 +54,6 @@ func (a *App) resolveGowaAccount(r *fastglue.Request, orgID uuid.UUID) (gowaAcco
 // The QR image is fetched from GOWA and returned as a base64 data URI so the
 // browser can render it directly without needing Basic Auth credentials.
 // GET /api/accounts/{id}/gowa/qr
-func (a *App) GowaLoginQR(r *fastglue.Request) error {
-	orgID, _, err := a.requireAuth(r, models.ResourceDevices, models.ActionWrite)
-	if err != nil {
-		return nil
-	}
-
-	ga, ok := a.resolveGowaAccount(r, orgID)
-	if !ok {
-		return nil
-	}
-
-	ctx := context.Background()
-
-	// Check if device is already connected — don't fetch QR if it is.
-	status, err := ga.client.GetAppStatus(ctx, ga.account.GowaDeviceID)
-	if err == nil && status.IsConnected {
-		return r.SendEnvelope(map[string]any{
-			"already_connected": true,
-			"jid":               status.JID,
-		})
-	}
-
-	qr, err := ga.client.GetLoginQR(ctx, ga.account.GowaDeviceID)
-	if err != nil {
-		a.Log.Error("Failed to get GOWA login QR", "error", err, "account", ga.account.Name)
-		return r.SendErrorEnvelope(fasthttp.StatusBadGateway, "Failed to get QR code from GOWA", nil, "")
-	}
-
-	// Fetch the QR image through the GOWA client (which has Basic Auth) and
-	// return it as a data URI so the browser <img> tag doesn't need auth.
-	qrData, err := ga.client.DownloadMedia(ctx, qr.QRLink, "")
-	if err != nil {
-		a.Log.Error("Failed to download GOWA QR image", "error", err, "account", ga.account.Name)
-		return r.SendErrorEnvelope(fasthttp.StatusBadGateway, "Failed to download QR image", nil, "")
-	}
-
-	dataURI := fmt.Sprintf("data:image/png;base64,%s", base64.StdEncoding.EncodeToString(qrData))
-
-	return r.SendEnvelope(map[string]any{
-		"qr_link":     dataURI,
-		"qr_duration": qr.QRDuration,
-	})
-}
 
 // GowaPairCode requests a phone-code pairing for a GOWA device.
 // POST /api/accounts/{id}/gowa/pair-code  body: {"phone": "16505551234"}
@@ -232,28 +188,3 @@ func (a *App) GowaCreateDevice(r *fastglue.Request) error {
 
 // GowaDeviceStatus retrieves the connection status of a GOWA device.
 // GET /api/accounts/{id}/gowa/status
-func (a *App) GowaDeviceStatus(r *fastglue.Request) error {
-	orgID, _, err := a.requireAuth(r, models.ResourceDevices, models.ActionRead)
-	if err != nil {
-		return nil
-	}
-
-	ga, ok := a.resolveGowaAccount(r, orgID)
-	if !ok {
-		return nil
-	}
-
-	ctx := context.Background()
-	status, err := ga.client.GetAppStatus(ctx, ga.account.GowaDeviceID)
-	if err != nil {
-		a.Log.Error("Failed to get GOWA device status", "error", err, "account", ga.account.Name)
-		return r.SendErrorEnvelope(fasthttp.StatusBadGateway, "Failed to get device status from GOWA", nil, "")
-	}
-
-	return r.SendEnvelope(map[string]any{
-		"is_connected": status.IsConnected,
-		"is_logged_in": status.IsLoggedIn,
-		"device_id":    status.DeviceID,
-		"jid":          status.JID,
-	})
-}

@@ -699,21 +699,15 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	// Accounts
 	g.GET("/api/accounts", app.ListAccounts)
 	g.POST("/api/accounts", app.CreateAccount)
-	g.POST("/api/accounts/exchange-token", app.ExchangeToken) // Embedded signup
 	g.GET("/api/accounts/{id}", app.GetAccount)
 	g.PUT("/api/accounts/{id}", app.UpdateAccount)
 	g.DELETE("/api/accounts/{id}", app.DeleteAccount)
-	g.POST("/api/accounts/{id}/register", app.RegisterPhoneNumber) // Embedded signup manual/2fa registration
-	g.POST("/api/accounts/{id}/test", app.TestAccountConnection)
-	g.POST("/api/accounts/{id}/subscribe", app.SubscribeApp)
 	g.GET("/api/accounts/{id}/business_profile", app.GetBusinessProfile)
 	g.PUT("/api/accounts/{id}/business_profile", app.UpdateBusinessProfile)
 	g.POST("/api/accounts/{id}/business_profile/photo", app.UpdateProfilePicture)
 
 	// GOWA device management (QR code, pair code, connection status)
-	g.GET("/api/accounts/{id}/gowa/qr", app.GowaLoginQR)
 	g.POST("/api/accounts/{id}/gowa/pair-code", app.GowaPairCode)
-	g.GET("/api/accounts/{id}/gowa/status", app.GowaDeviceStatus)
 
 	// GOWA instance management (multi-instance dropdown + device provisioning)
 	g.GET("/api/gowa/instances", app.GowaInstances)
@@ -800,13 +794,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 
 	// Templates
 	g.GET("/api/templates", app.ListTemplates)
-	g.POST("/api/templates", app.CreateTemplate)
 	g.GET("/api/templates/{id}", app.GetTemplate)
-	g.PUT("/api/templates/{id}", app.UpdateTemplate)
-	g.DELETE("/api/templates/{id}", app.DeleteTemplate)
-	g.POST("/api/templates/sync", app.SyncTemplates)
-	g.POST("/api/templates/{id}/publish", app.SubmitTemplate)
-	g.POST("/api/templates/upload-media", app.UploadTemplateMedia)
 
 	// WhatsApp Flows
 	g.GET("/api/flows", app.ListFlows)
@@ -892,16 +880,9 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.POST("/api/canned-responses/{id}/use", app.IncrementCannedResponseUsage)
 
 	// Sessions (admin/debug)
-	g.GET("/api/chatbot/sessions", app.ListChatbotSessions)
-	g.GET("/api/chatbot/sessions/{id}", app.GetChatbotSession)
 
 	// Analytics
-	g.GET("/api/analytics/dashboard", app.GetDashboardStats)
-	g.GET("/api/analytics/messages", app.GetMessageAnalytics)
-	g.GET("/api/analytics/chatbot", app.GetChatbotAnalytics)
 	g.GET("/api/analytics/agents", app.GetAgentAnalytics)
-	g.GET("/api/analytics/agents/{id}", app.GetAgentDetails)
-	g.GET("/api/analytics/agents/comparison", app.GetAgentComparison)
 
 	// Widgets (customizable analytics)
 	g.GET("/api/widgets", app.ListWidgets)
@@ -922,11 +903,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	// Organizations
 	g.GET("/api/organizations", app.ListOrganizations)
 	g.POST("/api/organizations", app.CreateOrganization)
-	g.GET("/api/organizations/current", app.GetCurrentOrganization)
-	g.GET("/api/organizations/members", app.ListOrganizationMembers)
 	g.POST("/api/organizations/members", app.AddOrganizationMember)
-	g.PUT("/api/organizations/members/{member_id}", app.UpdateOrganizationMemberRole)
-	g.DELETE("/api/organizations/members/{member_id}", app.RemoveOrganizationMember)
 
 	// SSO Settings (admin only - enforced by middleware)
 	g.GET("/api/settings/sso", app.GetSSOSettings)
@@ -951,50 +928,18 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.GET("/api/custom-actions/redirect/{token}", app.CustomActionRedirect)
 
 	// IVR Flows
-	g.GET("/api/ivr-flows", app.ListIVRFlows)
-	g.GET("/api/ivr-flows/{id}", app.GetIVRFlow)
-	g.POST("/api/ivr-flows", app.CreateIVRFlow)
-	g.PUT("/api/ivr-flows/{id}", app.UpdateIVRFlow)
-	g.DELETE("/api/ivr-flows/{id}", app.DeleteIVRFlow)
-	g.POST("/api/ivr-flows/audio", app.UploadIVRAudio)
-	g.GET("/api/ivr-flows/audio/{filename}", app.ServeIVRAudio)
 
 	// Call Logs
-	g.GET("/api/call-logs", app.ListCallLogs)
-	g.GET("/api/call-logs/{id}", app.GetCallLog)
-	g.GET("/api/call-logs/{id}/recording", app.GetCallRecording)
 
 	// Call Transfers
-	g.GET("/api/call-transfers", app.ListCallTransfers)
-	g.GET("/api/call-transfers/{id}", app.GetCallTransfer)
-	g.POST("/api/call-transfers/{id}/connect", app.ConnectCallTransfer)
-	g.POST("/api/call-transfers/{id}/hangup", app.HangupCallTransfer)
-	g.POST("/api/call-transfers/initiate", app.InitiateAgentTransfer)
 
 	// Call Hold
-	g.POST("/api/call-logs/{id}/hold", app.HoldCall)
-	g.POST("/api/call-logs/{id}/resume", app.ResumeCall)
 
 	// Outgoing Calls
-	g.POST("/api/calls/outgoing", app.InitiateOutgoingCall)
-	g.POST("/api/calls/outgoing/{id}/hangup", app.HangupOutgoingCall)
-	g.POST("/api/calls/permission-request", app.SendCallPermissionRequest)
-	g.GET("/api/calls/permission/{contactId}", app.GetCallPermission)
-	g.GET("/api/calls/ice-servers", app.GetICEServers)
 
 	// Catalogs
-	g.GET("/api/catalogs", app.ListCatalogs)
-	g.POST("/api/catalogs", app.CreateCatalog)
-	g.GET("/api/catalogs/{id}", app.GetCatalog)
-	g.DELETE("/api/catalogs/{id}", app.DeleteCatalog)
-	g.POST("/api/catalogs/sync", app.SyncCatalogs)
 
 	// Catalog Products
-	g.GET("/api/catalogs/{id}/products", app.ListCatalogProducts)
-	g.POST("/api/catalogs/{id}/products", app.CreateCatalogProduct)
-	g.GET("/api/products/{id}", app.GetCatalogProduct)
-	g.PUT("/api/products/{id}", app.UpdateCatalogProduct)
-	g.DELETE("/api/products/{id}", app.DeleteCatalogProduct)
 
 	// Serve embedded frontend (SPA)
 	if frontend.IsEmbedded() {

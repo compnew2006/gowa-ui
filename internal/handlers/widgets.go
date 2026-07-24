@@ -1423,3 +1423,13 @@ func (a *App) getTableRows(orgID uuid.UUID, widget models.Widget, filters []Filt
 	}
 	return tableRows
 }
+
+func calculatePercentageChange(previous, current int64) float64 {
+	if previous == 0 {
+		if current > 0 {
+			return 100.0
+		}
+		return 0.0
+	}
+	return float64(current-previous) / float64(previous) * 100.0
+}

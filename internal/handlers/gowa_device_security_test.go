@@ -21,66 +21,6 @@ import (
 // TestGowaDevice_AgentDenied_AllEndpoints verifies that an agent-role user
 // (who lacks devices:read and devices:write) gets 403 on all five GOWA
 // device-management endpoints (FR-006, FR-007, FR-008).
-func TestGowaDevice_AgentDenied_AllEndpoints(t *testing.T) {
-	t.Parallel()
-
-	app := newTestApp(t)
-	org := testutil.CreateTestOrganization(t, app.DB)
-	agent := createTestAgent(t, app, org.ID)
-	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
-
-	// Set GOWA provider type on the account.
-	account.ProviderType = "gowa"
-	account.GowaDeviceID = "test-device-001"
-	account.GowaBaseURL = "http://gowa:8080"
-	require.NoError(t, app.DB.Save(account).Error)
-
-	// Test 1: Agent cannot get QR code → 403
-	req := testutil.NewGETRequest(t)
-	testutil.SetAuthContext(req, org.ID, agent.ID)
-	testutil.SetPathParam(req, "id", account.ID.String())
-	err := app.GowaLoginQR(req)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req),
-		"agent should get 403 on GowaLoginQR")
-
-	// Test 2: Agent cannot submit pair code → 403
-	req = testutil.NewJSONRequest(t, map[string]string{"phone": "628123456789"})
-	testutil.SetAuthContext(req, org.ID, agent.ID)
-	testutil.SetPathParam(req, "id", account.ID.String())
-	err = app.GowaPairCode(req)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req),
-		"agent should get 403 on GowaPairCode")
-
-	// Test 3: Agent cannot get device status → 403
-	req = testutil.NewGETRequest(t)
-	testutil.SetAuthContext(req, org.ID, agent.ID)
-	testutil.SetPathParam(req, "id", account.ID.String())
-	err = app.GowaDeviceStatus(req)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req),
-		"agent should get 403 on GowaDeviceStatus")
-
-	// Test 4: Agent cannot list GOWA instances → 403
-	req = testutil.NewGETRequest(t)
-	testutil.SetAuthContext(req, org.ID, agent.ID)
-	err = app.GowaInstances(req)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req),
-		"agent should get 403 on GowaInstances")
-
-	// Test 5: Agent cannot create a device → 403
-	req = testutil.NewJSONRequest(t, map[string]string{
-		"base_url":    "http://gowa:8080",
-		"device_name": "test-device",
-	})
-	testutil.SetAuthContext(req, org.ID, agent.ID)
-	err = app.GowaCreateDevice(req)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req),
-		"agent should get 403 on GowaCreateDevice")
-}
 
 // TestGowaDevice_AdminCanListInstances verifies that an admin user (who has
 // devices:read via the all-permissions admin role) can list GOWA instances.

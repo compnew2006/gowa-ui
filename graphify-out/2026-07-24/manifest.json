@@ -2465,9 +2465,9 @@
     "semantic_hash": "f82f0bc5780624a981e2df82ddc6238f"
   },
   "frontend/src/views/settings/GowaServerDetailView.vue": {
-    "mtime": 1784865892.1830373,
-    "ast_hash": "199468a276abc4b2cddcc1be2c8c5927",
-    "semantic_hash": "199468a276abc4b2cddcc1be2c8c5927"
+    "mtime": 1784866158.8707983,
+    "ast_hash": "1e86dbcb7f9f94e733aa2b50680b1abe",
+    "semantic_hash": ""
   },
   "frontend/src/views/settings/GowaServersView.vue": {
     "mtime": 1784864643.1722739,
@@ -2905,9 +2905,9 @@
     "semantic_hash": "ee81fd7672789ca108c8ac8ec75ec82c"
   },
   "internal/handlers/contacts.go": {
-    "mtime": 1784858135.9421816,
-    "ast_hash": "153d16aa98a1b2fe7d53fbff676f57fa",
-    "semantic_hash": "153d16aa98a1b2fe7d53fbff676f57fa"
+    "mtime": 1784866284.164029,
+    "ast_hash": "d88c0a090f81fe1dc97dc42f18182a2c",
+    "semantic_hash": ""
   },
   "internal/handlers/contacts_test.go": {
     "mtime": 1783960683.0,
@@ -4087,6 +4087,11 @@
   "frontend/public/favicon.svg": {
     "mtime": 1784764258.0,
     "ast_hash": "253725975a1d6359726208991181301f",
+    "semantic_hash": ""
+  },
+  "AGENTS.md": {
+    "mtime": 1784868975.4773495,
+    "ast_hash": "25aa3e2de65c52d5ae6279cb7e921ffa",
     "semantic_hash": ""
   }
 }
