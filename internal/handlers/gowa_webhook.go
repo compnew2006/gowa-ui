@@ -87,9 +87,16 @@ func (a *App) handleGowaWebhook(r *fastglue.Request, pathDeviceID string) error 
 	}
 
 	// Replay protection (FR-005): reject webhooks older than 5 minutes.
-	// For non-message events, the timestamp is in envelope.Timestamp (top-level).
-	// For message events, GOWA puts it inside the payload object, so we extract
-	// it from there before the replay check.
+	// For message events, GOWA puts the timestamp inside the payload object
+	// (not at the envelope level), so we peek into the payload to extract it
+	// before the replay check. For non-message events GOWA sometimes sends a
+	// top-level timestamp and sometimes omits it entirely — the production
+	// server has been observed omitting it for message.reaction / message.revoked
+	// / message.edited. When no timestamp is available at all, we skip the
+	// replay check rather than reject: the HMAC signature above already
+	// authenticates the sender, and these events are idempotent (a duplicate
+	// reaction / revoke / edit produces the same final state), so the residual
+	// replay risk is acceptable.
 	replayTS := envelope.Timestamp
 	if replayTS == "" && envelope.Event == "message" {
 		var msgPeek struct {
@@ -99,7 +106,11 @@ func (a *App) handleGowaWebhook(r *fastglue.Request, pathDeviceID string) error 
 			replayTS = msgPeek.Timestamp
 		}
 	}
-	if !gowa.CheckReplay(replayTS, 5*time.Minute) {
+	if replayTS == "" {
+		// No timestamp available — HMAC already authenticated the payload; accept it.
+		a.Log.Debug("GOWA webhook has no timestamp; accepting after HMAC verification",
+			"device_id", envelope.DeviceID, "event", envelope.Event)
+	} else if !gowa.CheckReplay(replayTS, 5*time.Minute) {
 		a.Log.Warn("Stale GOWA webhook rejected (replay)", "device_id", envelope.DeviceID, "timestamp", replayTS)
 		return r.SendEnvelope(map[string]string{"status": "ok"}) // 200 to prevent GOWA retries
 	}

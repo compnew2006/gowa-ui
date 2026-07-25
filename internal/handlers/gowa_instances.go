@@ -904,9 +904,19 @@ func (a *App) SyncGowaInstanceMessages(r *fastglue.Request) error {
 				Direction:         direction,
 				MessageType:       msgType,
 				Content:           content,
-				MediaURL:          m.URL,
-				MediaFilename:     m.Filename,
-				Status:            status,
+				// NOTE: MediaURL is intentionally left empty here. History sync
+				// gives us GOWA's server-side URL (m.URL), NOT a local file path —
+				// the bytes were never downloaded to disk. Writing m.URL into
+				// media_url would create a lying row: ServeMedia would try to serve
+				// a non-existent local file and 404. Instead, leave media_url empty
+				// so the row is honest ("no local media yet"), and let ServeMedia's
+				// auto-recovery lazily download the bytes via WhatsAppMessageID on
+				// first view. See internal/handlers/media.go ServeMedia for the
+				// recovery path. Stash the original GOWA URL in metadata as a
+				// fallback in case the message-ID-based recovery is unavailable.
+				MediaURL:      "",
+				MediaFilename: m.Filename,
+				Status:        status,
 			}
 			// Preserve the original timestamp via Metadata so the UI can render
 			// historical order even though created_at is now.
@@ -915,6 +925,11 @@ func (a *App) SyncGowaInstanceMessages(r *fastglue.Request) error {
 			}
 			msg.Metadata["synced_from_history"] = true
 			msg.Metadata["gowa_timestamp"] = m.Timestamp
+			if m.URL != "" {
+				// Keep GOWA's original URL for potential lazy recovery. Not used
+				// as a local path — only as a hint for future download attempts.
+				msg.Metadata["gowa_media_url"] = m.URL
+			}
 
 			if err := a.DB.Create(&msg).Error; err != nil {
 				a.Log.Error("Failed to store GOWA history message", "error", err, "msg_id", m.ID)

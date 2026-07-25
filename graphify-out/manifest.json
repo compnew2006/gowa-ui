@@ -2865,7 +2865,7 @@
     "semantic_hash": "e17237d71b343372cfa635696bc3fc1b"
   },
   "internal/handlers/chatbot_processor.go": {
-    "mtime": 1784861367.857396,
+    "mtime": 1784937341.6124084,
     "ast_hash": "00b0ebd8088674e75f18482b5d2c9ce4",
     "semantic_hash": "00b0ebd8088674e75f18482b5d2c9ce4"
   },
@@ -2955,9 +2955,9 @@
     "semantic_hash": "9f027bca64a28571619eac36c6b75d7e"
   },
   "internal/handlers/gowa_device_security_test.go": {
-    "mtime": 1784870892.5059505,
-    "ast_hash": "09629dce12b983f2162764c4e2a873f0",
-    "semantic_hash": "09629dce12b983f2162764c4e2a873f0"
+    "mtime": 1784937607.156631,
+    "ast_hash": "1b1dee8ca250a61be9074262e6d727cb",
+    "semantic_hash": ""
   },
   "internal/handlers/gowa_device_test.go": {
     "mtime": 1784870941.9193995,
@@ -2965,9 +2965,9 @@
     "semantic_hash": "40358f3f970bc2c95f9b0794f586cbef"
   },
   "internal/handlers/gowa_instances.go": {
-    "mtime": 1784861440.2092555,
-    "ast_hash": "f0896c5c16d25a6ad04715bd1cedee90",
-    "semantic_hash": "f0896c5c16d25a6ad04715bd1cedee90"
+    "mtime": 1784939194.5415268,
+    "ast_hash": "1f46ed09ab0119392372b9a14c17a1cf",
+    "semantic_hash": ""
   },
   "internal/handlers/gowa_instances_qr_test.go": {
     "mtime": 1784870858.4883559,
@@ -2980,9 +2980,9 @@
     "semantic_hash": "7be7251e51bb31fac76ad43bc102f701"
   },
   "internal/handlers/gowa_webhook.go": {
-    "mtime": 1784861477.0535872,
-    "ast_hash": "1f88404f97ca66dc7ff4fe589be718d6",
-    "semantic_hash": "1f88404f97ca66dc7ff4fe589be718d6"
+    "mtime": 1784937638.8951457,
+    "ast_hash": "fde0dfd37463bc1cf1feb774011e496d",
+    "semantic_hash": ""
   },
   "internal/handlers/gowa_webhook_test.go": {
     "mtime": 1784870858.488776,
@@ -4107,6 +4107,11 @@
   ".zcode/plans/plan-sess_7aae5d37-3202-4a0f-ba3e-6794a3f04ca2.md": {
     "mtime": 1784929926.6323874,
     "ast_hash": "a1f85f93bba489590f73555d7aea02ed",
+    "semantic_hash": ""
+  },
+  "internal/handlers/gowa_messages_sync_test.go": {
+    "mtime": 1784939168.3722465,
+    "ast_hash": "210f476c011519efbf30464ed249cca9",
     "semantic_hash": ""
   }
 }

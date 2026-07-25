@@ -354,3 +354,87 @@ func TestMediaZip_ExportPermission_Required(t *testing.T) {
 	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req),
 		"agent without contacts:export should get 403 on ZIP download")
 }
+
+// TestGowaWebhook_ReactionWithoutTimestamp_Accepted pins the fix for the
+// incoming-reaction bug: the production GOWA server sends message.reaction
+// (and message.revoked, message.edited) events WITHOUT a top-level `timestamp`
+// field and WITHOUT a timestamp inside the payload. The replay guard used to
+// reject these as "stale replay" (treating empty as stale), silently dropping
+// every inbound reaction.
+//
+// Regression contract: a reaction webhook with a valid HMAC signature but NO
+// timestamp anywhere must reach the dispatch path so processGowaReaction runs
+// and the reaction is persisted to the target message's metadata.
+//
+// We assert the SIDE EFFECT (the reaction is written to the seeded message's
+// metadata), because the accept path and the replay-reject path both return
+// the same HTTP 200 + {status:"ok"} envelope (line 115 vs line 139 of
+// gowa_webhook.go) — body shape does not distinguish them.
+func TestGowaWebhook_ReactionWithoutTimestamp_Accepted(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	secret := gowa.GenerateWebhookSecret()
+	account := &models.WhatsAppAccount{
+		BaseModel:         models.BaseModel{ID: uuid.New()},
+		OrganizationID:    org.ID,
+		Name:              "reaction-no-ts-account",
+		ProviderType:      "gowa",
+		GowaDeviceID:      "reaction-no-ts-dev",
+		GowaWebhookSecret: secret,
+		Status:            "active",
+	}
+	require.NoError(t, app.DB.Create(account).Error)
+
+	// Seed a contact + a message that the reaction will target. The reacted
+	// id in the webhook payload must match this message's whats_app_message_id.
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+	targetMsg := &models.Message{
+		BaseModel:           models.BaseModel{ID: uuid.New()},
+		OrganizationID:      org.ID,
+		ContactID:           contact.ID,
+		WhatsAppAccount:     account.Name,
+		Direction:           models.DirectionIncoming,
+		MessageType:         models.MessageTypeText,
+		Content:             "hello",
+		Status:              models.MessageStatusDelivered,
+		WhatsAppMessageID:   "REACTION_TARGET_MSG_001",
+	}
+	require.NoError(t, app.DB.Create(targetMsg).Error)
+
+	// Reaction payload with NO timestamp anywhere — mirrors production GOWA.
+	// Envelope has no top-level `timestamp`; payload has no `timestamp` field.
+	body := `{"event":"message.reaction","device_id":"reaction-no-ts-dev","payload":{"reaction":"👍","reacted_message_id":"REACTION_TARGET_MSG_001","from":"201234567890@s.whatsapp.net","chat_id":"201234567890@s.whatsapp.net"}}`
+
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(body))
+	sig := "sha256=" + hex.EncodeToString(mac.Sum(nil))
+
+	req := testutil.NewJSONRequest(t, nil)
+	req.RequestCtx.Request.SetBody([]byte(body))
+	req.RequestCtx.Request.Header.Set("X-Hub-Signature-256", sig)
+
+	err := app.GowaWebhookHandler(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req),
+		"reaction webhook must be accepted (HMAC valid, no timestamp tolerated)")
+
+	// processGowaReaction runs in a goroutine and writes the reaction to the
+	// message's metadata. Poll for it (the write is async).
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		var fresh models.Message
+		require.NoError(t, app.DB.First(&fresh, "id = ?", targetMsg.ID).Error)
+		rawReactions := fresh.Metadata["reactions"]
+		if rawReactions != nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("reaction was not persisted to message metadata within 2s — " +
+				"the webhook was likely rejected at the replay guard")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
