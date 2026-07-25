@@ -117,18 +117,18 @@ export const useContactsStore = defineStore('contacts', () => {
   const replyingTo = ref<Message | null>(null)
   const accountFilter = ref<string | null>(null)
 
-  // Pending/Me/All tab selector for the chat sidebar. Persisted to localStorage
-  // (M2) so the agent's preference survives reloads. 'all' is admin/manager-only.
-  // Default falls back to the stored value if it is still valid for the user's
-  // current role; otherwise 'pending' (the unassigned queue — the entry point
-  // for picking up work per the original requirement).
-  const VALID_TABS = ['pending', 'me', 'all'] as const
+  // Me/Pending tab selector for the chat sidebar. Persisted to localStorage
+  // (M2) so the agent's preference survives reloads. Default falls back to the
+  // stored value if it is still valid; otherwise 'me' (the agent's own
+  // conversations — the primary working surface; 'pending' is the unassigned
+  // queue for picking up new work).
+  const VALID_TABS = ['me', 'pending'] as const
   type ListTab = typeof VALID_TABS[number]
   function loadStoredTab(): ListTab {
     const stored = typeof localStorage !== 'undefined'
       ? localStorage.getItem('whatomate.chat.activeListTab') as ListTab | null
       : null
-    return stored && (VALID_TABS as readonly string[]).includes(stored) ? stored : 'pending'
+    return stored && (VALID_TABS as readonly string[]).includes(stored) ? stored : 'me'
   }
   const activeListTab = ref<ListTab>(loadStoredTab())
   // Persist tab choice (M2). `watch` re-fires on every change, so the stored
@@ -165,7 +165,7 @@ export const useContactsStore = defineStore('contacts', () => {
     })
   })
 
-  // ─── Pending / Me / All tab membership (client-side filtering per D4) ───
+  // ─── Pending / Me tab membership (client-side filtering per D4) ───
   // Membership is derived from ASSIGNMENT (the source of truth) plus the explicit
   // `chat_status` for the closed-state check. The backend's EffectiveStatus()
   // defaults to "open" for legacy rows that never had chat_status set, so a
@@ -173,32 +173,19 @@ export const useContactsStore = defineStore('contacts', () => {
   // unassigned chats. We therefore treat "pending" as `!assigned && !closed`.
   //   pending → not assigned to anyone AND not closed (awaiting a claim)
   //   me      → assigned to the current user (closed or not — owner sees their own)
-  //   all     → every contact regardless of assignment (admin/manager only, M1).
-  //             Chats assigned to OTHER agents live here, tagged with the agent.
   const pendingContacts = computed(() =>
     sortedContacts.value.filter(c => !c.assigned_user_id && c.chat_status !== 'closed')
   )
   const myContacts = computed(() =>
     sortedContacts.value.filter(c => c.assigned_user_id === authStore.user?.id)
   )
-  const allContacts = computed(() => sortedContacts.value)
   const pendingCount = computed(() => pendingContacts.value.length)
   const myCount = computed(() => myContacts.value.length)
-  const allCount = computed(() => allContacts.value.length)
-
-  // When the active tab becomes invalid for the user's role (e.g. they were on
-  // 'all' and lost admin), fall back to 'pending'. This is reactive, so a
-  // role change immediately corrects the tab without a reload.
-  const canSeeAllTab = computed(() => authStore.hasPermission('contacts', 'write'))
-  watch(canSeeAllTab, (allowed) => {
-    if (!allowed && activeListTab.value === 'all') activeListTab.value = 'pending'
-  })
 
   // The list to render in the sidebar for the active tab.
   const displayedContacts = computed(() => {
     switch (activeListTab.value) {
       case 'me': return myContacts.value
-      case 'all': return canSeeAllTab.value ? allContacts.value : pendingContacts.value
       case 'pending':
       default: return pendingContacts.value
     }
@@ -239,17 +226,14 @@ export const useContactsStore = defineStore('contacts', () => {
     if (!r.length) return null
     const inPending = r.some(c => !c.assigned_user_id && c.chat_status !== 'closed')
     const inMe = r.some(c => c.assigned_user_id === authStore.user?.id)
-    const inOthers = r.some(c => c.assigned_user_id && c.assigned_user_id !== authStore.user?.id)
     const current = activeListTab.value
     const currentHasHits =
       (current === 'pending' && inPending) ||
-      (current === 'me' && inMe) ||
-      (current === 'all')
+      (current === 'me' && inMe)
     if (currentHasHits) return null
     const tabs: ListTab[] = []
-    if (inPending) tabs.push('pending')
     if (inMe) tabs.push('me')
-    if (inOthers && canSeeAllTab.value) tabs.push('all')
+    if (inPending) tabs.push('pending')
     return { show: tabs.length > 0, tabs }
   })
 
@@ -798,15 +782,12 @@ export const useContactsStore = defineStore('contacts', () => {
     replyingTo,
     filteredContacts,
     sortedContacts,
-    // Pending / Me / All tabs
+    // Pending / Me tabs
     activeListTab,
     pendingContacts,
     myContacts,
-    allContacts,
     pendingCount,
     myCount,
-    allCount,
-    canSeeAllTab,
     displayedContacts,
     // Cross-tab search (M3)
     visibleContacts,

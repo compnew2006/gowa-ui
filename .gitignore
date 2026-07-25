@@ -36,6 +36,7 @@ frontend/dist/
 frontend/.env.local
 frontend/.env.*.local
 .playwright-mcp/
+graphify-out/
 # Playwright
 frontend/playwright-report/
 frontend/test-results/

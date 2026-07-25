@@ -474,14 +474,14 @@ async function handleReopen() {
   }
 }
 
-// ─── Pending/Me/All tab keyboard navigation (M5 a11y) ───
+// ─── Pending/Me tab keyboard navigation (M5 a11y) ───
 // Arrow Left/Right move focus between tabs and activate them, mirroring the
 // WAI-ARIA tabs pattern. Home/End jump to first/last. The roving tabindex on
 // the buttons themselves handles the rest.
 const tabStripRef = ref<HTMLElement | null>(null)
-const TAB_ORDER: Array<'pending' | 'me' | 'all'> = ['pending', 'me', 'all']
-function visibleTabOrder(): Array<'pending' | 'me' | 'all'> {
-  return TAB_ORDER.filter(t => t !== 'all' || contactsStore.canSeeAllTab)
+const TAB_ORDER = ['me', 'pending'] as const
+function visibleTabOrder(): Array<'pending' | 'me'> {
+  return [...TAB_ORDER]
 }
 function onTabKeydown(e: KeyboardEvent) {
   const order = visibleTabOrder()
@@ -500,10 +500,8 @@ function onTabKeydown(e: KeyboardEvent) {
     el?.focus()
   })
 }
-function tabLabel(tab: 'pending' | 'me' | 'all'): string {
-  return tab === 'pending' ? t('chat.tabPending')
-    : tab === 'me' ? t('chat.tabMe')
-    : t('chat.tabAll')
+function tabLabel(tab: 'pending' | 'me'): string {
+  return tab === 'pending' ? t('chat.tabPending') : t('chat.tabMe')
 }
 
 // Bulk release (M4). Wraps the store action with the standard try/catch +
@@ -2188,41 +2186,38 @@ async function sendMediaMessage() {
           </label>
         </div>
 
-        <!-- Pending / Me / All tab strip — drives the sidebar list.
-             All tab is admin/manager-only (M1) and shows chats assigned to other
-             agents too. Full a11y (M5): role=tablist + arrow-key navigation. -->
+        <!-- Pending / Me tab strip — drives the sidebar list.
+             Full a11y (M5): role=tablist + arrow-key navigation. -->
         <div
           ref="tabStripRef"
           role="tablist"
           aria-label="$t('chat.conversationTabs')"
-          class="grid gap-1 rounded-lg bg-white/[0.04] light:bg-gray-100 p-1 mt-2"
-          :class="contactsStore.canSeeAllTab ? 'grid-cols-3' : 'grid-cols-2'"
+          class="grid grid-cols-2 gap-1 rounded-lg bg-white/[0.04] light:bg-gray-100 p-1 mt-2"
           @keydown="onTabKeydown"
         >
           <button
-            v-if="contactsStore.canSeeAllTab"
             type="button"
             role="tab"
-            :id="'tab-all'"
-            :aria-selected="contactsStore.activeListTab === 'all'"
-            :tabindex="contactsStore.activeListTab === 'all' ? 0 : -1"
+            :id="'tab-me'"
+            :aria-selected="contactsStore.activeListTab === 'me'"
+            :tabindex="contactsStore.activeListTab === 'me' ? 0 : -1"
             :class="[
               'rounded-md py-1.5 text-xs font-medium whitespace-nowrap transition-all inline-flex items-center justify-center gap-1.5',
-              contactsStore.activeListTab === 'all'
+              contactsStore.activeListTab === 'me'
                 ? 'bg-emerald-600 text-white shadow-sm'
                 : 'text-white/60 hover:text-white/90 hover:bg-white/[0.06] light:text-gray-600 light:hover:text-gray-800 light:hover:bg-gray-200'
             ]"
-            @click="contactsStore.activeListTab = 'all'"
+            @click="contactsStore.activeListTab = 'me'"
           >
-            {{ $t('chat.tabAll') }}
+            {{ $t('chat.tabMe') }}
             <span
               :class="[
                 'inline-flex items-center justify-center min-w-[1.25rem] h-4 px-1 rounded-full text-[10px] font-semibold tabular-nums',
-                contactsStore.activeListTab === 'all'
+                contactsStore.activeListTab === 'me'
                   ? 'bg-white/25 text-white'
                   : 'bg-white/[0.08] text-white/60 light:bg-gray-300 light:text-gray-700'
               ]"
-            >{{ contactsStore.allCount }}</span>
+            >{{ contactsStore.myCount }}</span>
           </button>
           <button
             type="button"
@@ -2247,30 +2242,6 @@ async function sendMediaMessage() {
                   : 'bg-white/[0.08] text-white/60 light:bg-gray-300 light:text-gray-700'
               ]"
             >{{ contactsStore.pendingCount }}</span>
-          </button>
-          <button
-            type="button"
-            role="tab"
-            :id="'tab-me'"
-            :aria-selected="contactsStore.activeListTab === 'me'"
-            :tabindex="contactsStore.activeListTab === 'me' ? 0 : -1"
-            :class="[
-              'rounded-md py-1.5 text-xs font-medium whitespace-nowrap transition-all inline-flex items-center justify-center gap-1.5',
-              contactsStore.activeListTab === 'me'
-                ? 'bg-emerald-600 text-white shadow-sm'
-                : 'text-white/60 hover:text-white/90 hover:bg-white/[0.06] light:text-gray-600 light:hover:text-gray-800 light:hover:bg-gray-200'
-            ]"
-            @click="contactsStore.activeListTab = 'me'"
-          >
-            {{ $t('chat.tabMe') }}
-            <span
-              :class="[
-                'inline-flex items-center justify-center min-w-[1.25rem] h-4 px-1 rounded-full text-[10px] font-semibold tabular-nums',
-                contactsStore.activeListTab === 'me'
-                  ? 'bg-white/25 text-white'
-                  : 'bg-white/[0.08] text-white/60 light:bg-gray-300 light:text-gray-700'
-              ]"
-            >{{ contactsStore.myCount }}</span>
           </button>
         </div>
       </div>
@@ -2342,10 +2313,10 @@ async function sendMediaMessage() {
               <div class="flex items-center justify-between gap-2">
                 <p class="flex-1 min-w-0 text-xs text-white/50 light:text-gray-500 truncate flex items-center gap-1">
                   {{ contact.phone_number }}
-                  <!-- M1: assigned-agent tag. Shows on the 'all' tab (and anywhere
-                       a chat is assigned to someone other than the viewer) so an
-                       admin can see who owns each conversation at a glance, and a
-                       fellow agent can see who to collaborate with. -->
+                  <!-- M1: assigned-agent tag. Shows whenever a chat is assigned
+                       to someone other than the viewer, so an admin can see who
+                       owns each conversation at a glance and a fellow agent can
+                       see who to collaborate with. -->
                   <span
                     v-if="contact.assigned_user_name && contact.assigned_user_id !== authStore.user?.id"
                     class="inline-flex items-center gap-0.5 ml-1 px-1.5 py-0.5 rounded text-[9px] font-medium bg-emerald-500/15 text-emerald-300 light:bg-emerald-100 light:text-emerald-700 truncate max-w-[90px]"
