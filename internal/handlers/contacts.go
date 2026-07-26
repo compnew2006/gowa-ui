@@ -1632,22 +1632,14 @@ func (a *App) AssignContact(r *fastglue.Request) error {
 		}
 	}
 
-	// Update contact assignment
-	if err := a.DB.Model(contact).Update("assigned_user_id", req.UserID).Error; err != nil {
+	// Delegate to the lifecycle service: it persists the assignment, keeps
+	// the status consistent (assign → open, unassign → release/pending),
+	// writes the "X assigned this conversation to Y" system message + audit
+	// entry, and broadcasts so all clients update without a refresh.
+	if err := a.ChatLifecycle.Assign(r.RequestCtx, orgID, userID, contact, req.UserID); err != nil {
 		a.Log.Error("Failed to assign contact", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to assign contact", nil, "")
 	}
-
-	// Maintain lifecycle consistency: assigning sets open, unassigning sets pending
-	if req.UserID != nil {
-		contact.AssignedUserID = req.UserID
-		contact.SetStatus(models.ChatStatusOpen)
-	} else {
-		contact.AssignedUserID = nil
-		contact.SetStatus(models.ChatStatusPending)
-		contact.ClearCollaborators()
-	}
-	a.DB.Model(contact).Update("metadata", contact.Metadata)
 
 	return r.SendEnvelope(map[string]any{
 		"message":          "Contact assigned successfully",

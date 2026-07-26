@@ -187,6 +187,83 @@ func (s *Service) Release(ctx context.Context, orgID, userID uuid.UUID, contact 
 	return true, nil
 }
 
+// Assign is the admin/manager "Assign to agent" transition: sets the owner,
+// flips the status to open, and emits the same side effects as the other
+// transitions — a system message crediting who assigned the chat to whom, an
+// audit entry, and a chat_claimed broadcast so every client updates without a
+// page refresh.
+//
+// A nil targetID unassigns: semantically that is a release performed by an
+// admin, so it delegates to Release (pending + cleared collaborators +
+// chat_released system message/broadcast).
+//
+// Idempotent: assigning an open chat to its current owner is a no-op — no
+// duplicate system message, no broadcast.
+func (s *Service) Assign(ctx context.Context, orgID, adminID uuid.UUID, contact *models.Contact, targetID *uuid.UUID) error {
+	if targetID == nil {
+		_, err := s.Release(ctx, orgID, adminID, contact, false, true)
+		return err
+	}
+
+	if contact.AssignedUserID != nil && *contact.AssignedUserID == *targetID &&
+		contact.EffectiveStatus() == models.ChatStatusOpen {
+		return nil
+	}
+
+	// Capture pre-mutation values for the audit log BEFORE mutation (see
+	// Release for why: Metadata is a shared JSONB map).
+	oldStatus := string(contact.EffectiveStatus())
+	oldAssigned := contact.AssignedUserID
+
+	contact.AssignedUserID = targetID
+	contact.SetStatus(models.ChatStatusOpen)
+	if err := s.db.Model(&models.Contact{}).Where("id = ?", contact.ID).Updates(map[string]any{
+		"assigned_user_id": targetID,
+		"metadata":         contact.Metadata,
+	}).Error; err != nil {
+		s.log.Error("Failed to assign chat", "error", err, "contact_id", contact.ID)
+		return fmt.Errorf("chat: failed to assign: %w", err)
+	}
+
+	adminName := audit.GetUserName(s.db, adminID)
+	targetName := audit.GetUserName(s.db, *targetID)
+
+	s.CreateSystemMessage(orgID, contact.ID,
+		fmt.Sprintf("🔔 %s assigned this conversation to %s", adminName, targetName),
+		models.JSONB{
+			"system_type":      "chat_assigned",
+			"agent_id":         targetID.String(),
+			"agent_name":       targetName,
+			"assigned_by":      adminID.String(),
+			"assigned_by_name": adminName,
+		})
+
+	audit.LogAudit(s.db, orgID, adminID, adminName,
+		"contact", contact.ID, models.AuditActionUpdated, nil, contact,
+		map[string]any{
+			"chat_status":      map[string]any{"old": oldStatus, "new": string(models.ChatStatusOpen)},
+			"assigned_user_id": map[string]any{"old": oldAssigned, "new": targetID},
+		})
+
+	// Same shape as Claim's broadcast — the frontend's chat_claimed handler
+	// already updates the list entry and re-fetches messages for viewers, so
+	// the system message shows up in real time.
+	s.broadcast(orgID, websocket.WSMessage{
+		Type: websocket.TypeChatClaimed,
+		Payload: map[string]any{
+			"contact_id":       contact.ID.String(),
+			"assigned_to":      targetID.String(),
+			"assigned_user_id": targetID.String(),
+			"assigned_to_name": targetName,
+			"chat_status":      string(models.ChatStatusOpen),
+			"assigned_by":      adminID.String(),
+			"assigned_by_name": adminName,
+		},
+	})
+
+	return nil
+}
+
 // releaseOne is the per-item body of BulkRelease. It shares Release's logic
 // without re-broadcasting the "idempotent skip" semantics differently: on
 // idempotent skip it records the id as released (matching Release's
@@ -448,10 +525,10 @@ const (
 )
 
 type InviteResult struct {
-	Outcome        InviteOutcome
-	TargetName     string
-	TargetRole     string
-	InviterName    string
+	Outcome     InviteOutcome
+	TargetName  string
+	TargetRole  string
+	InviterName string
 }
 
 func (s *Service) Invite(ctx context.Context, orgID, inviterID, targetID uuid.UUID, contact *models.Contact) (InviteResult, error) {
@@ -564,9 +641,9 @@ const (
 )
 
 type LeaveResult struct {
-	Outcome            LeaveOutcome
-	UserName           string // for system message + response
-	NewOwnerName       string // set on LeaveOwnershipTransferred
+	Outcome      LeaveOutcome
+	UserName     string // for system message + response
+	NewOwnerName string // set on LeaveOwnershipTransferred
 }
 
 // Leave handles the three departure branches: ghost-exit (admin/manager),
@@ -673,8 +750,8 @@ func (s *Service) Leave(ctx context.Context, orgID, userID uuid.UUID, contact *m
 // not currently a collaborator. Sets TargetName + ManagerName on success for
 // the handler's response envelope + system message.
 type RemoveCollaboratorResult struct {
-	TargetName   string
-	ManagerName  string
+	TargetName  string
+	ManagerName string
 }
 
 func (s *Service) RemoveCollaborator(ctx context.Context, orgID, actorID, targetID uuid.UUID, contact *models.Contact) (RemoveCollaboratorResult, error) {
