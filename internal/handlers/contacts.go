@@ -107,6 +107,9 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 	pg := parsePagination(r)
 	search := string(r.RequestCtx.QueryArgs().Peek("search"))
 	tagsParam := string(r.RequestCtx.QueryArgs().Peek("tags"))
+	// When has_messages=true, hide contacts with no messages (used by /chat to
+	// distinguish real conversations from synced-but-empty contacts in /settings/contacts).
+	hasMessages := string(r.RequestCtx.QueryArgs().Peek("has_messages"))
 
 	var contacts []models.Contact
 	query := a.ScopeToOrg(a.DB, userID, orgID)
@@ -114,6 +117,12 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 	// Users without contacts:read permission can only see contacts assigned to them
 	// or contacts with an active chat transfer to them
 	query = a.scopeAssignedContact(query, userID, orgID)
+
+	// Hide empty conversations: a contact is a "conversation" only if it has at
+	// least one message. /chat uses this by default; /settings/contacts shows all.
+	if hasMessages == "true" || hasMessages == "1" {
+		query = query.Where("last_message_at IS NOT NULL")
+	}
 
 	if search != "" {
 		// Limit search string length to prevent abuse

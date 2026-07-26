@@ -118,17 +118,38 @@ export const useContactsStore = defineStore('contacts', () => {
   const accountFilter = ref<string | null>(null)
 
   // Me/Pending tab selector for the chat sidebar. Persisted to localStorage
-  // (M2) so the agent's preference survives reloads. Default falls back to the
-  // stored value if it is still valid; otherwise 'me' (the agent's own
-  // conversations — the primary working surface; 'pending' is the unassigned
-  // queue for picking up new work).
+  // (M2) so the agent's preference survives reloads. The default (when there is
+  // no valid stored preference) is role-aware: admins/managers land on 'pending'
+  // (the unassigned queue they manage — they have no chats assigned to them
+  // directly, so 'me' would show an empty list); agents land on 'me' (their own
+  // assigned conversations — the primary working surface).
   const VALID_TABS = ['me', 'pending'] as const
   type ListTab = typeof VALID_TABS[number]
+
+  // One-time migration: an earlier build defaulted everyone (including admins)
+  // to the 'me' tab, which is empty for admins (no chats assigned to them) and
+  // left them staring at an empty sidebar / no messages. Bumping this version
+  // flag clears the stale 'me' preference so the role-aware default below takes
+  // over for everyone once. Users can still re-pick a tab afterwards.
+  const TAB_PREF_VERSION = '2'
+  const TAB_PREF_VERSION_KEY = 'whatomate.chat.activeListTab.v'
+  if (typeof localStorage !== 'undefined'
+    && localStorage.getItem(TAB_PREF_VERSION_KEY) !== TAB_PREF_VERSION) {
+    localStorage.removeItem('whatomate.chat.activeListTab')
+    localStorage.setItem(TAB_PREF_VERSION_KEY, TAB_PREF_VERSION)
+  }
+
   function loadStoredTab(): ListTab {
     const stored = typeof localStorage !== 'undefined'
       ? localStorage.getItem('whatomate.chat.activeListTab') as ListTab | null
       : null
-    return stored && (VALID_TABS as readonly string[]).includes(stored) ? stored : 'me'
+    if (stored && (VALID_TABS as readonly string[]).includes(stored)) {
+      return stored
+    }
+    // Role-aware default. Admins/managers have contacts:write and manage the
+    // unassigned queue; agents work their own assigned chats.
+    const isManager = authStore.hasPermission('contacts', 'write')
+    return isManager ? 'pending' : 'me'
   }
   const activeListTab = ref<ListTab>(loadStoredTab())
   // Persist tab choice (M2). `watch` re-fires on every change, so the stored
@@ -136,6 +157,24 @@ export const useContactsStore = defineStore('contacts', () => {
   watch(activeListTab, (tab) => {
     try { localStorage.setItem('whatomate.chat.activeListTab', tab) } catch { /* quota / private mode */ }
   })
+
+  // Role-aware default correction. `loadStoredTab()` may run before the auth
+  // session is restored (e.g. on cold load, when the contacts store is created
+  // before `restoreSession()` resolves), so a manager with no explicit saved
+  // preference can land on 'me' and see an empty list. Once the user object is
+  // available, if the user never made an explicit choice (no stored tab), flip
+  // managers to 'pending' (the queue they manage) and leave agents on 'me'.
+  const hasExplicitTabChoice = typeof localStorage !== 'undefined'
+    && !!localStorage.getItem('whatomate.chat.activeListTab')
+  watch(() => authStore.user, (user) => {
+    if (!user || hasExplicitTabChoice) return
+    const isManager = authStore.hasPermission('contacts', 'write')
+    if (isManager && activeListTab.value === 'me') {
+      activeListTab.value = 'pending'
+    } else if (!isManager && activeListTab.value === 'pending') {
+      activeListTab.value = 'me'
+    }
+  }, { immediate: true })
 
   // Contacts pagination
   const contactsPage = ref(1)

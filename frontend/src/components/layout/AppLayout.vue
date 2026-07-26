@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
@@ -26,6 +26,16 @@ const router = useRouter()
 const authStore = useAuthStore()
 const isCollapsed = ref(true)
 const isMobileMenuOpen = ref(false)
+
+// Auto-expand the sidebar on settings pages so users can see and navigate
+// the settings sub-items (General, Accounts, Catalogs, ...). Stays collapsed
+// everywhere else. The user can still collapse it manually on a settings page
+// via the toggle — we only force-expand on navigation into /settings/*.
+watch(() => route.path, (path) => {
+  if (path.startsWith('/settings')) {
+    isCollapsed.value = false
+  }
+}, { immediate: true })
 
 // Refresh user data and connect WebSocket on mount
 onMounted(() => {
