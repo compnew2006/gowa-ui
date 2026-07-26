@@ -185,6 +185,67 @@ func TestSyncGowaInstanceDeviceContacts_Idempotent(t *testing.T) {
 	assert.Equal(t, int64(2), count, "no duplicate contacts after re-sync")
 }
 
+// TestSyncGowaInstanceDeviceContacts_OverwritesStaleAccount verifies that a
+// pre-existing contact carrying an empty or stale whats_app_account gets
+// re-stamped with the syncing device's account: a sync from a specific GOWA
+// server is authoritative about which account owns the chat.
+func TestSyncGowaInstanceDeviceContacts_OverwritesStaleAccount(t *testing.T) {
+	t.Parallel()
+
+	mock := newChatsMock(t)
+	defer mock.Close()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	admin := createAdminUser(t, app, org.ID)
+	inst := &models.GowaInstance{OrganizationID: org.ID, Name: "s-" + uuid.New().String()[:8], BaseURL: mock.URL, IsActive: true}
+	require.NoError(t, app.DB.Create(inst).Error)
+
+	deviceID := "dev-stale-" + uuid.New().String()[:8]
+	accountName := "gowa-dev-1-" + uuid.New().String()[:8]
+	acc := &models.WhatsAppAccount{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		Name:           accountName,
+		ProviderType:   "gowa",
+		GowaDeviceID:   deviceID,
+		Status:         "active",
+	}
+	require.NoError(t, app.DB.Create(acc).Error)
+
+	// Pre-existing contacts: one stamped with a stale account name, one with
+	// an empty account (the webhook-created shape). Both must end up on the
+	// syncing device's account.
+	stale := &models.Contact{
+		OrganizationID:  org.ID,
+		PhoneNumber:     "16505551234",
+		WhatsAppAccount: "some-old-account",
+	}
+	require.NoError(t, app.DB.Create(stale).Error)
+	empty := &models.Contact{
+		OrganizationID: org.ID,
+		PhoneNumber:    "120363group@g.us",
+	}
+	require.NoError(t, app.DB.Create(empty).Error)
+
+	req := testutil.NewJSONRequest(t, nil)
+	testutil.SetAuthContext(req, org.ID, admin.ID)
+	testutil.SetPathParam(req, "id", inst.ID.String())
+	testutil.SetPathParam(req, "deviceId", deviceID)
+
+	require.NoError(t, app.SyncGowaInstanceDeviceContacts(req))
+	require.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req),
+		"want 200, body=%s", string(testutil.GetResponseBody(req)))
+
+	var c1 models.Contact
+	require.NoError(t, app.DB.First(&c1, "id = ?", stale.ID).Error)
+	assert.Equal(t, accountName, c1.WhatsAppAccount, "stale account must be overwritten on sync")
+
+	var c2 models.Contact
+	require.NoError(t, app.DB.First(&c2, "id = ?", empty.ID).Error)
+	assert.Equal(t, accountName, c2.WhatsAppAccount, "empty account must be stamped on sync")
+}
+
 // TestSyncGowaInstanceDeviceContacts_AgentDenied verifies the devices:write
 // permission is enforced.
 func TestSyncGowaInstanceDeviceContacts_AgentDenied(t *testing.T) {

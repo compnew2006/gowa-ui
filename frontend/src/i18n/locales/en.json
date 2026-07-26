@@ -487,6 +487,8 @@
     "inviteCollaboratorDesc": "Add an agent to this conversation as a collaborator",
     "tabPending": "Pending",
     "tabMe": "Me",
+    "tabClosed": "Closed",
+    "tabAll": "All",
     "releasedConversation": "Release",
     "releaseClosedHint": "Closed chats must be reopened before release",
     "conversationTabs": "Conversation lists",

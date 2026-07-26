@@ -117,13 +117,15 @@ export const useContactsStore = defineStore('contacts', () => {
   const replyingTo = ref<Message | null>(null)
   const accountFilter = ref<string | null>(null)
 
-  // Me/Pending tab selector for the chat sidebar. Persisted to localStorage
-  // (M2) so the agent's preference survives reloads. The default (when there is
-  // no valid stored preference) is role-aware: admins/managers land on 'pending'
-  // (the unassigned queue they manage — they have no chats assigned to them
-  // directly, so 'me' would show an empty list); agents land on 'me' (their own
-  // assigned conversations — the primary working surface).
-  const VALID_TABS = ['me', 'pending'] as const
+  // Me/Pending/Closed/All tab selector for the chat sidebar. Persisted to
+  // localStorage (M2) so the agent's preference survives reloads. The default
+  // (when there is no valid stored preference) is role-aware: admins/managers
+  // land on 'pending' (the unassigned queue they manage — they have no chats
+  // assigned to them directly, so 'me' would show an empty list); agents land
+  // on 'me' (their own assigned conversations — the primary working surface).
+  // 'closed' and 'all' are supervisor tabs, gated on contacts:write in the
+  // view (the admin/manager marker — see canSeeSupervisorTabs below).
+  const VALID_TABS = ['me', 'pending', 'closed', 'all'] as const
   type ListTab = typeof VALID_TABS[number]
 
   // One-time migration: an earlier build defaulted everyone (including admins)
@@ -158,6 +160,16 @@ export const useContactsStore = defineStore('contacts', () => {
     try { localStorage.setItem('whatomate.chat.activeListTab', tab) } catch { /* quota / private mode */ }
   })
 
+  // Supervisor visibility gate for the 'closed' and 'all' tabs. Gated on
+  // contacts:write (the admin/manager marker used by canManageAllChats and
+  // the role-aware tab default below) rather than contacts:read, because the
+  // seeded agent role DOES carry contacts:read — gating on read would surface
+  // the supervisor tabs to every agent. Agents keep the two-tab Me/Pending
+  // strip focused on their own work.
+  const canSeeSupervisorTabs = computed(() =>
+    authStore.hasPermission('contacts', 'write')
+  )
+
   // Role-aware default correction. `loadStoredTab()` may run before the auth
   // session is restored (e.g. on cold load, when the contacts store is created
   // before `restoreSession()` resolves), so a manager with no explicit saved
@@ -167,7 +179,16 @@ export const useContactsStore = defineStore('contacts', () => {
   const hasExplicitTabChoice = typeof localStorage !== 'undefined'
     && !!localStorage.getItem('whatomate.chat.activeListTab')
   watch(() => authStore.user, (user) => {
-    if (!user || hasExplicitTabChoice) return
+    if (!user) return
+    // A stored 'closed'/'all' preference is only honored for users who can
+    // actually see those tabs (e.g. after a role downgrade); others fall back
+    // to 'me' so they aren't stuck on an invisible tab.
+    if (!canSeeSupervisorTabs.value
+      && (activeListTab.value === 'closed' || activeListTab.value === 'all')) {
+      activeListTab.value = 'me'
+      return
+    }
+    if (hasExplicitTabChoice) return
     const isManager = authStore.hasPermission('contacts', 'write')
     if (isManager && activeListTab.value === 'me') {
       activeListTab.value = 'pending'
@@ -204,7 +225,7 @@ export const useContactsStore = defineStore('contacts', () => {
     })
   })
 
-  // ─── Pending / Me tab membership (client-side filtering per D4) ───
+  // ─── Pending / Me / Closed / All tab membership (client-side filtering per D4) ───
   // Membership is derived from ASSIGNMENT (the source of truth) plus the explicit
   // `chat_status` for the closed-state check. The backend's EffectiveStatus()
   // defaults to "open" for legacy rows that never had chat_status set, so a
@@ -212,19 +233,31 @@ export const useContactsStore = defineStore('contacts', () => {
   // unassigned chats. We therefore treat "pending" as `!assigned && !closed`.
   //   pending → not assigned to anyone AND not closed (awaiting a claim)
   //   me      → assigned to the current user (closed or not — owner sees their own)
+  //   closed  → chat_status === 'closed' (supervisors only; legacy rows without
+  //             chat_status default to open and correctly stay out of here)
+  //   all     → every loaded chat, no filter (supervisors only — the backend
+  //             already returns everything for contacts:read holders)
   const pendingContacts = computed(() =>
     sortedContacts.value.filter(c => !c.assigned_user_id && c.chat_status !== 'closed')
   )
   const myContacts = computed(() =>
     sortedContacts.value.filter(c => c.assigned_user_id === authStore.user?.id)
   )
+  const closedContacts = computed(() =>
+    sortedContacts.value.filter(c => c.chat_status === 'closed')
+  )
+  const allContacts = computed(() => sortedContacts.value)
   const pendingCount = computed(() => pendingContacts.value.length)
   const myCount = computed(() => myContacts.value.length)
+  const closedCount = computed(() => closedContacts.value.length)
+  const allCount = computed(() => allContacts.value.length)
 
   // The list to render in the sidebar for the active tab.
   const displayedContacts = computed(() => {
     switch (activeListTab.value) {
       case 'me': return myContacts.value
+      case 'closed': return closedContacts.value
+      case 'all': return allContacts.value
       case 'pending':
       default: return pendingContacts.value
     }
@@ -257,7 +290,9 @@ export const useContactsStore = defineStore('contacts', () => {
     return displayedContacts.value
   })
   // True when the current search query has hits in OTHER tabs but not the
-  // current one — drives the "found in: Me" hint in the view.
+  // current one — drives the "found in: Me" hint in the view. The 'all' tab
+  // shows every match by definition, so it never needs (or produces) a hint;
+  // 'closed' participates only for supervisors who can see that tab.
   const searchHint = computed<{ show: boolean; tabs: ListTab[] } | null>(() => {
     const q = searchQuery.value.trim()
     if (!q) return null
@@ -265,14 +300,18 @@ export const useContactsStore = defineStore('contacts', () => {
     if (!r.length) return null
     const inPending = r.some(c => !c.assigned_user_id && c.chat_status !== 'closed')
     const inMe = r.some(c => c.assigned_user_id === authStore.user?.id)
+    const inClosed = canSeeSupervisorTabs.value && r.some(c => c.chat_status === 'closed')
     const current = activeListTab.value
     const currentHasHits =
+      current === 'all' ||
       (current === 'pending' && inPending) ||
-      (current === 'me' && inMe)
+      (current === 'me' && inMe) ||
+      (current === 'closed' && inClosed)
     if (currentHasHits) return null
     const tabs: ListTab[] = []
     if (inMe) tabs.push('me')
     if (inPending) tabs.push('pending')
+    if (inClosed) tabs.push('closed')
     return { show: tabs.length > 0, tabs }
   })
 
@@ -821,12 +860,17 @@ export const useContactsStore = defineStore('contacts', () => {
     replyingTo,
     filteredContacts,
     sortedContacts,
-    // Pending / Me tabs
+    // Pending / Me / Closed / All tabs
     activeListTab,
+    canSeeSupervisorTabs,
     pendingContacts,
     myContacts,
+    closedContacts,
+    allContacts,
     pendingCount,
     myCount,
+    closedCount,
+    allCount,
     displayedContacts,
     // Cross-tab search (M3)
     visibleContacts,

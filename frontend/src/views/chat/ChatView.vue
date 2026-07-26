@@ -474,14 +474,19 @@ async function handleReopen() {
   }
 }
 
-// ─── Pending/Me tab keyboard navigation (M5 a11y) ───
+// ─── Tab keyboard navigation (M5 a11y) ───
 // Arrow Left/Right move focus between tabs and activate them, mirroring the
 // WAI-ARIA tabs pattern. Home/End jump to first/last. The roving tabindex on
 // the buttons themselves handles the rest.
 const tabStripRef = ref<HTMLElement | null>(null)
-const TAB_ORDER = ['me', 'pending'] as const
-function visibleTabOrder(): Array<'pending' | 'me'> {
-  return [...TAB_ORDER]
+type ListTab = 'me' | 'pending' | 'closed' | 'all'
+const TAB_ORDER = ['me', 'pending', 'closed', 'all'] as const
+// 'closed' and 'all' are supervisor tabs (contacts:write — the admin/manager
+// marker, matching canManageAllChats), so agents keep the two-tab strip.
+function visibleTabOrder(): ListTab[] {
+  return contactsStore.canSeeSupervisorTabs
+    ? [...TAB_ORDER]
+    : ['me', 'pending']
 }
 function onTabKeydown(e: KeyboardEvent) {
   const order = visibleTabOrder()
@@ -500,8 +505,21 @@ function onTabKeydown(e: KeyboardEvent) {
     el?.focus()
   })
 }
-function tabLabel(tab: 'pending' | 'me'): string {
-  return tab === 'pending' ? t('chat.tabPending') : t('chat.tabMe')
+function tabLabel(tab: ListTab): string {
+  switch (tab) {
+    case 'pending': return t('chat.tabPending')
+    case 'closed': return t('chat.tabClosed')
+    case 'all': return t('chat.tabAll')
+    default: return t('chat.tabMe')
+  }
+}
+function tabCount(tab: ListTab): number {
+  switch (tab) {
+    case 'pending': return contactsStore.pendingCount
+    case 'closed': return contactsStore.closedCount
+    case 'all': return contactsStore.allCount
+    default: return contactsStore.myCount
+  }
 }
 
 // Bulk release (M4). Wraps the store action with the standard try/catch +
@@ -2186,62 +2204,44 @@ async function sendMediaMessage() {
           </label>
         </div>
 
-        <!-- Pending / Me tab strip — drives the sidebar list.
-             Full a11y (M5): role=tablist + arrow-key navigation. -->
+        <!-- Me / Pending (+ Closed / All for supervisors) tab strip — drives
+             the sidebar list. Full a11y (M5): role=tablist + arrow-key
+             navigation with roving tabindex. -->
         <div
           ref="tabStripRef"
           role="tablist"
           aria-label="$t('chat.conversationTabs')"
-          class="grid grid-cols-2 gap-1 rounded-lg bg-white/[0.04] light:bg-gray-100 p-1 mt-2"
+          :class="[
+            'grid gap-1 rounded-lg bg-white/[0.04] light:bg-gray-100 p-1 mt-2',
+            contactsStore.canSeeSupervisorTabs ? 'grid-cols-4' : 'grid-cols-2'
+          ]"
           @keydown="onTabKeydown"
         >
           <button
+            v-for="tab in visibleTabOrder()"
+            :key="tab"
             type="button"
             role="tab"
-            :id="'tab-me'"
-            :aria-selected="contactsStore.activeListTab === 'me'"
-            :tabindex="contactsStore.activeListTab === 'me' ? 0 : -1"
+            :id="`tab-${tab}`"
+            :aria-selected="contactsStore.activeListTab === tab"
+            :tabindex="contactsStore.activeListTab === tab ? 0 : -1"
             :class="[
               'rounded-md py-1.5 text-xs font-medium whitespace-nowrap transition-all inline-flex items-center justify-center gap-1.5',
-              contactsStore.activeListTab === 'me'
+              contactsStore.activeListTab === tab
                 ? 'bg-emerald-600 text-white shadow-sm'
                 : 'text-white/60 hover:text-white/90 hover:bg-white/[0.06] light:text-gray-600 light:hover:text-gray-800 light:hover:bg-gray-200'
             ]"
-            @click="contactsStore.activeListTab = 'me'"
+            @click="contactsStore.activeListTab = tab"
           >
-            {{ $t('chat.tabMe') }}
+            {{ tabLabel(tab) }}
             <span
               :class="[
                 'inline-flex items-center justify-center min-w-[1.25rem] h-4 px-1 rounded-full text-[10px] font-semibold tabular-nums',
-                contactsStore.activeListTab === 'me'
+                contactsStore.activeListTab === tab
                   ? 'bg-white/25 text-white'
                   : 'bg-white/[0.08] text-white/60 light:bg-gray-300 light:text-gray-700'
               ]"
-            >{{ contactsStore.myCount }}</span>
-          </button>
-          <button
-            type="button"
-            role="tab"
-            :id="'tab-pending'"
-            :aria-selected="contactsStore.activeListTab === 'pending'"
-            :tabindex="contactsStore.activeListTab === 'pending' ? 0 : -1"
-            :class="[
-              'rounded-md py-1.5 text-xs font-medium whitespace-nowrap transition-all inline-flex items-center justify-center gap-1.5',
-              contactsStore.activeListTab === 'pending'
-                ? 'bg-emerald-600 text-white shadow-sm'
-                : 'text-white/60 hover:text-white/90 hover:bg-white/[0.06] light:text-gray-600 light:hover:text-gray-800 light:hover:bg-gray-200'
-            ]"
-            @click="contactsStore.activeListTab = 'pending'"
-          >
-            {{ $t('chat.tabPending') }}
-            <span
-              :class="[
-                'inline-flex items-center justify-center min-w-[1.25rem] h-4 px-1 rounded-full text-[10px] font-semibold tabular-nums',
-                contactsStore.activeListTab === 'pending'
-                  ? 'bg-white/25 text-white'
-                  : 'bg-white/[0.08] text-white/60 light:bg-gray-300 light:text-gray-700'
-              ]"
-            >{{ contactsStore.pendingCount }}</span>
+            >{{ tabCount(tab) }}</span>
           </button>
         </div>
       </div>

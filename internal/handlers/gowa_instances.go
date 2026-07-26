@@ -652,15 +652,18 @@ func (a *App) SyncGowaInstanceDeviceContacts(r *fastglue.Request) error {
 			}
 		}
 
-		// Stamp the owning account name if empty. The webhook path leaves this
-		// null for message-created contacts; setting it here lets the Contacts
-		// UI's account filter work for synced rows. NOTE: the column is
-		// whats_app_account (GORM maps the WhatsAppAccount field to
-		// whats_app_account, not whatsapp_account), so the raw Update must use
-		// the DB column name.
-		if contact.WhatsAppAccount == "" {
+		// Stamp the owning account name. A sync from a specific GOWA server
+		// means the contact belongs to that server's account, so always
+		// overwrite — webhook-created rows can carry an empty or stale value
+		// that would otherwise never self-heal, breaking the Contacts UI's
+		// account filter. NOTE: the column is whats_app_account (GORM maps
+		// the WhatsAppAccount field to whats_app_account, not
+		// whatsapp_account), so the raw Update must use the DB column name.
+		if contact.WhatsAppAccount != account.Name {
 			if err := a.DB.Model(contact).Update("whats_app_account", account.Name).Error; err != nil {
 				a.Log.Error("Failed to stamp whats_app_account during GOWA sync", "error", err, "jid", jid)
+			} else {
+				contact.WhatsAppAccount = account.Name
 			}
 		}
 
@@ -804,9 +807,16 @@ func (a *App) SyncGowaInstanceMessages(r *fastglue.Request) error {
 			continue
 		}
 
-		// Stamp the owning account name if empty (mirrors /sync-contacts).
-		if contact.WhatsAppAccount == "" {
-			a.DB.Model(contact).Update("whatsapp_account", account.Name)
+		// Stamp the owning account name (mirrors /sync-contacts): always
+		// overwrite so an empty or stale value self-heals. The DB column is
+		// whats_app_account (GORM's mapping of the WhatsAppAccount field),
+		// not whatsapp_account.
+		if contact.WhatsAppAccount != account.Name {
+			if err := a.DB.Model(contact).Update("whats_app_account", account.Name).Error; err != nil {
+				a.Log.Error("Failed to stamp whats_app_account during GOWA message sync", "error", err, "jid", jid)
+			} else {
+				contact.WhatsAppAccount = account.Name
+			}
 		}
 
 		// Stamp group/newsletter metadata if not already set (mirrors
