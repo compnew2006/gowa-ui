@@ -464,11 +464,23 @@ export const useContactsStore = defineStore('contacts', () => {
     }
 
     try {
-      const response = await messagesService.list(contactId, params)
+      // Default to the active account filter when a caller (lifecycle actions,
+      // websocket re-fetches) doesn't pass one explicitly, so the live view
+      // matches what a page refresh would render. The select-contact flow
+      // clears the filter first, so it still fetches the unfiltered set.
+      const account = params?.account ?? (accountFilter.value || undefined)
+      const response = await messagesService.list(contactId, { ...params, account })
       // API returns { status: "success", data: { messages: [...], has_more: boolean } }
       const data = response.data.data || response.data
       messages.value = data.messages || []
       hasMoreMessages.value = data.has_more === true
+      // A successful fetch marks the conversation read server-side
+      // (GetMessages → markMessagesAsRead); mirror that on the sidebar badge.
+      // Claim-gated chats never reach here (403 / early return above), so
+      // their badge survives until the chat is actually claimed and read.
+      const listEntry = contacts.value.find(c => c.id === contactId)
+      if (listEntry) listEntry.unread_count = 0
+      if (currentContact.value?.id === contactId) currentContact.value.unread_count = 0
     } catch (error: any) {
       // Privacy guard: conversation is pending and unclaimed
       if (error.response?.status === 403 && error.response.data?.code === 'chat_not_claimed') {
@@ -612,7 +624,13 @@ export const useContactsStore = defineStore('contacts', () => {
     currentContact.value = contact
     replyingTo.value = null // Clear reply state when switching contacts
     if (contact) {
-      contact.unread_count = 0
+      // Keep the unread badge for claim-gated conversations: the claim screen
+      // hides the content, so nothing has actually been read yet. The badge
+      // clears in fetchMessages once a successful (post-claim) fetch marks the
+      // conversation read server-side.
+      const claimGated =
+        !canManageAllChats.value && contact.chat_status === 'pending' && !contact.assigned_user_id
+      if (!claimGated) contact.unread_count = 0
       // Lazily fetch the contact's WhatsApp profile picture when it isn't
       // cached yet (e.g. the chat was created by an inbound message before a
       // GOWA contact sync). Best-effort: failures are swallowed so the chat

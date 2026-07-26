@@ -264,6 +264,19 @@ func (a *App) scopeAssignedContact(query *gorm.DB, userID, orgID uuid.UUID) *gor
 	)
 }
 
+// hasActiveTransfer reports whether the user has an active agent transfer for
+// the contact. An active transfer is an effective assignment created by the
+// chatbot handoff flow (assigned_user_id stays unset unless AssignToSameAgent
+// is on), so the claim gate must treat the transfer target as the assignee.
+func (a *App) hasActiveTransfer(userID, contactID, orgID uuid.UUID) bool {
+	var n int64
+	a.DB.Model(&models.AgentTransfer{}).
+		Where("contact_id = ? AND agent_id = ? AND organization_id = ? AND status = ?",
+			contactID, userID, orgID, models.TransferStatusActive).
+		Count(&n)
+	return n > 0
+}
+
 // GetContact returns a single contact
 // Users without contacts:read permission can only access contacts assigned to them
 func (a *App) GetContact(r *fastglue.Request) error {
@@ -373,6 +386,8 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 
 	// Managers/admins (contacts:write) can see any chat — no restrictions.
 	// Agents can only see messages if: they own it, are a collaborator, or have collaborate permission.
+	// An active agent transfer counts as ownership — the chatbot handoff
+	// assigns work without setting assigned_user_id (see scopeAssignedContact).
 	// Closed conversations are readable by everyone (read-only).
 	hasContactsWritePermission := a.HasPermission(userID, models.ResourceContacts, models.ActionWrite, orgID)
 	hasCollaboratePermission := a.HasPermission(userID, models.ResourceChatCollaborate, models.ActionWrite, orgID)
@@ -380,7 +395,8 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 	isCollaborator := contact.IsCollaborator(userID.String())
 	canViewContent := hasContactsWritePermission || isAssigned || isCollaborator || hasCollaboratePermission
 
-	if !canViewContent && contact.EffectiveStatus() == models.ChatStatusPending {
+	if !canViewContent && contact.EffectiveStatus() == models.ChatStatusPending &&
+		!a.hasActiveTransfer(userID, contactID, orgID) {
 		var pendingCount int64
 		a.DB.Model(&models.Message{}).
 			Where("contact_id = ? AND direction = ? AND status != ?",
@@ -404,10 +420,16 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 	// Build base query
 	msgQuery := a.DB.Where("contact_id = ?", contactID)
 
-	// Filter by WhatsApp account if specified
+	// Filter by WhatsApp account if specified. System messages (claim/close/
+	// release/reopen notifications) are conversation-level events written
+	// without a WhatsApp account, so they must be exempt from the account
+	// filter — otherwise they vanish on refresh whenever an account is
+	// selected (multi-account org, switchAccount, or older-message paging).
 	accountFilter := string(r.RequestCtx.QueryArgs().Peek("account"))
 	if accountFilter != "" {
-		msgQuery = msgQuery.Where("whats_app_account = ?", accountFilter)
+		msgQuery = msgQuery.Where(
+			"whats_app_account = ? OR metadata->>'is_system_message' = 'true'",
+			accountFilter)
 	}
 
 	// Check if user without contacts:read should only see current conversation
@@ -586,6 +608,23 @@ func (a *App) MarkContactRead(r *fastglue.Request) error {
 	query = a.scopeAssignedContact(query, userID, orgID)
 	if err := query.First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
+	}
+
+	// Mirror the GetMessages privacy guard: a caller who can't view the
+	// content of a pending unclaimed chat must not mark it read either —
+	// doing so would clear the unread badge and fire read receipts (blue
+	// ticks) for messages nobody has actually seen. An active agent transfer
+	// counts as ownership, same as in GetMessages.
+	hasContactsWritePermission := a.HasPermission(userID, models.ResourceContacts, models.ActionWrite, orgID)
+	hasCollaboratePermission := a.HasPermission(userID, models.ResourceChatCollaborate, models.ActionWrite, orgID)
+	isAssigned := contact.AssignedUserID != nil && *contact.AssignedUserID == userID
+	isCollaborator := contact.IsCollaborator(userID.String())
+	canViewContent := hasContactsWritePermission || isAssigned || isCollaborator || hasCollaboratePermission
+
+	if !canViewContent && contact.EffectiveStatus() == models.ChatStatusPending &&
+		!a.hasActiveTransfer(userID, contactID, orgID) {
+		return r.SendErrorEnvelope(fasthttp.StatusForbidden,
+			"Claim this chat to view messages", nil, "chat_not_claimed")
 	}
 
 	a.markMessagesAsRead(orgID, contactID, &contact)

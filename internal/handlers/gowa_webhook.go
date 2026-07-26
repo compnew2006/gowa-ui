@@ -429,6 +429,15 @@ func (a *App) processGowaOutgoingMessage(account *models.WhatsAppAccount, msg *g
 	content := msg.Body
 	var mediaURL, mediaMime, mediaFilename string
 
+	// A message sent from the connected number's phone is customer-side
+	// activity just like a received message: an unassigned conversation must
+	// stay claimable (pending), and a closed one reopens as pending. Without
+	// this, outgoing-only chats default past the claim gate and any agent can
+	// read them without claiming. Runs after the dedup above so echoes of
+	// UI-sent messages (already lifecycle-managed at send time) are excluded.
+	a.ensureClaimableChatStatus(orgID, contact,
+		"🔔 Conversation reopened by a message sent from the phone")
+
 	ctx := context.Background()
 	waAccount := account.ToWAAccount()
 

@@ -874,9 +874,11 @@ async function selectContact(id: string) {
       }
       if (selectedAccount.value) {
         contactsStore.setAccountFilter(selectedAccount.value)
-        // Filter messages client-side instead of re-fetching
+        // Filter messages client-side instead of re-fetching. System messages
+        // (claim/close/release/reopen) carry no whatsapp_account — keep them so
+        // lifecycle events don't disappear when an account is selected.
         contactsStore.messages = contactsStore.messages.filter(
-          (m: any) => m.whatsapp_account === selectedAccount.value
+          (m: any) => m.whatsapp_account === selectedAccount.value || m.metadata?.is_system_message
         )
       }
     } else if (contactAccounts.value.length === 1) {

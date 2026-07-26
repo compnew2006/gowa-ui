@@ -200,47 +200,8 @@ func (a *App) processIncomingMessageFull(phoneNumberID string, msg IncomingTextM
 	// Set chat_status to pending for unassigned conversations (new or reopened).
 	// If the conversation was closed and the customer sends a new message, reopen as pending.
 	// If already open (assigned), don't change — the timer resets via last_message_at.
-	if contact.AssignedUserID == nil {
-		currentStatus := contact.EffectiveStatus()
-		if currentStatus != models.ChatStatusPending {
-			contact.SetStatus(models.ChatStatusPending)
-			a.DB.Model(contact).Update("metadata", contact.Metadata)
-		}
-	} else if contact.EffectiveStatus() == models.ChatStatusClosed {
-		// Customer messaged a closed conversation — reopen as pending
-		contact.AssignedUserID = nil
-		contact.ClearCollaborators()
-		contact.SetStatus(models.ChatStatusPending)
-		a.DB.Model(contact).Updates(map[string]any{
-			"assigned_user_id": nil,
-			"metadata":         contact.Metadata,
-		})
-		a.createSystemMessage(account.OrganizationID, contact.ID,
-			"🔔 Conversation reopened by customer",
-			models.JSONB{"system_type": "chat_reopened"})
-	}
-
-	// Set chat_status to pending for unassigned conversations (new or reopened).
-	// If the conversation was closed and the customer sends a new message, reopen as pending.
-	// If already open (assigned), don't change — the timer resets via last_message_at.
-	if contact.AssignedUserID == nil {
-		if contact.EffectiveStatus() != models.ChatStatusPending {
-			contact.SetStatus(models.ChatStatusPending)
-			a.DB.Model(contact).Update("metadata", contact.Metadata)
-		}
-	} else if contact.EffectiveStatus() == models.ChatStatusClosed {
-		// Customer messaged a closed conversation — reopen as pending
-		contact.AssignedUserID = nil
-		contact.ClearCollaborators()
-		contact.SetStatus(models.ChatStatusPending)
-		a.DB.Model(contact).Updates(map[string]any{
-			"assigned_user_id": nil,
-			"metadata":         contact.Metadata,
-		})
-		a.createSystemMessage(account.OrganizationID, contact.ID,
-			"🔔 Conversation reopened by customer",
-			models.JSONB{"system_type": "chat_reopened"})
-	}
+	a.ensureClaimableChatStatus(account.OrganizationID, contact,
+		"🔔 Conversation reopened by customer")
 
 	// Store BSUID if provided and not already set
 	if msg.FromUserID != "" && contact.BSUID != msg.FromUserID {
