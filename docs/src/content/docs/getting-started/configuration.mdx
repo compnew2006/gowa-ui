@@ -73,31 +73,6 @@ trust_proxy = false           # true if behind a reverse proxy (uses X-Forwarded
 api_max_requests = 200        # Per-IP cap across all /api routes
 api_window_seconds = 60
 
-[tts]
-# piper_binary = "/usr/local/bin/piper"
-# piper_model = "/opt/piper/models/en_US-lessac-medium.onnx"
-# opusenc_binary = "opusenc"
-
-[calling]
-max_call_duration = 300       # seconds
-audio_dir = "./audio"
-# hold_music_file = "hold_music.opus"
-# ringback_file = "ringback.opus"
-transfer_timeout_secs = 120
-recording_enabled = true
-udp_port_min = 10000
-udp_port_max = 10100
-# public_ip = "1.2.3.4"        # Required on AWS / cloud where the host doesn't see its public IP
-# relay_only = true             # Force all media through TURN
-
-# Configure STUN, TURN, or both. Repeat the [[calling.ice_servers]] block for each.
-# [[calling.ice_servers]]
-# urls = ["stun:stun.l.google.com:19302"]
-# [[calling.ice_servers]]
-# urls = ["turn:your-turn.example.com:3478"]
-# username = "user"
-# credential = "password"
-
 [default_admin]
 email = "admin@admin.com"
 password = "admin"
@@ -105,7 +80,7 @@ full_name = "Admin"
 ```
 
 <Aside type="note">
-  WhatsApp Cloud API credentials and AI provider API keys (OpenAI, Anthropic, Google) are configured **per organization** through the UI under **Settings → Accounts** — they are not in `config.toml`.
+  AI provider API keys (OpenAI, Anthropic, Google) are configured **per organization** through the UI under **Settings → Chatbot → AI** — they are not in `config.toml`.
 </Aside>
 
 ## Sections in detail
@@ -160,7 +135,7 @@ JWTs are stored in httpOnly cookies — the frontend never sees them.
 Controls media storage (template samples, uploaded files, optional call recordings).
 
 - `type = "local"` — files under `local_path` (default `./uploads`). Suitable for single-host deployments. The directory must be writable by the process and persisted (Docker volume).
-- `type = "s3"` — fill in `s3_bucket`, `s3_region`, `s3_key`, `s3_secret`. Required if you set `calling.recording_enabled = true` and want recordings retained off-host.
+- `type = "s3"` — fill in `s3_bucket`, `s3_region`, `s3_key`, `s3_secret`.
 
 ### `[cookie]`
 
@@ -183,32 +158,6 @@ Off by default. Turn on with `enabled = true` for any internet-facing deployment
 | `trust_proxy` | Set to `true` only if you run behind a trusted reverse proxy (nginx, Cloudflare, ALB) — otherwise clients can spoof their IP via `X-Forwarded-For`. |
 
 Implemented as Redis fixed-window counters; failures hit Redis, so leaving rate limits enabled with Redis down will block all auth.
-
-### `[tts]`
-
-Optional, only used when an IVR step needs to synthesize speech (welcome prompt, menu read-out). All three keys are paths to external binaries / models:
-
-- `piper_binary` — [piper](https://github.com/rhasspy/piper) standalone TTS executable.
-- `piper_model` — `.onnx` voice model from [piper-voices](https://huggingface.co/rhasspy/piper-voices).
-- `opusenc_binary` — `opusenc` from `opus-tools` (`apt install opus-tools` / `dnf install opus-tools`). Defaults to looking up `opusenc` in `PATH`.
-
-If unset, IVR flows still work but cannot synthesize new audio prompts on the fly — only pre-rendered Opus files in `calling.audio_dir` will play.
-
-### `[calling]`
-
-Required only if you use WhatsApp voice calling / IVR.
-
-| Field | Notes |
-|---|---|
-| `max_call_duration` | Hard cap in seconds; calls beyond this are forcibly terminated. |
-| `audio_dir` | Where prompt audio files (`hold_music.opus`, `ringback.opus`, IVR prompts) live. |
-| `hold_music_file`, `ringback_file` | Filenames inside `audio_dir`. |
-| `transfer_timeout_secs` | How long to wait for an agent to accept a transferred call before falling through. |
-| `recording_enabled` | Records both directions per call. **Requires `[storage] type = "s3"` and credentials** for off-host retention; without S3, recordings are local under `local_path`. |
-| `udp_port_min`, `udp_port_max` | RTP/SRTP UDP port range. Whatever range you set must be open in your firewall / security group. Default `10000–10100` gives 100 concurrent streams. |
-| `public_ip` | **Required on AWS / GCP / Azure**, where the host's network interface does not have its public IP attached. Pion uses this for ICE candidate generation. |
-| `relay_only` | If `true`, advertises only TURN candidates (no host/srflx). Useful when the network is too restricted for direct UDP. |
-| `[[calling.ice_servers]]` | One block per STUN/TURN server. STUN-only works in permissive networks; configure TURN for guaranteed connectivity behind strict NAT or corporate firewalls. |
 
 ### `[default_admin]`
 
@@ -235,14 +184,12 @@ with underscores in `<KEY>` preserved. Examples:
 | `WHATOMATE_JWT_SECRET` | `jwt.secret` |
 | `WHATOMATE_STORAGE_S3_BUCKET` | `storage.s3_bucket` |
 | `WHATOMATE_RATE_LIMIT_ENABLED` | `rate_limit.enabled` |
-| `WHATOMATE_CALLING_PUBLIC_IP` | `calling.public_ip` |
+
 | `WHATOMATE_DEFAULT_ADMIN_PASSWORD` | `default_admin.password` |
 
 Env vars take precedence over the config file, so the typical pattern is to commit a non-secret `config.toml` and inject secrets (`*_PASSWORD`, `*_KEY`, `*_SECRET`, `JWT_SECRET`) via the deployment environment.
 
-<Aside type="caution">
-  Array entries (`[[calling.ice_servers]]`) cannot be set via env vars — define them in `config.toml`.
-</Aside>
+
 
 ## Database Setup
 
@@ -264,21 +211,14 @@ psql -c "CREATE DATABASE whatomate;"
 
 Schema is generated from GORM struct tags in `internal/models/`; there are no SQL migration files. Re-running with `-migrate` is safe — it adds new tables/columns and is a no-op for existing ones.
 
-## WhatsApp API Configuration
+## WhatsApp Account Configuration
 
-WhatsApp Cloud API credentials are **not** in `config.toml`. Configure them per organization in the UI:
+WhatsApp accounts are connected via QR code pairing using GOWA (WhatsApp Web protocol):
 
 1. Navigate to **Settings → Accounts**
 2. Click **Add Account**
-3. Enter:
-   - **Phone Number ID** — from Meta Business Suite
-   - **Business Account ID** — from Meta Business Suite
-   - **Access Token** — generated in Meta for Developers
-   - **Webhook Verify Token** — your custom verification token
-
-<Aside type="caution">
-  Access tokens are encrypted at rest using `app.encryption_key`. If you haven't set that, tokens are stored in plaintext.
-</Aside>
+3. Enter a name for the account
+4. Scan the QR code with your WhatsApp mobile app
 
 ## Building
 
@@ -383,6 +323,5 @@ docker compose up -d --scale worker=3
 - Configure `redis.password` (and `redis.username` for ACL) and enable `redis.tls = true` for managed Redis.
 - Enable `rate_limit.enabled = true` and set `rate_limit.trust_proxy` to match your reverse proxy.
 - Restrict `server.allowed_origins` to your actual frontend hostnames.
-- For voice calling: set `calling.public_ip` on cloud hosts, ensure UDP `udp_port_min`–`udp_port_max` is open in your security group, configure at least one `[[calling.ice_servers]]` (TURN strongly recommended for traversal across strict NATs).
 - Terminate TLS at a reverse proxy (nginx, Caddy, or a cloud load balancer) — the binary serves HTTP only.
 - Run API and workers as separate processes so a stuck campaign send doesn't block API responses.

@@ -200,7 +200,7 @@ labelled with the outcome they handle (`default`, `button:<id>`,
 | `api_call` | Fire an HTTP request, capture mapped fields into session data, optionally send a templated message. | `http:2xx`, `http:non2xx` |
 | `condition` | Evaluate an expression against session data and route on the result. | `true`, `false` |
 | `timing` | Route based on a per-day business-hours schedule. | `in_hours`, `out_of_hours` |
-| `whatsapp_flow` | Send a native WhatsApp Flow form and merge the submission into session data. | `default` |
+
 | `transfer` | Hand off to a team / queue and end the flow. | (terminal) |
 | `goto_flow` | Jump execution into another flow (variables carry over). | (handled internally) |
 | `webhook` | Fire-and-forget HTTP call; result is ignored. | `default` |
@@ -234,7 +234,7 @@ the `false` edge — the webhook always succeeds, even on a typo.
 | **Template Engine** | Format messages with variables, conditionals, and loops |
 | **Webhook Headers** | Configure custom headers for API calls and completion webhooks |
 | **Agent Transfer** | Transfer to human agent when needed |
-| **WhatsApp Flows** | Integrate native WhatsApp Flows |
+
 | **Sub-flows** | `goto_flow` jumps into another flow, carrying variables forward |
 
 ### API Integration

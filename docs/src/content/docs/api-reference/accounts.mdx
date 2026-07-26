@@ -7,7 +7,7 @@ import { Aside } from '@astrojs/starlight/components';
 
 ## Overview
 
-Accounts represent your WhatsApp Business API connections. Each account is linked to a phone number registered with Meta's WhatsApp Business Platform.
+Accounts represent your WhatsApp device connections managed through GOWA (WhatsApp Web protocol).
 
 ## List Accounts
 
@@ -28,8 +28,6 @@ GET /api/accounts
         "id": "uuid",
         "name": "Main Business",
         "phone_number": "+1234567890",
-        "phone_number_id": "123456789",
-        "business_account_id": "987654321",
         "status": "active",
         "created_at": "2024-01-01T00:00:00Z"
       }
@@ -54,11 +52,7 @@ GET /api/accounts/{id}
   "data": {
     "id": "uuid",
     "name": "Main Business",
-    "phone_number": "+1234567890",
-    "phone_number_id": "123456789",
-    "business_account_id": "987654321",
-    "access_token": "EAAxxxx...",
-    "webhook_verify_token": "your_verify_token",
+        "phone_number": "+1234567890",
     "status": "active",
     "quality_rating": "GREEN",
     "messaging_limit": "TIER_1K",
@@ -69,7 +63,7 @@ GET /api/accounts/{id}
 
 ## Create Account
 
-Connect a new WhatsApp Business account.
+Connect a new WhatsApp account via QR code pairing (GOWA).
 
 ```bash
 POST /api/accounts
@@ -79,11 +73,7 @@ POST /api/accounts
 
 ```json
 {
-  "name": "Support Line",
-  "phone_number_id": "123456789",
-  "business_account_id": "987654321",
-  "access_token": "EAAxxxx...",
-  "webhook_verify_token": "your_custom_verify_token"
+  "name": "Support Line"
 }
 ```
 
@@ -113,8 +103,7 @@ PUT /api/accounts/{id}
 
 ```json
 {
-  "name": "Customer Support",
-  "access_token": "EAAyyyy..."
+  "name": "Customer Support"
 }
 ```
 
@@ -132,7 +121,7 @@ DELETE /api/accounts/{id}
 
 ## Test Connection
 
-Verify the account connection with Meta.
+Verify the account connection.
 
 ```bash
 POST /api/accounts/{id}/test
@@ -145,10 +134,7 @@ POST /api/accounts/{id}/test
   "status": "success",
   "data": {
     "connected": true,
-    "phone_number": "+1234567890",
-    "display_phone_number": "(123) 456-7890",
-    "verified_name": "Your Business Name",
-    "quality_rating": "GREEN"
+    "phone_number": "+1234567890"
   }
 }
 ```
@@ -157,21 +143,6 @@ POST /api/accounts/{id}/test
 
 | Status | Description |
 |--------|-------------|
-| `pending` | Account created, awaiting verification |
+| `pending` | Account created, awaiting QR pairing |
 | `active` | Account is connected and working |
 | `disconnected` | Connection lost, needs reconnection |
-| `suspended` | Account suspended by Meta |
-
-## Quality Rating
-
-Meta assigns quality ratings based on message performance:
-
-| Rating | Description |
-|--------|-------------|
-| `GREEN` | High quality, no issues |
-| `YELLOW` | Some issues, review messages |
-| `RED` | Low quality, account at risk |
-
-<Aside type="tip">
-  Monitor your quality rating regularly. A RED rating can lead to messaging limits or account suspension.
-</Aside>

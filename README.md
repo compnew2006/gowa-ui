@@ -15,8 +15,8 @@ Modern, open-source WhatsApp Business Platform. Single binary app.
 - **Granular Roles & Permissions**
   Customizable roles with fine-grained permissions. Create custom roles, assign specific permissions per resource (users, contacts, templates, etc.), and control access at the action level (read, create, update, delete). Super admins can manage multiple organizations.
 
-- **WhatsApp Cloud API Integration**
-  Connect with Meta's WhatsApp Business API for messaging.
+- **WhatsApp Business API Integration**
+  Connect via the WhatsApp Business API for messaging.
 
 - **Real-time Chat**
   Live messaging with WebSocket support for instant communication.
@@ -32,9 +32,6 @@ Modern, open-source WhatsApp Business Platform. Single binary app.
 
 - **Canned Responses**
   Pre-defined quick replies with slash commands (`/shortcut`) and dynamic placeholders.
-
-- **Voice Calling & IVR**
-  Incoming and outgoing WhatsApp calls with IVR menus, DTMF routing, call transfers to agent teams, hold music, and call recording. See [calling docs](https://shridarpatil.github.io/whatomate/features/calling/).
 
 - **Analytics Dashboard**
   Track messages, engagement, and campaign performance.
