@@ -194,9 +194,8 @@ func TestFindByIDAndOrg_Found(t *testing.T) {
 		BaseModel:      models.BaseModel{ID: uuid.New()},
 		OrganizationID: org.ID,
 		Name:           "test-acct-" + uuid.New().String()[:8],
-		PhoneID:        "p-" + uuid.New().String()[:8],
-		BusinessID:     "b-" + uuid.New().String()[:8],
-		AccessToken:    "tok",
+		GowaBaseURL:    "http://gowa.test:3000",
+		GowaDeviceID:   "device-" + uuid.New().String()[:8],
 	}
 	require.NoError(t, db.Create(account).Error)
 
@@ -237,9 +236,8 @@ func TestFindByIDAndOrg_CrossOrgIsolation(t *testing.T) {
 		BaseModel:      models.BaseModel{ID: uuid.New()},
 		OrganizationID: org1.ID,
 		Name:           "acct-" + uuid.New().String()[:8],
-		PhoneID:        "p-" + uuid.New().String()[:8],
-		BusinessID:     "b-" + uuid.New().String()[:8],
-		AccessToken:    "tok",
+		GowaBaseURL:    "http://gowa.test:3000",
+		GowaDeviceID:   "device-" + uuid.New().String()[:8],
 	}
 	require.NoError(t, db.Create(account).Error)
 

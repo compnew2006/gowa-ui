@@ -19,7 +19,7 @@ func TestSendReaction_SendsEmojiAndPhone(t *testing.T) {
 	defer mock.close()
 
 	c := gowa.New(mock.url(), "", "")
-	account := &whatsapp.Account{ProviderType: "gowa", GowaDeviceID: "dev1"}
+	account := &whatsapp.Account{GowaDeviceID: "dev1"}
 
 	err := c.SendReaction(context.Background(), account, "MSG123", "628123@s.whatsapp.net", "👍")
 	require.NoError(t, err)
@@ -38,7 +38,7 @@ func TestRevokeMessage_PostsToRevokeEndpoint(t *testing.T) {
 	defer mock.close()
 
 	c := gowa.New(mock.url(), "", "")
-	account := &whatsapp.Account{ProviderType: "gowa", GowaDeviceID: "dev1"}
+	account := &whatsapp.Account{GowaDeviceID: "dev1"}
 
 	err := c.RevokeMessage(context.Background(), account, "MSG456", "628123@s.whatsapp.net")
 	require.NoError(t, err)
@@ -51,7 +51,7 @@ func TestUnstarMessage_PostsToUnstarEndpoint(t *testing.T) {
 	defer mock.close()
 
 	c := gowa.New(mock.url(), "", "")
-	account := &whatsapp.Account{ProviderType: "gowa", GowaDeviceID: "dev1"}
+	account := &whatsapp.Account{GowaDeviceID: "dev1"}
 
 	err := c.UnstarMessage(context.Background(), account, "MSG001", "628123@s.whatsapp.net")
 	require.NoError(t, err)
@@ -64,7 +64,7 @@ func TestMarkMessageRead_PassesJIDAsPhoneField(t *testing.T) {
 	defer mock.close()
 
 	c := gowa.New(mock.url(), "", "")
-	account := &whatsapp.Account{ProviderType: "gowa", GowaDeviceID: "dev1"}
+	account := &whatsapp.Account{GowaDeviceID: "dev1"}
 
 	err := c.MarkMessageReadWithJID(context.Background(), account, "MSG111", "628123@s.whatsapp.net")
 	require.NoError(t, err)
@@ -88,7 +88,7 @@ func TestSendReaction_PropagatesAPIError(t *testing.T) {
 	defer server.Close()
 
 	c := gowa.New(server.URL, "", "")
-	account := &whatsapp.Account{ProviderType: "gowa", GowaDeviceID: "dev1"}
+	account := &whatsapp.Account{GowaDeviceID: "dev1"}
 
 	err := c.SendReaction(context.Background(), account, "BADMSG", "628123@s.whatsapp.net", "❤️")
 	require.Error(t, err)

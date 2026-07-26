@@ -25,7 +25,6 @@ import {
   MessageSquare,
   MousePointerClick,
   Globe,
-  MessageCircle,
   Users,
   GitBranch,
   Clock,
@@ -50,7 +49,6 @@ import type { PanelConfig, AvailableVariable } from '@/components/chatbot/PanelC
 import ChatbotTextNode from '@/components/chatbot/nodes/ChatbotTextNode.vue'
 import ChatbotButtonsNode from '@/components/chatbot/nodes/ChatbotButtonsNode.vue'
 import ChatbotApiNode from '@/components/chatbot/nodes/ChatbotApiNode.vue'
-import ChatbotWhatsAppFlowNode from '@/components/chatbot/nodes/ChatbotWhatsAppFlowNode.vue'
 import ChatbotTransferNode from '@/components/chatbot/nodes/ChatbotTransferNode.vue'
 import ChatbotConditionNode from '@/components/chatbot/nodes/ChatbotConditionNode.vue'
 import ChatbotTimingNode from '@/components/chatbot/nodes/ChatbotTimingNode.vue'
@@ -113,7 +111,6 @@ const nodeTypes: any = {
   prompt: markRaw(ChatbotTextNode),
   buttons: markRaw(ChatbotButtonsNode),
   api_call: markRaw(ChatbotApiNode),
-  whatsapp_flow: markRaw(ChatbotWhatsAppFlowNode),
   transfer: markRaw(ChatbotTransferNode),
   condition: markRaw(ChatbotConditionNode),
   timing: markRaw(ChatbotTimingNode),
@@ -128,7 +125,6 @@ const palette: { type: ChatNodeType; label: string; icon: any; color: string }[]
   { type: 'message', label: 'Text', icon: MessageSquare, color: 'bg-blue-600' },
   { type: 'buttons', label: 'Buttons', icon: MousePointerClick, color: 'bg-purple-600' },
   { type: 'api_call', label: 'API', icon: Globe, color: 'bg-orange-600' },
-  { type: 'whatsapp_flow', label: 'WA Flow', icon: MessageCircle, color: 'bg-green-600' },
   { type: 'transfer', label: 'Transfer', icon: Users, color: 'bg-amber-600' },
   { type: 'condition', label: 'Condition', icon: GitBranch, color: 'bg-indigo-600' },
   { type: 'timing', label: 'Timing', icon: Clock, color: 'bg-cyan-600' },
@@ -195,8 +191,6 @@ function defaultConfigFor(type: ChatNodeType): Record<string, any> {
       return { body: '', buttons: [] }
     case 'api_call':
       return { url: '', method: 'GET', headers: {}, body: '', response_mapping: {}, message_template: '' }
-    case 'whatsapp_flow':
-      return { flow_id: '', header: '', body: '', cta: 'Open' }
     case 'transfer':
       return { body: '', team_id: '_general', notes: '' }
     case 'condition':
@@ -229,7 +223,6 @@ const paletteLabels: Record<string, string> = {
   prompt: 'Prompt',
   buttons: 'Buttons',
   api_call: 'API',
-  whatsapp_flow: 'WhatsApp Flow',
   transfer: 'Transfer',
   condition: 'Condition',
   timing: 'Timing',

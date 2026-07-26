@@ -5,17 +5,15 @@ import (
 )
 
 // Registry holds provider instances and resolves the correct one for a given
-// account. The Meta client is a singleton (it is account-agnostic — each call
-// passes the account's credentials explicitly). GOWA clients are keyed by
-// base URL because each GOWA instance runs at a different endpoint.
+// account. GOWA clients are keyed by base URL because each GOWA instance runs
+// at a different endpoint.
 //
 // Usage:
 //
-//	reg := whatsapp.NewRegistry(metaClient)
-//	provider := reg.Get(account) // returns metaProvider or gowa.Client
+//	reg := whatsapp.NewRegistry(log)
+//	provider := reg.Get(account) // returns the gowa.Client for the account
 type Registry struct {
 	mu   sync.RWMutex
-	meta Provider
 	gowa map[string]Provider // keyed by base URL
 	log  logger
 }
@@ -28,28 +26,20 @@ type logger interface {
 	Debug(msg string, ctx ...any)
 }
 
-// NewRegistry creates a registry with the given Meta provider as the default.
-func NewRegistry(meta Provider, log logger) *Registry {
+// NewRegistry creates an empty GOWA provider registry.
+func NewRegistry(log logger) *Registry {
 	return &Registry{
-		meta: meta,
 		gowa: make(map[string]Provider),
 		log:  log,
 	}
 }
 
-// Get returns the provider for the given account credentials.
-// ProviderType "gowa" → GOWA client for the account's GowaBaseURL.
-// Everything else (including "") → Meta client.
+// Get returns the GOWA provider for the given account credentials.
 func (r *Registry) Get(account *Account) Provider {
 	if account == nil {
-		return r.meta
+		return r.getOrCreateGowa("", "")
 	}
-
-	if account.ProviderType == "gowa" {
-		return r.getOrCreateGowa(account.GowaBaseURL, account.GowaDeviceID)
-	}
-
-	return r.meta
+	return r.getOrCreateGowa(account.GowaBaseURL, account.GowaDeviceID)
 }
 
 // getOrCreateGowa returns an existing GOWA client for the base URL, or
@@ -81,11 +71,11 @@ func (r *Registry) getOrCreateGowa(baseURL, deviceID string) Provider {
 	// whatsapp (this package) and gowa (which imports whatsapp).
 	p := gowaFactory(baseURL)
 	if p == nil {
-		// Factory not registered — fall back to Meta with a warning.
+		// Factory not registered — a startup wiring bug.
 		if r.log != nil {
-			r.log.Warn("GOWA provider factory not registered, falling back to Meta", "base_url", baseURL)
+			r.log.Error("GOWA provider factory not registered", "base_url", baseURL)
 		}
-		return r.meta
+		return nil
 	}
 	r.gowa[baseURL] = p
 	if r.log != nil {

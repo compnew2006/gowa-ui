@@ -128,7 +128,7 @@ const SHORTCUT_REGISTRY = computed(() => ({
   campaigns: { label: t('nav.campaigns'), to: '/campaigns', icon: Megaphone, gradient: 'from-orange-500 to-amber-600' },
   chatbot: { label: t('nav.chatbot'), to: '/chatbot', icon: Bot, gradient: 'from-purple-500 to-pink-600' },
   contacts: { label: t('nav.contacts'), to: '/settings/contacts', icon: Contact, gradient: 'from-cyan-500 to-blue-600' },
-  flows: { label: t('nav.flows'), to: '/flows', icon: Workflow, gradient: 'from-indigo-500 to-violet-600' },
+  flows: { label: t('nav.flows'), to: '/chatbot/flows', icon: Workflow, gradient: 'from-indigo-500 to-violet-600' },
   transfers: { label: t('nav.transfers'), to: '/chatbot/transfers', icon: UserX, gradient: 'from-rose-500 to-red-600' },
   agentAnalytics: { label: t('nav.agentAnalytics'), to: '/analytics/agents', icon: BarChart3, gradient: 'from-teal-500 to-cyan-600' },
   settings: { label: t('nav.settings'), to: '/settings', icon: Settings, gradient: 'from-gray-500 to-zinc-600' },

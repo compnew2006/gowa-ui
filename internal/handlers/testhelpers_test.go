@@ -9,7 +9,6 @@ import (
 	"github.com/shridarpatil/whatomate/internal/config"
 	"github.com/shridarpatil/whatomate/internal/handlers"
 	"github.com/shridarpatil/whatomate/internal/queue"
-	"github.com/shridarpatil/whatomate/pkg/whatsapp"
 	"github.com/shridarpatil/whatomate/test/testutil"
 )
 
@@ -20,13 +19,6 @@ type appOption func(*handlers.App)
 func withQueue(q queue.Queue) appOption {
 	return func(a *handlers.App) {
 		a.Queue = q
-	}
-}
-
-// withWhatsApp sets the WhatsApp client on the test App.
-func withWhatsApp(wa *whatsapp.Client) appOption {
-	return func(a *handlers.App) {
-		a.WhatsApp = wa
 	}
 }
 

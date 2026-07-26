@@ -52,7 +52,6 @@ func (m *mockGowaServer) url() string { return m.Server.URL }
 
 func testAccount(deviceID string) *whatsapp.Account {
 	return &whatsapp.Account{
-		ProviderType: "gowa",
 		GowaBaseURL:  "",
 		GowaDeviceID: deviceID,
 	}

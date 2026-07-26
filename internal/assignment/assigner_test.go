@@ -362,7 +362,7 @@ func TestResolvePerAgentTimeout(t *testing.T) {
 	}
 }
 
-// --- ChatLoadCounter / CallLoadCounter ---
+// --- ChatLoadCounter ---
 
 func TestChatLoadCounter_CountsActiveTransfersPerAgent(t *testing.T) {
 	_, db := newAssigner(t)
@@ -426,41 +426,4 @@ func TestChatLoadCounter_CrossOrgIsolation(t *testing.T) {
 
 	loads := assignment.ChatLoadCounter(db, orgA.ID, []uuid.UUID{a1.ID})
 	assert.Equal(t, int64(1), loads[a1.ID], "load count must not leak across organizations")
-}
-
-func TestCallLoadCounter_OnlyWaitingAndConnected(t *testing.T) {
-	_, db := newAssigner(t)
-	org := testutil.CreateTestOrganization(t, db)
-	agent := testutil.CreateTestUser(t, db, org.ID)
-	contact := testutil.CreateTestContact(t, db, org.ID)
-
-	callLog := &models.CallLog{
-		BaseModel:      models.BaseModel{ID: uuid.New()},
-		OrganizationID: org.ID,
-		ContactID:      contact.ID,
-		Status:         models.CallStatusAnswered,
-		CallerPhone:    contact.PhoneNumber,
-	}
-	require.NoError(t, db.Create(callLog).Error)
-
-	mkTransfer := func(status models.CallTransferStatus) {
-		require.NoError(t, db.Create(&models.CallTransfer{
-			BaseModel:       models.BaseModel{ID: uuid.New()},
-			OrganizationID:  org.ID,
-			CallLogID:       callLog.ID,
-			ContactID:       contact.ID,
-			WhatsAppCallID:  "wa-" + uuid.New().String()[:8],
-			CallerPhone:     contact.PhoneNumber,
-			WhatsAppAccount: "test-account",
-			AgentID:         &agent.ID,
-			Status:          status,
-		}).Error)
-	}
-	mkTransfer(models.CallTransferStatusWaiting)
-	mkTransfer(models.CallTransferStatusConnected)
-	mkTransfer(models.CallTransferStatusCompleted) // must NOT count
-	mkTransfer(models.CallTransferStatusAbandoned) // must NOT count
-
-	loads := assignment.CallLoadCounter(db, org.ID, []uuid.UUID{agent.ID})
-	assert.Equal(t, int64(2), loads[agent.ID], "only waiting + connected should be counted")
 }

@@ -152,15 +152,12 @@ func CreateTestWhatsAppAccount(t *testing.T, db *gorm.DB, orgID uuid.UUID) *mode
 	t.Helper()
 
 	account := &models.WhatsAppAccount{
-		BaseModel:          models.BaseModel{ID: uuid.New()},
-		OrganizationID:     orgID,
-		Name:               "test-account-" + uuid.New().String()[:8],
-		PhoneID:            "phone-" + uuid.New().String()[:8],
-		BusinessID:         "business-" + uuid.New().String()[:8],
-		AccessToken:        "test-token",
-		WebhookVerifyToken: "webhook-token",
-		APIVersion:         "v18.0",
-		Status:             "active",
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: orgID,
+		Name:           "test-account-" + uuid.New().String()[:8],
+		GowaBaseURL:    "http://gowa.test:3000",
+		GowaDeviceID:   "device-" + uuid.New().String()[:8],
+		Status:         "active",
 	}
 	require.NoError(t, db.Create(account).Error)
 	return account
@@ -181,15 +178,12 @@ func CreateTestWhatsAppAccountWith(t *testing.T, db *gorm.DB, orgID uuid.UUID, o
 	t.Helper()
 
 	account := &models.WhatsAppAccount{
-		BaseModel:          models.BaseModel{ID: uuid.New()},
-		OrganizationID:     orgID,
-		Name:               "test-account-" + uuid.New().String()[:8],
-		PhoneID:            "phone-" + uuid.New().String()[:8],
-		BusinessID:         "business-" + uuid.New().String()[:8],
-		AccessToken:        "test-token",
-		WebhookVerifyToken: "webhook-token",
-		APIVersion:         "v18.0",
-		Status:             "active",
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: orgID,
+		Name:           "test-account-" + uuid.New().String()[:8],
+		GowaBaseURL:    "http://gowa.test:3000",
+		GowaDeviceID:   "device-" + uuid.New().String()[:8],
+		Status:         "active",
 	}
 
 	for _, opt := range opts {
@@ -265,10 +259,8 @@ func CreateTestTemplate(t *testing.T, db *gorm.DB, orgID uuid.UUID, accountName 
 		OrganizationID:  orgID,
 		WhatsAppAccount: accountName,
 		Name:            "test-template-" + uuid.New().String()[:8],
-		MetaTemplateID:  "meta-" + uuid.New().String()[:8],
 		Category:        "MARKETING",
 		Language:        "en",
-		Status:          string(models.TemplateStatusApproved),
 		BodyContent:     "Hello {{1}}",
 	}
 	require.NoError(t, db.Create(template).Error)

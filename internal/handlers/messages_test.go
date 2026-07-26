@@ -4,136 +4,123 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/shridarpatil/whatomate/internal/handlers"
 	"github.com/shridarpatil/whatomate/internal/models"
 	"github.com/shridarpatil/whatomate/internal/templateutil"
+	"github.com/shridarpatil/whatomate/pkg/gowa"
 	"github.com/shridarpatil/whatomate/pkg/whatsapp"
 	"github.com/shridarpatil/whatomate/test/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// mockWhatsAppServer creates a mock WhatsApp API server for testing.
-// It handles various endpoints and returns configurable responses.
-type mockWhatsAppServer struct {
+// gowaRequest captures a single request received by the mock GOWA server.
+type gowaRequest struct {
+	method string
+	path   string
+	body   map[string]any    // decoded JSON body (JSON requests)
+	form   map[string]string // form fields (multipart requests)
+	files  []string          // file field names (multipart requests)
+}
+
+// mockGowaServer is a mock GOWA REST API server for message tests.
+// It records every request and returns configurable send responses.
+type mockGowaServer struct {
 	server        *httptest.Server
-	sentMessages  []map[string]any
-	uploadedMedia []map[string]any
+	mu            sync.Mutex
+	requests      []gowaRequest
 	returnError   bool
 	errorMessage  string
 	nextMessageID string
-	nextMediaID   string
 }
 
-func newMockWhatsAppServer() *mockWhatsAppServer {
-	m := &mockWhatsAppServer{
-		sentMessages:  make([]map[string]any, 0),
-		uploadedMedia: make([]map[string]any, 0),
-		nextMessageID: "wamid.test-" + uuid.New().String()[:8],
-		nextMediaID:   "media-" + uuid.New().String()[:8],
+func newMockGowaServer() *mockGowaServer {
+	m := &mockGowaServer{
+		nextMessageID: "gowa-msg-" + uuid.New().String()[:8],
 	}
 
 	m.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Check authorization
-		auth := r.Header.Get("Authorization")
-		if auth != "Bearer test-token" {
-			w.WriteHeader(http.StatusUnauthorized)
+		req := gowaRequest{method: r.Method, path: r.URL.Path}
+		if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+			if err := r.ParseMultipartForm(32 << 20); err == nil {
+				req.form = make(map[string]string)
+				for key, vals := range r.MultipartForm.Value {
+					if len(vals) > 0 {
+						req.form[key] = vals[0]
+					}
+				}
+				for name := range r.MultipartForm.File {
+					req.files = append(req.files, name)
+				}
+			}
+		} else {
+			_ = json.NewDecoder(r.Body).Decode(&req.body)
+		}
+
+		m.mu.Lock()
+		m.requests = append(m.requests, req)
+		returnError, errorMessage := m.returnError, m.errorMessage
+		m.mu.Unlock()
+
+		w.Header().Set("Content-Type", "application/json")
+		if returnError {
+			w.WriteHeader(http.StatusBadRequest)
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"error": map[string]any{
-					"message": "Invalid access token",
-					"code":    190,
-				},
+				"code":    "BAD_REQUEST",
+				"message": errorMessage,
 			})
 			return
 		}
-
-		// Handle different endpoints
-		switch {
-		case r.URL.Path == "/v18.0/phone-123/messages" && r.Method == http.MethodPost:
-			m.handleMessages(w, r)
-		case r.URL.Path == "/v18.0/phone-123/media" && r.Method == http.MethodPost:
-			m.handleMediaUpload(w, r)
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"code":    "SUCCESS",
+			"message": "Success",
+			"results": map[string]any{"message_id": m.nextMessageID, "status": "ok"},
+		})
 	}))
 
 	return m
 }
 
-func (m *mockWhatsAppServer) handleMessages(w http.ResponseWriter, r *http.Request) {
-	if m.returnError {
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"error": map[string]any{
-				"message": m.errorMessage,
-				"code":    100,
-			},
-		})
-		return
-	}
-
-	var body map[string]any
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	m.sentMessages = append(m.sentMessages, body)
-
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"messages": []map[string]string{{"id": m.nextMessageID}},
-	})
+// setError makes the mock server fail every send with a GOWA error envelope.
+func (m *mockGowaServer) setError(msg string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.returnError = true
+	m.errorMessage = msg
 }
 
-func (m *mockWhatsAppServer) handleMediaUpload(w http.ResponseWriter, r *http.Request) {
-	if m.returnError {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	m.uploadedMedia = append(m.uploadedMedia, map[string]any{
-		"content_type": r.Header.Get("Content-Type"),
-	})
-
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"id": m.nextMediaID,
-	})
+// sentRequests returns a snapshot of the recorded requests.
+func (m *mockGowaServer) sentRequests() []gowaRequest {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]gowaRequest(nil), m.requests...)
 }
 
-func (m *mockWhatsAppServer) close() {
+func (m *mockGowaServer) close() {
 	m.server.Close()
 }
 
-// testServerTransport redirects all requests to the test server
-type testServerTransport struct {
-	serverURL string
-}
-
-func (t *testServerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	testReq := req.Clone(req.Context())
-	testReq.URL.Scheme = "http"
-	testReq.URL.Host = t.serverURL[7:] // Remove "http://"
-	return http.DefaultTransport.RoundTrip(testReq)
-}
-
-// newMsgTestApp creates an App instance for message testing with a mock WhatsApp server.
-func newMsgTestApp(t *testing.T, mockServer *mockWhatsAppServer) *handlers.App {
+// newMsgTestApp creates an App instance for message testing with a mock GOWA server.
+func newMsgTestApp(t *testing.T, mockServer *mockGowaServer) *handlers.App {
 	t.Helper()
 
-	log := testutil.NopLogger()
-	waClient := whatsapp.NewWithTimeout(log, 5*time.Second)
-	waClient.HTTPClient = &http.Client{
-		Transport: &testServerTransport{serverURL: mockServer.server.URL},
-	}
+	app := newTestApp(t)
 
-	return newTestApp(t, withWhatsApp(waClient))
+	// Route every account through the mock server, regardless of its base URL.
+	whatsapp.RegisterGowaFactory(
+		func(baseURL string) (string, string) { return "", "" },
+		func(baseURL, username, password string) whatsapp.Provider {
+			return gowa.New(mockServer.server.URL, username, password)
+		},
+	)
+	app.WARegistry = whatsapp.NewRegistry(testutil.NopLogger())
+
+	return app
 }
 
 // createTestAccount creates a test WhatsApp account in the database.
@@ -141,15 +128,12 @@ func createTestAccount(t *testing.T, app *handlers.App, orgID uuid.UUID) *models
 	t.Helper()
 
 	account := &models.WhatsAppAccount{
-		BaseModel:          models.BaseModel{ID: uuid.New()},
-		OrganizationID:     orgID,
-		Name:               "test-account-" + uuid.New().String()[:8],
-		PhoneID:            "phone-123",
-		BusinessID:         "business-123",
-		AccessToken:        "test-token",
-		WebhookVerifyToken: "webhook-token",
-		APIVersion:         "v18.0",
-		Status:             "active",
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: orgID,
+		Name:           "test-account-" + uuid.New().String()[:8],
+		GowaBaseURL:    "http://gowa.test:3000",
+		GowaDeviceID:   "device-" + uuid.New().String()[:8],
+		Status:         "active",
 	}
 	require.NoError(t, app.DB.Create(account).Error)
 	return account
@@ -158,7 +142,7 @@ func createTestAccount(t *testing.T, app *handlers.App, orgID uuid.UUID) *models
 // --- SendOutgoingMessage Tests ---
 
 func TestApp_SendOutgoingMessage_TextMessage_Success(t *testing.T) {
-	mockServer := newMockWhatsAppServer()
+	mockServer := newMockGowaServer()
 	defer mockServer.close()
 
 	app := newMsgTestApp(t, mockServer)
@@ -190,14 +174,13 @@ func TestApp_SendOutgoingMessage_TextMessage_Success(t *testing.T) {
 	assert.Equal(t, contact.ID, msg.ContactID)
 	assert.Equal(t, org.ID, msg.OrganizationID)
 
-	// Verify message was sent to WhatsApp API
-	require.Len(t, mockServer.sentMessages, 1)
-	sentMsg := mockServer.sentMessages[0]
-	assert.Equal(t, "text", sentMsg["type"])
-	assert.Equal(t, contact.PhoneNumber, sentMsg["to"])
-
-	textContent := sentMsg["text"].(map[string]any)
-	assert.Equal(t, "Hello, World!", textContent["body"])
+	// Verify message was sent to the GOWA API
+	reqs := mockServer.sentRequests()
+	require.Len(t, reqs, 1)
+	sent := reqs[0]
+	assert.Equal(t, "/send/message", sent.path)
+	assert.Equal(t, contact.PhoneNumber+"@s.whatsapp.net", sent.body["phone"])
+	assert.Equal(t, "Hello, World!", sent.body["message"])
 
 	// Verify message status was updated in DB
 	var dbMsg models.Message
@@ -207,11 +190,10 @@ func TestApp_SendOutgoingMessage_TextMessage_Success(t *testing.T) {
 }
 
 func TestApp_SendOutgoingMessage_TextMessage_APIError(t *testing.T) {
-	mockServer := newMockWhatsAppServer()
+	mockServer := newMockGowaServer()
 	defer mockServer.close()
 
-	mockServer.returnError = true
-	mockServer.errorMessage = "Phone number is invalid"
+	mockServer.setError("Phone number is invalid")
 
 	app := newMsgTestApp(t, mockServer)
 	org := testutil.CreateTestOrganization(t, app.DB)
@@ -243,7 +225,7 @@ func TestApp_SendOutgoingMessage_TextMessage_APIError(t *testing.T) {
 }
 
 func TestApp_SendOutgoingMessage_ImageMessage_WithMediaID(t *testing.T) {
-	mockServer := newMockWhatsAppServer()
+	mockServer := newMockGowaServer()
 	defer mockServer.close()
 
 	app := newMsgTestApp(t, mockServer)
@@ -269,21 +251,18 @@ func TestApp_SendOutgoingMessage_ImageMessage_WithMediaID(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, msg)
 
-	// Verify image message was sent
-	require.Len(t, mockServer.sentMessages, 1)
-	sentMsg := mockServer.sentMessages[0]
-	assert.Equal(t, "image", sentMsg["type"])
-
-	imageContent := sentMsg["image"].(map[string]any)
-	assert.Equal(t, "existing-media-id", imageContent["id"])
-	assert.Equal(t, "Check this out!", imageContent["caption"])
-
-	// No media upload should have occurred
-	assert.Len(t, mockServer.uploadedMedia, 0)
+	// Verify image message was sent as a URL/ID pass-through (JSON, no upload)
+	reqs := mockServer.sentRequests()
+	require.Len(t, reqs, 1)
+	sent := reqs[0]
+	assert.Equal(t, "/send/image", sent.path)
+	assert.Equal(t, "existing-media-id", sent.body["image_url"])
+	assert.Equal(t, "Check this out!", sent.body["caption"])
+	assert.Nil(t, sent.form)
 }
 
 func TestApp_SendOutgoingMessage_ImageMessage_WithMediaData(t *testing.T) {
-	mockServer := newMockWhatsAppServer()
+	mockServer := newMockGowaServer()
 	defer mockServer.close()
 
 	app := newMsgTestApp(t, mockServer)
@@ -310,20 +289,20 @@ func TestApp_SendOutgoingMessage_ImageMessage_WithMediaData(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, msg)
 
-	// Verify media was uploaded
-	require.Len(t, mockServer.uploadedMedia, 1)
-
-	// Verify image message was sent with uploaded media ID
-	require.Len(t, mockServer.sentMessages, 1)
-	sentMsg := mockServer.sentMessages[0]
-	assert.Equal(t, "image", sentMsg["type"])
-
-	imageContent := sentMsg["image"].(map[string]any)
-	assert.Equal(t, mockServer.nextMediaID, imageContent["id"])
+	// GOWA has no separate upload endpoint — the uploaded bytes are sent
+	// inline as a single multipart request to /send/image.
+	reqs := mockServer.sentRequests()
+	require.Len(t, reqs, 1)
+	sent := reqs[0]
+	assert.Equal(t, "/send/image", sent.path)
+	require.NotNil(t, sent.form)
+	assert.Equal(t, contact.PhoneNumber+"@s.whatsapp.net", sent.form["phone"])
+	assert.Equal(t, "Photo caption", sent.form["caption"])
+	assert.Equal(t, []string{"image"}, sent.files)
 }
 
 func TestApp_SendOutgoingMessage_DocumentMessage(t *testing.T) {
-	mockServer := newMockWhatsAppServer()
+	mockServer := newMockGowaServer()
 	defer mockServer.close()
 
 	app := newMsgTestApp(t, mockServer)
@@ -351,18 +330,16 @@ func TestApp_SendOutgoingMessage_DocumentMessage(t *testing.T) {
 	require.NotNil(t, msg)
 
 	// Verify document message was sent
-	require.Len(t, mockServer.sentMessages, 1)
-	sentMsg := mockServer.sentMessages[0]
-	assert.Equal(t, "document", sentMsg["type"])
-
-	docContent := sentMsg["document"].(map[string]any)
-	assert.Equal(t, "doc-media-id", docContent["id"])
-	assert.Equal(t, "report.pdf", docContent["filename"])
-	assert.Equal(t, "Monthly report", docContent["caption"])
+	reqs := mockServer.sentRequests()
+	require.Len(t, reqs, 1)
+	sent := reqs[0]
+	assert.Equal(t, "/send/file", sent.path)
+	assert.Equal(t, "doc-media-id", sent.body["file_url"])
+	assert.Equal(t, "Monthly report", sent.body["caption"])
 }
 
 func TestApp_SendOutgoingMessage_VideoMessage(t *testing.T) {
-	mockServer := newMockWhatsAppServer()
+	mockServer := newMockGowaServer()
 	defer mockServer.close()
 
 	app := newMsgTestApp(t, mockServer)
@@ -388,17 +365,16 @@ func TestApp_SendOutgoingMessage_VideoMessage(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, msg)
 
-	require.Len(t, mockServer.sentMessages, 1)
-	sentMsg := mockServer.sentMessages[0]
-	assert.Equal(t, "video", sentMsg["type"])
-
-	videoContent := sentMsg["video"].(map[string]any)
-	assert.Equal(t, "video-media-id", videoContent["id"])
-	assert.Equal(t, "Watch this!", videoContent["caption"])
+	reqs := mockServer.sentRequests()
+	require.Len(t, reqs, 1)
+	sent := reqs[0]
+	assert.Equal(t, "/send/video", sent.path)
+	assert.Equal(t, "video-media-id", sent.body["video_url"])
+	assert.Equal(t, "Watch this!", sent.body["caption"])
 }
 
 func TestApp_SendOutgoingMessage_AudioMessage(t *testing.T) {
-	mockServer := newMockWhatsAppServer()
+	mockServer := newMockGowaServer()
 	defer mockServer.close()
 
 	app := newMsgTestApp(t, mockServer)
@@ -423,16 +399,15 @@ func TestApp_SendOutgoingMessage_AudioMessage(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, msg)
 
-	require.Len(t, mockServer.sentMessages, 1)
-	sentMsg := mockServer.sentMessages[0]
-	assert.Equal(t, "audio", sentMsg["type"])
-
-	audioContent := sentMsg["audio"].(map[string]any)
-	assert.Equal(t, "audio-media-id", audioContent["id"])
+	reqs := mockServer.sentRequests()
+	require.Len(t, reqs, 1)
+	sent := reqs[0]
+	assert.Equal(t, "/send/audio", sent.path)
+	assert.Equal(t, "audio-media-id", sent.body["audio_url"])
 }
 
 func TestApp_SendOutgoingMessage_InteractiveButtons(t *testing.T) {
-	mockServer := newMockWhatsAppServer()
+	mockServer := newMockGowaServer()
 	defer mockServer.close()
 
 	app := newMsgTestApp(t, mockServer)
@@ -465,24 +440,17 @@ func TestApp_SendOutgoingMessage_InteractiveButtons(t *testing.T) {
 	assert.Equal(t, models.MessageTypeInteractive, msg.MessageType)
 	assert.Equal(t, "Choose an option:", msg.Content)
 
-	// Verify interactive message was sent
-	require.Len(t, mockServer.sentMessages, 1)
-	sentMsg := mockServer.sentMessages[0]
-	assert.Equal(t, "interactive", sentMsg["type"])
-
-	interactive := sentMsg["interactive"].(map[string]any)
-	assert.Equal(t, "button", interactive["type"])
-
-	body := interactive["body"].(map[string]any)
-	assert.Equal(t, "Choose an option:", body["text"])
-
-	action := interactive["action"].(map[string]any)
-	buttons := action["buttons"].([]any)
-	assert.Len(t, buttons, 2)
+	// GOWA has no native reply buttons — the message falls back to a plain
+	// text send with the options rendered as a numbered list.
+	reqs := mockServer.sentRequests()
+	require.Len(t, reqs, 1)
+	sent := reqs[0]
+	assert.Equal(t, "/send/message", sent.path)
+	assert.Equal(t, "Choose an option:\n\n1. Yes\n2. No", sent.body["message"])
 }
 
 func TestApp_SendOutgoingMessage_InteractiveCTAURL(t *testing.T) {
-	mockServer := newMockWhatsAppServer()
+	mockServer := newMockGowaServer()
 	defer mockServer.close()
 
 	app := newMsgTestApp(t, mockServer)
@@ -514,17 +482,17 @@ func TestApp_SendOutgoingMessage_InteractiveCTAURL(t *testing.T) {
 	assert.NotNil(t, msg.InteractiveData)
 	assert.Equal(t, "cta_url", msg.InteractiveData["type"])
 
-	// Verify CTA URL message was sent
-	require.Len(t, mockServer.sentMessages, 1)
-	sentMsg := mockServer.sentMessages[0]
-	assert.Equal(t, "interactive", sentMsg["type"])
-
-	interactive := sentMsg["interactive"].(map[string]any)
-	assert.Equal(t, "cta_url", interactive["type"])
+	// GOWA approximates CTA URL buttons with a link-preview message.
+	reqs := mockServer.sentRequests()
+	require.Len(t, reqs, 1)
+	sent := reqs[0]
+	assert.Equal(t, "/send/link", sent.path)
+	assert.Equal(t, "https://example.com", sent.body["link"])
+	assert.Equal(t, "Visit our website", sent.body["caption"])
 }
 
 func TestApp_SendOutgoingMessage_TemplateMessage(t *testing.T) {
-	mockServer := newMockWhatsAppServer()
+	mockServer := newMockGowaServer()
 	defer mockServer.close()
 
 	app := newMsgTestApp(t, mockServer)
@@ -539,10 +507,8 @@ func TestApp_SendOutgoingMessage_TemplateMessage(t *testing.T) {
 		WhatsAppAccount: account.Name,
 		Name:            "hello_world",
 		DisplayName:     "Hello World Template",
-		MetaTemplateID:  "meta-123",
 		Category:        "MARKETING",
 		Language:        "en",
-		Status:          string(models.TemplateStatusApproved),
 		BodyContent:     "Hello {{1}}! Your order {{2}} is ready.",
 	}
 	require.NoError(t, app.DB.Create(template).Error)
@@ -572,18 +538,16 @@ func TestApp_SendOutgoingMessage_TemplateMessage(t *testing.T) {
 	assert.NotNil(t, msg.Metadata)
 	assert.Equal(t, "hello_world", msg.Metadata["template_name"])
 
-	// Verify template message was sent
-	require.Len(t, mockServer.sentMessages, 1)
-	sentMsg := mockServer.sentMessages[0]
-	assert.Equal(t, "template", sentMsg["type"])
-
-	templateData := sentMsg["template"].(map[string]any)
-	assert.Equal(t, "hello_world", templateData["name"])
-	assert.Equal(t, "en", templateData["language"].(map[string]any)["code"])
+	// Verify the template was rendered locally and sent as plain text
+	reqs := mockServer.sentRequests()
+	require.Len(t, reqs, 1)
+	sent := reqs[0]
+	assert.Equal(t, "/send/message", sent.path)
+	assert.Equal(t, "Hello John! Your order ORD-123 is ready.", sent.body["message"])
 }
 
 func TestApp_SendOutgoingMessage_TemplateMessage_MissingTemplate(t *testing.T) {
-	mockServer := newMockWhatsAppServer()
+	mockServer := newMockGowaServer()
 	defer mockServer.close()
 
 	app := newMsgTestApp(t, mockServer)
@@ -617,7 +581,7 @@ func TestApp_SendOutgoingMessage_TemplateMessage_MissingTemplate(t *testing.T) {
 }
 
 func TestApp_SendOutgoingMessage_AsyncOption(t *testing.T) {
-	mockServer := newMockWhatsAppServer()
+	mockServer := newMockGowaServer()
 	defer mockServer.close()
 
 	app := newMsgTestApp(t, mockServer)
@@ -654,7 +618,7 @@ func TestApp_SendOutgoingMessage_AsyncOption(t *testing.T) {
 }
 
 func TestApp_SendOutgoingMessage_SyncOption(t *testing.T) {
-	mockServer := newMockWhatsAppServer()
+	mockServer := newMockGowaServer()
 	defer mockServer.close()
 
 	app := newMsgTestApp(t, mockServer)
@@ -687,7 +651,7 @@ func TestApp_SendOutgoingMessage_SyncOption(t *testing.T) {
 }
 
 func TestApp_SendOutgoingMessage_WithSentByUser(t *testing.T) {
-	mockServer := newMockWhatsAppServer()
+	mockServer := newMockGowaServer()
 	defer mockServer.close()
 
 	app := newMsgTestApp(t, mockServer)
@@ -734,7 +698,7 @@ func TestApp_SendOutgoingMessage_WithSentByUser(t *testing.T) {
 }
 
 func TestApp_SendOutgoingMessage_UnsupportedType(t *testing.T) {
-	mockServer := newMockWhatsAppServer()
+	mockServer := newMockGowaServer()
 	defer mockServer.close()
 
 	app := newMsgTestApp(t, mockServer)
@@ -810,7 +774,7 @@ func TestSLASendOptions(t *testing.T) {
 // --- Message Preview Tests ---
 
 func TestApp_SendOutgoingMessage_ContactLastMessageUpdated(t *testing.T) {
-	mockServer := newMockWhatsAppServer()
+	mockServer := newMockGowaServer()
 	defer mockServer.close()
 
 	app := newMsgTestApp(t, mockServer)
@@ -840,7 +804,7 @@ func TestApp_SendOutgoingMessage_ContactLastMessageUpdated(t *testing.T) {
 }
 
 func TestApp_SendOutgoingMessage_MediaPreview(t *testing.T) {
-	mockServer := newMockWhatsAppServer()
+	mockServer := newMockGowaServer()
 	defer mockServer.close()
 
 	app := newMsgTestApp(t, mockServer)
@@ -870,7 +834,7 @@ func TestApp_SendOutgoingMessage_MediaPreview(t *testing.T) {
 }
 
 func TestApp_SendOutgoingMessage_DocumentPreview(t *testing.T) {
-	mockServer := newMockWhatsAppServer()
+	mockServer := newMockGowaServer()
 	defer mockServer.close()
 
 	app := newMsgTestApp(t, mockServer)

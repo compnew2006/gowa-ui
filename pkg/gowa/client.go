@@ -22,8 +22,7 @@ import (
 const DefaultTimeout = 30 * time.Second
 
 // Client is a GOWA (Go WhatsApp Web Multi-Device) REST API client.
-// It implements whatsapp.Provider so it can be used interchangeably
-// with the Meta Cloud API client.
+// It implements whatsapp.Provider.
 type Client struct {
 	httpClient *http.Client
 	baseURL    string
@@ -47,19 +46,11 @@ func New(baseURL, username, password string) *Client {
 }
 
 // Capabilities reports the GOWA feature set.
-// GOWA supports free-form messaging, media, interactive buttons (polls),
-// and read receipts. It does NOT support templates, flows, catalog,
-// analytics, business profiles, or account setup (those are Meta-only).
+// GOWA supports free-form messaging, media, and read receipts.
 func (c *Client) Capabilities() whatsapp.Capabilities {
 	return whatsapp.Capabilities{
-		Templates:       false,
-		Flows:           false,
-		Calls:           false,
-		Catalog:         false,
-		BusinessProfile: false,
-		MediaUpload:     false, // GOWA sends inline, no two-step upload
-		Interactive:     false, // no native buttons in v8.10.0
-		AccountSetup:    false,
+		MediaUpload: false, // GOWA sends inline, no two-step upload
+		Interactive: false, // no native buttons in v8.10.0
 	}
 }
 

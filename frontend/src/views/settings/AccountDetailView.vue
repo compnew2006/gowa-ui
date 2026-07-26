@@ -18,7 +18,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Separator } from '@/components/ui/separator'
-import { IconButton } from '@/components/shared'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -59,13 +58,11 @@ import {
 interface WhatsAppAccount {
   id: string
   name: string
-  provider_type: string
   gowa_base_url?: string
   gowa_device_id?: string
   gowa_username?: string
   gowa_password?: string
   has_gowa_webhook_secret?: boolean
-  webhook_verify_token?: string
   is_default_incoming: boolean
   is_default_outgoing: boolean
   auto_read_receipt: boolean
@@ -100,13 +97,11 @@ const canWriteDevices = computed(() => authStore.hasPermission('devices', 'write
 
 const form = ref({
   name: '',
-  provider_type: 'gowa' as const,
   gowa_base_url: '',
   gowa_device_id: '',
   gowa_username: '',
   gowa_password: '',
   gowa_webhook_secret: '',
-  webhook_verify_token: '',
   is_default_incoming: false,
   is_default_outgoing: false,
   auto_read_receipt: false,
@@ -117,9 +112,6 @@ const breadcrumbs = computed(() => [
   { label: t('settings.accounts', 'Accounts'), href: '/settings/accounts' },
   { label: isNew.value ? t('accounts.newAccount', 'New Account') : (account.value?.name || '') },
 ])
-
-const basePath = ((window as any).__BASE_PATH__ ?? '').replace(/\/$/, '')
-const webhookUrl = window.location.origin + basePath + '/api/webhook'
 
 // Track form changes
 watch(form, () => { hasChanges.value = true }, { deep: true })
@@ -144,13 +136,11 @@ function syncForm() {
   if (!account.value) return
   form.value = {
     name: account.value.name,
-    provider_type: 'gowa',
     gowa_base_url: account.value.gowa_base_url || '',
     gowa_device_id: account.value.gowa_device_id || '',
     gowa_username: account.value.gowa_username || '',
     gowa_password: account.value.gowa_password || '',
     gowa_webhook_secret: '',
-    webhook_verify_token: account.value.webhook_verify_token || '',
     is_default_incoming: account.value.is_default_incoming,
     is_default_outgoing: account.value.is_default_outgoing,
     auto_read_receipt: account.value.auto_read_receipt,
@@ -172,7 +162,6 @@ async function save() {
   try {
     const payload: any = {
       name: form.value.name,
-      provider_type: 'gowa',
       gowa_base_url: form.value.gowa_base_url,
       gowa_device_id: form.value.gowa_device_id,
       gowa_username: form.value.gowa_username,
@@ -502,29 +491,6 @@ onMounted(async () => {
                 <p class="text-[11px] text-muted-foreground">Automatically send read receipts for incoming messages</p>
               </div>
               <Switch :checked="form.auto_read_receipt" @update:checked="form.auto_read_receipt = $event" :disabled="!canWrite" />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <!-- Webhook Config Card -->
-      <Card v-if="!isNew">
-        <CardHeader class="pb-3">
-          <CardTitle class="text-sm font-medium">{{ $t('accounts.webhookConfig', 'Webhook Configuration') }}</CardTitle>
-        </CardHeader>
-        <CardContent class="space-y-3">
-          <div>
-            <Label class="text-xs text-muted-foreground">{{ $t('accounts.webhookUrl', 'Webhook URL') }}</Label>
-            <div class="flex items-center gap-2 mt-1">
-              <code class="px-2 py-1 bg-muted rounded text-xs font-mono flex-1 truncate">{{ webhookUrl }}</code>
-              <IconButton :icon="Copy" label="Copy" @click="copyToClipboard(webhookUrl)" />
-            </div>
-          </div>
-          <div>
-            <Label class="text-xs text-muted-foreground">{{ $t('accounts.verifyToken', 'Verify Token') }}</Label>
-            <div class="flex items-center gap-2 mt-1">
-              <code class="px-2 py-1 bg-muted rounded text-xs font-mono flex-1 truncate">{{ account?.webhook_verify_token }}</code>
-              <IconButton :icon="Copy" label="Copy" @click="copyToClipboard(account?.webhook_verify_token || '')" />
             </div>
           </div>
         </CardContent>

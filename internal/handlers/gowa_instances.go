@@ -369,7 +369,7 @@ type ensureGowaAccountOpts struct {
 	PreferredName string // optional human label; defaults to InstanceName
 	// DeviceJID is the connected WhatsApp JID for this device (e.g.
 	// "966561853319@s.whatsapp.net"). GOWA webhooks send this JID as the
-	// top-level device_id, so it must be stored as WhatsAppAccount.PhoneID for
+	// top-level device_id, so it must be stored as WhatsAppAccount.GowaJID for
 	// getGowaAccountByDeviceID to resolve the account. May be empty for a
 	// freshly created device that has not yet paired; it is backfilled on the
 	// first connection webhook and on subsequent syncs.
@@ -392,13 +392,13 @@ func (a *App) ensureGowaAccountForDevice(orgID, userID uuid.UUID, opts ensureGow
 	if err := a.DB.Where("organization_id = ? AND gowa_device_id = ?", orgID, opts.DeviceID).First(&existing).Error; err == nil {
 		// Backfill the JID if we now know it but the row predates pairing.
 		// This is the key fix for "device connected but no chats": GOWA sends
-		// the JID as device_id, so PhoneID must be set or the webhook lookup
+		// the JID as device_id, so GowaJID must be set or the webhook lookup
 		// fails with "Unknown GOWA device" on every real message.
-		if opts.DeviceJID != "" && existing.PhoneID != opts.DeviceJID {
-			if err := a.DB.Model(&existing).Update("phone_id", opts.DeviceJID).Error; err != nil {
-				return nil, fmt.Errorf("update gowa account phone_id: %w", err)
+		if opts.DeviceJID != "" && existing.GowaJID != opts.DeviceJID {
+			if err := a.DB.Model(&existing).Update("gowa_jid", opts.DeviceJID).Error; err != nil {
+				return nil, fmt.Errorf("update gowa account gowa_jid: %w", err)
 			}
-			existing.PhoneID = opts.DeviceJID
+			existing.GowaJID = opts.DeviceJID
 		}
 		a.decryptAccountSecrets(&existing)
 		return &existing, nil
@@ -438,11 +438,10 @@ func (a *App) ensureGowaAccountForDevice(orgID, userID uuid.UUID, opts ensureGow
 		BaseModel:      models.BaseModel{},
 		OrganizationID: orgID,
 		Name:           name,
-		ProviderType:   "gowa",
 		// GOWA webhooks key device_id by the connected JID, not the custom
-		// device id. Storing the JID as PhoneID here lets the webhook lookup
+		// device id. Storing the JID as GowaJID here lets the webhook lookup
 		// match on the first message (see getGowaAccountByDeviceID).
-		PhoneID:           opts.DeviceJID,
+		GowaJID:           opts.DeviceJID,
 		GowaBaseURL:       opts.BaseURL,
 		GowaDeviceID:      opts.DeviceID,
 		GowaWebhookSecret: opts.WebhookSecret,

@@ -118,11 +118,6 @@ func (c *Client) SendCTAURLButton(ctx context.Context, account *whatsapp.Account
 	return c.doJSON(ctx, "POST", "/send/link", deviceID(account), body)
 }
 
-// SendVoiceCallButton is not supported by GOWA.
-func (c *Client) SendVoiceCallButton(ctx context.Context, account *whatsapp.Account, rcpt whatsapp.Recipient, bodyText, displayText string, ttlMinutes int, payload string) (string, error) {
-	return "", whatsapp.ErrNotSupported
-}
-
 // MarkMessageRead marks a message as read via /message/{id}/read.
 func (c *Client) MarkMessageRead(ctx context.Context, account *whatsapp.Account, messageID string) error {
 	path := fmt.Sprintf("/message/%s/read", messageID)

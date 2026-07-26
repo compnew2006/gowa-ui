@@ -37,7 +37,7 @@ watch(isOpen, async (open) => {
 async function fetchTemplates() {
   isLoading.value = true
   try {
-    const params: any = { status: 'APPROVED' }
+    const params: any = {}
     if (props.selectedAccount) {
       params.account = props.selectedAccount
     }

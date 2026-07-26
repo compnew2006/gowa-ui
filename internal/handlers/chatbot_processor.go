@@ -61,17 +61,6 @@ type IncomingTextMessage struct {
 			Title       string `json:"title"`
 			Description string `json:"description"`
 		} `json:"list_reply,omitempty"`
-		NFMReply *struct {
-			ResponseJSON string `json:"response_json"`
-			Body         string `json:"body"`
-			Name         string `json:"name"`
-		} `json:"nfm_reply,omitempty"`
-		CallPermissionReply *struct {
-			Response            string      `json:"response"`
-			IsPermanent         bool        `json:"is_permanent"`
-			ExpirationTimestamp json.Number `json:"expiration_timestamp,omitempty"`
-			ResponseSource      string      `json:"response_source"`
-		} `json:"call_permission_reply,omitempty"`
 	} `json:"interactive,omitempty"`
 	Image *struct {
 		ID       string `json:"id"`
@@ -225,7 +214,6 @@ func (a *App) processIncomingMessageFull(phoneNumberID string, msg IncomingTextM
 	messageType := extracted.Type
 	buttonID := extracted.ButtonID
 	mediaInfo := extracted.Media
-	flowResponseData := extracted.FlowResponseData
 
 	// Save incoming message to messages table (always, even if chatbot is disabled)
 	var replyToWAMID string
@@ -332,7 +320,7 @@ func (a *App) processIncomingMessageFull(phoneNumberID string, msg IncomingTextM
 			a.exitFlow(session)
 			return
 		}
-		if err := a.runChatGraph(account, contact, session, flow, messageText, buttonID, flowResponseData); err != nil {
+		if err := a.runChatGraph(account, contact, session, flow, messageText, buttonID); err != nil {
 			a.Log.Error("Chat graph runner failed", "error", err, "session", session.ID, "flow", flow.ID)
 		}
 		return
@@ -351,7 +339,7 @@ func (a *App) processIncomingMessageFull(phoneNumberID string, msg IncomingTextM
 			"_flow_id":   flow.ID.String(),
 			"_flow_name": flow.Name,
 		}
-		if err := a.runChatGraph(account, contact, session, flow, messageText, buttonID, flowResponseData); err != nil {
+		if err := a.runChatGraph(account, contact, session, flow, messageText, buttonID); err != nil {
 			a.Log.Error("Chat graph runner failed at flow start", "error", err, "session", session.ID, "flow", flow.ID)
 		}
 		return
@@ -671,24 +659,6 @@ func (a *App) sendAndSaveCTAURLButton(account *models.WhatsAppAccount, contact *
 		BodyText:        bodyText,
 		ButtonText:      buttonText,
 		URL:             url,
-	}, ChatbotSendOptions())
-	return err
-}
-
-// sendAndSaveFlowMessage sends a WhatsApp Flow message and saves it to the database
-// Uses the unified SendOutgoingMessage for consistent behavior
-func (a *App) sendAndSaveFlowMessage(account *models.WhatsAppAccount, contact *models.Contact, flowID, headerText, bodyText, ctaText, flowToken, firstScreen string) error {
-	ctx := context.Background()
-	_, err := a.SendOutgoingMessage(ctx, OutgoingMessageRequest{
-		Account:         account,
-		Contact:         contact,
-		Type:            models.MessageTypeFlow,
-		FlowID:          flowID,
-		FlowHeader:      headerText,
-		BodyText:        bodyText,
-		FlowCTA:         ctaText,
-		FlowToken:       flowToken,
-		FlowFirstScreen: firstScreen,
 	}, ChatbotSendOptions())
 	return err
 }
@@ -1429,11 +1399,10 @@ func getStringFromMap(m map[string]any, key string) string {
 
 // ExtractedMessage holds the derived content fields of a message.
 type ExtractedMessage struct {
-	Text             string
-	Type             string // may differ from msg.Type, e.g. "button_reply"
-	Media            *MediaInfo
-	ButtonID         string         // used by chatbot routing only
-	FlowResponseData map[string]any // used by chatbot routing only
+	Text     string
+	Type     string // may differ from msg.Type, e.g. "button_reply"
+	Media    *MediaInfo
+	ButtonID string // used by chatbot routing only
 }
 
 // extractMessageContent walks an IncomingTextMessage and returns the derived
@@ -1462,21 +1431,6 @@ func (a *App) extractMessageContent(ctx context.Context, msg IncomingTextMessage
 			extracted.Text = msg.Interactive.ListReply.Title
 			extracted.ButtonID = msg.Interactive.ListReply.ID
 			extracted.Type = "button_reply"
-		}
-		// Handle WhatsApp Flow reply (nfm_reply)
-		if msg.Interactive.NFMReply != nil {
-			extracted.Text = msg.Interactive.NFMReply.Body
-			extracted.Type = "nfm_reply"
-			// Parse the response JSON to extract form data
-			if msg.Interactive.NFMReply.ResponseJSON != "" {
-				var responseData map[string]any
-				if err := json.Unmarshal([]byte(msg.Interactive.NFMReply.ResponseJSON), &responseData); err != nil {
-					a.Log.Error("Failed to parse flow response JSON", "error", err, "response_json", msg.Interactive.NFMReply.ResponseJSON)
-				} else {
-					extracted.FlowResponseData = responseData
-					a.Log.Info("Parsed WhatsApp Flow response", "data", extracted.FlowResponseData)
-				}
-			}
 		}
 	} else if msg.Type == "image" && msg.Image != nil {
 		// Handle image message
@@ -1658,7 +1612,7 @@ func (a *App) saveIncomingMessage(account *models.WhatsAppAccount, contact *mode
 	if len(preview) > 100 {
 		preview = preview[:97] + "..."
 	}
-	if msgType != "text" && msgType != "button_reply" && msgType != "nfm_reply" {
+	if msgType != "text" && msgType != "button_reply" {
 		preview = "[" + msgType + "]"
 	}
 

@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -47,31 +48,19 @@ type OutgoingMessageRequest struct {
 	Caption       string
 
 	// Interactive messages
-	InteractiveType string            // "button", "list", "cta_url", "voice_call"
+	InteractiveType string            // "button", "list", "cta_url"
 	BodyText        string            // Body text for interactive messages
 	Buttons         []whatsapp.Button // For button/list messages
 	ButtonText      string            // For CTA URL button
 	URL             string            // For CTA URL button
 
-	// voice_call interactive (WhatsApp Business Calling)
-	DisplayText      string // Button face label
-	TTLMinutes       int    // How long the button stays clickable; 0 ⇒ Meta default
-	VoiceCallPayload string // Opaque round-trip string; server-set, e.g. "agent:<uuid>" for sticky routing
-
-	// Template messages
-	Template            *models.Template
-	BodyParams          map[string]string // Parameter name -> value (supports both named and positional)
-	HeaderParams        map[string]string // Header-only param values; falls back to BodyParams if empty (used for TEXT headers with a {{var}})
-	HeaderMediaID       string            // WhatsApp media ID for template header (IMAGE/VIDEO/DOCUMENT)
-	HeaderMediaFilename string            // Filename — required by Meta for DOCUMENT headers
-	ButtonURLParams     map[string]string // Button index (as string) -> dynamic URL param value
-
-	// WhatsApp Flow messages
-	FlowID          string // Meta Flow ID
-	FlowHeader      string // Optional header text for flow
-	FlowCTA         string // CTA button text (max 20 chars)
-	FlowToken       string // Unique token for flow response tracking
-	FlowFirstScreen string // First screen name to navigate to
+	// Template messages (rendered locally and sent as text/media/interactive).
+	// Header media for IMAGE/VIDEO/DOCUMENT headers is carried in the shared
+	// MediaData/MediaURL/MediaMimeType/MediaFilename fields above.
+	Template        *models.Template
+	BodyParams      map[string]string // Parameter name -> value (supports both named and positional)
+	HeaderParams    map[string]string // Header-only param values; falls back to BodyParams if empty (used for TEXT headers with a {{var}})
+	ButtonURLParams map[string]string // Button index (as string) -> dynamic URL param value
 
 	// Reply context
 	ReplyToMessage *models.Message
@@ -155,9 +144,7 @@ func (a *App) SendOutgoingMessage(ctx context.Context, req OutgoingMessageReques
 	}
 
 	// 2. Define the send function based on message type.
-	// The provider is resolved from the account's ProviderType so that
-	// GOWA accounts route through the GOWA client and Meta accounts through
-	// the Meta Cloud API client.
+	// The provider is resolved from the registry (GOWA).
 	sendFn := func(sendCtx context.Context) (string, error) {
 		waAccount := a.toWhatsAppAccount(req.Account)
 		provider := a.resolveProvider(req.Account)
@@ -208,38 +195,21 @@ func (a *App) SendOutgoingMessage(ctx context.Context, req OutgoingMessageReques
 			switch req.InteractiveType {
 			case "cta_url":
 				return provider.SendCTAURLButton(sendCtx, waAccount, rcpt, req.BodyText, req.ButtonText, req.URL)
-			case "voice_call":
-				return provider.SendVoiceCallButton(sendCtx, waAccount, rcpt, req.BodyText, req.DisplayText, req.TTLMinutes, req.VoiceCallPayload)
 			default: // "button" or "list"
-				return provider.SendInteractiveButtons(sendCtx, waAccount, rcpt, req.BodyText, req.Buttons)
+				wamid, err := provider.SendInteractiveButtons(sendCtx, waAccount, rcpt, req.BodyText, req.Buttons)
+				if err == nil || !errors.Is(err, whatsapp.ErrNotSupported) {
+					return wamid, err
+				}
+				// Provider has no native buttons — render the options into
+				// the text body so the recipient can still reply.
+				return provider.SendTextMessage(sendCtx, waAccount, rcpt, renderButtonsAsText(req.BodyText, req.Buttons), replyToMsgID)
 			}
 
 		case models.MessageTypeTemplate:
 			if req.Template == nil {
 				return "", fmt.Errorf("template is required for template messages")
 			}
-			components, err := whatsapp.BuildTemplateComponents(
-				req.BodyParams,
-				req.Template.HeaderType, req.Template.HeaderContent,
-				req.HeaderParams,
-				req.HeaderMediaID, req.HeaderMediaFilename,
-			)
-			if err != nil {
-				return "", fmt.Errorf("failed to build template components: %w", err)
-			}
-			// Add auto-generated button components (Flow needs flow_token)
-			flowComponents := whatsapp.AutoButtonComponents(req.Template.Buttons)
-			components = append(components, flowComponents...)
-			// Add URL/COPY_CODE button components with dynamic params
-			buttonComponents := whatsapp.ButtonURLParamsToComponents(req.ButtonURLParams, req.Template.Buttons)
-			components = append(components, buttonComponents...)
-			return provider.SendTemplateMessage(sendCtx, waAccount, rcpt, req.Template.Name, req.Template.Language, components)
-
-		case models.MessageTypeFlow:
-			if req.FlowID == "" {
-				return "", fmt.Errorf("flow ID is required for flow messages")
-			}
-			return provider.SendFlowMessage(sendCtx, waAccount, rcpt, req.FlowID, req.FlowHeader, req.BodyText, req.FlowCTA, req.FlowToken, req.FlowFirstScreen)
+			return a.sendRenderedTemplate(sendCtx, provider, waAccount, rcpt, req, replyToMsgID)
 
 		default:
 			return "", fmt.Errorf("unsupported message type: %s", req.Type)
@@ -287,6 +257,124 @@ func (a *App) toWhatsAppAccount(account *models.WhatsAppAccount) *whatsapp.Accou
 	return account.ToWAAccount()
 }
 
+// renderButtonsAsText renders an interactive-buttons message as plain text
+// (body followed by a numbered option list) for providers without native
+// reply buttons.
+func renderButtonsAsText(bodyText string, buttons []whatsapp.Button) string {
+	if len(buttons) == 0 {
+		return bodyText
+	}
+	lines := make([]string, len(buttons))
+	for i, btn := range buttons {
+		lines[i] = fmt.Sprintf("%d. %s", i+1, btn.Title)
+	}
+	if bodyText == "" {
+		return strings.Join(lines, "\n")
+	}
+	return bodyText + "\n\n" + strings.Join(lines, "\n")
+}
+
+// sendRenderedTemplate renders a local template blueprint and sends it through
+// the provider as a plain text, media-with-caption, or interactive message.
+// Templates are no longer submitted to a remote API — the body/header/footer
+// are resolved locally from the stored template content and parameters.
+func (a *App) sendRenderedTemplate(ctx context.Context, provider whatsapp.Provider, waAccount *whatsapp.Account, rcpt whatsapp.Recipient, req OutgoingMessageRequest, replyToMsgID string) (string, error) {
+	tpl := req.Template
+
+	// Render body text from params
+	body := templateutil.ReplaceWithStringParams(tpl.BodyContent, req.BodyParams)
+
+	// TEXT headers render above the body; header params fall back to body params.
+	var parts []string
+	if tpl.HeaderType == "TEXT" && tpl.HeaderContent != "" {
+		headerParams := req.HeaderParams
+		if len(headerParams) == 0 {
+			headerParams = req.BodyParams
+		}
+		if header := templateutil.ReplaceWithStringParams(tpl.HeaderContent, headerParams); header != "" {
+			parts = append(parts, "*"+header+"*")
+		}
+	}
+	if body != "" {
+		parts = append(parts, body)
+	}
+	if tpl.FooterContent != "" {
+		parts = append(parts, tpl.FooterContent)
+	}
+
+	// Split template buttons: QUICK_REPLY becomes native reply buttons; URL
+	// buttons can't be rendered natively, so append them as links in the text.
+	var quickReplies []whatsapp.Button
+	for i, raw := range tpl.Buttons {
+		btn, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		btnType, _ := btn["type"].(string)
+		label, _ := btn["text"].(string)
+		switch strings.ToUpper(btnType) {
+		case "QUICK_REPLY":
+			quickReplies = append(quickReplies, whatsapp.Button{ID: fmt.Sprintf("btn_%d", i), Title: label})
+		case "URL":
+			urlStr, _ := btn["url"].(string)
+			if val, exists := req.ButtonURLParams[fmt.Sprintf("%d", i)]; exists {
+				urlStr = templateutil.ParameterPattern.ReplaceAllString(urlStr, val)
+			}
+			if urlStr != "" {
+				if label != "" {
+					parts = append(parts, label+": "+urlStr)
+				} else {
+					parts = append(parts, urlStr)
+				}
+			}
+		}
+	}
+
+	text := strings.Join(parts, "\n\n")
+
+	// Media header: send as media with the rendered text as caption.
+	if tpl.HeaderType == "IMAGE" || tpl.HeaderType == "VIDEO" || tpl.HeaderType == "DOCUMENT" {
+		mediaID := req.MediaID
+		mediaData := req.MediaData
+		if mediaID == "" && len(mediaData) == 0 && req.MediaURL != "" {
+			// Retry/resend: read the header media back from local storage
+			mediaPath := filepath.Join(a.getMediaStoragePath(), req.MediaURL)
+			if fileData, readErr := os.ReadFile(mediaPath); readErr == nil && len(fileData) > 0 {
+				mediaData = fileData
+			}
+		}
+		if mediaID == "" && len(mediaData) > 0 {
+			var err error
+			mediaID, err = provider.UploadMedia(ctx, waAccount, mediaData, req.MediaMimeType, req.MediaFilename)
+			if err != nil {
+				return "", fmt.Errorf("failed to upload template header media: %w", err)
+			}
+		}
+		if mediaID != "" {
+			switch tpl.HeaderType {
+			case "IMAGE":
+				return provider.SendImageMessage(ctx, waAccount, rcpt, mediaID, text, replyToMsgID)
+			case "VIDEO":
+				return provider.SendVideoMessage(ctx, waAccount, rcpt, mediaID, text, replyToMsgID)
+			default: // DOCUMENT
+				return provider.SendDocumentMessage(ctx, waAccount, rcpt, mediaID, req.MediaFilename, text, replyToMsgID)
+			}
+		}
+		// No media supplied — fall through to a plain text send.
+	}
+
+	// Quick-reply buttons via interactive send; fall back to plain text when
+	// the provider doesn't support native reply buttons.
+	if len(quickReplies) > 0 {
+		wamid, err := provider.SendInteractiveButtons(ctx, waAccount, rcpt, text, quickReplies)
+		if err == nil || !errors.Is(err, whatsapp.ErrNotSupported) {
+			return wamid, err
+		}
+	}
+
+	return provider.SendTextMessage(ctx, waAccount, rcpt, text, replyToMsgID)
+}
+
 // createOutgoingMessage creates a Message model from the request
 func (a *App) createOutgoingMessage(req OutgoingMessageRequest, opts MessageSendOptions) *models.Message {
 	msg := &models.Message{
@@ -314,15 +402,6 @@ func (a *App) createOutgoingMessage(req OutgoingMessageRequest, opts MessageSend
 	case models.MessageTypeInteractive:
 		msg.Content = req.BodyText
 		msg.InteractiveData = a.buildInteractiveData(req)
-
-	case models.MessageTypeFlow:
-		msg.Content = req.BodyText
-		msg.InteractiveData = models.JSONB{
-			"type":        "flow",
-			"body":        req.BodyText,
-			"button_text": req.FlowCTA,
-			"flow_id":     req.FlowID,
-		}
 
 	case models.MessageTypeTemplate:
 		if req.Template != nil {
@@ -397,18 +476,6 @@ func (a *App) buildInteractiveData(req OutgoingMessageRequest) models.JSONB {
 			"button_text": req.ButtonText,
 			"url":         req.URL,
 		}
-	case "voice_call":
-		// Don't store the payload — it carries server-only context (the
-		// originating agent id) and the chat history doesn't need it.
-		out := models.JSONB{
-			"type":         "voice_call",
-			"body":         req.BodyText,
-			"display_text": req.DisplayText,
-		}
-		if req.TTLMinutes > 0 {
-			out["ttl_minutes"] = req.TTLMinutes
-		}
-		return out
 	case "list":
 		rows := make([]any, len(req.Buttons))
 		for i, btn := range req.Buttons {
@@ -633,8 +700,6 @@ func (a *App) getMessagePreview(req OutgoingMessageRequest) string {
 		return "[Document]"
 	case models.MessageTypeInteractive:
 		return truncateString(req.BodyText, 100)
-	case models.MessageTypeFlow:
-		return truncateString(req.BodyText, 100)
 	case models.MessageTypeTemplate:
 		if req.Template != nil {
 			return fmt.Sprintf("[Template: %s]", req.Template.DisplayName)
@@ -660,16 +725,14 @@ type SendTemplateMessageRequest struct {
 	AccountName    string            `json:"account_name"`    // Optional: specific WhatsApp account
 
 	// Header media for templates with IMAGE/VIDEO/DOCUMENT headers.
-	// Three options (in priority order):
-	//   1. header_media_id  — pre-uploaded WhatsApp media ID (skip upload)
-	//   2. header_media_url — URL to fetch the media from (server downloads & uploads to WhatsApp)
-	//   3. multipart header_file — raw file upload via multipart/form-data
-	HeaderMediaID       string `json:"header_media_id"`       // Already-uploaded WhatsApp media ID
+	// Two options (in priority order):
+	//   1. header_media_url — URL to fetch the media from (server downloads it)
+	//   2. multipart header_file — raw file upload via multipart/form-data
 	HeaderMediaURL      string `json:"header_media_url"`      // URL to download media from
-	HeaderMediaFilename string `json:"header_media_filename"` // Filename — required by Meta for DOCUMENT headers (#351)
+	HeaderMediaFilename string `json:"header_media_filename"` // Filename for DOCUMENT headers
 
 	// Header text parameter values for TEXT headers that contain a {{var}}.
-	// Meta only permits one variable in a TEXT header. Keyed by the variable's
+	// Only one variable is permitted in a TEXT header. Keyed by the variable's
 	// name (named templates) or by "1" (positional). Optional — if absent, the
 	// value is looked up in TemplateParams as a fallback.
 	HeaderParams map[string]string `json:"header_params"`
@@ -784,11 +847,6 @@ func (a *App) SendTemplateMessage(r *fastglue.Request) error {
 		}
 	}
 
-	// Check template is approved
-	if template.Status != "APPROVED" {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, fmt.Sprintf("Template is not approved (status: %s)", template.Status), nil, "")
-	}
-
 	// Get contact or use phone number directly
 	var contact *models.Contact
 
@@ -856,13 +914,13 @@ func (a *App) SendTemplateMessage(r *fastglue.Request) error {
 		}
 	}
 
-	// Validate the header variable (TEXT headers only). Meta allows at most one
-	// variable in a TEXT header — surface a clean 400 if it's missing.
+	// Validate the header variable (TEXT headers only). At most one variable is
+	// allowed in a TEXT header — surface a clean 400 if it's missing.
 	if template.HeaderType == "TEXT" {
 		headerNames := templateutil.ExtParamNames(template.HeaderContent)
 		if len(headerNames) > 1 {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest,
-				fmt.Sprintf("Template header text contains %d variables; Meta allows at most 1", len(headerNames)),
+				fmt.Sprintf("Template header text contains %d variables; at most 1 is allowed", len(headerNames)),
 				nil, "")
 		}
 		if len(headerNames) == 1 {
@@ -876,16 +934,13 @@ func (a *App) SendTemplateMessage(r *fastglue.Request) error {
 	}
 
 	// Resolve header media for templates with IMAGE/VIDEO/DOCUMENT headers.
-	// Priority: header_media_id > header_media_url > multipart header_file
-	var headerMediaID string
+	// Priority: header_media_url > multipart header_file. The raw bytes are
+	// passed through to the unified sender, which uploads them via the provider.
 	var headerMediaData []byte
 	var headerMimeType string
 	if template.HeaderType == "IMAGE" || template.HeaderType == "VIDEO" || template.HeaderType == "DOCUMENT" {
-		if req.HeaderMediaID != "" {
-			// Option 1: Pre-uploaded WhatsApp media ID — use directly (no local preview)
-			headerMediaID = req.HeaderMediaID
-		} else if req.HeaderMediaURL != "" {
-			// Option 2: Download from URL, then upload to WhatsApp
+		if req.HeaderMediaURL != "" {
+			// Option 1: Download from URL
 			resp, err := http.Get(req.HeaderMediaURL)
 			if err != nil {
 				return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Failed to download header media from URL", nil, "")
@@ -904,20 +959,9 @@ func (a *App) SendTemplateMessage(r *fastglue.Request) error {
 				headerMimeType = "application/octet-stream"
 			}
 		} else if len(headerFileData) > 0 {
-			// Option 3: Multipart file upload
+			// Option 2: Multipart file upload
 			headerMediaData = headerFileData
 			headerMimeType = headerFileMimeType
-		}
-
-		// Upload to WhatsApp if we have raw data (options 2 & 3)
-		if len(headerMediaData) > 0 {
-			waAcct := a.toWhatsAppAccount(account)
-			mediaID, err := a.resolveProvider(account).UploadMedia(context.Background(), waAcct, headerMediaData, headerMimeType, "header")
-			if err != nil {
-				a.Log.Error("Failed to upload template header media", "error", err)
-				return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to upload header media to WhatsApp", nil, "")
-			}
-			headerMediaID = mediaID
 		}
 	}
 
@@ -938,29 +982,8 @@ func (a *App) SendTemplateMessage(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Contact has opted out of marketing messages", nil, "")
 	}
 
-	// For authentication templates with OTP COPY_CODE buttons, Meta expects
-	// a button component with sub_type "url" and the OTP code as a text parameter.
-	// Auto-populate from template_params["1"] so callers don't need button_params.
-	buttonParams := req.ButtonParams
-	if strings.EqualFold(template.Category, "AUTHENTICATION") && len(buttonParams) == 0 {
-		if code, ok := req.TemplateParams["1"]; ok && code != "" {
-			for i, raw := range template.Buttons {
-				if btn, ok := raw.(map[string]any); ok {
-					btnType, _ := btn["type"].(string)
-					if strings.EqualFold(btnType, "OTP") {
-						if buttonParams == nil {
-							buttonParams = make(map[string]string)
-						}
-						buttonParams[fmt.Sprintf("%d", i)] = code
-						break
-					}
-				}
-			}
-		}
-	}
-
-	// Resolve filename for DOCUMENT headers — required by Meta (#351).
-	// Caller-supplied wins, then the multipart filename.
+	// Resolve filename for DOCUMENT headers — caller-supplied wins, then the
+	// multipart filename.
 	headerMediaFilename := req.HeaderMediaFilename
 	if headerMediaFilename == "" {
 		headerMediaFilename = headerFileFilename
@@ -968,17 +991,17 @@ func (a *App) SendTemplateMessage(r *fastglue.Request) error {
 
 	// Send using unified message sender
 	msgReq := OutgoingMessageRequest{
-		Account:             account,
-		Contact:             contact,
-		Type:                models.MessageTypeTemplate,
-		Template:            &template,
-		BodyParams:          req.TemplateParams,
-		HeaderParams:        req.HeaderParams,
-		HeaderMediaID:       headerMediaID,
-		HeaderMediaFilename: headerMediaFilename,
-		MediaURL:            headerLocalPath,
-		MediaMimeType:       headerMimeType,
-		ButtonURLParams:     buttonParams,
+		Account:         account,
+		Contact:         contact,
+		Type:            models.MessageTypeTemplate,
+		Template:        &template,
+		BodyParams:      req.TemplateParams,
+		HeaderParams:    req.HeaderParams,
+		MediaData:       headerMediaData,
+		MediaURL:        headerLocalPath,
+		MediaMimeType:   headerMimeType,
+		MediaFilename:   headerMediaFilename,
+		ButtonURLParams: req.ButtonParams,
 	}
 
 	opts := DefaultSendOptions()

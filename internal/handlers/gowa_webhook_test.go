@@ -33,11 +33,9 @@ func TestE2E_GOWAAccountResolvesGOWAProvider(t *testing.T) {
 		},
 	)
 
-	meta := whatsapp.New(nopLogger())
-	reg := whatsapp.NewRegistry(meta, nopLogger())
+	reg := whatsapp.NewRegistry(nopLogger())
 
 	account := &whatsapp.Account{
-		ProviderType: "gowa",
 		GowaBaseURL:  mock.url(),
 		GowaDeviceID: "628123456789@s.whatsapp.net",
 	}
@@ -45,33 +43,7 @@ func TestE2E_GOWAAccountResolvesGOWAProvider(t *testing.T) {
 	provider := reg.Get(account)
 	_, ok := provider.(*gowa.Client)
 	assert.True(t, ok, "GOWA account must route to GOWA provider")
-	assert.False(t, provider.Capabilities().Templates)
-}
-
-// --- Provider routing: Meta account routes to Meta client ---
-
-func TestE2E_MetaAccountResolvesMetaProvider(t *testing.T) {
-	t.Parallel()
-	whatsapp.RegisterGowaFactory(
-		func(baseURL string) (string, string) { return "", "" },
-		func(baseURL, username, password string) whatsapp.Provider {
-			return gowa.New(baseURL, username, password)
-		},
-	)
-
-	meta := whatsapp.New(nopLogger())
-	reg := whatsapp.NewRegistry(meta, nopLogger())
-
-	account := &whatsapp.Account{
-		ProviderType: "meta",
-		PhoneID:      "123",
-		AccessToken:  "token",
-	}
-
-	provider := reg.Get(account)
-	_, ok := provider.(*whatsapp.Client)
-	assert.True(t, ok, "Meta account must route to Meta provider")
-	assert.True(t, provider.Capabilities().Templates)
+	assert.False(t, provider.Capabilities().MediaUpload)
 }
 
 // --- Provider fallback: GOWA down does NOT silently fall back to Meta ---
@@ -85,11 +57,9 @@ func TestE2E_Registry_GOWADownReturnsErrorNotMetaFallback(t *testing.T) {
 		},
 	)
 
-	meta := whatsapp.New(nopLogger())
-	reg := whatsapp.NewRegistry(meta, nopLogger())
+	reg := whatsapp.NewRegistry(nopLogger())
 
 	account := &whatsapp.Account{
-		ProviderType: "gowa",
 		GowaBaseURL:  "http://127.0.0.1:1", // port 1 = connection refused
 		GowaDeviceID: "dev1",
 	}
@@ -118,7 +88,6 @@ func TestE2E_GOWASendText_VerifiesHTTPFormat(t *testing.T) {
 
 	c := gowa.New(mock.url(), "", "")
 	account := &whatsapp.Account{
-		ProviderType: "gowa",
 		GowaDeviceID: "628123456789@s.whatsapp.net",
 	}
 
@@ -148,7 +117,6 @@ func TestE2E_GOWASendImage_MultipartNotTwoStep(t *testing.T) {
 
 	c := gowa.New(mock.url(), "", "")
 	account := &whatsapp.Account{
-		ProviderType: "gowa",
 		GowaDeviceID: "dev1",
 	}
 

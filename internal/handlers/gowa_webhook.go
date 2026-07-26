@@ -147,7 +147,7 @@ func (a *App) getGowaAccountByDeviceID(deviceID string) (*models.WhatsAppAccount
 	// GOWA v8 webhooks send the connected JID (e.g. "201007181781@s.whatsapp.net")
 	// as device_id, but whatomate stores the custom device ID assigned during
 	// device creation (e.g. "test-account-d9768a03"). We try multiple match
-	// strategies: exact device_id, phone portion of JID, phone_id field.
+	// strategies: exact device_id, phone portion of JID, gowa_jid field.
 	//
 	// NOTE: the previous implementation had a fallback that iterated ALL GOWA
 	// accounts across every org and made outbound GetAppStatus calls on every
@@ -155,15 +155,15 @@ func (a *App) getGowaAccountByDeviceID(deviceID string) (*models.WhatsAppAccount
 	// been removed. The account must resolve via the direct query below.
 	phone := gowa.PhoneFromJID(deviceID)
 	if err := a.DB.Where(
-		"provider_type = ? AND (gowa_device_id = ? OR gowa_device_id = ? OR phone_id = ? OR phone_id = ?)",
-		"gowa", deviceID, phone, deviceID, phone,
+		"gowa_device_id = ? OR gowa_device_id = ? OR gowa_jid = ? OR gowa_jid = ?",
+		deviceID, phone, deviceID, phone,
 	).First(&account).Error; err != nil {
 		return nil, fmt.Errorf("gowa account not found for device %s: %w", deviceID, err)
 	}
 
-	// Cache the JID as phone_id for faster future lookups.
-	if phone != "" && phone != deviceID && account.PhoneID != deviceID {
-		a.DB.Model(&account).Update("phone_id", deviceID)
+	// Cache the JID as gowa_jid for faster future lookups.
+	if phone != "" && phone != deviceID && account.GowaJID != deviceID {
+		a.DB.Model(&account).Update("gowa_jid", deviceID)
 	}
 
 	a.decryptAccountSecrets(&account)

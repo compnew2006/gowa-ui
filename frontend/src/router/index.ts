@@ -59,12 +59,6 @@ const router = createRouter({
           // All roles can access profile
         },
         {
-          path: 'flows',
-          name: 'flows',
-          component: () => import('@/views/settings/FlowsView.vue'),
-          meta: { permission: 'flows.whatsapp' }
-        },
-        {
           path: 'campaigns',
           name: 'campaigns',
           component: () => import('@/views/settings/CampaignsView.vue'),
@@ -163,18 +157,6 @@ const router = createRouter({
           name: 'account-detail',
           component: () => import('@/views/settings/AccountDetailView.vue'),
           meta: { permission: 'accounts' }
-        },
-        {
-          path: 'settings/catalogs',
-          name: 'catalogs',
-          component: () => import('@/views/settings/CatalogsView.vue'),
-          meta: { permission: 'catalogs' }
-        },
-        {
-          path: 'settings/catalogs/:id',
-          name: 'catalog-detail',
-          component: () => import('@/views/settings/CatalogDetailView.vue'),
-          meta: { permission: 'catalogs' }
         },
         {
           path: 'settings/gowa-servers',
@@ -328,13 +310,11 @@ const navigationOrder = [
   ]},
   { path: '/chatbot/transfers', permission: 'transfers' },
   { path: '/analytics/agents', permission: 'analytics.agents' },
-  { path: '/flows', permission: 'flows.whatsapp' },
   { path: '/campaigns', permission: 'campaigns' },
   { path: '/settings', permission: 'settings.general', childPaths: [
     { path: '/settings', permission: 'settings.general' },
     { path: '/settings/chatbot', permission: 'settings.chatbot' },
     { path: '/settings/accounts', permission: 'accounts' },
-    { path: '/settings/catalogs', permission: 'catalogs' },
     { path: '/settings/canned-responses', permission: 'canned_responses' },
     { path: '/settings/contacts', permission: 'contacts' },
     { path: '/settings/tags', permission: 'tags' },

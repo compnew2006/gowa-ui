@@ -289,42 +289,24 @@ func (CustomAction) TableName() string {
 	return "custom_actions"
 }
 
-// WhatsAppAccount represents a WhatsApp Business Account
+// WhatsAppAccount represents a WhatsApp Business Account backed by a GOWA
+// (Go WhatsApp Web Multi-Device) instance.
 type WhatsAppAccount struct {
 	BaseModel
 	OrganizationID uuid.UUID `gorm:"type:uuid;index;not null" json:"organization_id"`
 	Name           string    `gorm:"size:100;uniqueIndex:idx_wa_org_name;not null" json:"name"` // Unique per org, used as reference
 
-	// ProviderType discriminates the WhatsApp backend for this account.
-	// "meta" (default) uses the Meta Cloud API; "gowa" uses a GOWA instance.
-	ProviderType string `gorm:"size:20;default:'meta';index:idx_wa_provider_type" json:"provider_type"`
-
-	// Meta credentials (populated when ProviderType == "meta").
-	AppID              string `gorm:"size:100" json:"app_id"` // Meta App ID
-	PhoneID            string `gorm:"size:100" json:"phone_id"`
-	BusinessID         string `gorm:"size:100" json:"business_id"`
-	AccessToken        string `gorm:"type:text" json:"-"` // encrypted
-	AppSecret          string `gorm:"size:255" json:"-"`  // Meta App Secret for webhook signature verification
-	WebhookVerifyToken string `gorm:"size:255" json:"webhook_verify_token"`
-	APIVersion         string `gorm:"size:20;default:'v21.0'" json:"api_version"`
-
-	// GOWA credentials (populated when ProviderType == "gowa").
-	GowaBaseURL       string `gorm:"size:255" json:"gowa_base_url,omitempty"`  // GOWA REST API base URL, e.g. "http://gowa:8080"
-	GowaDeviceID      string `gorm:"size:100" json:"gowa_device_id,omitempty"` // GOWA device UUID identifying the WhatsApp session
-	GowaWebhookSecret string `gorm:"size:255" json:"-"`                        // HMAC secret for verifying GOWA webhooks (encrypted)
-	IsDefaultIncoming bool   `gorm:"default:false" json:"is_default_incoming"`
-	IsDefaultOutgoing bool   `gorm:"default:false" json:"is_default_outgoing"`
-	AutoReadReceipt   bool   `gorm:"default:false" json:"auto_read_receipt"`
-	// BusinessCallingEnabled gates outbound voice_call interactive buttons.
-	// Set to true only after Meta enrolls this number in the WhatsApp Business
-	// Calling API. Used by the canned-response editor to disable the Call
-	// button option, and by the send path to refuse voice_call sends.
-	BusinessCallingEnabled bool       `gorm:"default:false" json:"business_calling_enabled"`
-	IsSMB                  bool       `gorm:"default:false" json:"is_smb"`
-	Status                 string     `gorm:"size:20;default:'active'" json:"status"`
-	Pin                    string     `gorm:"size:255" json:"-"` // 6-digit 2FA PIN (encrypted)
-	CreatedByID            *uuid.UUID `gorm:"type:uuid" json:"created_by_id,omitempty"`
-	UpdatedByID            *uuid.UUID `gorm:"type:uuid" json:"updated_by_id,omitempty"`
+	// GOWA credentials.
+	GowaBaseURL       string     `gorm:"size:255" json:"gowa_base_url,omitempty"`  // GOWA REST API base URL, e.g. "http://gowa:8080"
+	GowaDeviceID      string     `gorm:"size:100" json:"gowa_device_id,omitempty"` // GOWA device UUID identifying the WhatsApp session
+	GowaJID           string     `gorm:"size:100" json:"gowa_jid,omitempty"`       // Connected WhatsApp JID reported by GOWA (backfilled on first webhook)
+	GowaWebhookSecret string     `gorm:"size:255" json:"-"`                        // HMAC secret for verifying GOWA webhooks (encrypted)
+	IsDefaultIncoming bool       `gorm:"default:false" json:"is_default_incoming"`
+	IsDefaultOutgoing bool       `gorm:"default:false" json:"is_default_outgoing"`
+	AutoReadReceipt   bool       `gorm:"default:false" json:"auto_read_receipt"`
+	Status            string     `gorm:"size:20;default:'active'" json:"status"`
+	CreatedByID       *uuid.UUID `gorm:"type:uuid" json:"created_by_id,omitempty"`
+	UpdatedByID       *uuid.UUID `gorm:"type:uuid" json:"updated_by_id,omitempty"`
 
 	// Relations
 	Organization *Organization `gorm:"foreignKey:OrganizationID" json:"organization,omitempty"`
@@ -339,26 +321,14 @@ func (WhatsAppAccount) TableName() string {
 // ToWAAccount converts the model to the whatsapp client's Account type.
 func (a *WhatsAppAccount) ToWAAccount() *whatsapp.Account {
 	return &whatsapp.Account{
-		PhoneID:      a.PhoneID,
-		BusinessID:   a.BusinessID,
-		AppID:        a.AppID,
-		APIVersion:   a.APIVersion,
-		AccessToken:  a.AccessToken,
-		ProviderType: a.ProviderType,
 		GowaBaseURL:  a.GowaBaseURL,
 		GowaDeviceID: a.GowaDeviceID,
 	}
 }
 
-// IsGowa reports whether this account is backed by a GOWA instance.
-func (a *WhatsAppAccount) IsGowa() bool {
-	return a.ProviderType == "gowa"
-}
-
-// DecryptSecrets decrypts the encrypted access token, app secret, pin, and
-// GOWA webhook secret fields.
+// DecryptSecrets decrypts the encrypted GOWA webhook secret field.
 func (a *WhatsAppAccount) DecryptSecrets(encryptionKey string) {
-	crypto.DecryptFields(encryptionKey, &a.AccessToken, &a.AppSecret, &a.Pin, &a.GowaWebhookSecret)
+	crypto.DecryptFields(encryptionKey, &a.GowaWebhookSecret)
 }
 
 // Contact represents a WhatsApp contact/profile
@@ -442,13 +412,10 @@ type Template struct {
 	BaseModel
 	OrganizationID  uuid.UUID  `gorm:"type:uuid;index;not null" json:"organization_id"`
 	WhatsAppAccount string     `gorm:"size:100;index;not null" json:"whatsapp_account"` // References WhatsAppAccount.Name
-	MetaTemplateID  string     `gorm:"size:100" json:"meta_template_id"`
 	Name            string     `gorm:"size:255;not null" json:"name"`
 	DisplayName     string     `gorm:"size:255" json:"display_name"`
 	Language        string     `gorm:"size:10;not null" json:"language"`
-	Category        string     `gorm:"size:50" json:"category"`                 // MARKETING, UTILITY, AUTHENTICATION
-	Status          string     `gorm:"size:20;default:'PENDING'" json:"status"` // PENDING, APPROVED, REJECTED
-	QualityRating   string     `gorm:"size:50;default:'UNKNOWN'" json:"quality_rating"`
+	Category        string     `gorm:"size:50" json:"category"` // MARKETING, UTILITY, AUTHENTICATION
 	HeaderType      string     `gorm:"size:20" json:"header_type"` // TEXT, IMAGE, DOCUMENT, VIDEO
 	HeaderContent   string     `gorm:"type:text" json:"header_content"`
 	BodyContent     string     `gorm:"type:text;not null" json:"body_content"`
@@ -471,29 +438,6 @@ type Template struct {
 
 func (Template) TableName() string {
 	return "templates"
-}
-
-// WhatsAppFlow represents a WhatsApp interactive flow
-type WhatsAppFlow struct {
-	BaseModel
-	OrganizationID  uuid.UUID  `gorm:"type:uuid;index;not null" json:"organization_id"`
-	WhatsAppAccount string     `gorm:"size:100;index;not null" json:"whatsapp_account"` // References WhatsAppAccount.Name
-	MetaFlowID      string     `gorm:"size:100" json:"meta_flow_id"`
-	Name            string     `gorm:"size:255;not null" json:"name"`
-	Status          string     `gorm:"size:20;default:'DRAFT'" json:"status"` // DRAFT, PUBLISHED, DEPRECATED, BLOCKED
-	Category        string     `gorm:"size:50" json:"category"`
-	JSONVersion     string     `gorm:"size:10;default:'6.0'" json:"json_version"`
-	FlowJSON        JSONB      `gorm:"type:jsonb" json:"flow_json"`
-	Screens         JSONBArray `gorm:"type:jsonb;default:'[]'" json:"screens"`
-	PreviewURL      string     `gorm:"type:text" json:"preview_url"`
-	HasLocalChanges bool       `gorm:"default:true" json:"has_local_changes"` // True when local changes need to be synced to Meta
-
-	// Relations
-	Organization *Organization `gorm:"foreignKey:OrganizationID" json:"organization,omitempty"`
-}
-
-func (WhatsAppFlow) TableName() string {
-	return "whatsapp_flows"
 }
 
 // Widget represents a customizable analytics widget on the dashboard

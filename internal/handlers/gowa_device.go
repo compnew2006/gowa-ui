@@ -33,8 +33,8 @@ func (a *App) resolveGowaAccount(r *fastglue.Request, orgID uuid.UUID) (gowaAcco
 		return gowaAccount{}, false
 	}
 
-	if !account.IsGowa() {
-		_ = r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Account is not a GOWA account", nil, "")
+	if account.GowaBaseURL == "" || account.GowaDeviceID == "" {
+		_ = r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Account has no GOWA configuration", nil, "")
 		return gowaAccount{}, false
 	}
 

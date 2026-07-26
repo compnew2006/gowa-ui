@@ -34,7 +34,6 @@ const authStore = useAuthStore()
 interface WhatsAppAccount {
   id: string
   name: string
-  provider_type: string
   is_default_incoming: boolean
   is_default_outgoing: boolean
   status: string

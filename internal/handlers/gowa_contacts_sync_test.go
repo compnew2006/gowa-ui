@@ -75,7 +75,6 @@ func TestSyncGowaInstanceDeviceContacts_ImportsChats(t *testing.T) {
 		BaseModel:      models.BaseModel{ID: uuid.New()},
 		OrganizationID: org.ID,
 		Name:           accountName,
-		ProviderType:   "gowa",
 		GowaDeviceID:   deviceID,
 		Status:         "active",
 	}
@@ -162,7 +161,6 @@ func TestSyncGowaInstanceDeviceContacts_Idempotent(t *testing.T) {
 		BaseModel:      models.BaseModel{ID: uuid.New()},
 		OrganizationID: org.ID,
 		Name:           "gowa-dev-1-" + uuid.New().String()[:8],
-		ProviderType:   "gowa",
 		GowaDeviceID:   deviceID,
 		Status:         "active",
 	}
@@ -207,7 +205,6 @@ func TestSyncGowaInstanceDeviceContacts_OverwritesStaleAccount(t *testing.T) {
 		BaseModel:      models.BaseModel{ID: uuid.New()},
 		OrganizationID: org.ID,
 		Name:           accountName,
-		ProviderType:   "gowa",
 		GowaDeviceID:   deviceID,
 		Status:         "active",
 	}

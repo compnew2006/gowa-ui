@@ -46,8 +46,9 @@ func TestApp_ListAccounts_Success(t *testing.T) {
 	assert.Equal(t, acc2.ID, resp.Data.Accounts[0].ID)
 	assert.Equal(t, acc1.ID, resp.Data.Accounts[1].ID)
 
-	// Verify sensitive fields are not exposed (has_access_token is set instead)
-	assert.True(t, resp.Data.Accounts[0].HasAccessToken)
+	// Verify GOWA fields are exposed but the webhook secret is not
+	assert.Equal(t, acc2.GowaDeviceID, resp.Data.Accounts[0].GowaDeviceID)
+	assert.False(t, resp.Data.Accounts[0].HasGowaWebhookSecret)
 }
 
 func TestApp_ListAccounts_Empty(t *testing.T) {
@@ -146,10 +147,9 @@ func TestApp_CreateAccount_Success(t *testing.T) {
 	user := createAdminUser(t, app, org.ID)
 
 	req := testutil.NewJSONRequest(t, map[string]any{
-		"name":         "My WhatsApp Account",
-		"phone_id":     "123456789",
-		"business_id":  "987654321",
-		"access_token": "test-access-token",
+		"name":           "My WhatsApp Account",
+		"gowa_base_url":  "http://gowa.local:3000",
+		"gowa_device_id": "device-abc",
 	})
 	testutil.SetAuthContext(req, org.ID, user.ID)
 
@@ -163,12 +163,10 @@ func TestApp_CreateAccount_Success(t *testing.T) {
 	err = json.Unmarshal(testutil.GetResponseBody(req), &resp)
 	require.NoError(t, err)
 	assert.Equal(t, "My WhatsApp Account", resp.Data.Name)
-	assert.Equal(t, "123456789", resp.Data.PhoneID)
-	assert.Equal(t, "987654321", resp.Data.BusinessID)
+	assert.Equal(t, "http://gowa.local:3000", resp.Data.GowaBaseURL)
+	assert.Equal(t, "device-abc", resp.Data.GowaDeviceID)
 	assert.Equal(t, "active", resp.Data.Status)
-	assert.Equal(t, "v21.0", resp.Data.APIVersion) // default version
-	assert.True(t, resp.Data.HasAccessToken)
-	assert.NotEmpty(t, resp.Data.WebhookVerifyToken) // auto-generated
+	assert.True(t, resp.Data.HasGowaWebhookSecret) // auto-generated
 	assert.NotEqual(t, uuid.Nil, resp.Data.ID)
 }
 
@@ -180,17 +178,13 @@ func TestApp_CreateAccount_WithOptionalFields(t *testing.T) {
 	user := createAdminUser(t, app, org.ID)
 
 	req := testutil.NewJSONRequest(t, map[string]any{
-		"name":                 "Full Account",
-		"phone_id":             "111222333",
-		"business_id":          "444555666",
-		"access_token":         "my-token",
-		"app_id":               "my-app-id",
-		"app_secret":           "my-app-secret",
-		"webhook_verify_token": "custom-verify-token",
-		"api_version":          "v19.0",
-		"is_default_incoming":  true,
-		"is_default_outgoing":  true,
-		"auto_read_receipt":    true,
+		"name":                "Full Account",
+		"gowa_base_url":       "http://gowa.local:3001",
+		"gowa_device_id":      "device-full",
+		"gowa_webhook_secret": "custom-webhook-secret",
+		"is_default_incoming": true,
+		"is_default_outgoing": true,
+		"auto_read_receipt":   true,
 	})
 	testutil.SetAuthContext(req, org.ID, user.ID)
 
@@ -204,14 +198,12 @@ func TestApp_CreateAccount_WithOptionalFields(t *testing.T) {
 	err = json.Unmarshal(testutil.GetResponseBody(req), &resp)
 	require.NoError(t, err)
 	assert.Equal(t, "Full Account", resp.Data.Name)
-	assert.Equal(t, "my-app-id", resp.Data.AppID)
-	assert.Equal(t, "custom-verify-token", resp.Data.WebhookVerifyToken)
-	assert.Equal(t, "v19.0", resp.Data.APIVersion)
+	assert.Equal(t, "http://gowa.local:3001", resp.Data.GowaBaseURL)
+	assert.Equal(t, "device-full", resp.Data.GowaDeviceID)
 	assert.True(t, resp.Data.IsDefaultIncoming)
 	assert.True(t, resp.Data.IsDefaultOutgoing)
 	assert.True(t, resp.Data.AutoReadReceipt)
-	assert.True(t, resp.Data.HasAccessToken)
-	assert.True(t, resp.Data.HasAppSecret)
+	assert.True(t, resp.Data.HasGowaWebhookSecret)
 }
 
 func TestApp_CreateAccount_ValidationErrors(t *testing.T) {
@@ -228,33 +220,22 @@ func TestApp_CreateAccount_ValidationErrors(t *testing.T) {
 		{
 			name: "missing_name",
 			body: map[string]any{
-				"phone_id":     "123",
-				"business_id":  "456",
-				"access_token": "tok",
+				"gowa_base_url":  "http://gowa.local:3000",
+				"gowa_device_id": "device-1",
 			},
 		},
 		{
-			name: "missing_phone_id",
+			name: "missing_gowa_base_url",
 			body: map[string]any{
-				"name":         "Test",
-				"business_id":  "456",
-				"access_token": "tok",
+				"name":           "Test",
+				"gowa_device_id": "device-1",
 			},
 		},
 		{
-			name: "missing_business_id",
+			name: "missing_gowa_device_id",
 			body: map[string]any{
-				"name":         "Test",
-				"phone_id":     "123",
-				"access_token": "tok",
-			},
-		},
-		{
-			name: "missing_access_token",
-			body: map[string]any{
-				"name":        "Test",
-				"phone_id":    "123",
-				"business_id": "456",
+				"name":          "Test",
+				"gowa_base_url": "http://gowa.local:3000",
 			},
 		},
 		{
@@ -281,10 +262,9 @@ func TestApp_CreateAccount_Unauthorized(t *testing.T) {
 	app := newTestApp(t)
 
 	req := testutil.NewJSONRequest(t, map[string]any{
-		"name":         "Test",
-		"phone_id":     "123",
-		"business_id":  "456",
-		"access_token": "tok",
+		"name":           "Test",
+		"gowa_base_url":  "http://gowa.local:3000",
+		"gowa_device_id": "device-1",
 	})
 	// No auth context set
 
@@ -318,11 +298,10 @@ func TestApp_GetAccount_Success(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, account.ID, resp.Data.ID)
 	assert.Equal(t, account.Name, resp.Data.Name)
-	assert.Equal(t, account.PhoneID, resp.Data.PhoneID)
-	assert.Equal(t, account.BusinessID, resp.Data.BusinessID)
-	assert.Equal(t, account.APIVersion, resp.Data.APIVersion)
+	assert.Equal(t, account.GowaBaseURL, resp.Data.GowaBaseURL)
+	assert.Equal(t, account.GowaDeviceID, resp.Data.GowaDeviceID)
 	assert.Equal(t, "active", resp.Data.Status)
-	assert.True(t, resp.Data.HasAccessToken)
+	assert.False(t, resp.Data.HasGowaWebhookSecret)
 }
 
 func TestApp_GetAccount_NotFound(t *testing.T) {
@@ -392,12 +371,11 @@ func TestApp_UpdateAccount_Success(t *testing.T) {
 	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
 
 	req := testutil.NewJSONRequest(t, map[string]any{
-		"name":              "Updated Account Name",
-		"phone_id":          "new-phone-id",
-		"business_id":       "new-business-id",
-		"access_token":      "new-access-token",
-		"api_version":       "v20.0",
-		"auto_read_receipt": true,
+		"name":                "Updated Account Name",
+		"gowa_base_url":       "http://gowa.local:3999",
+		"gowa_device_id":      "device-updated",
+		"gowa_webhook_secret": "new-webhook-secret",
+		"auto_read_receipt":   true,
 	})
 	testutil.SetAuthContext(req, org.ID, user.ID)
 	testutil.SetPathParam(req, "id", account.ID.String())
@@ -413,19 +391,18 @@ func TestApp_UpdateAccount_Success(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, account.ID, resp.Data.ID)
 	assert.Equal(t, "Updated Account Name", resp.Data.Name)
-	assert.Equal(t, "new-phone-id", resp.Data.PhoneID)
-	assert.Equal(t, "new-business-id", resp.Data.BusinessID)
-	assert.Equal(t, "v20.0", resp.Data.APIVersion)
+	assert.Equal(t, "http://gowa.local:3999", resp.Data.GowaBaseURL)
+	assert.Equal(t, "device-updated", resp.Data.GowaDeviceID)
 	assert.True(t, resp.Data.AutoReadReceipt)
-	assert.True(t, resp.Data.HasAccessToken)
+	assert.True(t, resp.Data.HasGowaWebhookSecret)
 
 	// Verify the update persisted in the database
 	var updated models.WhatsAppAccount
 	require.NoError(t, app.DB.Where("id = ?", account.ID).First(&updated).Error)
 	assert.Equal(t, "Updated Account Name", updated.Name)
-	assert.Equal(t, "new-phone-id", updated.PhoneID)
+	assert.Equal(t, "http://gowa.local:3999", updated.GowaBaseURL)
 	updated.DecryptSecrets(app.Config.App.EncryptionKey)
-	assert.Equal(t, "new-access-token", updated.AccessToken)
+	assert.Equal(t, "new-webhook-secret", updated.GowaWebhookSecret)
 }
 
 func TestApp_UpdateAccount_PartialUpdate(t *testing.T) {
@@ -454,9 +431,8 @@ func TestApp_UpdateAccount_PartialUpdate(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "Only Name Changed", resp.Data.Name)
 	// Original values should be preserved
-	assert.Equal(t, account.PhoneID, resp.Data.PhoneID)
-	assert.Equal(t, account.BusinessID, resp.Data.BusinessID)
-	assert.Equal(t, account.APIVersion, resp.Data.APIVersion)
+	assert.Equal(t, account.GowaBaseURL, resp.Data.GowaBaseURL)
+	assert.Equal(t, account.GowaDeviceID, resp.Data.GowaDeviceID)
 }
 
 func TestApp_UpdateAccount_NotFound(t *testing.T) {

@@ -87,8 +87,6 @@ export function useFlowGraphSimulation(
     switch (node.type) {
       case 'buttons':
         return 'button'
-      case 'whatsapp_flow':
-        return 'whatsapp_flow'
       case 'prompt':
         return 'text'
       default:
@@ -198,7 +196,7 @@ export function useFlowGraphSimulation(
   }
 
   // runFrom keeps stepping through non-yielding nodes until it hits a
-  // yielding one (buttons / prompt / whatsapp_flow / end / transfer) or
+  // yielding one (buttons / prompt / end / transfer) or
   // walks off the graph.
   async function runFrom(startId: string): Promise<void> {
     let currentId = startId
@@ -276,8 +274,6 @@ export function useFlowGraphSimulation(
         return execTransfer(node)
       case 'api_call':
         return execApiCall(node)
-      case 'whatsapp_flow':
-        return execWhatsAppFlow(node)
       case 'goto_flow':
         // In a single-flow preview we can't actually jump; show a system note.
         addMessage('system', `[goto_flow] would jump to flow ${node.config?.flow_id || '?'}`)
@@ -398,22 +394,6 @@ export function useFlowGraphSimulation(
     return 'http:non2xx'
   }
 
-  function execWhatsAppFlow(node: ChatNode): string {
-    const body = interpolate(stringField(node, 'body', 'message', 'text'), state.variables)
-    if (body) {
-      addMessage('bot', body, {
-        stepName: node.id,
-        inputConfig: {
-          flow_id: stringField(node, 'flow_id'),
-          flow_cta: stringField(node, 'cta'),
-          flow_header: stringField(node, 'header'),
-        },
-      })
-    }
-    state.status = 'waiting_input'
-    return '__yield__'
-  }
-
   // ---- Inputs from the UI ------------------------------------------------
 
   async function processUserInput(input: UserInput): Promise<void> {
@@ -458,16 +438,6 @@ export function useFlowGraphSimulation(
       log('branch', node.id, { buttonId: btn.id })
       await advance(node, `button:${btn.id}`)
     }
-  }
-
-  async function processWhatsAppFlowCompletion(data: Record<string, any>): Promise<void> {
-    if (state.status !== 'waiting_input' || !state.currentStepName) return
-    const node = nodeById(state.currentStepName)
-    if (!node || node.type !== 'whatsapp_flow') return
-    addMessage('user', 'Form completed')
-    addMessage('debug', `Form data: ${JSON.stringify(data)}`)
-    for (const [k, v] of Object.entries(data)) setVariable(k, v)
-    await advance(node, 'default')
   }
 
   async function advance(node: ChatNode, outcome: string): Promise<void> {
@@ -559,7 +529,6 @@ export function useFlowGraphSimulation(
     resumeSimulation,
     resetSimulation,
     processUserInput,
-    processWhatsAppFlowCompletion,
     undo,
     stepForward,
     goToStep,
@@ -580,11 +549,7 @@ function adaptNodeAsStep(node: ChatNode): Record<string, any> {
     message: stringFromConfig(cfg, 'message', 'body', 'text'),
     input_type: messageType === 'prompt' ? 'text' : 'none',
     buttons: (cfg.buttons as any[]) || [],
-    input_config: {
-      flow_cta: stringFromConfig(cfg, 'cta'),
-      flow_id: stringFromConfig(cfg, 'flow_id'),
-      flow_header: stringFromConfig(cfg, 'header'),
-    },
+    input_config: {},
     transfer_config: {
       team_id: stringFromConfig(cfg, 'team_id'),
       notes: stringFromConfig(cfg, 'notes'),
@@ -601,8 +566,6 @@ function nodeTypeToMessageType(t: string): string {
       return 'buttons'
     case 'api_call':
       return 'api_fetch'
-    case 'whatsapp_flow':
-      return 'whatsapp_flow'
     case 'transfer':
       return 'transfer'
     case 'end':

@@ -98,9 +98,7 @@ func newGowaDeviceApp(t *testing.T, mock *mockGowaDeviceAPI) *handlers.App {
 			return gowa.New(baseURL, username, password)
 		},
 	)
-	meta := whatsapp.New(logf.New(logf.Opts{Level: logf.ErrorLevel}))
-	app.WhatsApp = meta
-	app.WARegistry = whatsapp.NewRegistry(meta, logf.New(logf.Opts{Level: logf.ErrorLevel}))
+	app.WARegistry = whatsapp.NewRegistry(logf.New(logf.Opts{Level: logf.ErrorLevel}))
 	return app
 }
 
@@ -113,7 +111,6 @@ func createGowaAccountInDB(t *testing.T, app *handlers.App, orgID uuid.UUID, moc
 		BaseModel:      models.BaseModel{ID: uuid.New()},
 		OrganizationID: orgID,
 		Name:           "gowa-acc-" + deviceID + "-" + uuid.New().String()[:8],
-		ProviderType:   "gowa",
 		GowaBaseURL:    mockURL,
 		GowaDeviceID:   deviceID,
 		Status:         "active",

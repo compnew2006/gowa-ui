@@ -223,7 +223,6 @@ const typeLabel: Record<string, string> = {
   transfer: 'Transfer',
   end: 'End',
   goto_flow: 'Go to Flow',
-  whatsapp_flow: 'WhatsApp Flow',
   webhook: 'Webhook',
 }
 </script>
@@ -583,44 +582,6 @@ const typeLabel: Record<string, string> = {
           </SelectContent>
         </Select>
         <p class="text-[10px] text-muted-foreground">Session variables carry forward into the target flow.</p>
-      </div>
-    </template>
-
-    <!-- whatsapp_flow -->
-    <template v-if="node.type === 'whatsapp_flow'">
-      <div class="space-y-1.5">
-        <Label class="text-xs">WhatsApp Flow ID</Label>
-        <Input
-          :model-value="config.flow_id || ''"
-          @update:model-value="(v: string) => updateConfig('flow_id', v)"
-          placeholder="Meta flow id"
-          class="h-8 text-xs font-mono"
-        />
-      </div>
-      <div class="space-y-1.5">
-        <Label class="text-xs">Header</Label>
-        <Input
-          :model-value="config.header || ''"
-          @update:model-value="(v: string) => updateConfig('header', v)"
-          class="h-8 text-xs"
-        />
-      </div>
-      <div class="space-y-1.5">
-        <Label class="text-xs">Body</Label>
-        <Textarea
-          :model-value="config.body || ''"
-          @update:model-value="(v: string) => updateConfig('body', v)"
-          class="min-h-[50px] text-xs"
-        />
-      </div>
-      <div class="space-y-1.5">
-        <Label class="text-xs">CTA label</Label>
-        <Input
-          :model-value="config.cta || ''"
-          @update:model-value="(v: string) => updateConfig('cta', v)"
-          placeholder="Open form"
-          class="h-8 text-xs"
-        />
       </div>
     </template>
 

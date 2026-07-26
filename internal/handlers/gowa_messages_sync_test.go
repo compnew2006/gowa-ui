@@ -112,7 +112,6 @@ func TestSyncGowaInstanceMessages_MediaUrlNotWrittenForUndownloadedBytes(t *test
 		BaseModel:      models.BaseModel{ID: uuid.New()},
 		OrganizationID: org.ID,
 		Name:           accountName,
-		ProviderType:   "gowa",
 		GowaDeviceID:   deviceID,
 		Status:         "active",
 	}

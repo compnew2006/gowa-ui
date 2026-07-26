@@ -72,7 +72,6 @@ func GetMigrationModels() []MigrationModel {
 		{"Tag", &models.Tag{}},
 		{"Message", &models.Message{}},
 		{"Template", &models.Template{}},
-		{"WhatsAppFlow", &models.WhatsAppFlow{}},
 
 		// Bulk & Notifications
 		{"BulkMessageCampaign", &models.BulkMessageCampaign{}},
@@ -99,21 +98,12 @@ func GetMigrationModels() []MigrationModel {
 		// Canned responses
 		{"CannedResponse", &models.CannedResponse{}},
 
-		// Catalogs
-		{"Catalog", &models.Catalog{}},
-		{"CatalogProduct", &models.CatalogProduct{}},
-
 		// Dashboard
 		{"Widget", &models.Widget{}},
 
 		// Conversation Notes
 		{"ConversationNote", &models.ConversationNote{}},
 
-		// Calling / IVR
-		{"CallLog", &models.CallLog{}},
-		{"IVRFlow", &models.IVRFlow{}},
-		{"CallTransfer", &models.CallTransfer{}},
-		{"CallPermission", &models.CallPermission{}},
 		{"AuditLog", &models.AuditLog{}},
 
 		// GOWA instances (DB-managed GOWA servers)
@@ -251,7 +241,6 @@ func getIndexes() []string {
 		`CREATE INDEX IF NOT EXISTS idx_agent_transfers_org_contact ON agent_transfers(organization_id, contact_id, status)`,
 		`CREATE INDEX IF NOT EXISTS idx_agent_transfers_agent_active ON agent_transfers(agent_id, status) WHERE status = 'active'`,
 		`CREATE INDEX IF NOT EXISTS idx_agent_transfers_team ON agent_transfers(team_id, status) WHERE team_id IS NOT NULL`,
-		`CREATE UNIQUE INDEX IF NOT EXISTS idx_whatsapp_accounts_org_phone ON whatsapp_accounts(organization_id, phone_id)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_templates_account_name_lang ON templates(whats_app_account, name, language)`,
 		`CREATE INDEX IF NOT EXISTS idx_keyword_rules_account ON keyword_rules(whats_app_account, is_enabled, priority DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_chatbot_flows_account ON chatbot_flows(whats_app_account, is_enabled)`,
@@ -281,13 +270,6 @@ func getIndexes() []string {
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_user_org_unique ON user_organizations(user_id, organization_id) WHERE deleted_at IS NULL`,
 		// Conversation notes
 		`CREATE INDEX IF NOT EXISTS idx_conversation_notes_contact ON conversation_notes(organization_id, contact_id, created_at DESC)`,
-		// Call logs
-		`CREATE INDEX IF NOT EXISTS idx_call_logs_org_status ON call_logs(organization_id, status, created_at DESC)`,
-		`CREATE INDEX IF NOT EXISTS idx_call_logs_contact ON call_logs(contact_id, created_at DESC)`,
-		`CREATE INDEX IF NOT EXISTS idx_call_logs_wa_call_id ON call_logs(whatsapp_call_id) WHERE whatsapp_call_id != ''`,
-		// IVR flows
-		`CREATE INDEX IF NOT EXISTS idx_ivr_flows_org_active ON ivr_flows(organization_id, whatsapp_account, is_active)`,
-		`CREATE UNIQUE INDEX IF NOT EXISTS idx_ivr_flows_org_call_start ON ivr_flows(organization_id, whatsapp_account) WHERE is_call_start = true AND is_active = true AND deleted_at IS NULL`,
 	}
 }
 

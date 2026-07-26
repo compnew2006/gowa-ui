@@ -35,20 +35,17 @@ func cacheTestApp(t *testing.T) *App {
 	}
 }
 
-// makeAccount inserts a WhatsApp account with the given phone ID and tokens.
-func makeAccount(t *testing.T, app *App, orgID uuid.UUID, phoneID, accessToken, appSecret string) *models.WhatsAppAccount {
+// makeAccount inserts a WhatsApp account with the given GOWA device ID and webhook secret.
+func makeAccount(t *testing.T, app *App, orgID uuid.UUID, deviceID, webhookSecret string) *models.WhatsAppAccount {
 	t.Helper()
 	acc := &models.WhatsAppAccount{
-		BaseModel:          models.BaseModel{ID: uuid.New()},
-		OrganizationID:     orgID,
-		Name:               "cache-acc-" + uuid.New().String()[:8],
-		PhoneID:            phoneID,
-		BusinessID:         "biz-" + uuid.New().String()[:8],
-		AccessToken:        accessToken,
-		AppSecret:          appSecret,
-		WebhookVerifyToken: "vt-" + uuid.New().String()[:8],
-		APIVersion:         "v18.0",
-		Status:             "active",
+		BaseModel:         models.BaseModel{ID: uuid.New()},
+		OrganizationID:    orgID,
+		Name:              "cache-acc-" + uuid.New().String()[:8],
+		GowaBaseURL:       "http://gowa.test:3000",
+		GowaDeviceID:      deviceID,
+		GowaWebhookSecret: webhookSecret,
+		Status:            "active",
 	}
 	require.NoError(t, app.DB.Create(acc).Error)
 	return acc
@@ -59,19 +56,18 @@ func makeAccount(t *testing.T, app *App, orgID uuid.UUID, phoneID, accessToken, 
 func TestGetWhatsAppAccountCached_CacheMissPopulatesCache(t *testing.T) {
 	app := cacheTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	phoneID := "phone-" + uuid.New().String()[:8]
-	acc := makeAccount(t, app, org.ID, phoneID, "tok", "secret")
+	deviceID := "device-" + uuid.New().String()[:8]
+	acc := makeAccount(t, app, org.ID, deviceID, "secret")
 
 	// Ensure cache is clean.
-	cacheKey := fmt.Sprintf("%s%s", whatsappAccountCachePrefix, phoneID)
+	cacheKey := fmt.Sprintf("%s%s", whatsappAccountCachePrefix, deviceID)
 	app.Redis.Del(context.Background(), cacheKey)
 
-	got, err := app.getWhatsAppAccountCached(phoneID)
+	got, err := app.getWhatsAppAccountCached(deviceID)
 	require.NoError(t, err)
 	require.NotNil(t, got)
 	assert.Equal(t, acc.ID, got.ID)
-	assert.Equal(t, "tok", got.AccessToken, "DB → cache path must return decrypted access token")
-	assert.Equal(t, "secret", got.AppSecret)
+	assert.Equal(t, deviceID, got.GowaDeviceID)
 
 	// Cache should now be populated.
 	cached, err := app.Redis.Get(context.Background(), cacheKey).Result()
@@ -82,57 +78,65 @@ func TestGetWhatsAppAccountCached_CacheMissPopulatesCache(t *testing.T) {
 func TestGetWhatsAppAccountCached_CacheHitSkipsDB(t *testing.T) {
 	app := cacheTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	phoneID := "phone-" + uuid.New().String()[:8]
-	acc := makeAccount(t, app, org.ID, phoneID, "real-tok", "real-secret")
+	deviceID := "device-" + uuid.New().String()[:8]
+	acc := makeAccount(t, app, org.ID, deviceID, "real-secret")
 
 	// Plant a fake cache entry with a different name → if the function reads from
 	// cache, we'll see "from-cache"; if it falls through to DB we'll see acc.Name.
-	cacheData := whatsAppAccountCache{
-		WhatsAppAccount: models.WhatsAppAccount{
-			BaseModel:      models.BaseModel{ID: acc.ID},
-			OrganizationID: org.ID,
-			Name:           "from-cache",
-			PhoneID:        phoneID,
-		},
-		AccessToken: "cached-tok",
-		AppSecret:   "cached-secret",
+	cacheData := models.WhatsAppAccount{
+		BaseModel:      models.BaseModel{ID: acc.ID},
+		OrganizationID: org.ID,
+		Name:           "from-cache",
+		GowaDeviceID:   deviceID,
 	}
 	data, err := json.Marshal(cacheData)
 	require.NoError(t, err)
-	cacheKey := fmt.Sprintf("%s%s", whatsappAccountCachePrefix, phoneID)
+	cacheKey := fmt.Sprintf("%s%s", whatsappAccountCachePrefix, deviceID)
 	require.NoError(t, app.Redis.Set(context.Background(), cacheKey, data, time.Hour).Err())
 
-	got, err := app.getWhatsAppAccountCached(phoneID)
+	got, err := app.getWhatsAppAccountCached(deviceID)
 	require.NoError(t, err)
 	assert.Equal(t, "from-cache", got.Name, "cache hit must short-circuit the DB read")
-	assert.Equal(t, "cached-tok", got.AccessToken,
-		"cached AccessToken must be restored on the WhatsAppAccount even though it has json:\"-\"")
-	assert.Equal(t, "cached-secret", got.AppSecret,
-		"cached AppSecret must be restored")
+}
+
+func TestGetWhatsAppAccountCached_MatchesByJID(t *testing.T) {
+	app := cacheTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	deviceID := "device-" + uuid.New().String()[:8]
+	acc := makeAccount(t, app, org.ID, deviceID, "secret")
+
+	// Backfill a JID and look the account up by the full JID.
+	jid := "16505551234@s.whatsapp.net"
+	require.NoError(t, app.DB.Model(acc).Update("gowa_jid", jid).Error)
+	app.Redis.Del(context.Background(), fmt.Sprintf("%s%s", whatsappAccountCachePrefix, jid))
+
+	got, err := app.getWhatsAppAccountCached(jid)
+	require.NoError(t, err)
+	assert.Equal(t, acc.ID, got.ID, "lookup by gowa_jid must resolve the account")
 }
 
 func TestGetWhatsAppAccountCached_NotFoundReturnsError(t *testing.T) {
 	app := cacheTestApp(t)
-	_, err := app.getWhatsAppAccountCached("phone-does-not-exist-" + uuid.New().String()[:8])
+	_, err := app.getWhatsAppAccountCached("device-does-not-exist-" + uuid.New().String()[:8])
 	require.Error(t, err)
 }
 
 func TestInvalidateWhatsAppAccountCache_DeletesKey(t *testing.T) {
 	app := cacheTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	phoneID := "phone-" + uuid.New().String()[:8]
-	makeAccount(t, app, org.ID, phoneID, "tok", "secret")
+	deviceID := "device-" + uuid.New().String()[:8]
+	makeAccount(t, app, org.ID, deviceID, "secret")
 
 	// Populate the cache.
-	_, err := app.getWhatsAppAccountCached(phoneID)
+	_, err := app.getWhatsAppAccountCached(deviceID)
 	require.NoError(t, err)
 
-	cacheKey := fmt.Sprintf("%s%s", whatsappAccountCachePrefix, phoneID)
+	cacheKey := fmt.Sprintf("%s%s", whatsappAccountCachePrefix, deviceID)
 	exists, err := app.Redis.Exists(context.Background(), cacheKey).Result()
 	require.NoError(t, err)
 	require.Equal(t, int64(1), exists)
 
-	app.InvalidateWhatsAppAccountCache(phoneID)
+	app.InvalidateWhatsAppAccountCache(deviceID)
 
 	exists, err = app.Redis.Exists(context.Background(), cacheKey).Result()
 	require.NoError(t, err)
@@ -145,15 +149,12 @@ func TestDecryptAccountSecrets_DecryptsEncryptedValues(t *testing.T) {
 	app := cacheTestApp(t)
 	app.Config.App.EncryptionKey = "this-is-a-32-character-test-key-XX"
 
-	encTok, err := crypto.Encrypt("plain-token", app.Config.App.EncryptionKey)
-	require.NoError(t, err)
 	encSecret, err := crypto.Encrypt("plain-secret", app.Config.App.EncryptionKey)
 	require.NoError(t, err)
 
-	acc := &models.WhatsAppAccount{AccessToken: encTok, AppSecret: encSecret}
+	acc := &models.WhatsAppAccount{GowaWebhookSecret: encSecret}
 	app.decryptAccountSecrets(acc)
-	assert.Equal(t, "plain-token", acc.AccessToken)
-	assert.Equal(t, "plain-secret", acc.AppSecret)
+	assert.Equal(t, "plain-secret", acc.GowaWebhookSecret)
 }
 
 func TestDecryptAccountSecrets_LeavesLegacyPlaintextUnchanged(t *testing.T) {
@@ -161,10 +162,9 @@ func TestDecryptAccountSecrets_LeavesLegacyPlaintextUnchanged(t *testing.T) {
 	app.Config.App.EncryptionKey = "this-is-a-32-character-test-key-XX"
 
 	// No "enc:" prefix → legacy value, returned as-is.
-	acc := &models.WhatsAppAccount{AccessToken: "legacy-plain", AppSecret: "legacy-secret"}
+	acc := &models.WhatsAppAccount{GowaWebhookSecret: "legacy-secret"}
 	app.decryptAccountSecrets(acc)
-	assert.Equal(t, "legacy-plain", acc.AccessToken)
-	assert.Equal(t, "legacy-secret", acc.AppSecret)
+	assert.Equal(t, "legacy-secret", acc.GowaWebhookSecret)
 }
 
 // --- getWebhooksCached ---

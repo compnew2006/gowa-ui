@@ -9,12 +9,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/shridarpatil/whatomate/internal/assignment"
-	"github.com/shridarpatil/whatomate/internal/calling"
 	"github.com/shridarpatil/whatomate/internal/chatlifecycle"
 	"github.com/shridarpatil/whatomate/internal/config"
 	"github.com/shridarpatil/whatomate/internal/queue"
 	"github.com/shridarpatil/whatomate/internal/storage"
-	"github.com/shridarpatil/whatomate/internal/tts"
 	"github.com/shridarpatil/whatomate/internal/websocket"
 	"github.com/shridarpatil/whatomate/pkg/whatsapp"
 	"github.com/valyala/fasthttp"
@@ -25,31 +23,25 @@ import (
 
 // App holds all dependencies for handlers
 type App struct {
-	Config   *config.Config
-	DB       *gorm.DB
-	Redis    *redis.Client
-	Log      logf.Logger
-	WhatsApp whatsapp.Provider
-	// WARegistry resolves the correct provider (Meta or GOWA) per account.
-	// When nil, handlers fall back to the WhatsApp field above.
+	Config *config.Config
+	DB     *gorm.DB
+	Redis  *redis.Client
+	Log    logf.Logger
+	// WARegistry resolves the GOWA provider per account.
 	WARegistry        *whatsapp.Registry
 	WSHub             *websocket.Hub
 	Queue             queue.Queue
 	CampaignSubCancel context.CancelFunc
 	// HTTPClient is a shared HTTP client with connection pooling for external API calls
 	HTTPClient *http.Client
-	// Assigner provides shared team-based agent assignment (used by both chat and call transfers)
+	// Assigner provides shared team-based agent assignment
 	Assigner *assignment.Assigner
 	// ChatLifecycle owns the chat conversation state machine (claim/release/
 	// close/reopen/join/leave/invite/remove) and its audit + system-message +
 	// WS side effects. Handlers in chat_lifecycle.go are thin HTTP adapters
 	// over this service. Nil only in tests that don't exercise chat lifecycle.
 	ChatLifecycle *chatlifecycle.Service
-	// CallManager handles WebRTC call sessions (nil when calling is disabled)
-	CallManager *calling.Manager
-	// TTS generates audio from text for IVR greetings (nil when not configured)
-	TTS *tts.PiperTTS
-	// S3Client for serving call recording presigned URLs (nil when not configured)
+	// S3Client for serving presigned URLs (nil when not configured)
 	S3Client *storage.S3Client
 	// wg tracks background goroutines for graceful shutdown
 	wg sync.WaitGroup
@@ -141,33 +133,6 @@ func (a *App) ReadyCheck(r *fastglue.Request) error {
 	return r.SendEnvelope(map[string]string{
 		"status": "ready",
 	})
-}
-
-// GetEmbeddedSignupConfig returns public configuration values for the embedded signup flow
-func (a *App) GetEmbeddedSignupConfig(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
-	}
-
-	appID, _, configID, err := a.resolveMetaAppCreds(orgID)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to resolve credentials", nil, "")
-	}
-
-	type EmbeddedSignupConfig struct {
-		WhatsAppAppID      string `json:"whatsapp_app_id,omitempty"`
-		WhatsAppConfigID   string `json:"whatsapp_config_id,omitempty"`
-		WhatsAppAPIVersion string `json:"whatsapp_api_version,omitempty"`
-	}
-
-	config := EmbeddedSignupConfig{
-		WhatsAppAppID:      appID,
-		WhatsAppConfigID:   configID,
-		WhatsAppAPIVersion: a.Config.WhatsApp.APIVersion,
-	}
-
-	return r.SendEnvelope(config)
 }
 
 // StartCampaignStatsSubscriber starts listening for campaign stats updates from Redis pub/sub

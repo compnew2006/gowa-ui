@@ -13,7 +13,7 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-// createTestTemplate creates an approved template in the database.
+// createTestTemplate creates a template blueprint in the database.
 func createTestTemplate(t *testing.T, app *handlers.App, orgID uuid.UUID, accountName string) *models.Template {
 	t.Helper()
 	tpl := &models.Template{
@@ -22,10 +22,8 @@ func createTestTemplate(t *testing.T, app *handlers.App, orgID uuid.UUID, accoun
 		WhatsAppAccount: accountName,
 		Name:            "order_confirm_" + uuid.New().String()[:8],
 		DisplayName:     "Order Confirmation",
-		MetaTemplateID:  "meta-" + uuid.New().String()[:8],
 		Category:        "UTILITY",
 		Language:        "en",
-		Status:          string(models.TemplateStatusApproved),
 		BodyContent:     "Hello {{name}}! Your order {{order_id}} has been confirmed.",
 	}
 	require.NoError(t, app.DB.Create(tpl).Error)
@@ -37,7 +35,7 @@ func TestApp_SendTemplateMessage(t *testing.T) {
 
 	t.Run("success with contact_id and template params", func(t *testing.T) {
 		t.Parallel()
-		mockServer := newMockWhatsAppServer()
+		mockServer := newMockGowaServer()
 		defer mockServer.close()
 
 		app := newMsgTestApp(t, mockServer)
@@ -80,10 +78,11 @@ func TestApp_SendTemplateMessage(t *testing.T) {
 		// Wait for async send to complete before checking mock
 		app.WaitForBackgroundTasks()
 
-		// Verify message was sent to WhatsApp API
-		require.Len(t, mockServer.sentMessages, 1)
-		sentMsg := mockServer.sentMessages[0]
-		assert.Equal(t, "template", sentMsg["type"])
+		// Verify the rendered template went out as a GOWA text send
+		sent := mockServer.sentRequests()
+		require.Len(t, sent, 1)
+		assert.Equal(t, "/send/message", sent[0].path)
+		assert.Equal(t, "Hello Alice! Your order ORD-42 has been confirmed.", sent[0].body["message"])
 
 		// Verify message was persisted in DB
 		var dbMsg models.Message
@@ -94,7 +93,7 @@ func TestApp_SendTemplateMessage(t *testing.T) {
 
 	t.Run("success without params", func(t *testing.T) {
 		t.Parallel()
-		mockServer := newMockWhatsAppServer()
+		mockServer := newMockGowaServer()
 		defer mockServer.close()
 
 		app := newMsgTestApp(t, mockServer)
@@ -112,7 +111,6 @@ func TestApp_SendTemplateMessage(t *testing.T) {
 			Name:            "simple_greeting_" + uuid.New().String()[:8],
 			DisplayName:     "Simple Greeting",
 			Language:        "en",
-			Status:          string(models.TemplateStatusApproved),
 			BodyContent:     "Welcome to our service!",
 		}
 		require.NoError(t, app.DB.Create(tpl).Error)
@@ -139,7 +137,7 @@ func TestApp_SendTemplateMessage(t *testing.T) {
 
 	t.Run("success with template_id", func(t *testing.T) {
 		t.Parallel()
-		mockServer := newMockWhatsAppServer()
+		mockServer := newMockGowaServer()
 		defer mockServer.close()
 
 		app := newMsgTestApp(t, mockServer)
@@ -177,7 +175,7 @@ func TestApp_SendTemplateMessage(t *testing.T) {
 
 	t.Run("success with account_name override", func(t *testing.T) {
 		t.Parallel()
-		mockServer := newMockWhatsAppServer()
+		mockServer := newMockGowaServer()
 		defer mockServer.close()
 
 		app := newMsgTestApp(t, mockServer)
@@ -264,39 +262,9 @@ func TestApp_SendTemplateMessage(t *testing.T) {
 		assert.Equal(t, fasthttp.StatusNotFound, testutil.GetResponseStatusCode(req))
 	})
 
-	t.Run("template not approved", func(t *testing.T) {
-		t.Parallel()
-		app := newTestApp(t)
-		org := testutil.CreateTestOrganization(t, app.DB)
-		adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
-		user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
-		contact := testutil.CreateTestContact(t, app.DB, org.ID)
-
-		tpl := &models.Template{
-			BaseModel:       models.BaseModel{ID: uuid.New()},
-			OrganizationID:  org.ID,
-			WhatsAppAccount: "test-account",
-			Name:            "pending_template_" + uuid.New().String()[:8],
-			Language:        "en",
-			Status:          "PENDING",
-			BodyContent:     "Some content",
-		}
-		require.NoError(t, app.DB.Create(tpl).Error)
-
-		req := testutil.NewJSONRequest(t, map[string]any{
-			"contact_id":    contact.ID.String(),
-			"template_name": tpl.Name,
-		})
-		testutil.SetAuthContext(req, org.ID, user.ID)
-
-		err := app.SendTemplateMessage(req)
-		require.NoError(t, err)
-		assert.Equal(t, fasthttp.StatusBadRequest, testutil.GetResponseStatusCode(req))
-	})
-
 	t.Run("contact not found", func(t *testing.T) {
 		t.Parallel()
-		mockServer := newMockWhatsAppServer()
+		mockServer := newMockGowaServer()
 		defer mockServer.close()
 
 		app := newMsgTestApp(t, mockServer)
@@ -319,7 +287,7 @@ func TestApp_SendTemplateMessage(t *testing.T) {
 
 	t.Run("missing required template params", func(t *testing.T) {
 		t.Parallel()
-		mockServer := newMockWhatsAppServer()
+		mockServer := newMockGowaServer()
 		defer mockServer.close()
 
 		app := newMsgTestApp(t, mockServer)
@@ -375,7 +343,6 @@ func TestApp_SendTemplateMessage(t *testing.T) {
 			WhatsAppAccount: "test-account",
 			Name:            "test_tpl_" + uuid.New().String()[:8],
 			Language:        "en",
-			Status:          string(models.TemplateStatusApproved),
 			BodyContent:     "Hello",
 		}
 		require.NoError(t, app.DB.Create(tpl).Error)
@@ -407,7 +374,6 @@ func TestApp_SendTemplateMessage(t *testing.T) {
 			WhatsAppAccount: "other-account",
 			Name:            "other_org_tpl_" + uuid.New().String()[:8],
 			Language:        "en",
-			Status:          string(models.TemplateStatusApproved),
 			BodyContent:     "Hello",
 		}
 		require.NoError(t, app.DB.Create(tpl).Error)
@@ -425,7 +391,7 @@ func TestApp_SendTemplateMessage(t *testing.T) {
 
 	t.Run("cross-org isolation - contact from another org", func(t *testing.T) {
 		t.Parallel()
-		mockServer := newMockWhatsAppServer()
+		mockServer := newMockGowaServer()
 		defer mockServer.close()
 
 		app := newMsgTestApp(t, mockServer)
@@ -464,7 +430,6 @@ func TestApp_SendTemplateMessage(t *testing.T) {
 			WhatsAppAccount: "some-account",
 			Name:            "tpl_" + uuid.New().String()[:8],
 			Language:        "en",
-			Status:          string(models.TemplateStatusApproved),
 			BodyContent:     "Hello",
 		}
 		require.NoError(t, app.DB.Create(tpl).Error)
@@ -483,7 +448,7 @@ func TestApp_SendTemplateMessage(t *testing.T) {
 
 	t.Run("response has correct MessageResponse shape", func(t *testing.T) {
 		t.Parallel()
-		mockServer := newMockWhatsAppServer()
+		mockServer := newMockGowaServer()
 		defer mockServer.close()
 
 		app := newMsgTestApp(t, mockServer)
@@ -499,7 +464,6 @@ func TestApp_SendTemplateMessage(t *testing.T) {
 			WhatsAppAccount: account.Name,
 			Name:            "shape_test_" + uuid.New().String()[:8],
 			Language:        "en",
-			Status:          string(models.TemplateStatusApproved),
 			BodyContent:     "Hello there!",
 		}
 		require.NoError(t, app.DB.Create(tpl).Error)
@@ -530,7 +494,7 @@ func TestApp_SendTemplateMessage(t *testing.T) {
 
 	t.Run("template with buttons stores interactive_data", func(t *testing.T) {
 		t.Parallel()
-		mockServer := newMockWhatsAppServer()
+		mockServer := newMockGowaServer()
 		defer mockServer.close()
 
 		app := newMsgTestApp(t, mockServer)
@@ -548,7 +512,6 @@ func TestApp_SendTemplateMessage(t *testing.T) {
 			Name:            "btn_tpl_" + uuid.New().String()[:8],
 			DisplayName:     "Button Template",
 			Language:        "en",
-			Status:          string(models.TemplateStatusApproved),
 			BodyContent:     "Would you like to proceed?",
 			Buttons: models.JSONBArray{
 				map[string]any{"type": "QUICK_REPLY", "text": "Yes"},
@@ -596,9 +559,9 @@ func TestApp_SendTemplateMessage(t *testing.T) {
 
 	// --- TEXT header parameter (header_params field) ---
 
-	// createTestTemplateWithHeader builds an approved template with a TEXT
-	// header that has a {{var}} (named for clarity; positional is exercised
-	// separately by the unit tests on BuildTemplateComponents).
+	// createTestTemplateWithHeader builds a template with a TEXT header that
+	// has a {{var}} (named for clarity; positional is exercised separately by
+	// the templateutil unit tests).
 	createTestTemplateWithHeader := func(t *testing.T, app *handlers.App, orgID uuid.UUID, accountName string) *models.Template {
 		t.Helper()
 		tpl := &models.Template{
@@ -607,10 +570,8 @@ func TestApp_SendTemplateMessage(t *testing.T) {
 			WhatsAppAccount: accountName,
 			Name:            "seasonal_" + uuid.New().String()[:8],
 			DisplayName:     "Seasonal Promo",
-			MetaTemplateID:  "meta-" + uuid.New().String()[:8],
 			Category:        "MARKETING",
 			Language:        "en",
-			Status:          string(models.TemplateStatusApproved),
 			HeaderType:      "TEXT",
 			HeaderContent:   "Our {{season}} sale",
 			BodyContent:     "Hi {{name}}, use code {{code}}.",
@@ -619,9 +580,9 @@ func TestApp_SendTemplateMessage(t *testing.T) {
 		return tpl
 	}
 
-	t.Run("header_params forwards a TEXT header value to Meta", func(t *testing.T) {
+	t.Run("header_params renders a TEXT header above the body", func(t *testing.T) {
 		t.Parallel()
-		mockServer := newMockWhatsAppServer()
+		mockServer := newMockGowaServer()
 		defer mockServer.close()
 
 		app := newMsgTestApp(t, mockServer)
@@ -649,30 +610,16 @@ func TestApp_SendTemplateMessage(t *testing.T) {
 
 		app.WaitForBackgroundTasks()
 
-		require.Len(t, mockServer.sentMessages, 1)
-		tplPayload := mockServer.sentMessages[0]["template"].(map[string]any)
-		components := tplPayload["components"].([]any)
-
-		// Find the header component and assert it carries the supplied value.
-		var headerComp map[string]any
-		for _, c := range components {
-			if m := c.(map[string]any); m["type"] == "header" {
-				headerComp = m
-				break
-			}
-		}
-		require.NotNil(t, headerComp, "expected a header component in the Meta payload")
-		params := headerComp["parameters"].([]any)
-		require.Len(t, params, 1)
-		p0 := params[0].(map[string]any)
-		assert.Equal(t, "text", p0["type"])
-		assert.Equal(t, "Summer", p0["text"])
-		assert.Equal(t, "season", p0["parameter_name"], "named templates include parameter_name")
+		// The header value renders bold above the body in the GOWA text send.
+		sent := mockServer.sentRequests()
+		require.Len(t, sent, 1)
+		assert.Equal(t, "/send/message", sent[0].path)
+		assert.Equal(t, "*Our Summer sale*\n\nHi Alice, use code SAVE20.", sent[0].body["message"])
 	})
 
 	t.Run("header_params falls back to template_params lookup", func(t *testing.T) {
 		t.Parallel()
-		mockServer := newMockWhatsAppServer()
+		mockServer := newMockGowaServer()
 		defer mockServer.close()
 
 		app := newMsgTestApp(t, mockServer)
@@ -703,23 +650,13 @@ func TestApp_SendTemplateMessage(t *testing.T) {
 
 		app.WaitForBackgroundTasks()
 
-		require.Len(t, mockServer.sentMessages, 1)
-		tplPayload := mockServer.sentMessages[0]["template"].(map[string]any)
-		components := tplPayload["components"].([]any)
-
-		var headerComp map[string]any
-		for _, c := range components {
-			if m := c.(map[string]any); m["type"] == "header" {
-				headerComp = m
-				break
-			}
-		}
-		require.NotNil(t, headerComp)
-		params := headerComp["parameters"].([]any)
-		assert.Equal(t, "Winter", params[0].(map[string]any)["text"])
+		sent := mockServer.sentRequests()
+		require.Len(t, sent, 1)
+		assert.Equal(t, "/send/message", sent[0].path)
+		assert.Equal(t, "*Our Winter sale*\n\nHi Bob, use code SAVE15.", sent[0].body["message"])
 	})
 
-	t.Run("missing header value 400s before reaching Meta", func(t *testing.T) {
+	t.Run("missing header value 400s before any send", func(t *testing.T) {
 		t.Parallel()
 		// No mock — request should fail validation before any send.
 		app := newTestApp(t)
@@ -748,7 +685,7 @@ func TestApp_SendTemplateMessage(t *testing.T) {
 
 	t.Run("template without buttons has no interactive_data", func(t *testing.T) {
 		t.Parallel()
-		mockServer := newMockWhatsAppServer()
+		mockServer := newMockGowaServer()
 		defer mockServer.close()
 
 		app := newMsgTestApp(t, mockServer)
@@ -764,7 +701,6 @@ func TestApp_SendTemplateMessage(t *testing.T) {
 			WhatsAppAccount: account.Name,
 			Name:            "no_btn_tpl_" + uuid.New().String()[:8],
 			Language:        "en",
-			Status:          string(models.TemplateStatusApproved),
 			BodyContent:     "Simple message",
 		}
 		require.NoError(t, app.DB.Create(tpl).Error)

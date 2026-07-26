@@ -12,8 +12,7 @@ import (
 )
 
 // LoadCounter counts the number of active items per agent. Callers provide a
-// domain-specific implementation: chat transfers count AgentTransfer rows while
-// call transfers count CallTransfer rows.
+// domain-specific implementation: chat transfers count AgentTransfer rows.
 type LoadCounter func(db *gorm.DB, orgID uuid.UUID, agentIDs []uuid.UUID) map[uuid.UUID]int64
 
 // Assigner provides team-based agent assignment with caching.

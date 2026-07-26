@@ -38,10 +38,6 @@ const generalSettings = ref({
   default_timezone: 'UTC',
   date_format: 'YYYY-MM-DD',
   mask_phone_numbers: false,
-  meta_app_id: '',
-  meta_config_id: '',
-  meta_app_secret: '',
-  has_meta_app_secret: false
 })
 
 // Notification Settings
@@ -76,10 +72,6 @@ onMounted(async () => {
         default_timezone: orgData.settings?.timezone || 'UTC',
         date_format: orgData.settings?.date_format || 'YYYY-MM-DD',
         mask_phone_numbers: orgData.settings?.mask_phone_numbers || false,
-        meta_app_id: orgData.settings?.meta_app_id || '',
-        meta_config_id: orgData.settings?.meta_config_id || '',
-        meta_app_secret: '',
-        has_meta_app_secret: orgData.settings?.has_meta_app_secret || false
       }
     }
 

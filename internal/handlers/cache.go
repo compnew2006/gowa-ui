@@ -204,15 +204,7 @@ func (a *App) deleteKeysByPattern(ctx context.Context, pattern string) {
 	}
 }
 
-// whatsAppAccountCache is used for caching since AccessToken, AppSecret, and Pin have json:"-" tag
-type whatsAppAccountCache struct {
-	models.WhatsAppAccount
-	AccessToken string `json:"access_token"`
-	AppSecret   string `json:"app_secret"`
-	Pin         string `json:"pin"`
-}
-
-// getWhatsAppAccountCached retrieves WhatsApp account by phone_id from cache or database
+// getWhatsAppAccountCached retrieves WhatsApp account by device ID from cache or database
 func (a *App) getWhatsAppAccountCached(phoneID string) (*models.WhatsAppAccount, error) {
 	ctx := context.Background()
 	cacheKey := fmt.Sprintf("%s%s", whatsappAccountCachePrefix, phoneID)
@@ -220,40 +212,30 @@ func (a *App) getWhatsAppAccountCached(phoneID string) (*models.WhatsAppAccount,
 	// Try cache first
 	cached, err := a.Redis.Get(ctx, cacheKey).Result()
 	if err == nil && cached != "" {
-		var cacheData whatsAppAccountCache
-		if err := json.Unmarshal([]byte(cached), &cacheData); err == nil {
-			cacheData.WhatsAppAccount.AccessToken = cacheData.AccessToken
-			cacheData.WhatsAppAccount.AppSecret = cacheData.AppSecret
-			cacheData.WhatsAppAccount.Pin = cacheData.Pin
-			a.decryptAccountSecrets(&cacheData.WhatsAppAccount)
-			return &cacheData.WhatsAppAccount, nil
+		var account models.WhatsAppAccount
+		if err := json.Unmarshal([]byte(cached), &account); err == nil {
+			a.decryptAccountSecrets(&account)
+			return &account, nil
 		}
 	}
 
 	// Cache miss - fetch from database.
-	// Match by phone_id (Meta accounts), gowa_device_id (GOWA accounts
-	// where phoneID is the device JID), or phone number portion (GOWA
-	// accounts where phoneID might be just the digits).
+	// Match by gowa_device_id / gowa_jid (where phoneID is the device JID) or
+	// the phone number portion (where phoneID might be just the digits).
 	var account models.WhatsAppAccount
 	phoneDigits := phoneID
 	if idx := strings.Index(phoneID, "@"); idx > 0 {
 		phoneDigits = phoneID[:idx]
 	}
 	if err := a.DB.Where(
-		"phone_id = ? OR gowa_device_id = ? OR gowa_device_id = ?",
-		phoneID, phoneID, phoneDigits,
+		"gowa_device_id = ? OR gowa_device_id = ? OR gowa_jid = ? OR gowa_jid = ?",
+		phoneID, phoneDigits, phoneID, phoneDigits,
 	).First(&account).Error; err != nil {
 		return nil, err
 	}
 
-	// Cache the result (include AccessToken, AppSecret, and Pin explicitly since they have json:"-")
-	cacheData := whatsAppAccountCache{
-		WhatsAppAccount: account,
-		AccessToken:     account.AccessToken,
-		AppSecret:       account.AppSecret,
-		Pin:             account.Pin,
-	}
-	if data, err := json.Marshal(cacheData); err == nil {
+	// Cache the result
+	if data, err := json.Marshal(account); err == nil {
 		a.Redis.Set(ctx, cacheKey, data, whatsappAccountCacheTTL)
 	}
 

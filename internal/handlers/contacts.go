@@ -1,13 +1,11 @@
 package handlers
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -348,15 +346,10 @@ func (a *App) RefreshContactAvatar(r *fastglue.Request) error {
 	}
 	a.decryptAccountSecrets(&account)
 
-	// GOWA accounts: fetch via the GOWA client. Meta Cloud API has no per-
-	// contact profile-picture fetch, so non-GOWA accounts just return the
-	// cached URL (empty today; Meta's business_profile picture is a different
-	// field handled elsewhere).
-	if account.IsGowa() {
-		provider := a.resolveProvider(&account)
-		gowaClient, _ := provider.(*gowa.Client)
-		a.refreshContactAvatar(gowaClient, &account, &contact, account.GowaDeviceID, true)
-	}
+	// Fetch the profile picture via the GOWA client.
+	provider := a.resolveProvider(&account)
+	gowaClient, _ := provider.(*gowa.Client)
+	a.refreshContactAvatar(gowaClient, &account, &contact, account.GowaDeviceID, true)
 
 	return r.SendEnvelope(map[string]any{"avatar_url": contact.AvatarURL})
 }
@@ -664,16 +657,12 @@ func (a *App) markMessagesAsRead(orgID uuid.UUID, contactID uuid.UUID, contact *
 							provider := a.resolveProvider(account)
 							// GOWA requires the chat JID for read receipts;
 							// the Provider interface's MarkMessageRead lacks it.
-							if account.IsGowa() {
-								if gc, ok := provider.(*gowa.Client); ok {
-									// Build the chat JID (handles group @g.us vs 1:1 suffix).
-									chatJID := gowaChatJID(contact)
-									if err := gc.MarkMessageReadWithJID(ctx, waAccount, msg.WhatsAppMessageID, chatJID); err != nil {
-										a.Log.Error("Failed to send GOWA read receipt", "error", err, "message_id", msg.WhatsAppMessageID)
-									}
+							if gc, ok := provider.(*gowa.Client); ok {
+								// Build the chat JID (handles group @g.us vs 1:1 suffix).
+								chatJID := gowaChatJID(contact)
+								if err := gc.MarkMessageReadWithJID(ctx, waAccount, msg.WhatsAppMessageID, chatJID); err != nil {
+									a.Log.Error("Failed to send GOWA read receipt", "error", err, "message_id", msg.WhatsAppMessageID)
 								}
-							} else if err := provider.MarkMessageRead(ctx, waAccount, msg.WhatsAppMessageID); err != nil {
-								a.Log.Error("Failed to send read receipt", "error", err, "message_id", msg.WhatsAppMessageID)
 							}
 						}
 					}
@@ -703,22 +692,11 @@ type SendMessageRequest struct {
 
 // InteractiveContent holds interactive message data
 type InteractiveContent struct {
-	Type       string          `json:"type"`                  // "button", "list", "cta_url", "voice_call", "flow"
+	Type       string          `json:"type"`                  // "button", "list", "cta_url"
 	Body       string          `json:"body"`                  // Body text
 	Buttons    []ButtonContent `json:"buttons,omitempty"`     // For button type
-	ButtonText string          `json:"button_text,omitempty"` // CTA label for cta_url and flow
+	ButtonText string          `json:"button_text,omitempty"` // CTA label for cta_url
 	URL        string          `json:"url,omitempty"`         // For cta_url type
-	// voice_call only: button face label and clickable TTL.
-	// The payload (round-trip opaque string Meta echoes back on the incoming-
-	// call webhook) is set server-side from the auth context — never from the
-	// request body — to prevent agent-id spoofing.
-	DisplayText string `json:"display_text,omitempty"`
-	TTLMinutes  int    `json:"ttl_minutes,omitempty"`
-	// flow only: the Meta flow to launch, an optional first screen, and an
-	// optional header. Body holds the message text, ButtonText the CTA label.
-	FlowID      string `json:"flow_id,omitempty"`
-	FirstScreen string `json:"first_screen,omitempty"`
-	Header      string `json:"header,omitempty"`
 }
 
 // ButtonContent represents a button in interactive messages
@@ -811,53 +789,6 @@ func (a *App) SendMessage(r *fastglue.Request) error {
 				}
 			}
 		}
-
-		if req.Interactive.Type == "flow" {
-			if req.Interactive.FlowID == "" {
-				return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "flow_id is required to send a flow", nil, "")
-			}
-			// Ensure the flow belongs to this org so an agent can't send another
-			// org's flow by supplying its Meta id.
-			var waFlow models.WhatsAppFlow
-			if err := a.DB.Where("meta_flow_id = ? AND organization_id = ?", req.Interactive.FlowID, orgID).First(&waFlow).Error; err != nil {
-				return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Flow not found for this organization", nil, "")
-			}
-			cta := req.Interactive.ButtonText
-			if cta == "" {
-				cta = "Open"
-			}
-			body := req.Interactive.Body
-			if body == "" {
-				body = req.Content.Body
-			}
-			msgReq.Type = models.MessageTypeFlow
-			msgReq.FlowID = req.Interactive.FlowID
-			msgReq.FlowCTA = cta
-			msgReq.FlowHeader = req.Interactive.Header
-			msgReq.FlowFirstScreen = req.Interactive.FirstScreen
-			msgReq.BodyText = body
-			msgReq.FlowToken = fmt.Sprintf("agent_%s_%d", contact.ID, time.Now().UnixNano())
-		}
-
-		if req.Interactive.Type == "voice_call" {
-			if !account.BusinessCallingEnabled {
-				return r.SendErrorEnvelope(fasthttp.StatusBadRequest,
-					"This WhatsApp account is not enrolled in the Business Calling API. Enable it under Settings → Accounts before sending Call buttons.",
-					nil, "")
-			}
-			msgReq.DisplayText = req.Interactive.DisplayText
-			msgReq.TTLMinutes = req.Interactive.TTLMinutes
-			// Stamp the payload server-side so the incoming-call webhook can
-			// sticky-route the resulting call back to the agent who sent it.
-			// Never trust a client-supplied payload — would let any agent
-			// impersonate any other.
-			msgReq.VoiceCallPayload = "agent:" + userID.String()
-			// Pre-register the sticky-routing intent in Redis so that the
-			// resulting incoming-call webhook can resolve the originating
-			// agent in O(1) (Meta does not currently echo the payload).
-			// TTL matches the button's clickable lifetime.
-			a.MarkPendingStickyCall(context.Background(), orgID, contact.PhoneNumber, userID, req.Interactive.TTLMinutes)
-		}
 	}
 
 	opts := DefaultSendOptions()
@@ -923,15 +854,12 @@ func (a *App) resolveWhatsAppAccount(orgID uuid.UUID, accountName string) (*mode
 	return &account, nil
 }
 
-// resolveProvider returns the WhatsApp provider for the given account.
-// When the registry is configured it resolves Meta vs GOWA based on the
-// account's ProviderType. When the registry is nil it falls back to the
-// default WhatsApp client (Meta).
+// resolveProvider returns the WhatsApp provider (GOWA) for the given account.
 func (a *App) resolveProvider(account *models.WhatsAppAccount) whatsapp.Provider {
 	if a.WARegistry != nil && account != nil {
 		return a.WARegistry.Get(account.ToWAAccount())
 	}
-	return a.WhatsApp
+	return nil
 }
 
 // resolveWhatsAppAccountByID fetches a WhatsApp account by UUID and org, decrypts secrets.
@@ -1252,66 +1180,22 @@ func (a *App) SendReaction(r *fastglue.Request) error {
 	})
 }
 
-// sendWhatsAppReaction sends a reaction to WhatsApp
+// sendWhatsAppReaction sends a reaction to WhatsApp via the GOWA client.
 func (a *App) sendWhatsAppReaction(account *models.WhatsAppAccount, contact *models.Contact, message *models.Message, emoji string) {
 	if message.WhatsAppMessageID == "" {
 		a.Log.Warn("Cannot send reaction - message has no WhatsApp ID", "message_id", message.ID)
 		return
 	}
 
-	// GOWA accounts: use the GOWA client's reaction method (not Meta Graph API).
-	if account.IsGowa() {
-		provider := a.resolveProvider(account)
-		gowaClient, ok := provider.(*gowa.Client)
-		if !ok {
-			a.Log.Error("GOWA provider not available for reaction", "account", account.Name)
-			return
-		}
-		chatJID := gowaChatJID(contact)
-		if err := gowaClient.SendReaction(context.Background(), account.ToWAAccount(), message.WhatsAppMessageID, chatJID, emoji); err != nil {
-			a.Log.Error("GOWA reaction error", "error", err, "account", account.Name)
-		}
+	provider := a.resolveProvider(account)
+	gowaClient, ok := provider.(*gowa.Client)
+	if !ok {
+		a.Log.Error("GOWA provider not available for reaction", "account", account.Name)
 		return
 	}
-
-	url := fmt.Sprintf("%s/%s/%s/messages", a.Config.WhatsApp.BaseURL, account.APIVersion, account.PhoneID)
-
-	payload := map[string]any{
-		"messaging_product": "whatsapp",
-		"recipient_type":    "individual",
-		"to":                contact.PhoneNumber,
-		"type":              "reaction",
-		"reaction": map[string]any{
-			"message_id": message.WhatsAppMessageID,
-			"emoji":      emoji, // Empty string removes the reaction
-		},
-	}
-
-	jsonPayload, err := json.Marshal(payload)
-	if err != nil {
-		a.Log.Error("Failed to marshal reaction payload", "error", err)
-		return
-	}
-
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonPayload))
-	if err != nil {
-		a.Log.Error("Failed to create reaction request", "error", err)
-		return
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+account.AccessToken)
-
-	resp, err := a.HTTPClient.Do(req)
-	if err != nil {
-		a.Log.Error("Failed to send reaction", "error", err)
-		return
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != 200 {
-		body, _ := io.ReadAll(resp.Body)
-		a.Log.Error("WhatsApp API reaction error", "status", resp.StatusCode, "body", string(body))
+	chatJID := gowaChatJID(contact)
+	if err := gowaClient.SendReaction(context.Background(), account.ToWAAccount(), message.WhatsAppMessageID, chatJID, emoji); err != nil {
+		a.Log.Error("GOWA reaction error", "error", err, "account", account.Name)
 		return
 	}
 
@@ -1362,10 +1246,10 @@ const avatarFetchTimeout = 8 * time.Second
 // avatar_url column; callers pass force=false to skip contacts that already
 // have an avatar (avoiding a GOWA round-trip on every sync).
 //
-// client may be nil for non-GOWA accounts (the caller decides whether to
-// resolve one); in that case the function is a no-op.
+// client may be nil (the caller decides whether to resolve one); in that
+// case the function is a no-op.
 func (a *App) refreshContactAvatar(client *gowa.Client, account *models.WhatsAppAccount, contact *models.Contact, deviceID string, force bool) bool {
-	if client == nil || contact == nil || account == nil || !account.IsGowa() {
+	if client == nil || contact == nil || account == nil {
 		return false
 	}
 	// Skip the round-trip when we already have a URL and the caller didn't ask
@@ -1466,9 +1350,6 @@ func (a *App) SendTypingIndicator(r *fastglue.Request) error {
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
 	}
-	if !account.IsGowa() {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Not supported for this account type", nil, "")
-	}
 
 	provider := a.resolveProvider(account)
 	gowaClient, ok := provider.(*gowa.Client)
@@ -1544,9 +1425,6 @@ func (a *App) RevokeMessage(r *fastglue.Request) error {
 	account, err := a.resolveWhatsAppAccount(orgID, revokeAccountName)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
-	}
-	if !account.IsGowa() {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Not supported for this account type", nil, "")
 	}
 
 	provider := a.resolveProvider(account)

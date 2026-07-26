@@ -98,7 +98,6 @@ func runMigrations(db *gorm.DB) error {
 		&models.Tag{},
 		&models.Message{},
 		&models.Template{},
-		&models.WhatsAppFlow{},
 		// Chatbot models
 		&models.ChatbotSettings{},
 		&models.KeywordRule{},
@@ -112,20 +111,12 @@ func runMigrations(db *gorm.DB) error {
 		&models.BulkMessageCampaign{},
 		&models.BulkMessageRecipient{},
 		&models.NotificationRule{},
-		// Catalog models
-		&models.Catalog{},
-		&models.CatalogProduct{},
 		// Canned responses
 		&models.CannedResponse{},
 		// Dashboard
 		&models.Widget{},
 		// Conversation Notes
 		&models.ConversationNote{},
-		// Calling / IVR
-		&models.CallLog{},
-		&models.IVRFlow{},
-		&models.CallTransfer{},
-		&models.CallPermission{},
 		// Audit
 		&models.AuditLog{},
 		// GOWA instances
@@ -139,9 +130,6 @@ func cleanupTables(db *gorm.DB) {
 	tables := []string{
 		// Dashboard tables
 		"widgets",
-		// Catalog tables
-		"catalog_products",
-		"catalogs",
 		// Canned responses
 		"canned_responses",
 		// Bulk message tables
@@ -191,8 +179,6 @@ func cleanupTables(db *gorm.DB) {
 func TruncateTables(db *gorm.DB) {
 	tables := []string{
 		"widgets",
-		"catalog_products",
-		"catalogs",
 		"canned_responses",
 		"bulk_message_recipients",
 		"bulk_message_campaigns",

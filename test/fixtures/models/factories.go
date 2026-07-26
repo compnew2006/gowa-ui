@@ -167,18 +167,14 @@ func NewWhatsAppAccount(orgID uuid.UUID) *WhatsAppAccountBuilder {
 				CreatedAt: time.Now(),
 				UpdatedAt: time.Now(),
 			},
-			OrganizationID:     orgID,
-			Name:               "test-account-" + id.String()[:8],
-			AppID:              "123456789",
-			PhoneID:            "987654321",
-			BusinessID:         "111222333",
-			AccessToken:        "test-access-token",
-			WebhookVerifyToken: "test-verify-token",
-			APIVersion:         "v21.0",
-			IsDefaultIncoming:  true,
-			IsDefaultOutgoing:  true,
-			AutoReadReceipt:    false,
-			Status:             "active",
+			OrganizationID:    orgID,
+			Name:              "test-account-" + id.String()[:8],
+			GowaBaseURL:       "http://gowa.test:3000",
+			GowaDeviceID:      "device-" + id.String()[:8],
+			IsDefaultIncoming: true,
+			IsDefaultOutgoing: true,
+			AutoReadReceipt:   false,
+			Status:            "active",
 		},
 	}
 }
@@ -192,24 +188,6 @@ func (b *WhatsAppAccountBuilder) WithID(id uuid.UUID) *WhatsAppAccountBuilder {
 // WithName sets the account name.
 func (b *WhatsAppAccountBuilder) WithName(name string) *WhatsAppAccountBuilder {
 	b.account.Name = name
-	return b
-}
-
-// WithPhoneID sets the phone ID.
-func (b *WhatsAppAccountBuilder) WithPhoneID(phoneID string) *WhatsAppAccountBuilder {
-	b.account.PhoneID = phoneID
-	return b
-}
-
-// WithBusinessID sets the business ID.
-func (b *WhatsAppAccountBuilder) WithBusinessID(businessID string) *WhatsAppAccountBuilder {
-	b.account.BusinessID = businessID
-	return b
-}
-
-// WithAccessToken sets the access token.
-func (b *WhatsAppAccountBuilder) WithAccessToken(token string) *WhatsAppAccountBuilder {
-	b.account.AccessToken = token
 	return b
 }
 
@@ -322,12 +300,10 @@ func NewTemplate(orgID uuid.UUID, accountName string) *TemplateBuilder {
 			},
 			OrganizationID:  orgID,
 			WhatsAppAccount: accountName,
-			MetaTemplateID:  "meta-" + id.String()[:8],
 			Name:            "test_template_" + id.String()[:8],
 			DisplayName:     "Test Template",
 			Language:        "en",
 			Category:        "UTILITY",
-			Status:          "APPROVED",
 			BodyContent:     "Hello {{1}}, this is a test message.",
 			Buttons:         models.JSONBArray{},
 			SampleValues:    models.JSONBArray{},
@@ -363,12 +339,6 @@ func (b *TemplateBuilder) WithHeader(headerType, content string) *TemplateBuilde
 // WithFooter sets the footer content.
 func (b *TemplateBuilder) WithFooter(footer string) *TemplateBuilder {
 	b.template.FooterContent = footer
-	return b
-}
-
-// WithStatus sets the template status.
-func (b *TemplateBuilder) WithStatus(status string) *TemplateBuilder {
-	b.template.Status = status
 	return b
 }
 

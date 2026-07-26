@@ -31,7 +31,6 @@ const {
   resumeSimulation,
   resetSimulation,
   processUserInput,
-  processWhatsAppFlowCompletion,
   undo,
   stepForward,
   goToStep,
@@ -98,10 +97,6 @@ function handleButtonSelect(button: ButtonConfig) {
 
 function handleTextSubmit(value: string) {
   processUserInput(value)
-}
-
-function handleWhatsAppFlowComplete() {
-  processWhatsAppFlowCompletion({})
 }
 
 function handleStart() {
@@ -193,22 +188,6 @@ function handleGoToStep(stepName: string) {
                 :message="message"
               />
 
-              <!-- Interactive WhatsApp Flow CTA -->
-              <div
-                v-if="isWaitingForInput && currentStep?.message_type === 'whatsapp_flow'"
-                class="flex justify-start"
-              >
-                <div class="max-w-[85%]">
-                  <button
-                    class="px-4 py-2 bg-[#075e54] text-white text-sm rounded-lg hover:bg-[#064e46] transition-colors"
-                    @click="handleWhatsAppFlowComplete"
-                  >
-                    {{ currentStep.input_config?.flow_cta || 'Open Form' }}
-                  </button>
-                  <p class="text-[10px] text-gray-500 mt-1 italic">Simulated: clicks complete the flow</p>
-                </div>
-              </div>
-
               <!-- Interactive Buttons (show only for last bot message when waiting) -->
               <div
                 v-if="lastButtonMessage && lastButtonMessage.buttons"
@@ -235,7 +214,7 @@ function handleGoToStep(stepName: string) {
             <!-- Input Bar -->
             <PreviewInputBar
               :input-type="expectedInputType"
-              :disabled="!isWaitingForInput || expectedInputType === 'button' || expectedInputType === 'whatsapp_flow'"
+              :disabled="!isWaitingForInput || expectedInputType === 'button'"
               @submit="handleTextSubmit"
             />
           </div>

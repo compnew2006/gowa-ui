@@ -51,7 +51,7 @@ func (m *mockAPIServer) close()      { m.Server.Close() }
 func (m *mockAPIServer) url() string { return m.Server.URL }
 
 func testAcct() *whatsapp.Account {
-	return &whatsapp.Account{ProviderType: "gowa", GowaDeviceID: "dev1"}
+	return &whatsapp.Account{GowaDeviceID: "dev1"}
 }
 
 // --- Send extensions ---

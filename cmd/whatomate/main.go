@@ -13,7 +13,6 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"github.com/shridarpatil/whatomate/internal/assignment"
-	"github.com/shridarpatil/whatomate/internal/calling"
 	"github.com/shridarpatil/whatomate/internal/chatlifecycle"
 	"github.com/shridarpatil/whatomate/internal/config"
 	"github.com/shridarpatil/whatomate/internal/database"
@@ -23,7 +22,6 @@ import (
 	"github.com/shridarpatil/whatomate/internal/models"
 	"github.com/shridarpatil/whatomate/internal/queue"
 	"github.com/shridarpatil/whatomate/internal/storage"
-	"github.com/shridarpatil/whatomate/internal/tts"
 	"github.com/shridarpatil/whatomate/internal/websocket"
 	"github.com/shridarpatil/whatomate/internal/worker"
 	"github.com/shridarpatil/whatomate/pkg/gowa"
@@ -216,10 +214,8 @@ func runServer(args []string) {
 	// Initialize Fastglue
 	g := fastglue.NewGlue()
 
-	// Initialize WhatsApp clients.
-	// Meta client is the default; GOWA factory resolves per-instance Basic
-	// Auth credentials from the DB (UI-managed) with a config-file fallback.
-	waClient := whatsapp.NewWithBaseURL(lo, cfg.WhatsApp.BaseURL)
+	// Initialize the GOWA provider registry. The factory resolves per-instance
+	// Basic Auth credentials from the DB (UI-managed) with a config-file fallback.
 	whatsapp.RegisterGowaFactory(
 		func(baseURL string) (string, string) {
 			return resolveGowaCreds(db, cfg, baseURL)
@@ -228,7 +224,7 @@ func runServer(args []string) {
 			return gowa.New(baseURL, username, password)
 		},
 	)
-	waRegistry := whatsapp.NewRegistry(waClient, lo)
+	waRegistry := whatsapp.NewRegistry(lo)
 
 	// Initialize WebSocket hub
 	wsHub := websocket.NewHub(lo)
@@ -252,26 +248,26 @@ func runServer(args []string) {
 		DB:         db,
 		Redis:      rdb,
 		Log:        lo,
-		WhatsApp:   waClient,
 		WARegistry: waRegistry,
 		WSHub:      wsHub,
 		Queue:      jobQueue,
 		HTTPClient: httpClient,
 	}
 
-	// Initialize S3 client for call recordings (optional)
+	// Initialize S3 client for media storage (optional)
 	var s3Client *storage.S3Client
-	if cfg.Calling.RecordingEnabled && cfg.Storage.S3Bucket != "" {
+	if cfg.Storage.S3Bucket != "" {
 		var err error
 		s3Client, err = storage.NewS3Client(&cfg.Storage)
 		if err != nil {
-			lo.Warn("Failed to initialize S3 client for recordings, recording disabled", "error", err)
+			lo.Warn("Failed to initialize S3 client", "error", err)
 		} else {
-			lo.Info("S3 client initialized for call recordings", "bucket", cfg.Storage.S3Bucket)
+			lo.Info("S3 client initialized", "bucket", cfg.Storage.S3Bucket)
 		}
 	}
+	app.S3Client = s3Client
 
-	// Initialize shared assignment engine (used by both chat and call transfers)
+	// Initialize shared assignment engine (used by chat transfers)
 	assigner := assignment.New(db, rdb, lo)
 	app.Assigner = assigner
 
@@ -279,22 +275,6 @@ func runServer(args []string) {
 	// the audit + system-message + WS side effects they emit. The handlers in
 	// chat_lifecycle.go are thin HTTP adapters over this service.
 	app.ChatLifecycle = chatlifecycle.New(db, wsHub, lo)
-
-	// Initialize CallManager (per-org calling_enabled DB setting controls access)
-	app.CallManager = calling.NewManager(&cfg.Calling, s3Client, db, rdb, waClient, wsHub, assigner, lo)
-	app.S3Client = s3Client
-	lo.Info("Call manager initialized")
-
-	// Initialize TTS if configured (requires piper binary + model)
-	if cfg.TTS.PiperBinary != "" && cfg.TTS.PiperModel != "" {
-		app.TTS = &tts.PiperTTS{
-			BinaryPath:    cfg.TTS.PiperBinary,
-			ModelPath:     cfg.TTS.PiperModel,
-			OpusencBinary: cfg.TTS.OpusencBinary,
-			AudioDir:      cfg.Calling.AudioDir,
-		}
-		lo.Info("TTS initialized", "piper", cfg.TTS.PiperBinary, "model", cfg.TTS.PiperModel)
-	}
 
 	// Start campaign stats subscriber for real-time WebSocket updates from worker
 	if err := app.StartCampaignStatsSubscriber(); err != nil {
@@ -457,10 +437,8 @@ func runWorker(args []string) {
 	}
 	lo.Info("Connected to Redis")
 
-	// Initialize WhatsApp clients.
-	// Meta client is the default; GOWA factory resolves per-instance Basic
-	// Auth credentials from the DB (UI-managed) with a config-file fallback.
-	waClient := whatsapp.NewWithBaseURL(lo, cfg.WhatsApp.BaseURL)
+	// Initialize the GOWA provider registry. The factory resolves per-instance
+	// Basic Auth credentials from the DB (UI-managed) with a config-file fallback.
 	whatsapp.RegisterGowaFactory(
 		func(baseURL string) (string, string) {
 			return resolveGowaCreds(db, cfg, baseURL)
@@ -469,7 +447,7 @@ func runWorker(args []string) {
 			return gowa.New(baseURL, username, password)
 		},
 	)
-	waRegistry := whatsapp.NewRegistry(waClient, lo)
+	waRegistry := whatsapp.NewRegistry(lo)
 
 	// Setup context with cancellation
 	ctx, cancel := context.WithCancel(context.Background())
@@ -531,8 +509,6 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.GET("/health", app.HealthCheck)
 	g.GET("/ready", app.ReadyCheck)
 
-	g.GET("/api/embedded-signup/config", app.GetEmbeddedSignupConfig)
-
 	// Auth routes (public, optionally rate-limited)
 	if cfg.RateLimit.Enabled {
 		window := time.Duration(cfg.RateLimit.WindowSeconds) * time.Second
@@ -576,10 +552,6 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 		g.GET("/api/auth/sso/{provider}/callback", app.CallbackSSO)
 	}
 
-	// Webhook routes (public - for Meta)
-	g.GET("/api/webhook", app.WebhookVerify)
-	g.POST("/api/webhook", app.WebhookHandler)
-
 	// GOWA webhook routes (public — HMAC verified in handler)
 	// Rate-limited per-IP to prevent brute-force signature attempts (FR-020).
 	gowaWebhookRL := middleware.RateLimitOpts{
@@ -612,7 +584,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 		// a dynamic device_id segment (e.g. /api/gowa/webhook/628123@s.whatsapp.net).
 		if path == "/health" || path == "/ready" ||
 			path == "/api/auth/login" || path == "/api/auth/register" || path == "/api/auth/refresh" ||
-			path == "/api/auth/logout" || path == "/api/webhook" || path == "/ws" ||
+			path == "/api/auth/logout" || path == "/ws" ||
 			path == "/api/gowa/webhook" || strings.HasPrefix(path, "/api/gowa/webhook/") {
 			return r
 		}
@@ -708,9 +680,6 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.GET("/api/accounts/{id}", app.GetAccount)
 	g.PUT("/api/accounts/{id}", app.UpdateAccount)
 	g.DELETE("/api/accounts/{id}", app.DeleteAccount)
-	g.GET("/api/accounts/{id}/business_profile", app.GetBusinessProfile)
-	g.PUT("/api/accounts/{id}/business_profile", app.UpdateBusinessProfile)
-	g.POST("/api/accounts/{id}/business_profile/photo", app.UpdateProfilePicture)
 
 	// GOWA device management (QR code, pair code, connection status)
 	g.POST("/api/accounts/{id}/gowa/pair-code", app.GowaPairCode)
@@ -799,33 +768,12 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	// Re-download a message's media from its provider (e.g. after a failed fetch)
 	g.POST("/api/media/{message_id}/redownload", app.RedownloadMedia)
 
-	// Templates
+	// Templates (local blueprints — full CRUD, no remote sync)
 	g.GET("/api/templates", app.ListTemplates)
+	g.POST("/api/templates", app.CreateTemplate)
 	g.GET("/api/templates/{id}", app.GetTemplate)
-
-	// Catalogs & Products
-	g.GET("/api/catalogs", app.ListCatalogs)
-	g.POST("/api/catalogs", app.CreateCatalog)
-	g.GET("/api/catalogs/{id}", app.GetCatalog)
-	g.DELETE("/api/catalogs/{id}", app.DeleteCatalog)
-	g.POST("/api/catalogs/sync", app.SyncCatalogs)
-	g.GET("/api/catalogs/{id}/products", app.ListCatalogProducts)
-	g.POST("/api/catalogs/{id}/products", app.CreateCatalogProduct)
-	g.GET("/api/products/{id}", app.GetCatalogProduct)
-	g.PUT("/api/products/{id}", app.UpdateCatalogProduct)
-	g.DELETE("/api/products/{id}", app.DeleteCatalogProduct)
-
-	// WhatsApp Flows
-	g.GET("/api/flows", app.ListFlows)
-	g.POST("/api/flows", app.CreateFlow)
-	g.GET("/api/flows/{id}", app.GetFlow)
-	g.PUT("/api/flows/{id}", app.UpdateFlow)
-	g.DELETE("/api/flows/{id}", app.DeleteFlow)
-	g.POST("/api/flows/{id}/save-to-meta", app.SaveFlowToMeta)
-	g.POST("/api/flows/{id}/publish", app.PublishFlow)
-	g.POST("/api/flows/{id}/deprecate", app.DeprecateFlow)
-	g.POST("/api/flows/{id}/duplicate", app.DuplicateFlow)
-	g.POST("/api/flows/sync", app.SyncFlows)
+	g.PUT("/api/templates/{id}", app.UpdateTemplate)
+	g.DELETE("/api/templates/{id}", app.DeleteTemplate)
 
 	// Bulk Campaigns
 	g.GET("/api/campaigns", app.ListCampaigns)
@@ -917,7 +865,6 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	// Organization Settings
 	g.GET("/api/org/settings", app.GetOrganizationSettings)
 	g.PUT("/api/org/settings", app.UpdateOrganizationSettings)
-	g.POST("/api/org/audio", app.UploadOrgAudio)
 
 	// Organizations
 	g.GET("/api/organizations", app.ListOrganizations)
@@ -945,20 +892,6 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.DELETE("/api/custom-actions/{id}", app.DeleteCustomAction)
 	g.POST("/api/custom-actions/{id}/execute", app.ExecuteCustomAction)
 	g.GET("/api/custom-actions/redirect/{token}", app.CustomActionRedirect)
-
-	// IVR Flows
-
-	// Call Logs
-
-	// Call Transfers
-
-	// Call Hold
-
-	// Outgoing Calls
-
-	// Catalogs
-
-	// Catalog Products
 
 	// Serve embedded frontend (SPA)
 	if frontend.IsEmbedded() {

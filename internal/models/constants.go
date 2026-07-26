@@ -36,7 +36,6 @@ const (
 	MessageTypeDocument    MessageType = "document"
 	MessageTypeTemplate    MessageType = "template"
 	MessageTypeInteractive MessageType = "interactive"
-	MessageTypeFlow        MessageType = "flow"
 )
 
 // MessageStatus represents the delivery status of a message
@@ -131,13 +130,6 @@ const (
 	CampaignStatusCompleted  CampaignStatus = "completed"
 	CampaignStatusCancelled  CampaignStatus = "cancelled"
 	CampaignStatusFailed     CampaignStatus = "failed"
-)
-
-// TemplateStatus represents WhatsApp template approval states
-type TemplateStatus string
-
-const (
-	TemplateStatusApproved TemplateStatus = "APPROVED"
 )
 
 // ContextType represents AI context types

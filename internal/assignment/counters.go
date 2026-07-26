@@ -27,20 +27,3 @@ func ChatLoadCounter(db *gorm.DB, orgID uuid.UUID, agentIDs []uuid.UUID) map[uui
 	}
 	return loadMap
 }
-
-// CallLoadCounter counts active CallTransfer records (waiting + connected) per agent.
-func CallLoadCounter(db *gorm.DB, orgID uuid.UUID, agentIDs []uuid.UUID) map[uuid.UUID]int64 {
-	var loads []agentLoad
-	db.Model(&models.CallTransfer{}).
-		Select("agent_id, COUNT(*) as count").
-		Where("organization_id = ? AND agent_id IN ? AND status IN ?", orgID, agentIDs,
-			[]models.CallTransferStatus{models.CallTransferStatusWaiting, models.CallTransferStatusConnected}).
-		Group("agent_id").
-		Scan(&loads)
-
-	loadMap := make(map[uuid.UUID]int64, len(loads))
-	for _, l := range loads {
-		loadMap[l.AgentID] = l.Count
-	}
-	return loadMap
-}

@@ -1,13 +1,11 @@
 package handlers
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/shridarpatil/whatomate/internal/models"
-	"github.com/shridarpatil/whatomate/pkg/whatsapp"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 )
@@ -35,12 +33,10 @@ type TemplateRequest struct {
 type TemplateResponse struct {
 	ID                        uuid.UUID `json:"id"`
 	WhatsAppAccount           string    `json:"whatsapp_account"` // WhatsApp account name
-	MetaTemplateID            string    `json:"meta_template_id"`
 	Name                      string    `json:"name"`
 	DisplayName               string    `json:"display_name"`
 	Language                  string    `json:"language"`
 	Category                  string    `json:"category"`
-	Status                    string    `json:"status"`
 	HeaderType                string    `json:"header_type"`
 	HeaderContent             string    `json:"header_content"`
 	BodyContent               string    `json:"body_content"`
@@ -49,7 +45,6 @@ type TemplateResponse struct {
 	SampleValues              []any     `json:"sample_values"`
 	AddSecurityRecommendation bool      `json:"add_security_recommendation"`
 	CodeExpirationMinutes     int       `json:"code_expiration_minutes"`
-	QualityRating             string    `json:"quality_rating"`
 	CreatedByName             string    `json:"created_by_name,omitempty"`
 	UpdatedByName             string    `json:"updated_by_name,omitempty"`
 	CreatedAt                 string    `json:"created_at"`
@@ -67,7 +62,6 @@ func (a *App) ListTemplates(r *fastglue.Request) error {
 
 	// Optional filters
 	accountName := string(r.RequestCtx.QueryArgs().Peek("account")) // Filter by account name
-	status := string(r.RequestCtx.QueryArgs().Peek("status"))
 	category := string(r.RequestCtx.QueryArgs().Peek("category"))
 	search := string(r.RequestCtx.QueryArgs().Peek("search"))
 
@@ -75,9 +69,6 @@ func (a *App) ListTemplates(r *fastglue.Request) error {
 
 	if accountName != "" {
 		query = query.Where("whats_app_account = ?", accountName)
-	}
-	if status != "" {
-		query = query.Where("status = ?", status)
 	}
 	if category != "" {
 		query = query.Where("category = ?", category)
@@ -104,7 +95,63 @@ func (a *App) ListTemplates(r *fastglue.Request) error {
 	return r.SendEnvelope(listEnvelope("templates", response, total, pg))
 }
 
-// CreateTemplate creates a new message template
+// CreateTemplate creates a new local message template
+func (a *App) CreateTemplate(r *fastglue.Request) error {
+	orgID, userID, err := a.requireAuth(r, models.ResourceTemplates, models.ActionWrite)
+	if err != nil {
+		return nil
+	}
+
+	var req TemplateRequest
+	if err := a.decodeRequest(r, &req); err != nil {
+		return nil
+	}
+
+	if req.WhatsAppAccount == "" || req.Name == "" || req.Language == "" || req.BodyContent == "" {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "whatsapp_account, name, language, and body_content are required", nil, "")
+	}
+
+	name := normalizeTemplateName(req.Name)
+
+	// Reject duplicates within the same account + language
+	var count int64
+	a.DB.Model(&models.Template{}).
+		Where("organization_id = ? AND whats_app_account = ? AND name = ? AND language = ?",
+			orgID, req.WhatsAppAccount, name, req.Language).
+		Count(&count)
+	if count > 0 {
+		return r.SendErrorEnvelope(fasthttp.StatusConflict, "Template with this name and language already exists", nil, "")
+	}
+
+	template := models.Template{
+		OrganizationID:            orgID,
+		WhatsAppAccount:           req.WhatsAppAccount,
+		Name:                      name,
+		DisplayName:               req.DisplayName,
+		Language:                  req.Language,
+		Category:                  req.Category,
+		HeaderType:                req.HeaderType,
+		HeaderContent:             req.HeaderContent,
+		BodyContent:               req.BodyContent,
+		FooterContent:             req.FooterContent,
+		Buttons:                   convertToJSONBArray(req.Buttons),
+		SampleValues:              convertToJSONBArray(req.SampleValues),
+		AddSecurityRecommendation: req.AddSecurityRecommendation,
+		CodeExpirationMinutes:     req.CodeExpirationMinutes,
+		CreatedByID:               &userID,
+		UpdatedByID:               &userID,
+	}
+
+	if err := a.DB.Create(&template).Error; err != nil {
+		a.Log.Error("Failed to create template", "error", err)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create template", nil, "")
+	}
+
+	a.logAudit(orgID, userID,
+		"template", template.ID, models.AuditActionCreated, nil, &template)
+
+	return r.SendEnvelope(templateToResponse(template))
+}
 
 // GetTemplate returns a single template
 func (a *App) GetTemplate(r *fastglue.Request) error {
@@ -135,51 +182,93 @@ func (a *App) GetTemplate(r *fastglue.Request) error {
 	return r.SendEnvelope(resp)
 }
 
-// UpdateTemplate updates a message template
-
-// DeleteTemplate deletes a message template
-
-// SubmitTemplate submits a template to Meta for approval
-
-// submitTemplateToMeta submits a template to Meta's API (creates new or updates existing)
-func (a *App) submitTemplateToMeta(account *models.WhatsAppAccount, template *models.Template) (string, error) {
-	waAccount := a.toWhatsAppAccount(account)
-
-	submission := &whatsapp.TemplateSubmission{
-		MetaTemplateID:            template.MetaTemplateID, // If set, will update instead of create
-		Name:                      template.Name,
-		Language:                  template.Language,
-		Category:                  template.Category,
-		HeaderType:                template.HeaderType,
-		HeaderContent:             template.HeaderContent,
-		BodyContent:               template.BodyContent,
-		FooterContent:             template.FooterContent,
-		Buttons:                   template.Buttons,
-		SampleValues:              template.SampleValues,
-		AddSecurityRecommendation: template.AddSecurityRecommendation,
-		CodeExpirationMinutes:     template.CodeExpirationMinutes,
+// UpdateTemplate updates a local message template
+func (a *App) UpdateTemplate(r *fastglue.Request) error {
+	orgID, userID, err := a.requireAuth(r, models.ResourceTemplates, models.ActionWrite)
+	if err != nil {
+		return nil
 	}
 
-	ctx := context.Background()
-	return a.WhatsApp.SubmitTemplate(ctx, waAccount, submission)
-}
-
-// SyncTemplates syncs templates from Meta API
-
-func (a *App) fetchTemplatesFromMeta(account *models.WhatsAppAccount) ([]whatsapp.MetaTemplate, error) {
-	waAccount := a.toWhatsAppAccount(account)
-
-	ctx := context.Background()
-	return a.WhatsApp.FetchTemplates(ctx, waAccount)
-}
-
-func (a *App) deleteTemplateFromMeta(account *models.WhatsAppAccount, templateName string) {
-	waAccount := a.toWhatsAppAccount(account)
-
-	ctx := context.Background()
-	if err := a.WhatsApp.DeleteTemplate(ctx, waAccount, templateName); err != nil {
-		a.Log.Error("Failed to delete template from Meta", "error", err, "template", templateName)
+	id, err := parsePathUUID(r, "id", "template")
+	if err != nil {
+		return nil
 	}
+
+	var template models.Template
+	if err := a.DB.Where("id = ? AND organization_id = ?", id, orgID).First(&template).Error; err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Template not found", nil, "")
+	}
+
+	oldTemplate := template // value copy for audit
+
+	var req TemplateRequest
+	if err := a.decodeRequest(r, &req); err != nil {
+		return nil
+	}
+
+	if req.WhatsAppAccount != "" {
+		template.WhatsAppAccount = req.WhatsAppAccount
+	}
+	if req.Name != "" {
+		template.Name = normalizeTemplateName(req.Name)
+	}
+	template.DisplayName = req.DisplayName
+	if req.Language != "" {
+		template.Language = req.Language
+	}
+	if req.Category != "" {
+		template.Category = req.Category
+	}
+	template.HeaderType = req.HeaderType
+	template.HeaderContent = req.HeaderContent
+	if req.BodyContent != "" {
+		template.BodyContent = req.BodyContent
+	}
+	template.FooterContent = req.FooterContent
+	template.Buttons = convertToJSONBArray(req.Buttons)
+	template.SampleValues = convertToJSONBArray(req.SampleValues)
+	template.AddSecurityRecommendation = req.AddSecurityRecommendation
+	template.CodeExpirationMinutes = req.CodeExpirationMinutes
+	template.UpdatedByID = &userID
+
+	if err := a.DB.Save(&template).Error; err != nil {
+		a.Log.Error("Failed to update template", "error", err)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update template", nil, "")
+	}
+
+	buttonChanges := diffButtons(oldTemplate.Buttons, template.Buttons)
+	a.logAudit(orgID, userID,
+		"template", template.ID, models.AuditActionUpdated, &oldTemplate, &template, buttonChanges...)
+
+	return r.SendEnvelope(templateToResponse(template))
+}
+
+// DeleteTemplate deletes a local message template
+func (a *App) DeleteTemplate(r *fastglue.Request) error {
+	orgID, userID, err := a.requireAuth(r, models.ResourceTemplates, models.ActionDelete)
+	if err != nil {
+		return nil
+	}
+
+	id, err := parsePathUUID(r, "id", "template")
+	if err != nil {
+		return nil
+	}
+
+	var template models.Template
+	if err := a.DB.Where("id = ? AND organization_id = ?", id, orgID).First(&template).Error; err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Template not found", nil, "")
+	}
+
+	if err := a.DB.Delete(&template).Error; err != nil {
+		a.Log.Error("Failed to delete template", "error", err)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete template", nil, "")
+	}
+
+	a.logAudit(orgID, userID,
+		"template", id, models.AuditActionDeleted, &template, nil)
+
+	return r.SendEnvelope(map[string]string{"message": "Template deleted successfully"})
 }
 
 // Helper functions
@@ -188,13 +277,10 @@ func templateToResponse(t models.Template) TemplateResponse {
 	return TemplateResponse{
 		ID:                        t.ID,
 		WhatsAppAccount:           t.WhatsAppAccount,
-		MetaTemplateID:            t.MetaTemplateID,
 		Name:                      t.Name,
 		DisplayName:               t.DisplayName,
 		Language:                  t.Language,
 		Category:                  t.Category,
-		Status:                    t.Status,
-		QualityRating:             t.QualityRating,
 		HeaderType:                t.HeaderType,
 		HeaderContent:             t.HeaderContent,
 		BodyContent:               t.BodyContent,
@@ -236,9 +322,6 @@ func convertFromJSONBArray(arr models.JSONBArray) []any {
 	}
 	return []any(arr)
 }
-
-// UploadTemplateMedia uploads a media file for use as template header sample
-// Returns a file handle that can be used in template creation
 
 // diffButtons compares old and new button arrays and returns per-button field-level changes.
 func diffButtons(oldButtons, newButtons models.JSONBArray) []map[string]any {

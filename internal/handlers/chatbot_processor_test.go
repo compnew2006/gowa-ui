@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/shridarpatil/whatomate/internal/models"
+	"github.com/shridarpatil/whatomate/pkg/gowa"
 	"github.com/shridarpatil/whatomate/pkg/whatsapp"
 	"github.com/shridarpatil/whatomate/test/testutil"
 	"github.com/stretchr/testify/assert"
@@ -16,26 +17,36 @@ import (
 )
 
 // newProcessorTestApp creates a minimal App suitable for chatbot processor tests.
-// It connects to the test database and Redis, provides a mock WhatsApp client,
-// and uses a no-op logger.
+// It connects to the test database and Redis, provides a mock GOWA server that
+// accepts all sends, and uses a no-op logger.
 func newProcessorTestApp(t *testing.T) *App {
 	t.Helper()
 	db := testutil.SetupTestDB(t)
 	log := testutil.NopLogger()
 
-	// Mock WhatsApp API server that accepts all requests.
+	// Mock GOWA API server that accepts all requests.
 	waServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"messages": []map[string]string{{"id": "wamid.mock_" + uuid.New().String()[:8]}},
+			"code":    "SUCCESS",
+			"message": "Success",
+			"results": map[string]any{"message_id": "wamid.mock_" + uuid.New().String()[:8], "status": "ok"},
 		})
 	}))
 	t.Cleanup(waServer.Close)
 
+	// Route every account through the mock server, regardless of its base URL.
+	whatsapp.RegisterGowaFactory(
+		func(baseURL string) (string, string) { return "", "" },
+		func(baseURL, username, password string) whatsapp.Provider {
+			return gowa.New(waServer.URL, username, password)
+		},
+	)
+
 	app := &App{
 		DB:         db,
 		Log:        log,
-		WhatsApp:   whatsapp.NewWithBaseURL(log, waServer.URL),
+		WARegistry: whatsapp.NewRegistry(log),
 		HTTPClient: &http.Client{Timeout: 5 * time.Second},
 	}
 	if rdb := testutil.SetupTestRedis(t); rdb != nil {

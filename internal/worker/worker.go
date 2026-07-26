@@ -2,7 +2,10 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -20,13 +23,11 @@ import (
 
 // Worker processes jobs from the queue
 type Worker struct {
-	Config   *config.Config
-	DB       *gorm.DB
-	Redis    *redis.Client
-	Log      logf.Logger
-	WhatsApp whatsapp.Provider
-	// WARegistry resolves the correct provider (Meta or GOWA) per account.
-	// When nil, the worker falls back to the WhatsApp field (Meta).
+	Config *config.Config
+	DB     *gorm.DB
+	Redis  *redis.Client
+	Log    logf.Logger
+	// WARegistry resolves the GOWA provider per account.
 	WARegistry *whatsapp.Registry
 	Consumer   *queue.RedisConsumer
 	Publisher  *queue.Publisher
@@ -35,8 +36,8 @@ type Worker struct {
 // Ensure Worker implements JobHandler interface
 var _ queue.JobHandler = (*Worker)(nil)
 
-// New creates a new Worker instance. The registry resolves the correct
-// WhatsApp provider (Meta or GOWA) per account; pass nil to default to Meta.
+// New creates a new Worker instance. The registry resolves the GOWA
+// provider per account.
 func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client, log logf.Logger, registry *whatsapp.Registry) (*Worker, error) {
 	consumer, err := queue.NewRedisConsumer(rdb, log)
 	if err != nil {
@@ -50,7 +51,6 @@ func New(cfg *config.Config, db *gorm.DB, rdb *redis.Client, log logf.Logger, re
 		DB:         db,
 		Redis:      rdb,
 		Log:        log,
-		WhatsApp:   whatsapp.New(log),
 		WARegistry: registry,
 		Consumer:   consumer,
 		Publisher:  publisher,
@@ -121,7 +121,7 @@ func (w *Worker) HandleRecipientJob(ctx context.Context, job *queue.RecipientJob
 	}
 
 	// Send template message
-	waMessageID, err := w.sendTemplateMessage(ctx, &account, campaign.Template, recipient, campaign.HeaderMediaID, campaign.HeaderMediaFilename)
+	waMessageID, err := w.sendTemplateMessage(ctx, &account, campaign.Template, recipient, &campaign)
 
 	// Create Message record
 	message := models.Message{
@@ -256,11 +256,15 @@ func (w *Worker) checkCampaignCompletion(ctx context.Context, campaignID, organi
 	}
 }
 
-// sendTemplateMessage sends a template message via WhatsApp Cloud API
-func (w *Worker) sendTemplateMessage(ctx context.Context, account *models.WhatsAppAccount, template *models.Template, recipient *models.BulkMessageRecipient, campaignHeaderMediaID, campaignHeaderMediaFilename string) (string, error) {
+// sendTemplateMessage renders the template locally and sends it via GOWA as
+// text / media-with-caption / interactive buttons (same approach as the chat
+// template send path in internal/handlers).
+func (w *Worker) sendTemplateMessage(ctx context.Context, account *models.WhatsAppAccount, template *models.Template, recipient *models.BulkMessageRecipient, campaign *models.BulkMessageCampaign) (string, error) {
+	provider := w.resolveProvider(account)
 	waAccount := account.ToWAAccount()
+	rcpt := whatsapp.Recipient{Phone: recipient.PhoneNumber}
 
-	// Resolve body parameters into a map for BuildTemplateComponents
+	// Resolve body parameters into a map keyed by parameter name.
 	resolvedParams := templateutil.ResolveParams(template.BodyContent, recipient.TemplateParams)
 	bodyParams := make(map[string]string, len(resolvedParams))
 	paramNames := templateutil.ExtParamNames(template.BodyContent)
@@ -271,13 +275,14 @@ func (w *Worker) sendTemplateMessage(ctx context.Context, account *models.WhatsA
 			bodyParams[fmt.Sprintf("%d", i+1)] = val
 		}
 	}
+	body := templateutil.ReplaceWithStringParams(template.BodyContent, bodyParams)
 
-	// Resolve the header text parameter (if any) into its own map. Prefer
-	// recipient.HeaderParams (new path, populated by AddRecipients) and fall
-	// back to a TemplateParams lookup for legacy recipient rows persisted
-	// before HeaderParams existed.
-	var headerParams map[string]string
-	if template.HeaderType == "TEXT" {
+	var parts []string
+	if template.HeaderType == "TEXT" && template.HeaderContent != "" {
+		// Resolve the header text parameter (if any). Prefer
+		// recipient.HeaderParams (new path, populated by AddRecipients) and
+		// fall back to a TemplateParams lookup for legacy recipient rows.
+		headerParams := bodyParams
 		if hNames := templateutil.ExtParamNames(template.HeaderContent); len(hNames) == 1 {
 			name := hNames[0]
 			if raw, ok := recipient.HeaderParams[name]; ok {
@@ -286,35 +291,92 @@ func (w *Worker) sendTemplateMessage(ctx context.Context, account *models.WhatsA
 				headerParams = map[string]string{name: fmt.Sprintf("%v", raw)}
 			}
 		}
+		if header := templateutil.ReplaceWithStringParams(template.HeaderContent, headerParams); header != "" {
+			parts = append(parts, "*"+header+"*")
+		}
+	}
+	if body != "" {
+		parts = append(parts, body)
+	}
+	if template.FooterContent != "" {
+		parts = append(parts, template.FooterContent)
 	}
 
-	// Use the shared component builder (same as chat template sending).
-	components, err := whatsapp.BuildTemplateComponents(
-		bodyParams,
-		template.HeaderType, template.HeaderContent,
-		headerParams,
-		campaignHeaderMediaID, campaignHeaderMediaFilename,
-	)
-	if err != nil {
-		return "", fmt.Errorf("failed to build template components: %w", err)
+	// Template buttons: quick replies become interactive buttons (when the
+	// provider supports them); URL buttons are appended as text lines.
+	var quickReplies []whatsapp.Button
+	for i, raw := range template.Buttons {
+		btn, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		btnType, _ := btn["type"].(string)
+		label, _ := btn["text"].(string)
+		switch strings.ToUpper(btnType) {
+		case "QUICK_REPLY":
+			quickReplies = append(quickReplies, whatsapp.Button{ID: fmt.Sprintf("btn_%d", i), Title: label})
+		case "URL":
+			urlStr, _ := btn["url"].(string)
+			urlStr = templateutil.ReplaceWithStringParams(urlStr, bodyParams)
+			if urlStr != "" {
+				if label != "" {
+					parts = append(parts, label+": "+urlStr)
+				} else {
+					parts = append(parts, urlStr)
+				}
+			}
+		}
 	}
-	// Add auto-generated button components (Flow needs flow_token)
-	flowComponents := whatsapp.AutoButtonComponents(template.Buttons)
-	components = append(components, flowComponents...)
 
-	rcpt := whatsapp.Recipient{Phone: recipient.PhoneNumber}
-	return w.resolveProvider(account).SendTemplateMessage(ctx, waAccount, rcpt, template.Name, template.Language, components)
+	text := strings.Join(parts, "\n\n")
+
+	// Media header: upload the campaign's local file (falling back to the
+	// stored media reference) and send as media with the rendered caption.
+	if template.HeaderType == "IMAGE" || template.HeaderType == "VIDEO" || template.HeaderType == "DOCUMENT" {
+		mediaID := campaign.HeaderMediaID
+		if campaign.HeaderMediaLocalPath != "" {
+			basePath := "./media"
+			if w.Config != nil && w.Config.Storage.LocalPath != "" {
+				basePath = w.Config.Storage.LocalPath
+			}
+			mediaPath := filepath.Join(basePath, campaign.HeaderMediaLocalPath)
+			if fileData, readErr := os.ReadFile(mediaPath); readErr == nil && len(fileData) > 0 {
+				uploaded, upErr := provider.UploadMedia(ctx, waAccount, fileData, campaign.HeaderMediaMimeType, campaign.HeaderMediaFilename)
+				if upErr != nil {
+					return "", fmt.Errorf("failed to upload template header media: %w", upErr)
+				}
+				mediaID = uploaded
+			}
+		}
+		if mediaID != "" {
+			switch template.HeaderType {
+			case "IMAGE":
+				return provider.SendImageMessage(ctx, waAccount, rcpt, mediaID, text, "")
+			case "VIDEO":
+				return provider.SendVideoMessage(ctx, waAccount, rcpt, mediaID, text, "")
+			default:
+				return provider.SendDocumentMessage(ctx, waAccount, rcpt, mediaID, campaign.HeaderMediaFilename, text, "")
+			}
+		}
+	}
+
+	if len(quickReplies) > 0 {
+		wamid, err := provider.SendInteractiveButtons(ctx, waAccount, rcpt, text, quickReplies)
+		if err == nil || !errors.Is(err, whatsapp.ErrNotSupported) {
+			return wamid, err
+		}
+	}
+
+	return provider.SendTextMessage(ctx, waAccount, rcpt, text, "")
 }
 
-// resolveProvider returns the WhatsApp provider for the given account.
-// When the registry is configured it resolves Meta vs GOWA based on the
-// account's ProviderType. When the registry is nil it falls back to the
-// default WhatsApp client (Meta).
+// resolveProvider returns the WhatsApp provider (GOWA) for the given account.
 func (w *Worker) resolveProvider(account *models.WhatsAppAccount) whatsapp.Provider {
-	if w.WARegistry != nil && account != nil {
-		return w.WARegistry.Get(account.ToWAAccount())
+	var waAccount *whatsapp.Account
+	if account != nil {
+		waAccount = account.ToWAAccount()
 	}
-	return w.WhatsApp
+	return w.WARegistry.Get(waAccount)
 }
 
 // decryptAccountSecrets decrypts the encrypted secrets on a WhatsApp account.

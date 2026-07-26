@@ -13,6 +13,7 @@ import (
 	"github.com/shridarpatil/whatomate/internal/models"
 	"github.com/shridarpatil/whatomate/internal/queue"
 	"github.com/shridarpatil/whatomate/internal/templateutil"
+	"github.com/shridarpatil/whatomate/pkg/gowa"
 	"github.com/shridarpatil/whatomate/pkg/whatsapp"
 	"github.com/shridarpatil/whatomate/test/testutil"
 	"github.com/stretchr/testify/assert"
@@ -25,9 +26,9 @@ func testWorker(t *testing.T) *Worker {
 	log := testutil.NopLogger()
 
 	w := &Worker{
-		DB:       db,
-		Log:      log,
-		WhatsApp: whatsapp.New(log),
+		DB:         db,
+		Log:        log,
+		WARegistry: whatsapp.NewRegistry(log),
 	}
 
 	// Set up Publisher if Redis is available
@@ -37,6 +38,35 @@ func testWorker(t *testing.T) *Worker {
 	}
 
 	return w
+}
+
+// pointWorkerAtGowa registers a GOWA client factory and gives the worker a
+// fresh registry, so accounts whose gowa_base_url points at a mock server
+// resolve a client that talks to it.
+func pointWorkerAtGowa(w *Worker) {
+	whatsapp.RegisterGowaFactory(
+		func(baseURL string) (string, string) { return "", "" },
+		func(baseURL, username, password string) whatsapp.Provider {
+			return gowa.New(baseURL, username, password)
+		},
+	)
+	w.WARegistry = whatsapp.NewRegistry(w.Log)
+}
+
+// newGowaSendServer returns a mock GOWA server that captures the last request
+// body and responds with a successful send result carrying msgID.
+func newGowaSendServer(msgID string, capturedBody *map[string]any) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		if capturedBody != nil {
+			_ = json.NewDecoder(r.Body).Decode(capturedBody)
+		}
+		rw.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(rw).Encode(map[string]any{
+			"code":    "SUCCESS",
+			"message": "Success",
+			"results": map[string]any{"message_id": msgID, "status": "ok"},
+		})
+	}))
 }
 
 // getOrCreateTestPermissions gets existing permissions or creates them for testing.
@@ -108,9 +138,8 @@ func createTestCampaignData(t *testing.T, w *Worker) (*models.Organization, *mod
 	account := &models.WhatsAppAccount{
 		OrganizationID: org.ID,
 		Name:           accountName,
-		PhoneID:        "phone-" + uniqueID,
-		BusinessID:     "business-" + uniqueID,
-		AccessToken:    "test-token",
+		GowaBaseURL:    "http://gowa.test:3000",
+		GowaDeviceID:   "device-" + uniqueID,
 	}
 	require.NoError(t, w.DB.Create(account).Error)
 
@@ -121,7 +150,6 @@ func createTestCampaignData(t *testing.T, w *Worker) (*models.Organization, *mod
 		Name:            "test_template_" + uniqueID,
 		Language:        "en",
 		Category:        "MARKETING",
-		Status:          "APPROVED",
 		BodyContent:     "Hello {{1}}, your order {{2}} is ready!",
 	}
 	require.NoError(t, w.DB.Create(template).Error)
@@ -276,9 +304,8 @@ func createMinimalCampaignData(t *testing.T, w *Worker, status models.CampaignSt
 	account := &models.WhatsAppAccount{
 		OrganizationID: org.ID,
 		Name:           accountName,
-		PhoneID:        "phone-" + uniqueID,
-		BusinessID:     "business-" + uniqueID,
-		AccessToken:    "test-token",
+		GowaBaseURL:    "http://gowa.test:3000",
+		GowaDeviceID:   "device-" + uniqueID,
 	}
 	require.NoError(t, w.DB.Create(account).Error)
 
@@ -288,7 +315,6 @@ func createMinimalCampaignData(t *testing.T, w *Worker, status models.CampaignSt
 		Name:            "test_template_" + uniqueID,
 		Language:        "en",
 		Category:        "MARKETING",
-		Status:          string(models.TemplateStatusApproved),
 		BodyContent:     "Hello {{1}}!",
 	}
 	require.NoError(t, w.DB.Create(template).Error)
@@ -451,30 +477,18 @@ func TestWorker_checkCampaignCompletion_NotProcessingStatus(t *testing.T) {
 	assert.Equal(t, models.CampaignStatusPaused, updated.Status)
 }
 
-func TestWorker_sendTemplateMessage_BuildsComponents(t *testing.T) {
+func TestWorker_sendTemplateMessage_RendersBodyLocally(t *testing.T) {
 	w := testWorker(t)
 
-	// Create mock server
 	var capturedBody map[string]any
-	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		_ = json.NewDecoder(r.Body).Decode(&capturedBody)
-		rw.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(rw).Encode(map[string]any{
-			"messages": []map[string]any{
-				{"id": "wamid.test123"},
-			},
-		})
-	}))
+	server := newGowaSendServer("3EB0WORKERTEST1", &capturedBody)
 	defer server.Close()
 
-	// Create WhatsApp client pointing to mock server
-	w.WhatsApp = whatsapp.NewWithBaseURL(w.Log, server.URL)
+	pointWorkerAtGowa(w)
 
 	account := &models.WhatsAppAccount{
-		PhoneID:     "123",
-		BusinessID:  "456",
-		AccessToken: "token",
-		APIVersion:  "v21.0",
+		GowaBaseURL:  server.URL,
+		GowaDeviceID: "dev1",
 	}
 
 	template := &models.Template{
@@ -491,46 +505,29 @@ func TestWorker_sendTemplateMessage_BuildsComponents(t *testing.T) {
 		},
 	}
 
-	msgID, err := w.sendTemplateMessage(context.Background(), account, template, recipient, "", "")
+	msgID, err := w.sendTemplateMessage(context.Background(), account, template, recipient, &models.BulkMessageCampaign{})
 	require.NoError(t, err)
-	assert.Equal(t, "wamid.test123", msgID)
+	assert.Equal(t, "3EB0WORKERTEST1", msgID)
 
-	// Verify request structure
-	templateData := capturedBody["template"].(map[string]any)
-	assert.Equal(t, "test_template", templateData["name"])
-	assert.Equal(t, "en", templateData["language"].(map[string]any)["code"])
-
-	components := templateData["components"].([]any)
-	require.Len(t, components, 1)
-
-	bodyComponent := components[0].(map[string]any)
-	assert.Equal(t, "body", bodyComponent["type"])
-
-	params := bodyComponent["parameters"].([]any)
-	require.Len(t, params, 2)
-	assert.Equal(t, "Hello", params[0].(map[string]any)["text"])
-	assert.Equal(t, "World", params[1].(map[string]any)["text"])
+	// Verify the body was rendered locally and sent as plain text
+	assert.Equal(t, "1234567890@s.whatsapp.net", capturedBody["phone"])
+	assert.Equal(t, "Hello Hello, welcome to World!", capturedBody["message"])
 }
 
 // When the recipient has explicit HeaderParams, the worker must use them
-// for the TEXT-header component instead of falling back to TemplateParams.
+// for the TEXT header instead of falling back to TemplateParams.
 // This protects positional templates where header {{1}} and body {{1}}
 // would otherwise share the same value.
 func TestWorker_sendTemplateMessage_HeaderParamsTakePrecedence(t *testing.T) {
 	w := testWorker(t)
 
 	var capturedBody map[string]any
-	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		_ = json.NewDecoder(r.Body).Decode(&capturedBody)
-		rw.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(rw).Encode(map[string]any{
-			"messages": []map[string]any{{"id": "wamid.hp-explicit"}},
-		})
-	}))
+	server := newGowaSendServer("3EB0HPEXPLICIT", &capturedBody)
 	defer server.Close()
-	w.WhatsApp = whatsapp.NewWithBaseURL(w.Log, server.URL)
 
-	account := &models.WhatsAppAccount{PhoneID: "123", BusinessID: "456", AccessToken: "token", APIVersion: "v21.0"}
+	pointWorkerAtGowa(w)
+
+	account := &models.WhatsAppAccount{GowaBaseURL: server.URL, GowaDeviceID: "dev1"}
 	template := &models.Template{
 		Name:          "tpl_explicit_hp",
 		Language:      "en",
@@ -544,24 +541,10 @@ func TestWorker_sendTemplateMessage_HeaderParamsTakePrecedence(t *testing.T) {
 		TemplateParams: models.JSONB{"1": "BODY-VAL"},
 	}
 
-	_, err := w.sendTemplateMessage(context.Background(), account, template, recipient, "", "")
+	_, err := w.sendTemplateMessage(context.Background(), account, template, recipient, &models.BulkMessageCampaign{})
 	require.NoError(t, err)
 
-	components := capturedBody["template"].(map[string]any)["components"].([]any)
-	var headerComp, bodyComp map[string]any
-	for _, c := range components {
-		m := c.(map[string]any)
-		switch m["type"] {
-		case "header":
-			headerComp = m
-		case "body":
-			bodyComp = m
-		}
-	}
-	require.NotNil(t, headerComp)
-	require.NotNil(t, bodyComp)
-	assert.Equal(t, "HEADER-VAL", headerComp["parameters"].([]any)[0].(map[string]any)["text"])
-	assert.Equal(t, "BODY-VAL", bodyComp["parameters"].([]any)[0].(map[string]any)["text"],
+	assert.Equal(t, "*Code HEADER-VAL*\n\nUse BODY-VAL to redeem", capturedBody["message"],
 		"body {{1}} must keep its own value when HeaderParams is set")
 }
 
@@ -572,17 +555,12 @@ func TestWorker_sendTemplateMessage_HeaderParamsFallbackToTemplateParams(t *test
 	w := testWorker(t)
 
 	var capturedBody map[string]any
-	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		_ = json.NewDecoder(r.Body).Decode(&capturedBody)
-		rw.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(rw).Encode(map[string]any{
-			"messages": []map[string]any{{"id": "wamid.hp-fallback"}},
-		})
-	}))
+	server := newGowaSendServer("3EB0HPFALLBACK", &capturedBody)
 	defer server.Close()
-	w.WhatsApp = whatsapp.NewWithBaseURL(w.Log, server.URL)
 
-	account := &models.WhatsAppAccount{PhoneID: "123", BusinessID: "456", AccessToken: "token", APIVersion: "v21.0"}
+	pointWorkerAtGowa(w)
+
+	account := &models.WhatsAppAccount{GowaBaseURL: server.URL, GowaDeviceID: "dev1"}
 	template := &models.Template{
 		Name:          "tpl_fallback_hp",
 		Language:      "en",
@@ -596,51 +574,31 @@ func TestWorker_sendTemplateMessage_HeaderParamsFallbackToTemplateParams(t *test
 		TemplateParams: models.JSONB{"season": "Summer", "name": "Alex"},
 	}
 
-	_, err := w.sendTemplateMessage(context.Background(), account, template, recipient, "", "")
+	_, err := w.sendTemplateMessage(context.Background(), account, template, recipient, &models.BulkMessageCampaign{})
 	require.NoError(t, err)
 
-	components := capturedBody["template"].(map[string]any)["components"].([]any)
-	var headerComp map[string]any
-	for _, c := range components {
-		if m := c.(map[string]any); m["type"] == "header" {
-			headerComp = m
-			break
-		}
-	}
-	require.NotNil(t, headerComp, "header component must still be emitted via fallback")
-	params := headerComp["parameters"].([]any)[0].(map[string]any)
-	assert.Equal(t, "Summer", params["text"])
-	assert.Equal(t, "season", params["parameter_name"])
+	assert.Equal(t, "*Our Summer sale*\n\nHi Alex", capturedBody["message"],
+		"header must still render via the TemplateParams fallback")
 }
 
 func TestWorker_sendTemplateMessage_NoParams(t *testing.T) {
 	w := testWorker(t)
 
-	// Create mock server
 	var capturedBody map[string]any
-	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		_ = json.NewDecoder(r.Body).Decode(&capturedBody)
-		rw.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(rw).Encode(map[string]any{
-			"messages": []map[string]any{
-				{"id": "wamid.test456"},
-			},
-		})
-	}))
+	server := newGowaSendServer("3EB0WORKERTEST2", &capturedBody)
 	defer server.Close()
 
-	w.WhatsApp = whatsapp.NewWithBaseURL(w.Log, server.URL)
+	pointWorkerAtGowa(w)
 
 	account := &models.WhatsAppAccount{
-		PhoneID:     "123",
-		BusinessID:  "456",
-		AccessToken: "token",
-		APIVersion:  "v21.0",
+		GowaBaseURL:  server.URL,
+		GowaDeviceID: "dev1",
 	}
 
 	template := &models.Template{
-		Name:     "simple_template",
-		Language: "en",
+		Name:        "simple_template",
+		Language:    "en",
+		BodyContent: "Static message body",
 	}
 
 	recipient := &models.BulkMessageRecipient{
@@ -648,16 +606,12 @@ func TestWorker_sendTemplateMessage_NoParams(t *testing.T) {
 		TemplateParams: nil, // No params
 	}
 
-	msgID, err := w.sendTemplateMessage(context.Background(), account, template, recipient, "", "")
+	msgID, err := w.sendTemplateMessage(context.Background(), account, template, recipient, &models.BulkMessageCampaign{})
 	require.NoError(t, err)
-	assert.Equal(t, "wamid.test456", msgID)
+	assert.Equal(t, "3EB0WORKERTEST2", msgID)
 
-	// Verify no components when no params
-	templateData := capturedBody["template"].(map[string]any)
-	components, hasComponents := templateData["components"]
-	if hasComponents {
-		assert.Empty(t, components)
-	}
+	// Body without placeholders is sent verbatim
+	assert.Equal(t, "Static message body", capturedBody["message"])
 }
 
 func TestWorker_Close_NilConsumer(t *testing.T) {
@@ -673,21 +627,13 @@ func TestWorker_HandleRecipientJob_Success(t *testing.T) {
 	w := testWorker(t)
 	org, account, template, campaign, recipient := createTestCampaignData(t, w)
 
-	// Create mock server
-	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		rw.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(rw).Encode(map[string]any{
-			"messages": []map[string]any{
-				{"id": "wamid.success123"},
-			},
-		})
-	}))
+	// Create mock GOWA server
+	server := newGowaSendServer("wamid.success123", nil)
 	defer server.Close()
 
-	// Update account's API version for URL building
-	require.NoError(t, w.DB.Model(account).Update("api_version", "v21.0").Error)
-
-	w.WhatsApp = whatsapp.NewWithBaseURL(w.Log, server.URL)
+	// Point the account at the mock server
+	require.NoError(t, w.DB.Model(account).Update("gowa_base_url", server.URL).Error)
+	pointWorkerAtGowa(w)
 
 	job := &queue.RecipientJob{
 		CampaignID:     campaign.ID,
@@ -724,21 +670,19 @@ func TestWorker_HandleRecipientJob_WhatsAppError(t *testing.T) {
 	w := testWorker(t)
 	org, account, _, campaign, recipient := createTestCampaignData(t, w)
 
-	// Create mock server that returns an error
+	// Create mock server that returns a GOWA error
 	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		rw.Header().Set("Content-Type", "application/json")
 		rw.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(rw).Encode(map[string]any{
-			"error": map[string]any{
-				"message": "Invalid phone number",
-				"code":    100,
-			},
+			"code":    "BAD_REQUEST",
+			"message": "Invalid phone number",
 		})
 	}))
 	defer server.Close()
 
-	require.NoError(t, w.DB.Model(account).Update("api_version", "v21.0").Error)
-	w.WhatsApp = whatsapp.NewWithBaseURL(w.Log, server.URL)
+	require.NoError(t, w.DB.Model(account).Update("gowa_base_url", server.URL).Error)
+	pointWorkerAtGowa(w)
 
 	job := &queue.RecipientJob{
 		CampaignID:     campaign.ID,
@@ -768,19 +712,12 @@ func TestWorker_HandleRecipientJob_CreatesContact(t *testing.T) {
 	w := testWorker(t)
 	org, account, _, campaign, recipient := createTestCampaignData(t, w)
 
-	// Create mock server
-	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		rw.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(rw).Encode(map[string]any{
-			"messages": []map[string]any{
-				{"id": "wamid.contact123"},
-			},
-		})
-	}))
+	// Create mock GOWA server
+	server := newGowaSendServer("wamid.contact123", nil)
 	defer server.Close()
 
-	require.NoError(t, w.DB.Model(account).Update("api_version", "v21.0").Error)
-	w.WhatsApp = whatsapp.NewWithBaseURL(w.Log, server.URL)
+	require.NoError(t, w.DB.Model(account).Update("gowa_base_url", server.URL).Error)
+	pointWorkerAtGowa(w)
 
 	// Use a new phone number that doesn't have a contact
 	newPhone := "9998887777"
@@ -806,19 +743,12 @@ func TestWorker_HandleRecipientJob_CampaignCompletion(t *testing.T) {
 	w := testWorker(t)
 	org, account, _, campaign, recipient := createTestCampaignData(t, w)
 
-	// Create mock server
-	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		rw.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(rw).Encode(map[string]any{
-			"messages": []map[string]any{
-				{"id": "wamid.complete123"},
-			},
-		})
-	}))
+	// Create mock GOWA server
+	server := newGowaSendServer("wamid.complete123", nil)
 	defer server.Close()
 
-	require.NoError(t, w.DB.Model(account).Update("api_version", "v21.0").Error)
-	w.WhatsApp = whatsapp.NewWithBaseURL(w.Log, server.URL)
+	require.NoError(t, w.DB.Model(account).Update("gowa_base_url", server.URL).Error)
+	pointWorkerAtGowa(w)
 
 	job := &queue.RecipientJob{
 		CampaignID:     campaign.ID,
@@ -843,19 +773,12 @@ func TestWorker_HandleRecipientJob_TemplateParamSubstitution(t *testing.T) {
 	w := testWorker(t)
 	org, account, template, campaign, recipient := createTestCampaignData(t, w)
 
-	// Create mock server
-	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		rw.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(rw).Encode(map[string]any{
-			"messages": []map[string]any{
-				{"id": "wamid.subst123"},
-			},
-		})
-	}))
+	// Create mock GOWA server
+	server := newGowaSendServer("wamid.subst123", nil)
 	defer server.Close()
 
-	require.NoError(t, w.DB.Model(account).Update("api_version", "v21.0").Error)
-	w.WhatsApp = whatsapp.NewWithBaseURL(w.Log, server.URL)
+	require.NoError(t, w.DB.Model(account).Update("gowa_base_url", server.URL).Error)
+	pointWorkerAtGowa(w)
 
 	job := &queue.RecipientJob{
 		CampaignID:     campaign.ID,
@@ -888,103 +811,34 @@ func TestWorker_DecryptAccountSecrets_WithEncryptionKey(t *testing.T) {
 		},
 	}
 
-	// Encrypt a token
-	plainToken := "EAAI2ZCP4ZAMv8BQtest"
-	plainSecret := "app-secret-123"
-	encToken, err := crypto.Encrypt(plainToken, w.Config.App.EncryptionKey)
-	require.NoError(t, err)
+	// Encrypt the GOWA webhook secret
+	plainSecret := "gowa-webhook-secret-123"
 	encSecret, err := crypto.Encrypt(plainSecret, w.Config.App.EncryptionKey)
 	require.NoError(t, err)
 
-	// Verify they are actually encrypted
-	assert.True(t, crypto.IsEncrypted(encToken))
+	// Verify it is actually encrypted
 	assert.True(t, crypto.IsEncrypted(encSecret))
 
 	account := &models.WhatsAppAccount{
-		AccessToken: encToken,
-		AppSecret:   encSecret,
+		GowaWebhookSecret: encSecret,
 	}
 
 	w.decryptAccountSecrets(account)
 
-	assert.Equal(t, plainToken, account.AccessToken)
-	assert.Equal(t, plainSecret, account.AppSecret)
+	assert.Equal(t, plainSecret, account.GowaWebhookSecret)
 }
 
 func TestWorker_DecryptAccountSecrets_NilConfig(t *testing.T) {
 	w := &Worker{}
 
 	account := &models.WhatsAppAccount{
-		AccessToken: "plain-token",
-		AppSecret:   "plain-secret",
+		GowaWebhookSecret: "plain-secret",
 	}
 
 	w.decryptAccountSecrets(account)
 
 	// Should remain unchanged (no-op)
-	assert.Equal(t, "plain-token", account.AccessToken)
-	assert.Equal(t, "plain-secret", account.AppSecret)
-}
-
-func TestWorker_HandleRecipientJob_WithEncryptedToken(t *testing.T) {
-	w := testWorker(t)
-
-	encKey := "test-encryption-key-for-aes"
-	w.Config = &config.Config{
-		App: config.AppConfig{EncryptionKey: encKey},
-	}
-
-	org, account, template, campaign, recipient := createTestCampaignData(t, w)
-
-	// Encrypt the token in the DB (simulating production)
-	encToken, err := crypto.Encrypt("test-token", encKey)
-	require.NoError(t, err)
-	require.NoError(t, w.DB.Model(account).Updates(map[string]any{
-		"access_token": encToken,
-		"api_version":  "v21.0",
-	}).Error)
-
-	// Create mock server that verifies the decrypted token arrives
-	var capturedAuth string
-	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		capturedAuth = r.Header.Get("Authorization")
-		rw.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(rw).Encode(map[string]any{
-			"messages": []map[string]any{
-				{"id": "wamid.encrypted123"},
-			},
-		})
-	}))
-	defer server.Close()
-
-	w.WhatsApp = whatsapp.NewWithBaseURL(w.Log, server.URL)
-
-	job := &queue.RecipientJob{
-		CampaignID:     campaign.ID,
-		RecipientID:    recipient.ID,
-		OrganizationID: org.ID,
-		PhoneNumber:    recipient.PhoneNumber,
-		RecipientName:  recipient.RecipientName,
-		TemplateParams: recipient.TemplateParams,
-	}
-
-	err = w.HandleRecipientJob(context.Background(), job)
-	require.NoError(t, err)
-
-	// Verify the decrypted token was sent to Meta API (not the encrypted one)
-	assert.Equal(t, "Bearer test-token", capturedAuth)
-	assert.NotContains(t, capturedAuth, "enc:")
-
-	// Verify recipient marked as sent
-	var updatedRecipient models.BulkMessageRecipient
-	require.NoError(t, w.DB.First(&updatedRecipient, recipient.ID).Error)
-	assert.Equal(t, models.MessageStatusSent, updatedRecipient.Status)
-	assert.Equal(t, "wamid.encrypted123", updatedRecipient.WhatsAppMessageID)
-
-	// Verify message record created
-	var message models.Message
-	require.NoError(t, w.DB.Where("template_name = ?", template.Name).Order("created_at desc").First(&message).Error)
-	assert.Equal(t, models.MessageStatusSent, message.Status)
+	assert.Equal(t, "plain-secret", account.GowaWebhookSecret)
 }
 
 // Unit tests for parameter resolution functions (no database required)

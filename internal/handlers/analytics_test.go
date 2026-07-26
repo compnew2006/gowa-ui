@@ -63,10 +63,8 @@ func createAnalyticsTestCampaign(t *testing.T, app *handlers.App, orgID, created
 		OrganizationID:  orgID,
 		WhatsAppAccount: "test-account",
 		Name:            "campaign-template-" + uuid.New().String()[:8],
-		MetaTemplateID:  "meta-" + uuid.New().String()[:8],
 		Category:        "MARKETING",
 		Language:        "en",
-		Status:          string(models.TemplateStatusApproved),
 		BodyContent:     "Hello",
 	}
 	require.NoError(t, app.DB.Create(tmpl).Error)

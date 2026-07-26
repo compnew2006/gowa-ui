@@ -80,13 +80,11 @@ func getExtensionFromMimeType(mimeType string) string {
 	}
 }
 
-// DownloadAndSaveMedia downloads media from Meta or GOWA and saves it locally.
-// For GOWA accounts where mediaID is already a download URL, it downloads
-// directly instead of calling GetMediaURL.
+// DownloadAndSaveMedia downloads media from GOWA and saves it locally.
+// mediaID may be a full URL, a relative server path, or a GOWA message ID.
 // Returns the local file path (relative to media storage) or error
 func (a *App) DownloadAndSaveMedia(ctx context.Context, mediaID string, mimeType string, account *whatsapp.Account) (string, error) {
-	// Resolve the provider (Meta or GOWA) for this account.
-	provider := a.WhatsApp
+	var provider whatsapp.Provider
 	if a.WARegistry != nil {
 		provider = a.WARegistry.Get(account)
 	}
@@ -99,36 +97,27 @@ func (a *App) DownloadAndSaveMedia(ctx context.Context, mediaID string, mimeType
 	var data []byte
 	var err error
 
-	if account.ProviderType == "gowa" {
-		gowaClient, ok := provider.(*gowa.Client)
-		if ok {
-			if strings.HasPrefix(mediaID, "http") {
-				// Full URL — download directly
-				data, err = gowaClient.DownloadMedia(ctx, mediaID, account.AccessToken)
-			} else if strings.Contains(mediaID, "/") {
-				// Relative path — prepend base URL
-				baseURL := account.GowaBaseURL
-				if baseURL == "" {
-					baseURL = "http://localhost:3000"
-				}
-				baseURL = strings.TrimSuffix(baseURL, "/")
-				gowaURL := baseURL + "/" + strings.TrimPrefix(mediaID, "/")
-				data, err = gowaClient.DownloadMedia(ctx, gowaURL, account.AccessToken)
-			} else {
-				// GOWA message ID or media field — try DownloadMedia first,
-				// then fall back to treating as message ID with download endpoint
-				data, err = gowaClient.DownloadMedia(ctx, mediaID, account.AccessToken)
+	gowaClient, ok := provider.(*gowa.Client)
+	if ok {
+		if strings.HasPrefix(mediaID, "http") {
+			// Full URL — download directly
+			data, err = gowaClient.DownloadMedia(ctx, mediaID, "")
+		} else if strings.Contains(mediaID, "/") {
+			// Relative path — prepend base URL
+			baseURL := account.GowaBaseURL
+			if baseURL == "" {
+				baseURL = "http://localhost:3000"
 			}
+			baseURL = strings.TrimSuffix(baseURL, "/")
+			gowaURL := baseURL + "/" + strings.TrimPrefix(mediaID, "/")
+			data, err = gowaClient.DownloadMedia(ctx, gowaURL, "")
 		} else {
-			err = fmt.Errorf("GOWA provider not available")
+			// GOWA message ID or media field — try DownloadMedia first,
+			// then fall back to treating as message ID with download endpoint
+			data, err = gowaClient.DownloadMedia(ctx, mediaID, "")
 		}
 	} else {
-		// Standard Meta flow: resolve media ID → URL → download
-		mediaURL, urlErr := provider.GetMediaURL(ctx, mediaID, account)
-		if urlErr != nil {
-			return "", fmt.Errorf("failed to get media URL: %w", urlErr)
-		}
-		data, err = provider.DownloadMedia(ctx, mediaURL, account.AccessToken)
+		err = fmt.Errorf("GOWA provider not available")
 	}
 	if err != nil {
 		return "", fmt.Errorf("failed to download media: %w", err)
@@ -289,7 +278,7 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 			a.Log.Warn("Media missing from disk and no recoverable account for message",
 				"message_id", message.ID, "wa_message_id", message.WhatsAppMessageID,
 				"msg_account", acctName, "error", err)
-		} else if account.ProviderType == "gowa" && message.WhatsAppMessageID != "" && hasContact {
+		} else if message.WhatsAppMessageID != "" && hasContact {
 			a.decryptAccountSecrets(&account)
 			waAccount := account.ToWAAccount()
 			provider := a.resolveProvider(&account)

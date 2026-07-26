@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -14,6 +16,16 @@ import (
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 )
+
+// generateWebhookSecret returns a random 32-byte hex string used to sign
+// outgoing webhook payloads.
+func generateWebhookSecret() string {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return uuid.New().String()
+	}
+	return hex.EncodeToString(b)
+}
 
 // validateWebhookURL performs structural validation of a webhook URL.
 // It blocks known-internal hostnames and IP literals pointing to private ranges.
@@ -212,7 +224,7 @@ func (a *App) CreateWebhook(r *fastglue.Request) error {
 	// Auto-generate secret if not provided
 	secret := req.Secret
 	if secret == "" {
-		secret = generateVerifyToken() // Reuse the 32-byte hex generator
+		secret = generateWebhookSecret()
 	}
 
 	webhook := models.Webhook{

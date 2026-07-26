@@ -64,7 +64,6 @@ import {
   Smile,
   MoreVertical,
   Phone,
-  PhoneCall,
   Check,
   CheckCheck,
   Clock,
@@ -105,7 +104,6 @@ import { getInitials, getAvatarGradient } from '@/lib/utils'
 import { useColorMode } from '@/composables/useColorMode'
 import { useInfiniteScroll } from '@/composables/useInfiniteScroll'
 import CannedResponsePicker from '@/components/chat/CannedResponsePicker.vue'
-import PreviewButtonGroup from '@/components/chatbot/flow-preview/PreviewButtonGroup.vue'
 import TemplatePicker from '@/components/chat/TemplatePicker.vue'
 import ContactInfoPanel from '@/components/chat/ContactInfoPanel.vue'
 import ConversationNotes from '@/components/chat/ConversationNotes.vue'
@@ -334,14 +332,9 @@ const executingActionId = ref<string | null>(null)
 // Tags filter state
 const isTagFilterOpen = ref(false)
 
-// Whether the selected (or contact-default) account is a GOWA provider.
-// Used to skip Meta-only restrictions (24h service window, typing) for GOWA.
-const isCurrentAccountGowa = computed(() => {
-  const name = selectedAccount.value || contactsStore.currentContact?.whatsapp_account
-  if (!name) return false
-  const acct = orgAccounts.value.find((a: any) => a?.name === name)
-  return acct?.provider_type === 'gowa'
-})
+// All accounts are GOWA providers; Meta-only restrictions (24h service
+// window) no longer apply. Kept as a computed for template bindings.
+const isCurrentAccountGowa = computed(() => true)
 
 // Add contact dialog state
 const isAddContactOpen = ref(false)
@@ -1188,51 +1181,16 @@ async function sendCannedResponse() {
   const replyButtons = buttons.filter(b => !b.type || b.type === 'reply')
   const urlButtons = buttons.filter(b => b.type === 'url')
 
-  // WhatsApp Cloud API supports: 1-3 reply buttons (interactive.button),
-  // 4-10 reply rows (interactive.list — backend's SendInteractiveButtons
-  // auto-picks the right shape), a single cta_url, or a single voice_call
-  // (Business Calling click-to-call). Phone buttons and multi-URL / mixed
-  // combos aren't representable; the detail-page validator blocks save for
-  // those, so the text fallback here is just a safety net.
-  const voiceCallButtons = buttons.filter(b => b.type === 'voice_call')
-  const flowButtons = buttons.filter(b => b.type === 'flow')
   let sendType: 'text' | 'interactive' = 'text'
   let interactive: {
-    type: 'button' | 'list' | 'cta_url' | 'voice_call' | 'flow'
+    type: 'button' | 'list' | 'cta_url'
     body: string
     buttons?: Array<{ id: string; title: string }>
     button_text?: string
     url?: string
-    display_text?: string
-    ttl_minutes?: number
-    flow_id?: string
-    first_screen?: string
   } | undefined
 
-  if (buttons.length === 1 && flowButtons.length === 1) {
-    const f = flowButtons[0]
-    sendType = 'interactive'
-    interactive = {
-      type: 'flow',
-      body,
-      // The button title is the CTA label shown to the customer.
-      button_text: resolveCannedTokens(f.title),
-      flow_id: f.flow_id,
-      first_screen: f.screen,
-    }
-  } else if (buttons.length === 1 && voiceCallButtons.length === 1) {
-    const vc = voiceCallButtons[0]
-    sendType = 'interactive'
-    interactive = {
-      type: 'voice_call',
-      body,
-      // {{...}} tokens already resolved in the canned-preview path; the
-      // button title is what becomes Meta's display_text. Backend
-      // truncates to 20 chars and stamps the agent-id payload.
-      display_text: resolveCannedTokens(vc.title),
-      ttl_minutes: vc.ttl_minutes ?? 15,
-    }
-  } else if (buttons.length > 0 && replyButtons.length === buttons.length && replyButtons.length <= 10) {
+  if (buttons.length > 0 && replyButtons.length === buttons.length && replyButtons.length <= 10) {
     sendType = 'interactive'
     interactive = {
       type: replyButtons.length <= 3 ? 'button' : 'list',
@@ -1884,33 +1842,6 @@ function getCTAUrlData(message: Message): CTAUrlData | null {
   }
 }
 
-interface VoiceCallData {
-  display_text: string
-  ttl_minutes?: number
-}
-
-function getVoiceCallData(message: Message): VoiceCallData | null {
-  if (message.message_type !== 'interactive' || !message.interactive_data) {
-    return null
-  }
-  if (message.interactive_data.type !== 'voice_call') {
-    return null
-  }
-  return {
-    display_text: (message.interactive_data as any).display_text || 'Call',
-    ttl_minutes: (message.interactive_data as any).ttl_minutes,
-  }
-}
-
-function getFlowButtonText(message: Message): string | null {
-  if (message.message_type !== 'flow') {
-    return null
-  }
-  if (!message.interactive_data) {
-    return null
-  }
-  return (message.interactive_data as any).button_text || 'Open'
-}
 
 function isMediaMessage(message: Message): boolean {
   return ['image', 'video', 'audio', 'document'].includes(message.message_type)
@@ -3024,25 +2955,7 @@ async function sendMediaMessage() {
                     {{ getCTAUrlData(message)?.button_text }}
                   </div>
                 </a>
-                <!-- Voice call button - WhatsApp style, non-clickable in our chat -->
-                <div
-                  v-if="getVoiceCallData(message)"
-                  class="interactive-buttons mt-2 -mx-2 -mb-1.5 border-t"
-                >
-                  <div class="py-2 text-sm text-center font-medium flex items-center justify-center gap-1.5">
-                    <PhoneCall class="h-3.5 w-3.5" />
-                    {{ getVoiceCallData(message)?.display_text }}
-                  </div>
-                </div>
-                <!-- Flow button - WhatsApp style -->
-                <div
-                  v-if="getFlowButtonText(message)"
-                  class="interactive-buttons mt-2 -mx-2 -mb-1.5 border-t"
-                >
-                  <div class="py-2 text-sm text-center font-medium">
-                    {{ getFlowButtonText(message) }}
-                  </div>
-                </div>
+
                 <!-- Time for messages without text content -->
                 <span v-if="!getMessageContent(message) && !(isMediaMessage(message) && !message.media_url)" class="chat-bubble-time block clear-both">
                   <span>{{ formatMessageTime(message.created_at) }}</span>
@@ -3416,11 +3329,7 @@ async function sendMediaMessage() {
             <label class="text-xs font-medium text-muted-foreground">{{ $t('chat.preview') }}</label>
             <div id="canned-response-preview" class="chat-bubble chat-bubble-outgoing ml-auto" style="max-width: 100%;">
               <span v-if="cannedPreview" class="whitespace-pre-wrap break-words text-sm">{{ cannedPreview }}</span>
-              <PreviewButtonGroup
-                v-if="cannedPreviewButtons.length"
-                :buttons="cannedPreviewButtons"
-                disabled
-              />
+
             </div>
           </div>
         </div>

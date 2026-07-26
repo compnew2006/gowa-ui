@@ -916,7 +916,7 @@ func TestApp_SendMessage(t *testing.T) {
 
 	t.Run("success - text message", func(t *testing.T) {
 		t.Parallel()
-		mockServer := newMockWhatsAppServer()
+		mockServer := newMockGowaServer()
 		defer mockServer.close()
 
 		app := newMsgTestApp(t, mockServer)
@@ -972,7 +972,7 @@ func TestApp_SendMessage(t *testing.T) {
 
 	t.Run("contact not found", func(t *testing.T) {
 		t.Parallel()
-		mockServer := newMockWhatsAppServer()
+		mockServer := newMockGowaServer()
 		defer mockServer.close()
 
 		app := newMsgTestApp(t, mockServer)
@@ -1017,7 +1017,7 @@ func TestApp_SendMessage(t *testing.T) {
 
 	t.Run("cross-org isolation", func(t *testing.T) {
 		t.Parallel()
-		mockServer := newMockWhatsAppServer()
+		mockServer := newMockGowaServer()
 		defer mockServer.close()
 
 		app := newMsgTestApp(t, mockServer)
@@ -1045,7 +1045,7 @@ func TestApp_SendMessage(t *testing.T) {
 
 	t.Run("no whatsapp account configured", func(t *testing.T) {
 		t.Parallel()
-		mockServer := newMockWhatsAppServer()
+		mockServer := newMockGowaServer()
 		defer mockServer.close()
 
 		app := newMsgTestApp(t, mockServer)
@@ -1071,7 +1071,7 @@ func TestApp_SendMessage(t *testing.T) {
 
 	t.Run("success with reply context", func(t *testing.T) {
 		t.Parallel()
-		mockServer := newMockWhatsAppServer()
+		mockServer := newMockGowaServer()
 		defer mockServer.close()
 
 		app := newMsgTestApp(t, mockServer)

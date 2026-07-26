@@ -299,17 +299,11 @@ export const messagesService = {
       whatsapp_account?: string
       // Interactive payload. Mirrors backend InteractiveContent.
       interactive?: {
-        type: 'button' | 'cta_url' | 'list' | 'voice_call' | 'flow'
+        type: 'button' | 'cta_url' | 'list'
         body: string
         buttons?: Array<{ id: string; title: string }>
         button_text?: string
         url?: string
-        // voice_call only
-        display_text?: string
-        ttl_minutes?: number
-        // flow only
-        flow_id?: string
-        first_screen?: string
         header?: string
       }
     },
@@ -354,18 +348,6 @@ export const templatesService = {
   list: (params?: { status?: string; category?: string; account?: string; search?: string; page?: number; limit?: number }) =>
     api.get<{ templates: any[]; total?: number }>('/templates', { params }),
   get: (id: string) => api.get(`/templates/${id}`)
-}
-
-export const flowsService = {
-  list: (params?: { account?: string; search?: string; page?: number; limit?: number }) =>
-    api.get<{ flows: any[]; total?: number }>('/flows', { params }),
-  create: (data: any) => api.post('/flows', data),
-  update: (id: string, data: any) => api.put(`/flows/${id}`, data),
-  delete: (id: string) => api.delete(`/flows/${id}`),
-  saveToMeta: (id: string) => api.post(`/flows/${id}/save-to-meta`),
-  publish: (id: string) => api.post(`/flows/${id}/publish`),
-  duplicate: (id: string) => api.post(`/flows/${id}/duplicate`),
-  sync: (whatsappAccount: string) => api.post('/flows/sync', { whatsapp_account: whatsappAccount })
 }
 
 export const campaignsService = {
@@ -451,13 +433,12 @@ export const chatbotService = {
 export interface CannedResponseButton {
   id: string
   title: string
-  type?: 'reply' | 'url' | 'phone' | 'voice_call' | 'flow'
+  type?: 'reply' | 'url' | 'phone'
   url?: string
   phone_number?: string
-  ttl_minutes?: number
-  flow_id?: string
-  screen?: string
 }
+
+export type ButtonConfig = CannedResponseButton
 
 export interface CannedResponse {
   id: string
@@ -616,14 +597,6 @@ export const organizationService = {
     timezone?: string
     date_format?: string
     name?: string
-    calling_enabled?: boolean
-    max_call_duration?: number
-    transfer_timeout_secs?: number
-    hold_music_file?: string
-    ringback_file?: string
-    meta_app_id?: string
-    meta_config_id?: string
-    meta_app_secret?: string
   }) => api.put('/org/settings', data)
 }
 
@@ -933,7 +906,6 @@ export type ChatNodeType =
   | 'transfer'
   | 'webhook'
   | 'goto_flow'
-  | 'whatsapp_flow'
 
 export interface ChatNode {
   id: string
@@ -1017,54 +989,4 @@ export const gowaServersService = {
     api.get<{ webhook: { webhook_url: string; webhook_events: string; webhook_insecure_skip_verify: boolean } }>(`/gowa/servers/${serverId}/devices/${encodeURIComponent(deviceId)}/webhook`),
   setDeviceWebhook: (serverId: string, deviceId: string, data: { webhook_url: string; webhook_events: string; webhook_insecure_skip_verify?: boolean }) =>
     api.put(`/gowa/servers/${serverId}/devices/${encodeURIComponent(deviceId)}/webhook`, data),
-}
-
-// ---- Catalogs & Products ----
-export interface Catalog {
-  id: string
-  meta_catalog_id: string
-  whatsapp_account: string
-  name: string
-  is_active: boolean
-  product_count: number
-  created_at: string
-  updated_at: string
-  products?: CatalogProduct[]
-}
-
-export interface CatalogProduct {
-  id: string
-  meta_product_id: string
-  name: string
-  description: string
-  price: number
-  currency: string
-  url: string
-  image_url: string
-  retailer_id: string
-  is_active: boolean
-  created_at: string
-  updated_at: string
-}
-
-export const catalogsService = {
-  list: (params?: { whatsapp_account?: string }) =>
-    api.get<{ catalogs: Catalog[] }>('/catalogs', { params }),
-  get: (id: string) => api.get<Catalog>(`/catalogs/${id}`),
-  create: (data: { whatsapp_account: string; name: string }) =>
-    api.post<Catalog>('/catalogs', data),
-  delete: (id: string) => api.delete(`/catalogs/${id}`),
-  sync: (data: { whatsapp_account: string }) =>
-    api.post<{ message: string; synced: number; total: number }>('/catalogs/sync', data),
-  listProducts: (catalogId: string) =>
-    api.get<{ products: CatalogProduct[] }>(`/catalogs/${catalogId}/products`),
-  createProduct: (catalogId: string, data: Partial<CatalogProduct>) =>
-    api.post<CatalogProduct>(`/catalogs/${catalogId}/products`, data),
-}
-
-export const productsService = {
-  get: (id: string) => api.get<CatalogProduct>(`/products/${id}`),
-  update: (id: string, data: Partial<CatalogProduct>) =>
-    api.put<CatalogProduct>(`/products/${id}`, data),
-  delete: (id: string) => api.delete(`/products/${id}`),
 }
