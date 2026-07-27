@@ -132,6 +132,8 @@ func (a *App) handleGowaWebhook(r *fastglue.Request, pathDeviceID string) error 
 		go a.processGowaRevoked(account, &envelope)
 	case "message.edited":
 		go a.processGowaEdited(account, &envelope)
+	case "call.offer":
+		go a.processGowaCallOffer(account, &envelope)
 	default:
 		a.Log.Debug("Unhandled GOWA event type", "event", envelope.Event)
 	}

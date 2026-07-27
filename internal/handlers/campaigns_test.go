@@ -698,6 +698,73 @@ func TestApp_ImportRecipients_Success(t *testing.T) {
 	assert.Equal(t, int64(2), resp.Data.TotalRecipients)
 }
 
+// Campaigns may only target individual numbers — group/newsletter JIDs and
+// malformed entries must be skipped, never stored as recipients.
+func TestApp_ImportRecipients_RejectsGroupsAndNewsletters(t *testing.T) {
+	mockQueue := testutil.NewMockQueue()
+	app := newTestApp(t, withQueue(mockQueue))
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("import-no-groups")), testutil.WithPassword("password"))
+	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("import-no-groups-account"))
+	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
+	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, models.CampaignStatusDraft)
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"recipients": []map[string]any{
+			{"phone_number": "+1234567890", "recipient_name": "John Doe"},
+			{"phone_number": "120363322157268559@g.us", "recipient_name": "Some Group"},
+			{"phone_number": "120363322157268559", "recipient_name": "Group bare ID"},
+			{"phone_number": "120363163799333272@newsletter", "recipient_name": "Newsletter"},
+			{"phone_number": "not-a-number", "recipient_name": "Garbage"},
+		},
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", campaign.ID.String())
+
+	err := app.ImportRecipients(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp struct {
+		Data struct {
+			AddedCount      int   `json:"added_count"`
+			SkippedCount    int   `json:"skipped_count"`
+			TotalRecipients int64 `json:"total_recipients"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+	assert.Equal(t, 1, resp.Data.AddedCount)
+	assert.Equal(t, 4, resp.Data.SkippedCount)
+	assert.Equal(t, int64(1), resp.Data.TotalRecipients)
+
+	var stored []models.BulkMessageRecipient
+	require.NoError(t, app.DB.Where("campaign_id = ?", campaign.ID).Find(&stored).Error)
+	require.Len(t, stored, 1)
+	assert.Equal(t, "1234567890", stored[0].PhoneNumber) // normalized, + stripped
+}
+
+func TestApp_ImportRecipients_AllInvalid(t *testing.T) {
+	mockQueue := testutil.NewMockQueue()
+	app := newTestApp(t, withQueue(mockQueue))
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("import-all-invalid")), testutil.WithPassword("password"))
+	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("import-all-invalid-account"))
+	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
+	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, models.CampaignStatusDraft)
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"recipients": []map[string]any{
+			{"phone_number": "120363322157268559@g.us"},
+		},
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", campaign.ID.String())
+
+	err := app.ImportRecipients(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusBadRequest, testutil.GetResponseStatusCode(req))
+}
+
 func TestApp_ImportRecipients_WithTemplateParams(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))

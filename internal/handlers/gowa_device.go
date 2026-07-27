@@ -164,7 +164,7 @@ func (a *App) GowaCreateDevice(r *fastglue.Request) error {
 	device, err := gowaClient.CreateDevice(ctx, deviceID, gowa.WebhookConfig{
 		WebhookURL:    webhookURL,
 		WebhookSecret: webhookSecret,
-		WebhookEvents: "message,message.ack,chat_presence,connection,message.reaction,message.revoked,message.edited",
+		WebhookEvents: "message,message.ack,chat_presence,connection,message.reaction,message.revoked,message.edited,call.offer",
 	})
 	if err != nil {
 		a.Log.Error("Failed to create GOWA device", "error", err, "base_url", req.BaseURL)

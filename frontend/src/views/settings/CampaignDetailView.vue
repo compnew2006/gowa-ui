@@ -684,6 +684,18 @@ function toggleSelectAllContacts(checked: boolean | 'indeterminate') {
   selectedContactIds.value = next
 }
 
+// Campaign recipients must be individual numbers. Group/newsletter JIDs
+// (…@g.us / …@newsletter) and their bare 12036x IDs can't receive template
+// broadcasts — mirror the backend's normalizeRecipientPhone rules.
+function normalizeRecipientPhone(raw: string): string | null {
+  const trimmed = (raw || '').trim()
+  if (trimmed.includes('@')) return null
+  const phone = trimmed.replace(/^\+/, '')
+  if (!/^\d{6,15}$/.test(phone)) return null
+  if (phone.startsWith('120362') || phone.startsWith('120363')) return null
+  return phone
+}
+
 async function addRecipientsFromContacts() {
   if (!campaign.value) return
   const chosen = accountContacts.value.filter(c => selectedContactIds.value.has(c.id))
@@ -691,16 +703,27 @@ async function addRecipientsFromContacts() {
     toast.error(t('campaigns.selectAtLeastOneContact', 'Please select at least one contact'))
     return
   }
-  const recipientsList = chosen.map(c => {
-    const recipient: { phone_number: string; recipient_name?: string } = {
-      phone_number: (c.phone_number || '').replace(/[^\d+]/g, ''),
+  let skippedInvalid = 0
+  const recipientsList: { phone_number: string; recipient_name?: string }[] = []
+  for (const c of chosen) {
+    const phone = normalizeRecipientPhone(c.phone_number || '')
+    if (!phone) {
+      skippedInvalid++
+      continue
     }
+    const recipient: { phone_number: string; recipient_name?: string } = { phone_number: phone }
     const name = c.profile_name || c.name
     if (name && name.trim()) {
       recipient.recipient_name = name.trim()
     }
-    return recipient
-  })
+    recipientsList.push(recipient)
+  }
+  if (skippedInvalid > 0) {
+    toast.warning(t('campaigns.skippedGroups', { count: skippedInvalid }, `Skipped ${skippedInvalid} group/invalid entries — only phone numbers are allowed`))
+  }
+  if (recipientsList.length === 0) {
+    return
+  }
 
   isAddingRecipients.value = true
   try {
@@ -731,10 +754,10 @@ const manualInputValidation = computed(() => {
 
   for (let i = 0; i < lines.length; i++) {
     const parts = lines[i].split(',').map((p: string) => p.trim())
-    const phone = parts[0]?.replace(/[^\d+]/g, '')
+    const phone = normalizeRecipientPhone(parts[0] || '')
 
-    if (!phone || !phone.match(/^\+?\d{10,15}$/)) {
-      invalidLines.push({ lineNumber: i + 1, reason: 'Invalid phone number' })
+    if (!phone) {
+      invalidLines.push({ lineNumber: i + 1, reason: 'Invalid phone number (groups are not allowed — numbers only)' })
       continue
     }
 
@@ -800,7 +823,7 @@ async function addRecipients() {
       template_params?: Record<string, any>
       header_params?: Record<string, any>
     } = {
-      phone_number: parts[0].replace(/[^\d+]/g, ''),
+      phone_number: normalizeRecipientPhone(parts[0]) || '',
     }
     if (parts[1]?.trim()) {
       recipient.recipient_name = parts[1].trim()
@@ -941,10 +964,16 @@ async function addRecipientsFromCSV() {
       header_params?: Record<string, any>
     }[] = []
 
+    let csvSkippedInvalid = 0
     for (let i = 1; i < lines.length; i++) {
       const values = lines[i].split(',').map(v => v.trim())
-      const phone = values[phoneIndex]?.replace(/[^\d+]/g, '')
-      if (!phone) continue
+      const rawPhone = values[phoneIndex] || ''
+      if (!rawPhone) continue
+      const phone = normalizeRecipientPhone(rawPhone)
+      if (!phone) {
+        csvSkippedInvalid++
+        continue
+      }
 
       const recipient: {
         phone_number: string
@@ -995,6 +1024,9 @@ async function addRecipientsFromCSV() {
       recipientsList.push(recipient)
     }
 
+    if (csvSkippedInvalid > 0) {
+      toast.warning(t('campaigns.skippedGroups', { count: csvSkippedInvalid }, `Skipped ${csvSkippedInvalid} group/invalid entries — only phone numbers are allowed`))
+    }
     if (recipientsList.length === 0) {
       toast.error(t('campaigns.noValidRowsToImport', 'No valid rows found in CSV'))
       isAddingRecipients.value = false

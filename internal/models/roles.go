@@ -55,6 +55,8 @@ const (
 	ResourceSettingsNotification = "settings.notification"
 	// Audit-only resource for the close-rating settings tab (not a permission).
 	ResourceSettingsCloseRating = "settings.close_rating"
+	// Audit-only resource for the call-auto-reject settings tab (not a permission).
+	ResourceSettingsCallAutoReject = "settings.call_auto_reject"
 	// Chatbot sub-resources — used only as audit_log resource_type values
 	// for per-tab activity feeds, not checked by the permission system.
 	ResourceSettingsChatbotMessages = "settings.chatbot.messages"

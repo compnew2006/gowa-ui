@@ -88,6 +88,14 @@ type EditedPayload struct {
 	ChatID            string `json:"chat_id,omitempty"`
 }
 
+// CallOfferPayload is decoded when event == "call.offer" (incoming call
+// ringing). payload.from and payload.call_id are the exact values the
+// POST /call/reject endpoint requires (caller_jid / call_id).
+type CallOfferPayload struct {
+	CallID string `json:"call_id"`
+	From   string `json:"from"`
+}
+
 // ConnectionPayload is decoded when event == "connection".
 // GOWA sends connection events when a device connects, disconnects,
 // or its connection state changes.

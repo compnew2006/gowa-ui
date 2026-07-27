@@ -136,7 +136,7 @@ const webhookDevice = ref<GowaDevice | null>(null);
 const webhookForm = ref({
   webhook_url: "",
   webhook_events:
-    "message,message.ack,chat_presence,connection,message.reaction,message.revoked,message.edited",
+    "message,message.ack,chat_presence,connection,message.reaction,message.revoked,message.edited,call.offer",
   webhook_insecure_skip_verify: false,
 });
 const webhookSaving = ref(false);
@@ -371,7 +371,7 @@ async function openWebhook(d: GowaDevice) {
     webhook_url: d.webhook_url || "",
     webhook_events:
       d.webhook_events ||
-      "message,message.ack,chat_presence,connection,message.reaction,message.revoked,message.edited",
+      "message,message.ack,chat_presence,connection,message.reaction,message.revoked,message.edited,call.offer",
     webhook_insecure_skip_verify: false,
   };
   webhookOpen.value = true;

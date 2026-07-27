@@ -187,6 +187,8 @@ func TestRejectCall_SendsCallerJIDAndCallID(t *testing.T) {
 	t.Parallel()
 	mock := newMockAPIServer()
 	defer mock.close()
+	// Real GOWA answers /call/reject with a GenericResponse — no message_id.
+	mock.respBody = `{"code":"SUCCESS","message":"Success","results":null}`
 	c := gowa.New(mock.url(), "", "")
 
 	err := c.RejectCall(context.Background(), "dev1", "caller@s.whatsapp.net", "CALL_123")

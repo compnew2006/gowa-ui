@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,7 +24,7 @@ type AuditLogResponse struct {
 }
 
 // ListAuditLogs returns audit logs with optional filters.
-// Supported query params: resource_type, resource_id, user_id, action, from, to, page, limit.
+// Supported query params: resource_type (comma-separated allowed), resource_id, user_id, action, from, to, page, limit.
 func (a *App) ListAuditLogs(r *fastglue.Request) error {
 	orgID, _, err := a.requireAuth(r, models.ResourceAuditLogs, models.ActionRead)
 	if err != nil {
@@ -33,8 +34,30 @@ func (a *App) ListAuditLogs(r *fastglue.Request) error {
 	// Build query with optional filters
 	baseQuery := a.DB.Where("organization_id = ?", orgID)
 
-	if v := string(r.RequestCtx.QueryArgs().Peek("resource_type")); v != "" {
-		baseQuery = baseQuery.Where("resource_type = ?", v)
+	if v := strings.TrimSpace(string(r.RequestCtx.QueryArgs().Peek("resource_type"))); v != "" {
+		// Comma-separated values (e.g. "account,settings.close_rating") expand to
+		// an IN query so a single Activity Log can aggregate multiple resource
+		// types that share the same resource_id (e.g. an account and its
+		// per-account settings blocks). A single value collapses to "=".
+		parts := strings.Split(v, ",")
+		for i := range parts {
+			parts[i] = strings.TrimSpace(parts[i])
+		}
+		n := 0
+		for _, p := range parts {
+			if p != "" {
+				parts[n] = p
+				n++
+			}
+		}
+		parts = parts[:n]
+		switch len(parts) {
+		case 0:
+		case 1:
+			baseQuery = baseQuery.Where("resource_type = ?", parts[0])
+		default:
+			baseQuery = baseQuery.Where("resource_type IN ?", parts)
+		}
 	}
 
 	if v := string(r.RequestCtx.QueryArgs().Peek("resource_id")); v != "" {

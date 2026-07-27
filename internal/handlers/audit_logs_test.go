@@ -98,6 +98,48 @@ func TestApp_ListAuditLogs_FilterByResourceType(t *testing.T) {
 	}
 }
 
+func TestApp_ListAuditLogs_FilterByResourceTypeMulti(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	role := auditLogsRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&role.ID))
+
+	// An account and its per-account settings blocks (close_rating, call_auto_reject)
+	// all share the same resource_id but use distinct resource_type strings. The
+	// account detail page aggregates them into a single Activity Log via a
+	// comma-separated resource_type filter.
+	accountID := uuid.New()
+	makeAuditLog(t, app.DB, org.ID, user.ID, accountID, "account", models.AuditActionCreated, time.Now())
+	makeAuditLog(t, app.DB, org.ID, user.ID, accountID, "settings.close_rating", models.AuditActionUpdated, time.Now())
+	makeAuditLog(t, app.DB, org.ID, user.ID, accountID, "settings.call_auto_reject", models.AuditActionUpdated, time.Now())
+	// Noise: same resource_id but a type not in the filter, plus a different id.
+	makeAuditLog(t, app.DB, org.ID, user.ID, accountID, "contact", models.AuditActionCreated, time.Now())
+	makeAuditLog(t, app.DB, org.ID, user.ID, uuid.New(), "account", models.AuditActionCreated, time.Now())
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetQueryParam(req, "resource_type", "account,settings.close_rating,settings.call_auto_reject")
+	testutil.SetQueryParam(req, "resource_id", accountID.String())
+
+	require.NoError(t, app.ListAuditLogs(req))
+	var resp struct {
+		Data struct {
+			AuditLogs []handlers.AuditLogResponse `json:"audit_logs"`
+			Total     int                         `json:"total"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+	assert.Equal(t, 3, resp.Data.Total, "comma-separated filter must match the 3 selected types for the account")
+	types := map[string]bool{}
+	for _, l := range resp.Data.AuditLogs {
+		types[l.ResourceType] = true
+		assert.Equal(t, accountID, l.ResourceID)
+	}
+	assert.True(t, types["account"])
+	assert.True(t, types["settings.close_rating"])
+	assert.True(t, types["settings.call_auto_reject"])
+}
+
 func TestApp_ListAuditLogs_FilterByAction(t *testing.T) {
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)

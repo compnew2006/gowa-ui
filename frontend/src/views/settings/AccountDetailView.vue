@@ -12,6 +12,7 @@ import MetadataPanel from '@/components/shared/MetadataPanel.vue'
 import AuditLogPanel from '@/components/shared/AuditLogPanel.vue'
 import UnsavedChangesDialog from '@/components/shared/UnsavedChangesDialog.vue'
 import AccountCloseRatingPanel from '@/components/settings/AccountCloseRatingPanel.vue'
+import AccountCallRejectPanel from '@/components/settings/AccountCallRejectPanel.vue'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -95,6 +96,20 @@ const { showLeaveDialog, confirmLeave, cancelLeave } = useUnsavedChangesGuard(ha
 const canWrite = computed(() => authStore.hasPermission('accounts', 'write'))
 const canDelete = computed(() => authStore.hasPermission('accounts', 'delete'))
 const canWriteDevices = computed(() => authStore.hasPermission('devices', 'write'))
+
+// Single Activity Log aggregates every audit entry tied to this account: the
+// account itself plus its per-account settings blocks (close_rating and
+// call_auto_reject), which share the account's resource_id. Bumped after the
+// account or a child panel saves to remount the panel and refetch.
+const accountLogKey = ref(0)
+const accountLogResourceTypes = [
+  'account',
+  'settings.close_rating',
+  'settings.call_auto_reject',
+]
+function bumpAccountLog() {
+  accountLogKey.value++
+}
 
 const form = ref({
   name: '',
@@ -188,6 +203,9 @@ async function save() {
       await loadAccount()
       hasChanges.value = false
       toast.success(t('common.updatedSuccess', { resource: t('resources.Account', 'Account') }))
+      // loadAccount() refetched the account; the Activity Log is keyed, so bump
+      // it after a short delay to let the backend persist the audit entry.
+      setTimeout(bumpAccountLog, 500)
     }
   } catch (e) {
     toast.error(getErrorMessage(e, t('common.failedSave', { resource: t('resources.account', 'account') })))
@@ -502,12 +520,22 @@ onMounted(async () => {
         v-if="account && !isNew"
         :account-id="account.id"
         :can-write="canWrite"
+        @saved="bumpAccountLog"
       />
 
-      <!-- Activity Log -->
+      <!-- Per-account call auto-reject (toggle + automated message) -->
+      <AccountCallRejectPanel
+        v-if="account && !isNew"
+        :account-id="account.id"
+        :can-write="canWrite"
+        @saved="bumpAccountLog"
+      />
+
+      <!-- Activity Log (aggregated: account + per-account settings blocks) -->
       <AuditLogPanel
         v-if="account && !isNew"
-        resource-type="account"
+        :key="accountLogKey"
+        :resource-type="accountLogResourceTypes"
         :resource-id="account.id"
       />
 

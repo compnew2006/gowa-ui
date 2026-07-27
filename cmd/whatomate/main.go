@@ -686,6 +686,10 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.PUT("/api/accounts/{id}/close-rating", app.UpdateCloseRatingSettings)
 	g.GET("/api/accounts/{id}/close-rating/stats", app.GetCloseRatingStats)
 
+	// Per-account call auto-reject (settings live on the WhatsApp account)
+	g.GET("/api/accounts/{id}/call-auto-reject", app.GetCallAutoRejectSettings)
+	g.PUT("/api/accounts/{id}/call-auto-reject", app.UpdateCallAutoRejectSettings)
+
 	// GOWA device management (QR code, pair code, connection status)
 	g.POST("/api/accounts/{id}/gowa/pair-code", app.GowaPairCode)
 

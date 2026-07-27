@@ -4,7 +4,6 @@ import { useI18n } from 'vue-i18n'
 import { toast } from 'vue-sonner'
 import { closeRatingService } from '@/services/api'
 import type { CloseRatingStats } from '@/services/api'
-import AuditLogPanel from '@/components/shared/AuditLogPanel.vue'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -23,6 +22,11 @@ const props = defineProps<{
   canWrite: boolean
 }>()
 
+// Emitted after a successful save so the parent (AccountDetailView) can refresh
+// the unified Activity Log. The close_rating audit entry shares the account's
+// resource_id, so it surfaces in the parent's aggregated timeline.
+const emit = defineEmits<{ (e: 'saved'): void }>()
+
 const { t } = useI18n()
 
 // The lexicon is edited as rows and re-assembled into a word→rating record on save.
@@ -35,10 +39,6 @@ const ratingSettings = ref({
 const lexiconRows = ref<Array<{ word: string; rating: string }>>([])
 const ratingStats = ref<CloseRatingStats | null>(null)
 const isSubmitting = ref(false)
-
-// Bumped after a save to remount the AuditLogPanel; the backend writes audit
-// entries asynchronously, so the remount is delayed slightly.
-const ratingLogKey = ref(0)
 
 onMounted(async () => {
   // Loaded independently: a stats failure must not blank the settings form
@@ -99,7 +99,9 @@ async function saveRatingSettings() {
       lexicon
     })
     toast.success(t('settings.ratingSaved'))
-    setTimeout(() => { ratingLogKey.value++ }, 500)
+    // Give the backend a moment to write the audit entry, then let the parent
+    // refresh its unified Activity Log.
+    setTimeout(() => emit('saved'), 500)
   } catch (error) {
     toast.error(t('common.failedSave', { resource: t('resources.settings') }))
   } finally {
@@ -235,7 +237,5 @@ async function saveRatingSettings() {
         </div>
       </CardContent>
     </Card>
-
-    <AuditLogPanel :key="ratingLogKey" resource-type="settings.close_rating" :resource-id="accountId" />
   </div>
 </template>

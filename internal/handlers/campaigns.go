@@ -646,6 +646,33 @@ func (a *App) RetryFailed(r *fastglue.Request) error {
 	})
 }
 
+// normalizeRecipientPhone validates that a campaign recipient is an individual
+// phone number and returns it in normalized (digits-only) form. Group and
+// newsletter JIDs (e.g. 120363322157268559@g.us) must never become campaign
+// recipients — template broadcasts can only target individual numbers.
+func normalizeRecipientPhone(phone string) (string, bool) {
+	phone = strings.TrimSpace(phone)
+	// JIDs carry a domain suffix (@g.us, @newsletter, @s.whatsapp.net, …)
+	if strings.Contains(phone, "@") {
+		return "", false
+	}
+	phone = strings.TrimPrefix(phone, "+")
+	for _, ch := range phone {
+		if ch < '0' || ch > '9' {
+			return "", false
+		}
+	}
+	// E.164 numbers are at most 15 digits; group/newsletter IDs are ~18 digits
+	// and start with the WhatsApp group prefixes.
+	if len(phone) < 6 || len(phone) > 15 {
+		return "", false
+	}
+	if strings.HasPrefix(phone, "120362") || strings.HasPrefix(phone, "120363") {
+		return "", false
+	}
+	return phone, true
+}
+
 // ImportRecipients implements adding recipients to a campaign
 func (a *App) ImportRecipients(r *fastglue.Request) error {
 	orgID, userID, err := a.getOrgAndUserID(r)
@@ -674,17 +701,32 @@ func (a *App) ImportRecipients(r *fastglue.Request) error {
 		return nil
 	}
 
-	// Create recipients
-	recipients := make([]models.BulkMessageRecipient, len(req.Recipients))
-	for i, rec := range req.Recipients {
-		recipients[i] = models.BulkMessageRecipient{
+	// Create recipients — groups/newsletters and malformed numbers are skipped,
+	// campaigns may only target individual phone numbers.
+	recipients := make([]models.BulkMessageRecipient, 0, len(req.Recipients))
+	skipped := make([]string, 0)
+	for _, rec := range req.Recipients {
+		phone, ok := normalizeRecipientPhone(rec.PhoneNumber)
+		if !ok {
+			skipped = append(skipped, rec.PhoneNumber)
+			continue
+		}
+		recipients = append(recipients, models.BulkMessageRecipient{
 			CampaignID:     id,
-			PhoneNumber:    rec.PhoneNumber,
+			PhoneNumber:    phone,
 			RecipientName:  rec.RecipientName,
 			TemplateParams: models.JSONB(rec.TemplateParams),
 			HeaderParams:   models.JSONB(rec.HeaderParams),
 			Status:         models.MessageStatusPending,
-		}
+		})
+	}
+
+	if len(skipped) > 0 {
+		a.Log.Warn("Skipped invalid campaign recipients", "campaign_id", id, "skipped", skipped)
+	}
+	if len(recipients) == 0 {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest,
+			"No valid phone numbers — groups and newsletters cannot be campaign recipients", nil, "")
 	}
 
 	if err := a.DB.Create(&recipients).Error; err != nil {
@@ -697,24 +739,20 @@ func (a *App) ImportRecipients(r *fastglue.Request) error {
 	a.DB.Model(&models.BulkMessageRecipient{}).Where("campaign_id = ?", id).Count(&totalCount)
 	a.DB.Model(campaign).Update("total_recipients", totalCount)
 
-	a.Log.Info("Recipients added to campaign", "campaign_id", id, "count", len(req.Recipients))
+	a.Log.Info("Recipients added to campaign", "campaign_id", id, "count", len(recipients))
 
-	// Log recipient addition as audit
-	phoneNumbers := make([]string, len(req.Recipients))
-	for i, rec := range req.Recipients {
-		phoneNumbers[i] = rec.PhoneNumber
-	}
 	a.logAudit(orgID, userID,
 		"campaign", id, models.AuditActionUpdated, nil, nil,
 		map[string]any{
 			"field":     "recipients_added",
 			"old_value": nil,
-			"new_value": fmt.Sprintf("%d recipients added", len(req.Recipients)),
+			"new_value": fmt.Sprintf("%d recipients added", len(recipients)),
 		})
 
 	return r.SendEnvelope(map[string]any{
 		"message":          "Recipients added successfully",
-		"added_count":      len(req.Recipients),
+		"added_count":      len(recipients),
+		"skipped_count":    len(skipped),
 		"total_recipients": totalCount,
 	})
 }

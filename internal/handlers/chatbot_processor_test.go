@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/shridarpatil/whatomate/internal/config"
 	"github.com/shridarpatil/whatomate/internal/models"
 	"github.com/shridarpatil/whatomate/pkg/gowa"
 	"github.com/shridarpatil/whatomate/pkg/whatsapp"
@@ -61,6 +62,37 @@ func createProcessorTestOrg(t *testing.T, app *App) (*models.Organization, *mode
 	org := testutil.CreateTestOrganization(t, app.DB)
 	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
 	return org, account
+}
+
+// =============================================================================
+// processIncomingMessage — missing chatbot settings
+// =============================================================================
+
+// An org that never configured chatbot settings must still get incoming chats
+// into the agent queue — record-not-found used to abort before the
+// chatbot-disabled fallback ran.
+func TestProcessIncomingMessage_NoChatbotSettingsRoutesToQueue(t *testing.T) {
+	app := newProcessorTestApp(t)
+	if app.Redis == nil {
+		t.Skip("TEST_REDIS_URL not set, skipping cached-settings test")
+	}
+	app.Config = &config.Config{}
+	org, account := createProcessorTestOrg(t, app)
+
+	senderPhone := uniquePhone()
+	accountJID := uniquePhone() + "@s.whatsapp.net"
+	require.NoError(t, app.DB.Model(account).Update("gowa_jid", accountJID).Error)
+
+	incoming := textIncoming("XWAMID_"+uuid.New().String()[:12], senderPhone, gowa.PhoneFromJID(accountJID), "hi there")
+	app.processIncomingMessage(account, accountJID, incoming, "Caller", false, false, "", "")
+
+	var contact models.Contact
+	require.NoError(t, app.DB.Where("organization_id = ? AND phone_number = ?", org.ID, senderPhone).First(&contact).Error)
+
+	var transfers []models.AgentTransfer
+	require.NoError(t, app.DB.Where("organization_id = ? AND contact_id = ?", org.ID, contact.ID).Find(&transfers).Error)
+	require.Len(t, transfers, 1, "the message must be handed to the agent queue when no chatbot settings exist")
+	assert.Equal(t, models.TransferSourceChatbotDisabled, transfers[0].Source)
 }
 
 // =============================================================================

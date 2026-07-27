@@ -649,7 +649,14 @@
     "ratingLexiconDesc": "اربط كلمات العملاء بتقييمات — المدخلات تتجاوز القاموس المدمج",
     "ratingLexiconWordPlaceholder": "كلمة، مثل: يجنن",
     "ratingAddWord": "إضافة كلمة",
-    "ratingSaved": "تم حفظ إعدادات التقييم"
+    "ratingSaved": "تم حفظ إعدادات التقييم",
+    "callRejectSettings": "الرفض التلقائي للمكالمات",
+    "callRejectSettingsDesc": "رفض مكالمات واتساب الواردة على هذا الحساب تلقائيًا مع إمكانية الرد برسالة نصية",
+    "callRejectEnable": "تفعيل الرفض التلقائي للمكالمات",
+    "callRejectEnableDesc": "يتم رفض المكالمات الصوتية ومكالمات الفيديو الواردة أثناء الرنين",
+    "callRejectMessage": "الرسالة التلقائية",
+    "callRejectMessageDesc": "تُرسل للمتصل مباشرة بعد رفض المكالمة. اتركها فارغة للرفض بدون رسالة.",
+    "callRejectSaved": "تم حفظ إعدادات رفض المكالمات"
   },
   "sso": {
     "title": "تسجيل الدخول الموحد (SSO)",
@@ -1255,6 +1262,7 @@
     "duplicatePhone": "رقم هاتف مكرر (ظهر لأول مرة في الصف {row})",
     "templateRequiresParamsError": "القالب يتطلب {required} معامل(ات)، تم العثور على {found}",
     "noValidRowsToImport": "لا توجد صفوف صالحة للاستيراد",
+        "skippedGroups": "تم تخطي {count} مجموعة/مدخلات غير صالحة — الأرقام الفردية فقط مسموح بها",
     "addedFromCsv": "تم إضافة {count} مستلم من ملف CSV",
     "parseCsvFailed": "فشل تحليل ملف CSV",
     "invalidPhoneNumber": "رقم هاتف غير صالح",

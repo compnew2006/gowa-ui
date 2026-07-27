@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 	"github.com/shridarpatil/whatomate/internal/contactutil"
 	"github.com/shridarpatil/whatomate/internal/models"
 	"github.com/shridarpatil/whatomate/pkg/whatsapp"
+	"gorm.io/gorm"
 )
 
 func redactURLForLog(raw string) string {
@@ -244,6 +246,13 @@ func (a *App) processIncomingMessageFull(phoneNumberID string, msg IncomingTextM
 
 	// Check if chatbot is enabled for this account (use cache)
 	settings, err := a.getChatbotSettingsCached(account.OrganizationID, account.Name)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		// No chatbot settings configured at all — treat as disabled so the
+		// conversation still lands in the agent queue instead of stalling.
+		a.Log.Debug("No chatbot settings configured, routing to agent queue", "account", account.Name)
+		a.createTransferToQueue(account, contact, models.TransferSourceChatbotDisabled)
+		return
+	}
 	if err != nil {
 		a.Log.Error("Failed to load chatbot settings", "error", err, "account", account.Name, "org_id", account.OrganizationID)
 		return

@@ -649,7 +649,14 @@
     "ratingLexiconDesc": "Map customer words to ratings — entries override the built-in dictionary",
     "ratingLexiconWordPlaceholder": "Word, e.g. awesome",
     "ratingAddWord": "Add word",
-    "ratingSaved": "Rating settings saved"
+    "ratingSaved": "Rating settings saved",
+    "callRejectSettings": "Call Auto-Reject",
+    "callRejectSettingsDesc": "Automatically reject incoming WhatsApp calls on this account and optionally reply with a text message",
+    "callRejectEnable": "Enable call auto-reject",
+    "callRejectEnableDesc": "Incoming voice and video calls are rejected while still ringing",
+    "callRejectMessage": "Automated message",
+    "callRejectMessageDesc": "Sent to the caller right after the call is rejected. Leave empty to reject silently.",
+    "callRejectSaved": "Call auto-reject settings saved"
   },
   "users": {
     "title": "User Management",
@@ -1458,6 +1465,7 @@
     "duplicatePhone": "Duplicate phone number (first seen in row {row})",
     "templateRequiresParamsError": "Template requires {required} parameter(s), found {found}",
     "noValidRowsToImport": "No valid rows to import",
+    "skippedGroups": "Skipped {count} group/invalid entries — only phone numbers are allowed",
     "addedFromCsv": "Added {count} recipients from CSV",
     "parseCsvFailed": "Failed to parse CSV file",
     "invalidPhoneNumber": "Invalid phone number",

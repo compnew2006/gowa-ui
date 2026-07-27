@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { auditLogsService, type AuditLogEntry } from '@/services/api'
 import { formatDateTime, formatLabel } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -8,7 +8,10 @@ import { Button } from '@/components/ui/button'
 import { History, Plus, Pencil, Trash2, Loader2, ChevronDown } from 'lucide-vue-next'
 
 const props = defineProps<{
-  resourceType: string
+  // A single resource type ("account") or several ("account,settings.close_rating"
+  // or ["account", "settings.close_rating"]). Several are aggregated into one
+  // Activity Log timeline, e.g. an account plus its per-account settings blocks.
+  resourceType: string | string[]
   resourceId: string
 }>()
 
@@ -17,6 +20,13 @@ const isLoading = ref(false)
 const total = ref(0)
 const page = ref(1)
 const limit = 10
+
+// Collapse string | string[] into the comma-separated value the backend's
+// resource_type filter accepts.
+const resourceTypeParam = computed(() => {
+  const v = props.resourceType
+  return Array.isArray(v) ? v.map(s => s.trim()).filter(Boolean).join(',') : v.trim()
+})
 
 const actionConfig: Record<string, { icon: any; color: string; label: string }> = {
   created: { icon: Plus, color: 'bg-green-500', label: 'Created' },
@@ -48,7 +58,7 @@ async function loadLogs(append = false) {
   isLoading.value = true
   try {
     const response = await auditLogsService.list({
-      resource_type: props.resourceType,
+      resource_type: resourceTypeParam.value,
       resource_id: props.resourceId,
       page: page.value,
       limit,

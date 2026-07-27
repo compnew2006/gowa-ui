@@ -628,6 +628,19 @@ export const closeRatingService = {
     api.get<{ data: CloseRatingStats }>(`/accounts/${accountId}/close-rating/stats`)
 }
 
+export interface CallAutoRejectSettings {
+  enabled: boolean
+  message: string
+}
+
+// Per-account call auto-reject (settings live on the WhatsApp account)
+export const callAutoRejectService = {
+  getSettings: (accountId: string) =>
+    api.get<{ data: CallAutoRejectSettings }>(`/accounts/${accountId}/call-auto-reject`),
+  updateSettings: (accountId: string, data: CallAutoRejectSettings) =>
+    api.put(`/accounts/${accountId}/call-auto-reject`, data)
+}
+
 // Organizations
 export interface Organization {
   id: string

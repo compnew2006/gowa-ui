@@ -498,7 +498,7 @@ func (a *App) SyncGowaInstanceDevice(r *fastglue.Request) error {
 		if _, err := bundle.client.SetDeviceWebhook(context.Background(), deviceID, gowa.WebhookConfig{
 			WebhookURL:    webhookURL,
 			WebhookSecret: secret,
-			WebhookEvents: "message,message.ack,chat_presence,connection,message.reaction,message.revoked,message.edited",
+			WebhookEvents: "message,message.ack,chat_presence,connection,message.reaction,message.revoked,message.edited,call.offer",
 		}); err != nil {
 			a.Log.Error("Failed to set GOWA device webhook during sync", "error", err, "device", deviceID)
 			return r.SendErrorEnvelope(fasthttp.StatusBadGateway, "Failed to set webhook on GOWA", nil, "")
@@ -1042,7 +1042,7 @@ func (a *App) CreateGowaInstanceDevice(r *fastglue.Request) error {
 	device, err := bundle.client.CreateDevice(ctx, deviceID, gowa.WebhookConfig{
 		WebhookURL:    webhookURL,
 		WebhookSecret: webhookSecret,
-		WebhookEvents: "message,message.ack,chat_presence,connection,message.reaction,message.revoked,message.edited",
+		WebhookEvents: "message,message.ack,chat_presence,connection,message.reaction,message.revoked,message.edited,call.offer",
 	})
 	if err != nil {
 		a.Log.Error("Failed to create GOWA device", "error", err, "instance", bundle.instance.Name)
