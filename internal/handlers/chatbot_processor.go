@@ -1310,9 +1310,12 @@ func (a *App) handleIncomingReaction(account *models.WhatsAppAccount, fromPhone,
 	// Meta encodes phone numbers in the WAMID prefix, so the same message
 	// has different WAMIDs from sender vs recipient perspective. We match on
 	// the suffix after "FQIA" + 4 chars (type indicator like "ERgS" or "EhgU").
-	// GOWA message IDs are plain IDs without FQIA — they match directly.
+	// GOWA message IDs are plain IDs without FQIA — they match directly. The
+	// lookup is scoped to the reacting device's account so the reaction lands
+	// on that account's copy when two org accounts share a wamid.
 	var message models.Message
-	if err := a.DB.Where("whats_app_message_id = ?", messageWAMID).First(&message).Error; err != nil {
+	if err := a.DB.Where("whats_app_message_id = ? AND organization_id = ? AND whats_app_account = ?",
+		messageWAMID, account.OrganizationID, account.Name).First(&message).Error; err != nil {
 		// Try matching on WAMID suffix (the unique message ID part)
 		if idx := strings.Index(messageWAMID, "FQIA"); idx != -1 {
 			// Extract suffix after "FQIA" + 4 char type indicator (e.g., "ERgS", "EhgU")
@@ -1329,8 +1332,10 @@ func (a *App) handleIncomingReaction(account *models.WhatsAppAccount, fromPhone,
 			}
 		} else {
 			// Non-FQIA ID (e.g., GOWA message ID) — try a LIKE match as fallback,
-			// scoped to the owning org to prevent cross-tenant matching.
-			if err := a.DB.Where("whats_app_message_id LIKE ? AND organization_id = ?", "%"+messageWAMID+"%", account.OrganizationID).First(&message).Error; err != nil {
+			// scoped to the owning org and account to prevent cross-tenant and
+			// cross-account matching.
+			if err := a.DB.Where("whats_app_message_id LIKE ? AND organization_id = ? AND whats_app_account = ?",
+				"%"+messageWAMID+"%", account.OrganizationID, account.Name).First(&message).Error; err != nil {
 				a.Log.Warn("Message not found for reaction", "wamid", messageWAMID)
 				return
 			}
@@ -1583,10 +1588,13 @@ func (a *App) saveIncomingMessage(account *models.WhatsAppAccount, contact *mode
 		}
 	}
 
-	// Handle reply context - look up the original message by WhatsApp message ID
+	// Handle reply context - look up the original message by WhatsApp message
+	// ID, scoped to this account so the quote resolves to this account's copy
+	// (two org accounts messaging each other share wamids across their copies).
 	if replyToWAMID != "" {
 		var replyToMsg models.Message
-		if err := a.DB.Where("whats_app_message_id = ?", replyToWAMID).First(&replyToMsg).Error; err == nil {
+		if err := a.DB.Where("whats_app_message_id = ? AND organization_id = ? AND whats_app_account = ?",
+			replyToWAMID, account.OrganizationID, account.Name).First(&replyToMsg).Error; err == nil {
 			message.IsReply = true
 			message.ReplyToMessageID = &replyToMsg.ID
 		} else {

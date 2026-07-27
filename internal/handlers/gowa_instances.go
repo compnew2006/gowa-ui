@@ -342,7 +342,7 @@ func (a *App) ListGowaInstanceDevices(r *fastglue.Request) error {
 //
 // This is required because GOWA webhooks send the connected JID as the
 // top-level device_id, while whatomate stores the device's custom id as
-// GowaDeviceID. The JID must be persisted as WhatsAppAccount.PhoneID for the
+// GowaDeviceID. The JID must be persisted as WhatsAppAccount.GowaJID for the
 // webhook resolver (getGowaAccountByDeviceID) to match incoming messages.
 func lookupGowaDeviceJID(ctx context.Context, client *gowa.Client, deviceID string) string {
 	if client == nil || deviceID == "" {
@@ -857,7 +857,10 @@ func (a *App) SyncGowaInstanceMessages(r *fastglue.Request) error {
 		// Bulk-insert messages, skipping any whose whats_app_message_id already
 		// exists (idempotent re-sync). GORM Clause OnConflict would need a
 		// unique constraint on the message id; we instead pre-filter by querying
-		// existing ids for this chat to avoid a schema change.
+		// existing ids for this chat to avoid a schema change. Scoped to this
+		// account: two org accounts chatting with each other share wamids across
+		// their copies, and syncing one device must not skip messages that only
+		// exist as the other account's copy.
 		existing := make(map[string]bool, len(msgs))
 		{
 			ids := make([]string, 0, len(msgs))
@@ -869,7 +872,8 @@ func (a *App) SyncGowaInstanceMessages(r *fastglue.Request) error {
 			if len(ids) > 0 {
 				var found []string
 				a.DB.Model(&models.Message{}).
-					Where("whats_app_message_id IN ?", ids).
+					Where("whats_app_message_id IN ? AND organization_id = ? AND whats_app_account = ?",
+						ids, account.OrganizationID, account.Name).
 					Pluck("whats_app_message_id", &found)
 				for _, id := range found {
 					existing[id] = true

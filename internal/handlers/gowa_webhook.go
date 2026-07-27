@@ -342,7 +342,7 @@ func (a *App) processGowaMessage(account *models.WhatsAppAccount, envelope *gowa
 	if isGroup || isNewsletter {
 		profileName = ""
 	}
-	a.processIncomingMessage(envelope.DeviceID, incoming, profileName, isGroup, isNewsletter, senderName, senderJID)
+	a.processIncomingMessage(account, envelope.DeviceID, incoming, profileName, isGroup, isNewsletter, senderName, senderJID)
 }
 
 // processGowaOutgoingMessage handles messages sent from the connected phone
@@ -406,15 +406,20 @@ func (a *App) processGowaOutgoingMessage(account *models.WhatsAppAccount, msg *g
 	// Dedup: if this message was already recorded (e.g. sent from the whatomate
 	// UI, which created a local row with the GOWA-returned wamid), update its
 	// reply context in place and skip creating a duplicate. The GOWA echo and
-	// the local row share the same WhatsAppMessageID.
+	// the local row share the same WhatsAppMessageID. Scoped to this account:
+	// when two org accounts message each other, the recipient account stores
+	// its own incoming copy under the same wamid — that copy must not suppress
+	// this account's outgoing echo (and vice versa).
 	if msg.ID != "" {
 		var existing models.Message
-		if err := a.DB.Where("whats_app_message_id = ?", msg.ID).First(&existing).Error; err == nil {
+		if err := a.DB.Where("whats_app_message_id = ? AND organization_id = ? AND whats_app_account = ?",
+			msg.ID, orgID, account.Name).First(&existing).Error; err == nil {
 			// Patch the reply context onto the existing row if the echo carries one
 			// and the local row doesn't already have it.
 			if msg.RepliedToID != "" && !existing.IsReply {
 				var replyToMsg models.Message
-				if err := a.DB.Where("whats_app_message_id = ?", msg.RepliedToID).First(&replyToMsg).Error; err == nil {
+				if err := a.DB.Where("whats_app_message_id = ? AND organization_id = ? AND whats_app_account = ?",
+					msg.RepliedToID, orgID, account.Name).First(&replyToMsg).Error; err == nil {
 					a.DB.Model(&existing).Updates(map[string]any{
 						"is_reply":            true,
 						"reply_to_message_id": replyToMsg.ID,
@@ -522,7 +527,8 @@ func (a *App) processGowaOutgoingMessage(account *models.WhatsAppAccount, msg *g
 	// of quoted replies.
 	if msg.RepliedToID != "" {
 		var replyToMsg models.Message
-		if err := a.DB.Where("whats_app_message_id = ?", msg.RepliedToID).First(&replyToMsg).Error; err == nil {
+		if err := a.DB.Where("whats_app_message_id = ? AND organization_id = ? AND whats_app_account = ?",
+			msg.RepliedToID, orgID, account.Name).First(&replyToMsg).Error; err == nil {
 			outgoing.IsReply = true
 			outgoing.ReplyToMessageID = &replyToMsg.ID
 		} else {

@@ -242,6 +242,16 @@ func getIndexes() []string {
 				END IF;
 			END IF;
 		END $$`,
+		// Meta-era rows stored the connected JID in phone_id; the GOWA-only
+		// refactor dropped the PhoneID field and moved webhook resolution to
+		// gowa_jid without copying the value across, so webhooks from those
+		// devices fail account resolution ("Unknown GOWA device") until a manual
+		// re-sync. Backfill gowa_jid from phone_id where it holds a JID.
+		`DO $$ BEGIN
+			IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'whatsapp_accounts' AND column_name = 'phone_id') THEN
+				UPDATE whatsapp_accounts SET gowa_jid = phone_id WHERE (gowa_jid IS NULL OR gowa_jid = '') AND phone_id LIKE '%@s.whatsapp.net';
+			END IF;
+		END $$`,
 		`ALTER TABLE chatbot_sessions ALTER COLUMN phone_number TYPE varchar(50)`,
 		`ALTER TABLE agent_transfers ALTER COLUMN phone_number TYPE varchar(50)`,
 		`ALTER TABLE bulk_message_recipients ALTER COLUMN phone_number TYPE varchar(50)`,

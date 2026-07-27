@@ -35,18 +35,26 @@ type WebhookStatus struct {
 	Errors []WebhookStatusError `json:"errors,omitempty"`
 }
 
-func (a *App) processIncomingMessage(phoneNumberID string, msg IncomingTextMessage, profileName string, isGroup, isNewsletter bool, senderName, senderJID string) {
+func (a *App) processIncomingMessage(account *models.WhatsAppAccount, phoneNumberID string, msg IncomingTextMessage, profileName string, isGroup, isNewsletter bool, senderName, senderJID string) {
 	defer func() {
 		if r := recover(); r != nil {
 			a.Log.Error("Panic recovered in processIncomingMessage", "panic", r, "phone_id", phoneNumberID, "message_id", msg.ID)
 		}
 	}()
 
-	// Check for duplicate message - the same message can be delivered multiple times
+	// Check for duplicate message - the same message can be delivered multiple
+	// times. The check is scoped to the receiving account: when two accounts of
+	// the same org message each other, the identical WhatsApp message ID
+	// legitimately exists once per account (the sender's outgoing copy and the
+	// recipient's incoming copy) — a global dedup would drop the recipient's
+	// copy entirely.
 	if msg.ID != "" {
 		var existingMsg models.Message
-		if err := a.DB.Where("whats_app_message_id = ?", msg.ID).First(&existingMsg).Error; err == nil {
-			a.Log.Debug("Duplicate message detected, skipping", "message_id", msg.ID)
+		if err := a.DB.Where(
+			"whats_app_message_id = ? AND organization_id = ? AND whats_app_account = ?",
+			msg.ID, account.OrganizationID, account.Name,
+		).First(&existingMsg).Error; err == nil {
+			a.Log.Debug("Duplicate message detected, skipping", "message_id", msg.ID, "account", account.Name)
 			return
 		}
 	}
@@ -67,16 +75,18 @@ func (a *App) processStatusUpdate(phoneNumberID string, status WebhookStatus) {
 
 	a.Log.Info("Processing status update", "message_id", messageID, "status", statusValue, "phone_number_id", phoneNumberID)
 
-	// Resolve the account to scope the status update to its org. Fall back to a
-	// zero UUID so the org-scoped lookup simply finds nothing rather than
-	// matching messages in another org.
+	// Resolve the account to scope the status update to its org and account.
+	// Fall back to a zero UUID / empty name so the scoped lookup simply finds
+	// nothing rather than matching messages in another org or account.
 	var orgID uuid.UUID
+	var accountName string
 	if account, err := a.getWhatsAppAccountCached(phoneNumberID); err == nil {
 		orgID = account.OrganizationID
+		accountName = account.Name
 	}
 
 	// Update messages table - this also handles campaign stats via incrementCampaignStat
-	a.updateMessageStatus(orgID, messageID, statusValue, status.Errors)
+	a.updateMessageStatus(orgID, accountName, messageID, statusValue, status.Errors)
 }
 
 // statusPriority returns the priority of a status (higher = more progressed)
@@ -98,10 +108,14 @@ func statusPriority(status models.MessageStatus) int {
 }
 
 // updateMessageStatus updates the status of a regular message in the messages table
-func (a *App) updateMessageStatus(orgID uuid.UUID, whatsappMsgID, statusValue string, errors []WebhookStatusError) {
-	// Find the message by WhatsApp message ID, scoped to the owning org.
+func (a *App) updateMessageStatus(orgID uuid.UUID, accountName, whatsappMsgID, statusValue string, errors []WebhookStatusError) {
+	// Find the message by WhatsApp message ID, scoped to the owning org AND
+	// account: when two org accounts message each other the same WhatsApp
+	// message ID exists once per account, and an ack must only touch the copy
+	// owned by the acking device.
 	var message models.Message
-	result := a.DB.Where("whats_app_message_id = ? AND organization_id = ?", whatsappMsgID, orgID).First(&message)
+	result := a.DB.Where("whats_app_message_id = ? AND organization_id = ? AND whats_app_account = ?",
+		whatsappMsgID, orgID, accountName).First(&message)
 	if result.Error != nil {
 		a.Log.Debug("No message found for status update", "whats_app_message_id", whatsappMsgID)
 		return
