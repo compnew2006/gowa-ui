@@ -170,6 +170,70 @@ func TestApp_ListContacts(t *testing.T) {
 		assert.NotNil(t, resp.Data.Contacts[0].Tags)
 	})
 
+	t.Run("filter by whatsapp account", func(t *testing.T) {
+		app := newTestApp(t)
+		org := testutil.CreateTestOrganization(t, app.DB)
+		adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+		user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+
+		// Two contacts on account A, one on account B.
+		match1 := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount("account-a"))
+		testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount("account-a"))
+		testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount("account-b"))
+
+		req := testutil.NewGETRequest(t)
+		testutil.SetAuthContext(req, org.ID, user.ID)
+		testutil.SetQueryParam(req, "account", "account-a")
+
+		err := app.ListContacts(req)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+		var resp struct {
+			Data struct {
+				Contacts []handlers.ContactResponse `json:"contacts"`
+				Total    int64                      `json:"total"`
+			} `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+		assert.Equal(t, int64(2), resp.Data.Total)
+		assert.Len(t, resp.Data.Contacts, 2)
+		for _, c := range resp.Data.Contacts {
+			assert.Equal(t, "account-a", c.WhatsAppAccount)
+		}
+		_ = match1
+	})
+
+	t.Run("exclude groups and newsletters", func(t *testing.T) {
+		app := newTestApp(t)
+		org := testutil.CreateTestOrganization(t, app.DB)
+		adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+		user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+
+		// One individual contact and one group contact (WhatsApp group-ID prefix).
+		individual := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithPhoneNumber("+15551230001"))
+		testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithPhoneNumber("120362123456789"))
+
+		req := testutil.NewGETRequest(t)
+		testutil.SetAuthContext(req, org.ID, user.ID)
+		testutil.SetQueryParam(req, "exclude_groups", "true")
+
+		err := app.ListContacts(req)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+		var resp struct {
+			Data struct {
+				Contacts []handlers.ContactResponse `json:"contacts"`
+				Total    int64                      `json:"total"`
+			} `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+		assert.Equal(t, int64(1), resp.Data.Total)
+		require.Len(t, resp.Data.Contacts, 1)
+		assert.Equal(t, individual.ID, resp.Data.Contacts[0].ID)
+	})
+
 	t.Run("default pagination with no params", func(t *testing.T) {
 		app := newTestApp(t)
 		org := testutil.CreateTestOrganization(t, app.DB)

@@ -108,6 +108,14 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 	// When has_messages=true, hide contacts with no messages (used by /chat to
 	// distinguish real conversations from synced-but-empty contacts in /settings/contacts).
 	hasMessages := string(r.RequestCtx.QueryArgs().Peek("has_messages"))
+	// Filter by WhatsApp account (references WhatsAppAccount.Name). Used by the
+	// campaign "Add Recipients" picker to only show contacts synced under the
+	// campaign's selected account.
+	accountParam := string(r.RequestCtx.QueryArgs().Peek("account"))
+	// When exclude_groups=true, hide group chats and newsletters. Campaign
+	// recipients must be individual numbers — groups/newsletters can't receive
+	// template broadcasts, so the recipient picker excludes them.
+	excludeGroups := string(r.RequestCtx.QueryArgs().Peek("exclude_groups"))
 
 	var contacts []models.Contact
 	query := a.ScopeToOrg(a.DB, userID, orgID)
@@ -120,6 +128,23 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 	// least one message. /chat uses this by default; /settings/contacts shows all.
 	if hasMessages == "true" || hasMessages == "1" {
 		query = query.Where("last_message_at IS NOT NULL")
+	}
+
+	// Scope to a single WhatsApp account when requested. The Contact model's
+	// WhatsAppAccount field has no explicit column tag, so GORM's default
+	// naming splits the acronym into the physical column whats_app_account.
+	if accountParam != "" {
+		query = query.Where("whats_app_account = ?", accountParam)
+	}
+
+	// Exclude group chats and newsletters. Group/newsletter status lives in the
+	// metadata JSONB (is_group_chat/is_newsletter); older group rows are also
+	// detectable by the WhatsApp group-ID phone prefixes 120362/120363.
+	if excludeGroups == "true" || excludeGroups == "1" {
+		query = query.Where(
+			"COALESCE(metadata->>'is_group_chat', '') <> 'true' AND " +
+				"COALESCE(metadata->>'is_newsletter', '') <> 'true' AND " +
+				"phone_number NOT LIKE '120362%' AND phone_number NOT LIKE '120363%'")
 	}
 
 	if search != "" {

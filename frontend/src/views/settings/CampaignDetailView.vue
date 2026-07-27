@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { campaignsService, templatesService, api } from '@/services/api'
+import { campaignsService, templatesService, contactsService, api } from '@/services/api'
 import { wsService } from '@/services/websocket'
 import { toast } from 'vue-sonner'
 import { useUnsavedChangesGuard } from '@/composables/useUnsavedChangesGuard'
@@ -48,6 +48,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Table,
   TableBody,
@@ -75,6 +76,8 @@ import {
   FileSpreadsheet,
   ChevronDown,
   Download,
+  Search,
+  Loader2,
 } from 'lucide-vue-next'
 
 interface Campaign {
@@ -195,6 +198,18 @@ const showMediaUpload = ref(false)
 const recipientsInput = ref('')
 const addRecipientsTab = ref('manual')
 const csvFile = ref<File | null>(null)
+
+// --- Contact picker state (Add Recipients > From Contacts tab) ---
+interface ContactOption {
+  id: string
+  phone_number: string
+  profile_name?: string
+  name?: string
+}
+const accountContacts = ref<ContactOption[]>([])
+const isLoadingContacts = ref(false)
+const contactSearch = ref('')
+const selectedContactIds = ref<Set<string>>(new Set())
 
 // --- Selected template for param extraction ---
 const selectedTemplate = ref<Template | null>(null)
@@ -581,6 +596,9 @@ async function openAddRecipientsDialog() {
   recipientsInput.value = ''
   csvFile.value = null
   addRecipientsTab.value = 'manual'
+  contactSearch.value = ''
+  selectedContactIds.value = new Set()
+  accountContacts.value = []
 
   // Fetch template details if needed
   if (campaign.value?.template_id && !selectedTemplate.value) {
@@ -593,6 +611,111 @@ async function openAddRecipientsDialog() {
   }
 
   showAddRecipientsDialog.value = true
+
+  // Preload the selected account's contacts so the "From Contacts" tab is ready.
+  if (form.value.whatsapp_account) {
+    await loadAccountContacts()
+  }
+}
+
+// Loads contacts belonging to the campaign's selected WhatsApp account. The
+// backend scopes /contacts by the `account` param (Contact.whats_app_account),
+// so an account must be chosen before recipients can be picked from contacts.
+async function loadAccountContacts() {
+  if (!form.value.whatsapp_account) {
+    accountContacts.value = []
+    return
+  }
+  isLoadingContacts.value = true
+  try {
+    // The backend caps limit at 100, so page through until all of the
+    // account's individual contacts are loaded (groups/newsletters excluded).
+    const pageSize = 100
+    const all: ContactOption[] = []
+    for (let page = 1; page <= 50; page++) {
+      const response = await contactsService.list({
+        account: form.value.whatsapp_account,
+        exclude_groups: true,
+        page,
+        limit: pageSize,
+      })
+      const batch: ContactOption[] = (response.data as any).data?.contacts || []
+      all.push(...batch)
+      if (batch.length < pageSize) break
+    }
+    accountContacts.value = all
+  } catch {
+    accountContacts.value = []
+  } finally {
+    isLoadingContacts.value = false
+  }
+}
+
+const filteredAccountContacts = computed<ContactOption[]>(() => {
+  const q = contactSearch.value.trim().toLowerCase()
+  if (!q) return accountContacts.value
+  return accountContacts.value.filter(c =>
+    (c.phone_number || '').toLowerCase().includes(q) ||
+    (c.profile_name || c.name || '').toLowerCase().includes(q)
+  )
+})
+
+function toggleContact(id: string, checked: boolean | 'indeterminate') {
+  const next = new Set(selectedContactIds.value)
+  if (checked) {
+    next.add(id)
+  } else {
+    next.delete(id)
+  }
+  selectedContactIds.value = next
+}
+
+const allFilteredSelected = computed(() =>
+  filteredAccountContacts.value.length > 0 &&
+  filteredAccountContacts.value.every(c => selectedContactIds.value.has(c.id))
+)
+
+function toggleSelectAllContacts(checked: boolean | 'indeterminate') {
+  const next = new Set(selectedContactIds.value)
+  for (const c of filteredAccountContacts.value) {
+    if (checked) next.add(c.id)
+    else next.delete(c.id)
+  }
+  selectedContactIds.value = next
+}
+
+async function addRecipientsFromContacts() {
+  if (!campaign.value) return
+  const chosen = accountContacts.value.filter(c => selectedContactIds.value.has(c.id))
+  if (chosen.length === 0) {
+    toast.error(t('campaigns.selectAtLeastOneContact', 'Please select at least one contact'))
+    return
+  }
+  const recipientsList = chosen.map(c => {
+    const recipient: { phone_number: string; recipient_name?: string } = {
+      phone_number: (c.phone_number || '').replace(/[^\d+]/g, ''),
+    }
+    const name = c.profile_name || c.name
+    if (name && name.trim()) {
+      recipient.recipient_name = name.trim()
+    }
+    return recipient
+  })
+
+  isAddingRecipients.value = true
+  try {
+    const response = await campaignsService.addRecipients(campaign.value.id, recipientsList)
+    const result = (response.data as any).data
+    toast.success(t('campaigns.addedRecipients', { count: result?.added_count || recipientsList.length }, `Added ${result?.added_count || recipientsList.length} recipients`))
+    showAddRecipientsDialog.value = false
+    selectedContactIds.value = new Set()
+    await loadCampaign()
+    await loadRecipients()
+  } catch (err: unknown) {
+    toast.error(getErrorMessage(err, t('campaigns.addRecipientsFailed', 'Failed to add recipients')))
+  } finally {
+    isAddingRecipients.value = false
+  }
 }
 
 const manualInputValidation = computed(() => {
@@ -1347,6 +1470,10 @@ onUnmounted(() => {
 
       <Tabs v-model="addRecipientsTab">
         <TabsList class="w-full">
+          <TabsTrigger value="contacts" class="flex-1">
+            <Users class="h-4 w-4 mr-1" />
+            {{ $t('campaigns.fromContacts', 'From Contacts') }}
+          </TabsTrigger>
           <TabsTrigger value="manual" class="flex-1">
             <UserPlus class="h-4 w-4 mr-1" />
             {{ $t('campaigns.manualEntry', 'Manual Entry') }}
@@ -1356,6 +1483,67 @@ onUnmounted(() => {
             {{ $t('campaigns.csvUpload', 'CSV Upload') }}
           </TabsTrigger>
         </TabsList>
+
+        <!-- From Contacts Tab -->
+        <TabsContent value="contacts" class="space-y-3 mt-3">
+          <div v-if="!form.whatsapp_account" class="text-center py-8 text-sm text-muted-foreground">
+            {{ $t('campaigns.selectAccountFirst', 'Select a WhatsApp account first to load its contacts.') }}
+          </div>
+          <template v-else>
+            <div class="relative">
+              <Search class="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                v-model="contactSearch"
+                class="pl-8"
+                :placeholder="$t('campaigns.searchContacts', 'Search contacts by name or number')"
+              />
+            </div>
+            <div v-if="isLoadingContacts" class="flex items-center justify-center py-8 text-sm text-muted-foreground">
+              <Loader2 class="h-4 w-4 mr-2 animate-spin" />
+              {{ $t('common.loading', 'Loading...') }}
+            </div>
+            <div v-else-if="filteredAccountContacts.length === 0" class="text-center py-8">
+              <Users class="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+              <p class="text-sm text-muted-foreground">{{ $t('campaigns.noContactsForAccount', 'No contacts found for this account') }}</p>
+            </div>
+            <template v-else>
+              <div class="flex items-center gap-2 px-1">
+                <Checkbox
+                  :checked="allFilteredSelected"
+                  @update:checked="toggleSelectAllContacts"
+                />
+                <span class="text-xs text-muted-foreground">
+                  {{ $t('campaigns.selectAll', 'Select all') }} ({{ filteredAccountContacts.length }})
+                </span>
+              </div>
+              <div class="max-h-[280px] overflow-y-auto rounded-md border divide-y">
+                <label
+                  v-for="contact in filteredAccountContacts"
+                  :key="contact.id"
+                  class="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-muted/50"
+                >
+                  <Checkbox
+                    :checked="selectedContactIds.has(contact.id)"
+                    @update:checked="(v: boolean | 'indeterminate') => toggleContact(contact.id, v)"
+                  />
+                  <div class="min-w-0">
+                    <p class="text-sm font-medium truncate">{{ contact.profile_name || contact.name || contact.phone_number }}</p>
+                    <p class="text-xs text-muted-foreground truncate">{{ contact.phone_number }}</p>
+                  </div>
+                </label>
+              </div>
+            </template>
+          </template>
+          <DialogFooter>
+            <Button
+              @click="addRecipientsFromContacts"
+              :disabled="isAddingRecipients || selectedContactIds.size === 0"
+            >
+              <UserPlus class="h-4 w-4 mr-1" />
+              {{ isAddingRecipients ? $t('common.adding', 'Adding...') : $t('campaigns.addSelected', { count: selectedContactIds.size }, `Add Selected (${selectedContactIds.size})`) }}
+            </Button>
+          </DialogFooter>
+        </TabsContent>
 
         <!-- Manual Entry Tab -->
         <TabsContent value="manual" class="space-y-3 mt-3">
