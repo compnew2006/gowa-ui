@@ -252,6 +252,7 @@ class WebSocketService {
         reply_to_message_id: payload.reply_to_message_id,
         reply_to_message: payload.reply_to_message,
         reactions: payload.reactions,
+        whatsapp_account: payload.whatsapp_account,
         is_group_chat: payload.is_group_chat,
         sender_phone: payload.sender_phone,
         sender_push_name: payload.sender_push_name,

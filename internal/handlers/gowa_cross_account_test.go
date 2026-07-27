@@ -168,6 +168,43 @@ func TestProcessGowaOutgoingMessage_CrossAccountSameWamidKeepsBothCopies(t *test
 	assert.Equal(t, models.DirectionOutgoing, stored.Direction)
 }
 
+// TestCrossAccountMirrorContactIDs locks the mirror-view resolution used by
+// GetMessages: selecting the tab of the account whose own number IS the page
+// contact must resolve to the counterpart contacts of the other org accounts
+// (where that account's copies of the thread actually live).
+func TestCrossAccountMirrorContactIDs(t *testing.T) {
+	app := newProcessorTestApp(t)
+	org, saudi := createProcessorTestOrg(t, app)
+	egypt := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID,
+		testutil.WithAccountName("egypt-"+uuid.New().String()[:8]))
+
+	saudiPhone := uniquePhone()
+	egyptPhone := uniquePhone()
+	require.NoError(t, app.DB.Model(saudi).Update("gowa_jid", saudiPhone+"@s.whatsapp.net").Error)
+	require.NoError(t, app.DB.Model(egypt).Update("gowa_jid", egyptPhone+"@s.whatsapp.net").Error)
+
+	saudiContact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithPhoneNumber(saudiPhone))
+	egyptContact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithPhoneNumber(egyptPhone))
+
+	// Page = saudi number, tab = saudi account → mirror to the egypt contact.
+	ids := app.crossAccountMirrorContactIDs(org.ID, saudi.Name, saudiContact)
+	require.Len(t, ids, 1)
+	assert.Equal(t, egyptContact.ID, ids[0])
+
+	// Page = egypt number, tab = egypt account → mirror to the saudi contact.
+	ids = app.crossAccountMirrorContactIDs(org.ID, egypt.Name, egyptContact)
+	require.Len(t, ids, 1)
+	assert.Equal(t, saudiContact.ID, ids[0])
+
+	// Normal tab (account's number differs from the page contact) → no mirror.
+	assert.Nil(t, app.crossAccountMirrorContactIDs(org.ID, saudi.Name, egyptContact))
+
+	// Unknown account or a regular customer contact → no mirror.
+	customer := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithPhoneNumber(uniquePhone()))
+	assert.Nil(t, app.crossAccountMirrorContactIDs(org.ID, saudi.Name, customer))
+	assert.Nil(t, app.crossAccountMirrorContactIDs(org.ID, "no-such-account", saudiContact))
+}
+
 func TestProcessGowaOutgoingMessage_SameAccountEchoStillDeduped(t *testing.T) {
 	app := newOutgoingLifecycleApp(t)
 	org, account := createProcessorTestOrg(t, app)

@@ -588,6 +588,9 @@ func (a *App) broadcastNewMessage(orgID uuid.UUID, msg *models.Message, contact 
 		"interactive_data": msg.InteractiveData,
 		"status":           msg.Status,
 		"wamid":            msg.WhatsAppMessageID,
+		// The account the message belongs to — the frontend's live-append
+		// guard needs it to keep messages out of the wrong account tab.
+		"whatsapp_account": msg.WhatsAppAccount,
 		"created_at":       msg.CreatedAt,
 		"updated_at":       msg.UpdatedAt,
 		"is_reply":         msg.IsReply,

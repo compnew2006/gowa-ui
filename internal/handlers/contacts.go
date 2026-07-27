@@ -420,9 +420,20 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 	// selected (multi-account org, switchAccount, or older-message paging).
 	accountFilter := string(r.RequestCtx.QueryArgs().Peek("account"))
 	if accountFilter != "" {
-		msgQuery = msgQuery.Where(
-			"whats_app_account = ? OR metadata->>'is_system_message' = 'true'",
-			accountFilter)
+		if mirrorIDs := a.crossAccountMirrorContactIDs(orgID, accountFilter, &contact); len(mirrorIDs) > 0 {
+			// The selected tab's account IS this contact (the page shows one of
+			// the org's own numbers). That account's copies of the cross-account
+			// conversation are stored under the counterpart contacts of the
+			// *other* org accounts, so surface those instead of the always-empty
+			// self view — while keeping this page's own system messages.
+			msgQuery = a.DB.Where(
+				"(contact_id IN ? AND whats_app_account = ?) OR (contact_id = ? AND metadata->>'is_system_message' = 'true')",
+				mirrorIDs, accountFilter, contactID)
+		} else {
+			msgQuery = msgQuery.Where(
+				"whats_app_account = ? OR metadata->>'is_system_message' = 'true'",
+				accountFilter)
+		}
 	}
 
 	// Check if user without contacts:read should only see current conversation
@@ -509,6 +520,42 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 		"limit":    responseLimit,
 		"has_more": offset > 0,
 	})
+}
+
+// crossAccountMirrorContactIDs resolves the "mirror" view for cross-account
+// conversations: when the requested account tab's own connected number equals
+// the page contact's phone (two org accounts messaging each other), that
+// account's copies of the thread are stored under the counterpart contacts of
+// the other org accounts — not under this contact. It returns those
+// counterpart contact IDs, or nil when this is a normal (non-self) tab.
+func (a *App) crossAccountMirrorContactIDs(orgID uuid.UUID, accountName string, contact *models.Contact) []uuid.UUID {
+	var account models.WhatsAppAccount
+	if err := a.DB.Where("organization_id = ? AND name = ?", orgID, accountName).
+		First(&account).Error; err != nil {
+		return nil
+	}
+	if account.GowaJID == "" || gowa.PhoneFromJID(account.GowaJID) != contact.PhoneNumber {
+		return nil
+	}
+
+	// The peers are the org's other connected numbers.
+	var others []models.WhatsAppAccount
+	if err := a.DB.Where("organization_id = ? AND name != ? AND gowa_jid != ''", orgID, accountName).
+		Find(&others).Error; err != nil || len(others) == 0 {
+		return nil
+	}
+	phones := make([]string, 0, len(others))
+	for _, o := range others {
+		phones = append(phones, gowa.PhoneFromJID(o.GowaJID))
+	}
+
+	var ids []uuid.UUID
+	if err := a.DB.Model(&models.Contact{}).
+		Where("organization_id = ? AND phone_number IN ?", orgID, phones).
+		Pluck("id", &ids).Error; err != nil {
+		return nil
+	}
+	return ids
 }
 
 // buildMessagesResponse converts messages to response format
