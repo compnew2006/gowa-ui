@@ -26,7 +26,8 @@ import {
   Activity,
   ChevronsUpDown,
   Check,
-  Coffee
+  Coffee,
+  Star
 } from 'lucide-vue-next'
 // Centralized Chart.js setup (registered once)
 import { Line, Bar, Doughnut } from '@/lib/charts'
@@ -41,6 +42,8 @@ interface AgentAnalyticsSummary {
   transfers_by_source: Record<string, number>
   total_break_time_mins: number
   break_count: number
+  avg_rating: number
+  ratings_count: number
 }
 
 interface AgentPerformanceStats {
@@ -55,6 +58,8 @@ interface AgentPerformanceStats {
   break_count: number
   is_available: boolean
   current_break_start?: string
+  avg_rating: number
+  ratings_count: number
 }
 
 interface TrendPoint {
@@ -299,6 +304,17 @@ const _displayStats = computed(() => {
   return analytics.value?.my_stats
 })
 void _displayStats.value // Suppress unused warning
+
+// CSAT values for the stat card: org-wide when viewing all agents,
+// per-agent otherwise (my_stats carries the filtered agent's numbers).
+const csatAvgRating = computed(() => {
+  if (selectedAgentId.value === 'all') return analytics.value?.summary?.avg_rating ?? 0
+  return analytics.value?.my_stats?.avg_rating ?? 0
+})
+const csatRatingsCount = computed(() => {
+  if (selectedAgentId.value === 'all') return analytics.value?.summary?.ratings_count ?? 0
+  return analytics.value?.my_stats?.ratings_count ?? 0
+})
 </script>
 
 <template>
@@ -374,9 +390,9 @@ void _displayStats.value // Suppress unused warning
         />
 
         <!-- Stats Cards -->
-        <div v-if="!error" class="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+        <div v-if="!error" class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           <template v-if="isLoading">
-            <div v-for="i in 5" :key="i" class="rounded-xl border border-white/[0.08] bg-white/[0.02] p-6 light:bg-white light:border-gray-200">
+            <div v-for="i in 6" :key="i" class="rounded-xl border border-white/[0.08] bg-white/[0.02] p-6 light:bg-white light:border-gray-200">
               <div class="flex flex-row items-center justify-between space-y-0 pb-2">
                 <Skeleton class="h-4 w-24 bg-white/[0.08] light:bg-gray-200" />
                 <Skeleton class="h-10 w-10 rounded-lg bg-white/[0.08] light:bg-gray-200" />
@@ -472,6 +488,24 @@ void _displayStats.value // Suppress unused warning
               </div>
             </div>
 
+            <!-- Customer Rating (CSAT) -->
+            <div class="card-depth rounded-xl border border-white/[0.08] bg-white/[0.04] p-6 light:bg-white light:border-gray-200">
+              <div class="flex flex-row items-center justify-between space-y-0 pb-2">
+                <span class="text-sm font-medium text-white/50 light:text-gray-500">{{ $t('agentAnalytics.customerRating') }}</span>
+                <div class="h-10 w-10 rounded-lg bg-yellow-500/20 flex items-center justify-center">
+                  <Star class="h-5 w-5 text-yellow-400" />
+                </div>
+              </div>
+              <div class="pt-2">
+                <div class="text-3xl font-bold text-white light:text-gray-900">
+                  {{ csatRatingsCount > 0 ? `${csatAvgRating.toFixed(1)} / 5` : '—' }}
+                </div>
+                <p class="text-xs text-white/40 light:text-gray-500 mt-1">
+                  {{ csatRatingsCount > 0 ? $t('agentAnalytics.ratingsReceived', { count: csatRatingsCount }) : $t('agentAnalytics.noRatingsYet') }}
+                </p>
+              </div>
+            </div>
+
             <!-- Break Time -->
             <div class="card-depth rounded-xl border border-white/[0.08] bg-white/[0.04] p-6 light:bg-white light:border-gray-200">
               <div class="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -543,6 +577,57 @@ void _displayStats.value // Suppress unused warning
 
         <!-- Agent Comparison (Admin/Manager only, when viewing all agents) -->
         <template v-if="!error && isAdminOrManager && selectedAgentId === 'all'">
+          <!-- Per-agent performance table with CSAT rating -->
+          <Card>
+            <CardHeader>
+              <CardTitle>{{ $t('agentAnalytics.agentPerformance') }}</CardTitle>
+              <CardDescription>{{ $t('agentAnalytics.agentPerformanceDesc') }}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <template v-if="isLoading">
+                <Skeleton class="h-40 w-full" />
+              </template>
+              <template v-else-if="analytics?.agent_stats?.length">
+                <table class="w-full text-sm">
+                  <thead>
+                    <tr class="border-b border-white/[0.08] light:border-gray-200 text-left rtl:text-right text-white/50 light:text-gray-500">
+                      <th class="py-2 pr-4 font-medium">{{ $t('agentAnalytics.agent') }}</th>
+                      <th class="py-2 pr-4 font-medium">{{ $t('agentAnalytics.customerRating') }}</th>
+                      <th class="py-2 pr-4 font-medium">{{ $t('agentAnalytics.transfersHandled') }}</th>
+                      <th class="py-2 pr-4 font-medium">{{ $t('agentAnalytics.messagesSent') }}</th>
+                      <th class="py-2 font-medium">{{ $t('agentAnalytics.avgResolutionTime') }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="agent in analytics.agent_stats"
+                      :key="agent.agent_id"
+                      class="border-b border-white/[0.04] light:border-gray-100 text-white light:text-gray-900"
+                    >
+                      <td class="py-2.5 pr-4 font-medium">{{ agent.agent_name || $t('agentAnalytics.selectAgent') }}</td>
+                      <td class="py-2.5 pr-4">
+                        <span v-if="agent.ratings_count > 0" class="inline-flex items-center gap-1">
+                          <Star class="h-4 w-4 text-yellow-400 fill-yellow-400" />
+                          {{ agent.avg_rating.toFixed(1) }}
+                          <span class="text-white/40 light:text-gray-500">({{ agent.ratings_count }})</span>
+                        </span>
+                        <span v-else class="text-white/40 light:text-gray-500">{{ $t('agentAnalytics.noRatingsYet') }}</span>
+                      </td>
+                      <td class="py-2.5 pr-4">{{ agent.transfers_handled }}</td>
+                      <td class="py-2.5 pr-4">{{ agent.messages_sent }}</td>
+                      <td class="py-2.5">{{ formatMinutes(agent.avg_resolution_mins) }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </template>
+              <template v-else>
+                <div class="py-8 text-center text-muted-foreground">
+                  {{ $t('agentAnalytics.noAgentsFound') }}
+                </div>
+              </template>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle>{{ $t('agentAnalytics.agentComparison') }}</CardTitle>

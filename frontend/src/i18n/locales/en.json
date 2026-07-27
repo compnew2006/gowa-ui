@@ -1899,6 +1899,12 @@
     "performanceComparison": "Performance comparison across agents",
     "noDataAvailable": "No data available",
     "noAgentsFound": "No agents found",
+    "customerRating": "Customer Rating",
+    "ratingsReceived": "{count} ratings received",
+    "noRatingsYet": "No ratings yet",
+    "agentPerformance": "Agent Performance",
+    "agentPerformanceDesc": "Each agent with their customer satisfaction rating",
+    "agent": "Agent",
     "errorLoadingAnalytics": "Failed to load agent analytics. Please try again."
   },
   "flowBuilder": {

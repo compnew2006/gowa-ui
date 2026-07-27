@@ -255,6 +255,22 @@ func getIndexes() []string {
 		`ALTER TABLE chatbot_sessions ALTER COLUMN phone_number TYPE varchar(50)`,
 		`ALTER TABLE agent_transfers ALTER COLUMN phone_number TYPE varchar(50)`,
 		`ALTER TABLE bulk_message_recipients ALTER COLUMN phone_number TYPE varchar(50)`,
+		// An earlier prototype of the CSAT feature created chat_closure_ratings
+		// with NOT NULL columns (chat_id, closing_agent_id, closed_at, ...) the
+		// current model never fills — every cycle insert violated them, so no
+		// rating prompt was ever sent. AutoMigrate never drops columns; do it here.
+		`ALTER TABLE chat_closure_ratings
+			DROP COLUMN IF EXISTS chat_id,
+			DROP COLUMN IF EXISTS agent_user_id,
+			DROP COLUMN IF EXISTS closing_agent_id,
+			DROP COLUMN IF EXISTS closed_at,
+			DROP COLUMN IF EXISTS state,
+			DROP COLUMN IF EXISTS rating_message,
+			DROP COLUMN IF EXISTS rating_message_id,
+			DROP COLUMN IF EXISTS close_message,
+			DROP COLUMN IF EXISTS close_message_language,
+			DROP COLUMN IF EXISTS close_message_id,
+			DROP COLUMN IF EXISTS context_messages`,
 		// Indexes
 		`CREATE INDEX IF NOT EXISTS idx_messages_contact_created ON messages(contact_id, created_at DESC)`,
 		// One pending rating cycle per contact — closes the check-then-insert race

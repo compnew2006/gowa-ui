@@ -113,6 +113,8 @@ func runMigrations(db *gorm.DB) error {
 		&models.NotificationRule{},
 		// Canned responses
 		&models.CannedResponse{},
+		// Chat close rating (CSAT)
+		&models.ChatClosureRating{},
 		// Dashboard
 		&models.Widget{},
 		// Conversation Notes

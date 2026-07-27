@@ -168,7 +168,7 @@ func (a *App) GetCloseRatingStats(r *fastglue.Request) error {
 	}
 	if err := a.DB.Model(&models.ChatClosureRating{}).
 		Select("status, COUNT(*) AS count").
-		Where("organization_id = ? AND whatsapp_account = ?", orgID, account.Name).
+		Where("organization_id = ? AND whats_app_account = ?", orgID, account.Name).
 		Group("status").Scan(&statusCounts).Error; err != nil {
 		a.Log.Error("Failed to load close-rating stats", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load stats", nil, "")
@@ -195,7 +195,7 @@ func (a *App) GetCloseRatingStats(r *fastglue.Request) error {
 	}
 	if err := a.DB.Model(&models.ChatClosureRating{}).
 		Select("rating, COUNT(*) AS count").
-		Where("organization_id = ? AND whatsapp_account = ? AND status = ? AND rating IS NOT NULL",
+		Where("organization_id = ? AND whats_app_account = ? AND status = ? AND rating IS NOT NULL",
 			orgID, account.Name, models.RatingStatusRated).
 		Group("rating").Scan(&dist).Error; err != nil {
 		a.Log.Error("Failed to load close-rating distribution", "error", err)

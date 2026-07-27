@@ -1696,6 +1696,12 @@
     "performanceComparison": "مقارنة الأداء بين الوكلاء",
     "noDataAvailable": "لا توجد بيانات متاحة",
     "noAgentsFound": "لم يتم العثور على وكلاء",
+    "customerRating": "تقييم العملاء",
+    "ratingsReceived": "{count} تقييم مستلم",
+    "noRatingsYet": "لا توجد تقييمات بعد",
+    "agentPerformance": "أداء الموظفين",
+    "agentPerformanceDesc": "كل موظف مع تقييم رضا العملاء الخاص به",
+    "agent": "الموظف",
     "errorLoadingAnalytics": "فشل تحميل تحليلات الوكلاء. يرجى المحاولة مرة أخرى."
   },
   "flowBuilder": {

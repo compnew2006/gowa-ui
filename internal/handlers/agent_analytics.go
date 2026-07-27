@@ -19,6 +19,8 @@ type AgentAnalyticsSummary struct {
 	TransfersBySource     map[string]int64 `json:"transfers_by_source"`
 	TotalBreakTimeMins    float64          `json:"total_break_time_mins"`
 	BreakCount            int64            `json:"break_count"`
+	AvgRating             float64          `json:"avg_rating"`
+	RatingsCount          int64            `json:"ratings_count"`
 }
 
 // AgentPerformanceStats represents performance metrics for an agent
@@ -34,6 +36,8 @@ type AgentPerformanceStats struct {
 	BreakCount           int64   `json:"break_count"`
 	IsAvailable          bool    `json:"is_available"`
 	CurrentBreakStart    *string `json:"current_break_start,omitempty"`
+	AvgRating            float64 `json:"avg_rating"`
+	RatingsCount         int64   `json:"ratings_count"`
 }
 
 // TrendPoint represents a data point for time-series charts
@@ -179,6 +183,9 @@ func (a *App) calculateSummaryStats(orgID uuid.UUID, start, end time.Time, summa
 	for _, sc := range sourceCounts {
 		summary.TransfersBySource[sc.Source] = sc.Count
 	}
+
+	// Customer satisfaction from close-rating cycles (org-wide)
+	summary.AvgRating, summary.RatingsCount = a.calculateClosureRatingStats(orgID, nil, start, end)
 }
 
 func (a *App) calculateAgentSummaryStats(orgID, agentID uuid.UUID, start, end time.Time, summary *AgentAnalyticsSummary) {
@@ -223,6 +230,9 @@ func (a *App) calculateAgentSummaryStats(orgID, agentID uuid.UUID, start, end ti
 
 	// Calculate break time
 	summary.TotalBreakTimeMins, summary.BreakCount = a.calculateBreakTime(agentID, start, end)
+
+	// Customer satisfaction from close-rating cycles for this agent
+	summary.AvgRating, summary.RatingsCount = a.calculateClosureRatingStats(orgID, &agentID, start, end)
 }
 
 func (a *App) calculateAgentStats(orgID, agentID uuid.UUID, start, end time.Time) AgentPerformanceStats {
@@ -270,6 +280,9 @@ func (a *App) calculateAgentStats(orgID, agentID uuid.UUID, start, end time.Time
 	// Calculate break time from availability logs
 	stats.TotalBreakTimeMins, stats.BreakCount = a.calculateBreakTime(agentID, start, end)
 
+	// Customer satisfaction from close-rating cycles closed by this agent
+	stats.AvgRating, stats.RatingsCount = a.calculateClosureRatingStats(orgID, &agentID, start, end)
+
 	// Check if currently on break and get break start time
 	if !stats.IsAvailable {
 		var currentBreak models.UserAvailabilityLog
@@ -283,14 +296,41 @@ func (a *App) calculateAgentStats(orgID, agentID uuid.UUID, start, end time.Time
 	return stats
 }
 
+// calculateClosureRatingStats aggregates rated close-rating cycles. When
+// agentID is nil the whole organization is aggregated; otherwise only cycles
+// closed by that agent are counted.
+func (a *App) calculateClosureRatingStats(orgID uuid.UUID, agentID *uuid.UUID, start, end time.Time) (avg float64, count int64) {
+	type ratingResult struct {
+		Avg   float64
+		Count int64
+	}
+	var result ratingResult
+	query := a.DB.Model(&models.ChatClosureRating{}).
+		Select("COALESCE(AVG(rating), 0) as avg, COUNT(*) as count").
+		Where("organization_id = ? AND status = ? AND rated_at >= ? AND rated_at <= ?",
+			orgID, models.RatingStatusRated, start, end)
+	if agentID != nil {
+		query = query.Where("closed_by_user_id = ?", *agentID)
+	}
+	query.Scan(&result)
+	return result.Avg, result.Count
+}
+
 func (a *App) calculateAllAgentStats(orgID uuid.UUID, start, end time.Time) []AgentPerformanceStats {
-	// Get all agents in the organization through team membership
+	// List every user who acts as an agent in this org: team members with the
+	// agent role, plus anyone who actually handled transfers or closed rated
+	// conversations — so orgs that don't use teams still see their staff here.
 	var agents []models.User
 	if err := a.DB.
-		Joins("JOIN team_members ON team_members.user_id = users.id").
-		Joins("JOIN teams ON teams.id = team_members.team_id").
-		Where("users.organization_id = ? AND team_members.role = ?", orgID, models.TeamRoleAgent).
-		Distinct().
+		Where("users.organization_id = ?", orgID).
+		Where(`users.id IN (SELECT team_members.user_id FROM team_members
+				JOIN teams ON teams.id = team_members.team_id
+				WHERE teams.organization_id = ? AND team_members.role = ?)
+			OR users.id IN (SELECT agent_id FROM agent_transfers
+				WHERE organization_id = ? AND agent_id IS NOT NULL)
+			OR users.id IN (SELECT closed_by_user_id FROM chat_closure_ratings
+				WHERE organization_id = ? AND closed_by_user_id IS NOT NULL)`,
+			orgID, models.TeamRoleAgent, orgID, orgID).
 		Find(&agents).Error; err != nil {
 		a.Log.Error("Failed to fetch agents for analytics", "error", err, "org_id", orgID)
 		return []AgentPerformanceStats{}

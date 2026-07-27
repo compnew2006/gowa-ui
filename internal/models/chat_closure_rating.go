@@ -37,7 +37,7 @@ type ChatClosureRating struct {
 	BaseModel
 	OrganizationID  uuid.UUID  `gorm:"type:uuid;index;not null" json:"organization_id"`
 	ContactID       uuid.UUID  `gorm:"type:uuid;index;not null" json:"contact_id"`
-	WhatsAppAccount string     `gorm:"size:100;index" json:"whatsapp_account"` // References WhatsAppAccount.Name
+	WhatsAppAccount string     `gorm:"column:whats_app_account;size:100;index" json:"whatsapp_account"` // References WhatsAppAccount.Name
 	ClosedByUserID  *uuid.UUID `gorm:"type:uuid" json:"closed_by_user_id,omitempty"`
 	Status          string     `gorm:"size:20;default:'pending';index" json:"status"` // pending | rated | expired
 	PromptKind      string     `gorm:"size:10;default:'text'" json:"prompt_kind"`     // text | poll

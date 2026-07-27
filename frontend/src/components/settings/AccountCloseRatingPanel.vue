@@ -41,11 +41,10 @@ const isSubmitting = ref(false)
 const ratingLogKey = ref(0)
 
 onMounted(async () => {
+  // Loaded independently: a stats failure must not blank the settings form
+  // (a rejected Promise.all here once made saved settings look lost).
   try {
-    const [ratingResponse, statsResponse] = await Promise.all([
-      closeRatingService.getSettings(props.accountId),
-      closeRatingService.getStats(props.accountId)
-    ])
+    const ratingResponse = await closeRatingService.getSettings(props.accountId)
     const rating = ratingResponse.data.data
     if (rating) {
       ratingSettings.value = {
@@ -59,9 +58,14 @@ onMounted(async () => {
         rating: String(r)
       }))
     }
-    ratingStats.value = statsResponse.data.data || null
   } catch (error) {
     console.error('Failed to load close-rating settings:', error)
+  }
+  try {
+    const statsResponse = await closeRatingService.getStats(props.accountId)
+    ratingStats.value = statsResponse.data.data || null
+  } catch (error) {
+    console.error('Failed to load close-rating stats:', error)
   }
 })
 

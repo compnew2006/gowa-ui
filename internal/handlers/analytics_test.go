@@ -253,3 +253,111 @@ func TestApp_GetAgentAnalytics_AgentSeesOwnStats(t *testing.T) {
 // --- GetAgentDetails Tests ---
 
 // --- GetAgentComparison Tests ---
+
+// createTestClosureRating creates a chat closure rating cycle in the database.
+func createTestClosureRating(t *testing.T, app *handlers.App, orgID, contactID uuid.UUID, closedBy *uuid.UUID, status string, rating *int, ratedAt *time.Time) *models.ChatClosureRating {
+	t.Helper()
+
+	cycle := &models.ChatClosureRating{
+		BaseModel:       models.BaseModel{ID: uuid.New()},
+		OrganizationID:  orgID,
+		ContactID:       contactID,
+		WhatsAppAccount: "test-account",
+		ClosedByUserID:  closedBy,
+		Status:          status,
+		Rating:          rating,
+		RatedAt:         ratedAt,
+		ExpiresAt:       time.Now().UTC().Add(48 * time.Hour),
+	}
+	require.NoError(t, app.DB.Create(cycle).Error)
+	return cycle
+}
+
+func TestApp_GetAgentAnalytics_ClosureRatings(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	perms := getAnalyticsPermissions(t, app)
+	role := testutil.CreateTestRoleExact(t, app.DB, org.ID, "Analytics Ratings", false, false, perms)
+	// NOTE: deliberately NOT a team member — the agent list must still include
+	// users who closed rated conversations (orgs without teams).
+	user := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("agent-ratings")),
+		testutil.WithPassword("password"),
+		testutil.WithRoleID(&role.ID),
+	)
+
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+	now := time.Now().UTC()
+	ratedAt := now.Add(-1 * time.Hour)
+
+	r4, r5 := 4, 5
+	createTestClosureRating(t, app, org.ID, contact.ID, &user.ID, models.RatingStatusRated, &r4, &ratedAt)
+	createTestClosureRating(t, app, org.ID, contact.ID, &user.ID, models.RatingStatusRated, &r5, &ratedAt)
+	// Pending and expired cycles must NOT count toward the average.
+	createTestClosureRating(t, app, org.ID, contact.ID, &user.ID, models.RatingStatusPending, nil, nil)
+	createTestClosureRating(t, app, org.ID, contact.ID, &user.ID, models.RatingStatusExpired, nil, nil)
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	// Explicit range so the default month window can't clip ratedAt on the 1st.
+	testutil.SetQueryParam(req, "from", now.Add(-48*time.Hour).Format("2006-01-02"))
+	testutil.SetQueryParam(req, "to", now.Format("2006-01-02"))
+
+	err := app.GetAgentAnalytics(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp struct {
+		Data handlers.AgentAnalyticsResponse `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+
+	// Org-wide summary aggregates only rated cycles.
+	assert.Equal(t, int64(2), resp.Data.Summary.RatingsCount)
+	assert.InDelta(t, 4.5, resp.Data.Summary.AvgRating, 0.001)
+
+	// The closing user appears in agent stats without any team membership,
+	// carrying their name and rating aggregate.
+	require.Len(t, resp.Data.AgentStats, 1)
+	agentStat := resp.Data.AgentStats[0]
+	assert.Equal(t, user.ID.String(), agentStat.AgentID)
+	assert.Equal(t, user.FullName, agentStat.AgentName)
+	assert.Equal(t, int64(2), agentStat.RatingsCount)
+	assert.InDelta(t, 4.5, agentStat.AvgRating, 0.001)
+
+	// my_stats carries the same rating aggregate for the requesting user.
+	require.NotNil(t, resp.Data.MyStats)
+	assert.Equal(t, int64(2), resp.Data.MyStats.RatingsCount)
+	assert.InDelta(t, 4.5, resp.Data.MyStats.AvgRating, 0.001)
+}
+
+func TestApp_GetAgentAnalytics_NoRatings(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	perms := getAnalyticsPermissions(t, app)
+	role := testutil.CreateTestRoleExact(t, app.DB, org.ID, "Analytics NoRatings", false, false, perms)
+	user := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("agent-noratings")),
+		testutil.WithPassword("password"),
+		testutil.WithRoleID(&role.ID),
+	)
+	createTestTeamWithAgent(t, app, org.ID, user.ID)
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+
+	err := app.GetAgentAnalytics(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp struct {
+		Data handlers.AgentAnalyticsResponse `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+
+	assert.Equal(t, int64(0), resp.Data.Summary.RatingsCount)
+	assert.Equal(t, float64(0), resp.Data.Summary.AvgRating)
+	require.Len(t, resp.Data.AgentStats, 1)
+	assert.Equal(t, int64(0), resp.Data.AgentStats[0].RatingsCount)
+	assert.Equal(t, float64(0), resp.Data.AgentStats[0].AvgRating)
+}
