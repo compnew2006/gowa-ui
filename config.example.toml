@@ -43,12 +43,8 @@ access_expiry_mins = 15
 refresh_expiry_days = 1
 
 [storage]
-type = "local"  # local, s3
+type = "local"
 local_path = "./uploads"
-s3_bucket = ""
-s3_region = ""
-s3_key = ""
-s3_secret = ""
 
 # Auth cookie settings (tokens are stored in httpOnly cookies)
 [cookie]

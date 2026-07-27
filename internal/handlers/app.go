@@ -12,7 +12,6 @@ import (
 	"github.com/shridarpatil/whatomate/internal/chatlifecycle"
 	"github.com/shridarpatil/whatomate/internal/config"
 	"github.com/shridarpatil/whatomate/internal/queue"
-	"github.com/shridarpatil/whatomate/internal/storage"
 	"github.com/shridarpatil/whatomate/internal/websocket"
 	"github.com/shridarpatil/whatomate/pkg/whatsapp"
 	"github.com/valyala/fasthttp"
@@ -41,8 +40,6 @@ type App struct {
 	// WS side effects. Handlers in chat_lifecycle.go are thin HTTP adapters
 	// over this service. Nil only in tests that don't exercise chat lifecycle.
 	ChatLifecycle *chatlifecycle.Service
-	// S3Client for serving presigned URLs (nil when not configured)
-	S3Client *storage.S3Client
 	// wg tracks background goroutines for graceful shutdown
 	wg sync.WaitGroup
 }

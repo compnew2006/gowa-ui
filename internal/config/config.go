@@ -143,12 +143,8 @@ type AIConfig struct {
 }
 
 type StorageConfig struct {
-	Type      string `koanf:"type"` // local, s3
+	Type      string `koanf:"type"` // local
 	LocalPath string `koanf:"local_path"`
-	S3Bucket  string `koanf:"s3_bucket"`
-	S3Region  string `koanf:"s3_region"`
-	S3Key     string `koanf:"s3_key"`
-	S3Secret  string `koanf:"s3_secret"`
 }
 
 type DefaultAdminConfig struct {

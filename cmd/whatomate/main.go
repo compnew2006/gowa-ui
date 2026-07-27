@@ -21,7 +21,6 @@ import (
 	"github.com/shridarpatil/whatomate/internal/middleware"
 	"github.com/shridarpatil/whatomate/internal/models"
 	"github.com/shridarpatil/whatomate/internal/queue"
-	"github.com/shridarpatil/whatomate/internal/storage"
 	"github.com/shridarpatil/whatomate/internal/websocket"
 	"github.com/shridarpatil/whatomate/internal/worker"
 	"github.com/shridarpatil/whatomate/pkg/gowa"
@@ -253,19 +252,6 @@ func runServer(args []string) {
 		Queue:      jobQueue,
 		HTTPClient: httpClient,
 	}
-
-	// Initialize S3 client for media storage (optional)
-	var s3Client *storage.S3Client
-	if cfg.Storage.S3Bucket != "" {
-		var err error
-		s3Client, err = storage.NewS3Client(&cfg.Storage)
-		if err != nil {
-			lo.Warn("Failed to initialize S3 client", "error", err)
-		} else {
-			lo.Info("S3 client initialized", "bucket", cfg.Storage.S3Bucket)
-		}
-	}
-	app.S3Client = s3Client
 
 	// Initialize shared assignment engine (used by chat transfers)
 	assigner := assignment.New(db, rdb, lo)
