@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'vue-sonner'
-import { MessageSquare, Loader2, Sparkles } from 'lucide-vue-next'
+import { MessageSquare, Loader2 } from 'lucide-vue-next'
 
 const { t } = useI18n()
 
@@ -85,59 +85,6 @@ const handleLogin = async () => {
   }
 }
 
-const handleDemoLogin = async () => {
-  isLoading.value = true
-
-  const demoAccounts = [
-    { email: 'admin@admin.com', password: 'admin' },
-    { email: 'admin@test.com', password: 'password' },
-    { email: 'admin@whatomate.com', password: 'admin' }
-  ]
-
-  let loggedIn = false
-
-  for (const acc of demoAccounts) {
-    try {
-      await authStore.login(acc.email, acc.password)
-      loggedIn = true
-      break
-    } catch {
-      // ignore and try next credential
-    }
-  }
-
-  if (!loggedIn) {
-    // Client-side session fallback if backend server is offline or doesn't match default seeded users
-    authStore.setAuth({
-      user: {
-        id: 'demo-user-1',
-        email: 'admin@whatomate.com',
-        full_name: 'Demo Administrator',
-        organization_id: 'org-demo-1',
-        organization_name: 'Whatomate Demo',
-        is_super_admin: true,
-        is_available: true,
-        role: {
-          id: 'role-superadmin',
-          name: 'superadmin',
-          is_system: true,
-          permissions: []
-        },
-        settings: {
-          email_notifications: true,
-          new_message_alerts: true,
-          campaign_updates: true
-        }
-      }
-    })
-  }
-
-  toast.success(t('auth.loginSuccess'))
-  const redirect = route.query.redirect as string
-  router.push(redirect || '/')
-  isLoading.value = false
-}
-
 const initiateSSO = (provider: string) => {
   const basePath = ((window as any).__BASE_PATH__ ?? '').replace(/\/$/, '')
   window.location.href = `${basePath}/api/auth/sso/${provider}/init`
@@ -186,17 +133,6 @@ const initiateSSO = (provider: string) => {
           <Button type="submit" class="w-full bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white shadow-lg shadow-emerald-500/20" :disabled="isLoading">
             <Loader2 v-if="isLoading" class="mr-2 h-4 w-4 animate-spin" />
             {{ $t('auth.signIn') }}
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            class="w-full bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300 light:bg-emerald-50 light:border-emerald-200 light:text-emerald-700 light:hover:bg-emerald-100 flex items-center justify-center gap-2 transition-all"
-            :disabled="isLoading"
-            @click="handleDemoLogin"
-          >
-            <Sparkles class="h-4 w-4 text-emerald-400 light:text-emerald-600" />
-            {{ $t('auth.demoLogin') }}
           </Button>
         </div>
       </form>

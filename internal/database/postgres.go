@@ -227,6 +227,18 @@ func getIndexes() []string {
 	return []string{
 		// Expand phone_number columns to support group JIDs (e.g., 120363422675615917@g.us)
 		`ALTER TABLE contacts ALTER COLUMN phone_number TYPE varchar(50)`,
+		// Heal the mis-named gowa_j_id column created by AutoMigrate before the
+		// GowaJID field had an explicit column tag. Raw SQL always used gowa_jid.
+		`DO $$ BEGIN
+			IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'whatsapp_accounts' AND column_name = 'gowa_j_id') THEN
+				IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'whatsapp_accounts' AND column_name = 'gowa_jid') THEN
+					UPDATE whatsapp_accounts SET gowa_jid = gowa_j_id WHERE (gowa_jid IS NULL OR gowa_jid = '') AND gowa_j_id IS NOT NULL AND gowa_j_id <> '';
+					ALTER TABLE whatsapp_accounts DROP COLUMN gowa_j_id;
+				ELSE
+					ALTER TABLE whatsapp_accounts RENAME COLUMN gowa_j_id TO gowa_jid;
+				END IF;
+			END IF;
+		END $$`,
 		`ALTER TABLE chatbot_sessions ALTER COLUMN phone_number TYPE varchar(50)`,
 		`ALTER TABLE agent_transfers ALTER COLUMN phone_number TYPE varchar(50)`,
 		`ALTER TABLE bulk_message_recipients ALTER COLUMN phone_number TYPE varchar(50)`,

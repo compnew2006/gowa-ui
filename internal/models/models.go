@@ -299,7 +299,7 @@ type WhatsAppAccount struct {
 	// GOWA credentials.
 	GowaBaseURL       string     `gorm:"size:255" json:"gowa_base_url,omitempty"`  // GOWA REST API base URL, e.g. "http://gowa:8080"
 	GowaDeviceID      string     `gorm:"size:100" json:"gowa_device_id,omitempty"` // GOWA device UUID identifying the WhatsApp session
-	GowaJID           string     `gorm:"size:100" json:"gowa_jid,omitempty"`       // Connected WhatsApp JID reported by GOWA (backfilled on first webhook)
+	GowaJID           string     `gorm:"column:gowa_jid;size:100" json:"gowa_jid,omitempty"` // Connected WhatsApp JID reported by GOWA (backfilled on first webhook)
 	GowaWebhookSecret string     `gorm:"size:255" json:"-"`                        // HMAC secret for verifying GOWA webhooks (encrypted)
 	IsDefaultIncoming bool       `gorm:"default:false" json:"is_default_incoming"`
 	IsDefaultOutgoing bool       `gorm:"default:false" json:"is_default_outgoing"`
