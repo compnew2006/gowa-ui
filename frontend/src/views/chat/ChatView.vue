@@ -1847,6 +1847,14 @@ function isMediaMessage(message: Message): boolean {
   return ['image', 'video', 'audio', 'document'].includes(message.message_type)
 }
 
+// Revoked messages keep their media_url (the backend only flips status and
+// content), so the file can stay visible under the red "deleted" overlay.
+// Broader than isMediaMessage because stickers are also overlaid.
+function hasRevokedMedia(message: Message): boolean {
+  return !!message.media_url &&
+    ['image', 'video', 'audio', 'document', 'sticker'].includes(message.message_type)
+}
+
 function getMediaUrl(message: Message): string {
   if (!message.media_url) return ''
   const basePath = ((window as any).__BASE_PATH__ ?? '').replace(/\/$/, '')
@@ -2741,11 +2749,53 @@ async function sendMediaMessage() {
                 </span>
                 <!-- Revoked (delete-for-everyone) placeholder. Both the inbound
                      message.revoked webhook and the outbound revoke handler set
-                     status "revoked", so a single render path covers both. -->
-                <span v-if="message.status === 'revoked'" class="block italic text-red-400 light:text-red-500">
-                  <Ban class="inline h-3 w-3 mr-1 align-text-bottom" />
-                  {{ $t('chat.messageRevokedPlaceholder') }}
-                </span>
+                     status "revoked", so a single render path covers both.
+                     Media files are kept visible under a red tint with the
+                     deleted label overlaid, since the backend preserves
+                     media_url on revoke. -->
+                <template v-if="message.status === 'revoked'">
+                  <div v-if="hasRevokedMedia(message)" class="revoked-media relative mb-1">
+                    <img
+                      v-if="message.message_type === 'image' || message.message_type === 'sticker'"
+                      :src="getMediaUrl(message)"
+                      :alt="$t('chat.messageRevokedPlaceholder')"
+                      class="max-w-[280px] max-h-[300px] rounded-lg cursor-pointer object-cover"
+                      @click="openMediaPreview(message)"
+                      @error="handleImageError($event)"
+                    />
+                    <video
+                      v-else-if="message.message_type === 'video'"
+                      :src="getMediaUrl(message)"
+                      controls
+                      class="max-w-[280px] max-h-[300px] rounded-lg"
+                    />
+                    <audio
+                      v-else-if="message.message_type === 'audio'"
+                      :src="getMediaUrl(message)"
+                      controls
+                      class="max-w-[280px]"
+                    />
+                    <a
+                      v-else
+                      :href="getMediaUrl(message)"
+                      :download="message.media_filename || 'document'"
+                      class="flex items-center gap-2 px-3 py-2 bg-background/50 rounded-lg hover:bg-background/80 transition-colors"
+                    >
+                      <FileText class="h-5 w-5 text-muted-foreground" />
+                      <span class="text-sm truncate max-w-[200px]">{{ message.media_filename || 'Document' }}</span>
+                    </a>
+                    <div class="revoked-media-overlay">
+                      <span class="revoked-media-label">
+                        <Ban class="h-3 w-3 shrink-0" />
+                        {{ $t('chat.messageRevokedPlaceholder') }}
+                      </span>
+                    </div>
+                  </div>
+                  <span v-else class="block italic text-red-400 light:text-red-500">
+                    <Ban class="inline h-3 w-3 mr-1 align-text-bottom" />
+                    {{ $t('chat.messageRevokedPlaceholder') }}
+                  </span>
+                </template>
                 <template v-else>
                 <div
                   v-if="message.is_reply && message.reply_to_message"
