@@ -333,17 +333,17 @@ func (s *Service) BulkRelease(ctx context.Context, orgID, userID uuid.UUID, ids 
 }
 
 // CustomerReopen reopens a closed conversation when the customer sends a new
-// inbound message. It unassigns the owner, clears collaborators, sets status
-// to pending, and writes the chat_reopened system message.
+// inbound message (or one is sent from the connected phone). It unassigns the
+// owner, clears collaborators, sets status to pending, writes the
+// chat_reopened system message, and broadcasts the reopen over WebSocket.
 //
-// This subsumes the duplicated block at internal/handlers/chatbot_processor.go
-// (lines 200-221 and 226-243 — currently copy-pasted twice). The service API
-// is ready; migrating the chatbot processor to call this is a follow-up task
-// (explicitly out of scope for the P0 extraction per the strangler plan).
+// note customizes the system-message text so the phone-sent path can say so;
+// an empty note falls back to the customer-reopen wording. Called from
+// ensureClaimableChatStatus in internal/handlers (incoming + phone-sent paths).
 //
 // Returns true if a reopen actually happened, false if the chat was already
 // in a non-closed state (idempotent — no system message written).
-func (s *Service) CustomerReopen(ctx context.Context, orgID uuid.UUID, contact *models.Contact) bool {
+func (s *Service) CustomerReopen(ctx context.Context, orgID uuid.UUID, contact *models.Contact, note string) bool {
 	if contact.EffectiveStatus() != models.ChatStatusClosed {
 		return false
 	}
@@ -359,8 +359,10 @@ func (s *Service) CustomerReopen(ctx context.Context, orgID uuid.UUID, contact *
 		return false
 	}
 
-	s.CreateSystemMessage(orgID, contact.ID,
-		"🔔 Conversation reopened by customer",
+	if note == "" {
+		note = "🔔 Conversation reopened by customer"
+	}
+	s.CreateSystemMessage(orgID, contact.ID, note,
 		models.JSONB{"system_type": "chat_reopened"})
 
 	s.broadcast(orgID, websocket.WSMessage{

@@ -184,9 +184,9 @@ func TestService_Release_Admin_CanReleaseClosed(t *testing.T) {
 	assert.Nil(t, updated.AssignedUserID)
 }
 
-// TestService_CustomerReopen_SubsumesChatbotProcessorBlock pins the new API
-// that will replace the duplicated block in chatbot_processor.go:200-243.
-// Pinning its behavior now means the follow-up migration is a pure swap.
+// TestService_CustomerReopen_SubsumesChatbotProcessorBlock pins the service
+// API behind ensureClaimableChatStatus (internal/handlers/chat_lifecycle.go),
+// which routes both the incoming and phone-sent reopen paths through here.
 func TestService_CustomerReopen_SubsumesChatbotProcessorBlock(t *testing.T) {
 	svc, db, org := newService(t)
 	contact := testutil.CreateTestContact(t, db, org.ID)
@@ -194,7 +194,7 @@ func TestService_CustomerReopen_SubsumesChatbotProcessorBlock(t *testing.T) {
 	require.NoError(t, db.Model(&models.Contact{}).Where("id = ?", contact.ID).
 		Update("metadata", contact.Metadata).Error)
 
-	reopened := svc.CustomerReopen(context.Background(), org.ID, contact)
+	reopened := svc.CustomerReopen(context.Background(), org.ID, contact, "")
 	assert.True(t, reopened, "CustomerReopen on a closed chat must reopen it")
 
 	var updated models.Contact
@@ -203,7 +203,7 @@ func TestService_CustomerReopen_SubsumesChatbotProcessorBlock(t *testing.T) {
 	assert.Nil(t, updated.AssignedUserID, "reopen must unassign the owner")
 
 	// Idempotent: a second call on the now-pending chat must NOT re-fire.
-	reopenedAgain := svc.CustomerReopen(context.Background(), org.ID, &updated)
+	reopenedAgain := svc.CustomerReopen(context.Background(), org.ID, &updated, "")
 	assert.False(t, reopenedAgain, "CustomerReopen on a non-closed chat must be a no-op")
 }
 

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,28 +13,14 @@ import (
 	"github.com/zerodha/fastglue"
 )
 
-// createSystemMessage is a thin delegator to Service.CreateSystemMessage.
-//
-// It exists only so internal/handlers/chatbot_processor.go (which writes
-// "Conversation reopened by customer" on inbound messages) keeps compiling
-// during the gradual chat-lifecycle extraction. The chatbot processor is
-// explicitly out of scope for the P0 refactor (strangler) — its two call
-// sites (chatbot_processor.go:218,240) will migrate to ChatLifecycle
-// directly in a follow-up that also dedupes the duplicated reopen block.
-//
-// TODO(chat-lifecycle): migrate chatbot_processor.go to a.ChatLifecycle, then
-// delete this delegator.
-func (a *App) createSystemMessage(orgID, contactID uuid.UUID, content string, metadata models.JSONB) {
-	a.ChatLifecycle.CreateSystemMessage(orgID, contactID, content, metadata)
-}
-
 // ensureClaimableChatStatus normalizes the lifecycle status when a new
 // customer-side message lands on the conversation — regardless of whether it
 // was received on the connected number or sent from its phone (is_from_me).
 // Unassigned conversations become pending (they must be claimed before an
-// agent can view them); closed conversations reopen as pending with a system
-// message. Assigned open conversations are left untouched — the inactivity
-// timer resets via last_message_at.
+// agent can view them); closed conversations reopen as pending via
+// ChatLifecycle.CustomerReopen (system message + WS broadcast). Assigned open
+// conversations are left untouched — the inactivity timer resets via
+// last_message_at.
 func (a *App) ensureClaimableChatStatus(orgID uuid.UUID, contact *models.Contact, reopenNote string) {
 	if contact.AssignedUserID == nil {
 		if contact.EffectiveStatus() != models.ChatStatusPending {
@@ -42,18 +29,7 @@ func (a *App) ensureClaimableChatStatus(orgID uuid.UUID, contact *models.Contact
 		}
 		return
 	}
-	if contact.EffectiveStatus() == models.ChatStatusClosed {
-		// New activity on a closed conversation — reopen as pending.
-		contact.AssignedUserID = nil
-		contact.ClearCollaborators()
-		contact.SetStatus(models.ChatStatusPending)
-		a.DB.Model(contact).Updates(map[string]any{
-			"assigned_user_id": nil,
-			"metadata":         contact.Metadata,
-		})
-		a.createSystemMessage(orgID, contact.ID, reopenNote,
-			models.JSONB{"system_type": "chat_reopened"})
-	}
+	a.ChatLifecycle.CustomerReopen(context.Background(), orgID, contact, reopenNote)
 }
 
 // ClaimChat allows an agent to claim a pending (unassigned) conversation.
