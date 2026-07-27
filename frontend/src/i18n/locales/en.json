@@ -493,7 +493,8 @@
       "chat_closed": "{agent} closed this conversation",
       "chat_reopened": "{agent} reopened this conversation",
       "collaborator_joined": "{agent} joined the conversation",
-      "collaborator_left": "{agent} left the conversation"
+      "collaborator_left": "{agent} left the conversation",
+      "rating_received": "⭐ Customer rated the conversation {rating}/5"
     }
   },
   "contacts": {
@@ -627,7 +628,28 @@
     "save": "Save Changes",
     "saved": "Settings saved",
     "generalSaved": "General settings saved",
-    "notificationsSaved": "Notification settings saved"
+    "notificationsSaved": "Notification settings saved",
+    "rating": "Rating",
+    "ratingStats": "Rating Statistics",
+    "ratingAverage": "Average rating",
+    "ratingResponses": "Responses",
+    "ratingResponseRate": "Response rate",
+    "ratingPending": "Awaiting reply",
+    "ratingSettings": "Chat Close Rating",
+    "ratingSettingsDesc": "Ask customers to rate the conversation after it is closed. Configured per account: each number can have its own message, staff and address",
+    "ratingEnable": "Enable rating prompts",
+    "ratingEnableDesc": "Send a rating request automatically when a conversation is closed",
+    "ratingWindowHours": "Reply window (hours)",
+    "ratingWindowHoursDesc": "How long a rating reply is accepted after the prompt (1–720 hours)",
+    "ratingPrompt": "Prompt message",
+    "ratingPromptPlaceholder": "Rate our service: send a number from 1 to 5",
+    "ratingThanks": "Thank-you message",
+    "ratingThanksDesc": "Sent after a rating is captured. Leave empty to disable.",
+    "ratingLexicon": "Custom word ratings",
+    "ratingLexiconDesc": "Map customer words to ratings — entries override the built-in dictionary",
+    "ratingLexiconWordPlaceholder": "Word, e.g. awesome",
+    "ratingAddWord": "Add word",
+    "ratingSaved": "Rating settings saved"
   },
   "users": {
     "title": "User Management",

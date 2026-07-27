@@ -1745,6 +1745,11 @@ function extractAgentFromLegacy(content: any): string {
 
 function getSystemMessageText(message: Message): string {
   const systemType = message.metadata?.system_type
+  // rating_received carries {rating} instead of {agent}, so it is handled
+  // outside the SYSTEM_MESSAGE_TYPES set.
+  if (systemType === 'rating_received' && message.metadata?.rating != null) {
+    return t('chat.system.rating_received', { rating: message.metadata.rating })
+  }
   if (systemType && SYSTEM_MESSAGE_TYPES.has(systemType)) {
     const agent =
       (message.metadata?.agent_name as string | undefined) ||

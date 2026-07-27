@@ -47,6 +47,10 @@ const notificationSettings = ref({
   campaign_updates: true
 })
 
+// Close-rating (CSAT) settings moved to the per-account page
+// (Settings → Accounts → account → Rating panel): each WhatsApp number has
+// its own prompt/thanks/lexicon.
+
 // Bump these keys to force the AuditLogPanel to remount and refetch after a save.
 // The backend writes audit entries asynchronously in a goroutine, so we delay
 // the remount slightly to give the write time to hit the DB before refetching.

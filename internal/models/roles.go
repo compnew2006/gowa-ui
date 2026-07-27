@@ -53,6 +53,8 @@ const (
 	ResourceSettingsChatbot      = "settings.chatbot"
 	ResourceSettingsSSO          = "settings.sso"
 	ResourceSettingsNotification = "settings.notification"
+	// Audit-only resource for the close-rating settings tab (not a permission).
+	ResourceSettingsCloseRating = "settings.close_rating"
 	// Chatbot sub-resources — used only as audit_log resource_type values
 	// for per-tab activity feeds, not checked by the permission system.
 	ResourceSettingsChatbotMessages = "settings.chatbot.messages"

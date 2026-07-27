@@ -600,6 +600,34 @@ export const organizationService = {
   }) => api.put('/org/settings', data)
 }
 
+export interface CloseRatingSettings {
+  enabled: boolean
+  window_hours: number
+  prompt: string
+  thanks: string
+  lexicon: Record<string, number>
+}
+
+export interface CloseRatingStats {
+  total: number
+  pending: number
+  rated: number
+  expired: number
+  average: number
+  response_rate: number
+  distribution: Record<string, number>
+}
+
+// Per-account chat-close rating (settings live on the WhatsApp account)
+export const closeRatingService = {
+  getSettings: (accountId: string) =>
+    api.get<{ data: CloseRatingSettings }>(`/accounts/${accountId}/close-rating`),
+  updateSettings: (accountId: string, data: CloseRatingSettings) =>
+    api.put(`/accounts/${accountId}/close-rating`, data),
+  getStats: (accountId: string) =>
+    api.get<{ data: CloseRatingStats }>(`/accounts/${accountId}/close-rating/stats`)
+}
+
 // Organizations
 export interface Organization {
   id: string

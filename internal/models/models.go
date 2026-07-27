@@ -297,13 +297,14 @@ type WhatsAppAccount struct {
 	Name           string    `gorm:"size:100;uniqueIndex:idx_wa_org_name;not null" json:"name"` // Unique per org, used as reference
 
 	// GOWA credentials.
-	GowaBaseURL       string     `gorm:"size:255" json:"gowa_base_url,omitempty"`  // GOWA REST API base URL, e.g. "http://gowa:8080"
-	GowaDeviceID      string     `gorm:"size:100" json:"gowa_device_id,omitempty"` // GOWA device UUID identifying the WhatsApp session
+	GowaBaseURL       string     `gorm:"size:255" json:"gowa_base_url,omitempty"`            // GOWA REST API base URL, e.g. "http://gowa:8080"
+	GowaDeviceID      string     `gorm:"size:100" json:"gowa_device_id,omitempty"`           // GOWA device UUID identifying the WhatsApp session
 	GowaJID           string     `gorm:"column:gowa_jid;size:100" json:"gowa_jid,omitempty"` // Connected WhatsApp JID reported by GOWA (backfilled on first webhook)
-	GowaWebhookSecret string     `gorm:"size:255" json:"-"`                        // HMAC secret for verifying GOWA webhooks (encrypted)
+	GowaWebhookSecret string     `gorm:"size:255" json:"-"`                                  // HMAC secret for verifying GOWA webhooks (encrypted)
 	IsDefaultIncoming bool       `gorm:"default:false" json:"is_default_incoming"`
 	IsDefaultOutgoing bool       `gorm:"default:false" json:"is_default_outgoing"`
 	AutoReadReceipt   bool       `gorm:"default:false" json:"auto_read_receipt"`
+	Settings          JSONB      `gorm:"type:jsonb;default:'{}'" json:"settings"` // Per-account config (close_rating, ...)
 	Status            string     `gorm:"size:20;default:'active'" json:"status"`
 	CreatedByID       *uuid.UUID `gorm:"type:uuid" json:"created_by_id,omitempty"`
 	UpdatedByID       *uuid.UUID `gorm:"type:uuid" json:"updated_by_id,omitempty"`
@@ -334,9 +335,9 @@ func (a *WhatsAppAccount) DecryptSecrets(encryptionKey string) {
 // Contact represents a WhatsApp contact/profile
 type Contact struct {
 	BaseModel
-	OrganizationID     uuid.UUID  `gorm:"type:uuid;index;not null" json:"organization_id"`
-	PhoneNumber        string     `gorm:"size:50;not null" json:"phone_number"`
-	ProfileName        string     `gorm:"size:255" json:"profile_name"`
+	OrganizationID uuid.UUID `gorm:"type:uuid;index;not null" json:"organization_id"`
+	PhoneNumber    string    `gorm:"size:50;not null" json:"phone_number"`
+	ProfileName    string    `gorm:"size:255" json:"profile_name"`
 	// AvatarURL is the contact's WhatsApp profile picture (or group icon),
 	// fetched via the GOWA /user/avatar endpoint. Empty when the contact has
 	// no picture, hasn't been synced yet, or the provider doesn't expose one —
@@ -415,7 +416,7 @@ type Template struct {
 	Name            string     `gorm:"size:255;not null" json:"name"`
 	DisplayName     string     `gorm:"size:255" json:"display_name"`
 	Language        string     `gorm:"size:10;not null" json:"language"`
-	Category        string     `gorm:"size:50" json:"category"` // MARKETING, UTILITY, AUTHENTICATION
+	Category        string     `gorm:"size:50" json:"category"`    // MARKETING, UTILITY, AUTHENTICATION
 	HeaderType      string     `gorm:"size:20" json:"header_type"` // TEXT, IMAGE, DOCUMENT, VIDEO
 	HeaderContent   string     `gorm:"type:text" json:"header_content"`
 	BodyContent     string     `gorm:"type:text;not null" json:"body_content"`

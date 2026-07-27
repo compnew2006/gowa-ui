@@ -186,6 +186,15 @@ func (a *App) processIncomingMessageFull(phoneNumberID string, msg IncomingTextM
 		}
 	}
 
+	// A reply to a pending close-rating cycle is consumed as the rating and
+	// must NOT reopen the closed conversation — capture strictly before
+	// ensureClaimableChatStatus. The reply itself is still saved to the chat
+	// history; chatbot processing stops here.
+	if a.maybeCaptureCloseRating(account, contact, msg) {
+		a.saveIncomingMessage(account, contact, msg.ID, "text", msg.Text.Body, nil, "", senderName, senderJID)
+		return
+	}
+
 	// Set chat_status to pending for unassigned conversations (new or reopened).
 	// If the conversation was closed and the customer sends a new message, reopen as pending.
 	// If already open (assigned), don't change — the timer resets via last_message_at.

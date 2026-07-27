@@ -11,6 +11,7 @@ import DetailPageLayout from '@/components/shared/DetailPageLayout.vue'
 import MetadataPanel from '@/components/shared/MetadataPanel.vue'
 import AuditLogPanel from '@/components/shared/AuditLogPanel.vue'
 import UnsavedChangesDialog from '@/components/shared/UnsavedChangesDialog.vue'
+import AccountCloseRatingPanel from '@/components/settings/AccountCloseRatingPanel.vue'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -495,6 +496,13 @@ onMounted(async () => {
           </div>
         </CardContent>
       </Card>
+
+      <!-- Per-account chat-close rating (prompt/thanks/lexicon + CSAT stats) -->
+      <AccountCloseRatingPanel
+        v-if="account && !isNew"
+        :account-id="account.id"
+        :can-write="canWrite"
+      />
 
       <!-- Activity Log -->
       <AuditLogPanel

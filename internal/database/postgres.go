@@ -108,6 +108,9 @@ func GetMigrationModels() []MigrationModel {
 
 		// GOWA instances (DB-managed GOWA servers)
 		{"GowaInstance", &models.GowaInstance{}},
+
+		// Chat closure CSAT rating cycles
+		{"ChatClosureRating", &models.ChatClosureRating{}},
 	}
 }
 
@@ -244,6 +247,9 @@ func getIndexes() []string {
 		`ALTER TABLE bulk_message_recipients ALTER COLUMN phone_number TYPE varchar(50)`,
 		// Indexes
 		`CREATE INDEX IF NOT EXISTS idx_messages_contact_created ON messages(contact_id, created_at DESC)`,
+		// One pending rating cycle per contact — closes the check-then-insert race
+		// between concurrent chat closes at the database level.
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_closure_ratings_pending ON chat_closure_ratings(contact_id) WHERE status = 'pending' AND deleted_at IS NULL`,
 		`CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_contacts_org_phone ON contacts(organization_id, phone_number)`,
 		`CREATE INDEX IF NOT EXISTS idx_contacts_assigned_read ON contacts(assigned_user_id, is_read)`,

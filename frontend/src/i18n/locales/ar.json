@@ -493,7 +493,8 @@
       "chat_closed": "{agent} أغلق هذه المحادثة",
       "chat_reopened": "{agent} أعاد فتح هذه المحادثة",
       "collaborator_joined": "{agent} انضم إلى المحادثة",
-      "collaborator_left": "{agent} غادر المحادثة"
+      "collaborator_left": "{agent} غادر المحادثة",
+      "rating_received": "⭐ قيّم العميل المحادثة {rating}/5"
     }
   },
   "contacts": {
@@ -627,7 +628,28 @@
     "save": "حفظ التغييرات",
     "saved": "تم حفظ الإعدادات",
     "generalSaved": "تم حفظ الإعدادات العامة",
-    "notificationsSaved": "تم حفظ إعدادات التنبيهات"
+    "notificationsSaved": "تم حفظ إعدادات التنبيهات",
+    "rating": "التقييم",
+    "ratingStats": "إحصائيات التقييم",
+    "ratingAverage": "متوسط التقييم",
+    "ratingResponses": "الردود",
+    "ratingResponseRate": "معدل الاستجابة",
+    "ratingPending": "بانتظار الرد",
+    "ratingSettings": "تقييم إغلاق المحادثة",
+    "ratingSettingsDesc": "اطلب من العملاء تقييم المحادثة بعد إغلاقها. الإعداد خاص بكل حساب: لكل رقم رسالته وموظفوه وعنوانه",
+    "ratingEnable": "تفعيل طلب التقييم",
+    "ratingEnableDesc": "إرسال طلب تقييم تلقائيًا عند إغلاق المحادثة",
+    "ratingWindowHours": "نافذة الرد (بالساعات)",
+    "ratingWindowHoursDesc": "المدة التي يُقبل خلالها رد التقييم بعد الطلب (1–720 ساعة)",
+    "ratingPrompt": "رسالة طلب التقييم",
+    "ratingPromptPlaceholder": "قيّم خدمتنا: أرسل رقمًا من ١ إلى ٥",
+    "ratingThanks": "رسالة الشكر",
+    "ratingThanksDesc": "تُرسل بعد استلام التقييم. اتركها فارغة لتعطيلها.",
+    "ratingLexicon": "معجم الكلمات المخصص",
+    "ratingLexiconDesc": "اربط كلمات العملاء بتقييمات — المدخلات تتجاوز القاموس المدمج",
+    "ratingLexiconWordPlaceholder": "كلمة، مثل: يجنن",
+    "ratingAddWord": "إضافة كلمة",
+    "ratingSaved": "تم حفظ إعدادات التقييم"
   },
   "sso": {
     "title": "تسجيل الدخول الموحد (SSO)",

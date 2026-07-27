@@ -307,6 +307,9 @@ func (a *App) LeaveChat(r *fastglue.Request) error {
 			"ghost_exit": true,
 		})
 	case chatlifecycle.LeaveClosedChat:
+		// Leaving as the last participant closed the conversation — same CSAT
+		// trigger as an explicit close.
+		go a.maybeSendCloseRatingPrompt(orgID, userID, contact)
 		return r.SendEnvelope(map[string]any{
 			"contact_id": contact.ID,
 			"left":       true,
@@ -405,6 +408,10 @@ func (a *App) CloseChat(r *fastglue.Request) error {
 		a.Log.Error("Failed to close chat", "error", err, "contact_id", contact.ID)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to close chat", nil, "")
 	}
+
+	// Kick off the CSAT rating cycle off-path — messaging stays out of the
+	// chatlifecycle service, so the prompt is triggered here in the handler.
+	go a.maybeSendCloseRatingPrompt(orgID, userID, contact)
 
 	return r.SendEnvelope(map[string]any{
 		"contact_id": contact.ID,
