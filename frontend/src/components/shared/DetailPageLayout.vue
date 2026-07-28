@@ -16,6 +16,11 @@ defineProps<{
   isNotFound?: boolean
   notFoundTitle?: string
   notFoundDescription?: string
+  /** When true, drops the 2/3 + 1/3 sidebar split and widens the content
+   *  canvas so the page can lay out its own multi-column bento grid in the
+   *  default slot. The sidebar slot still renders above the content when
+   *  populated. Default false keeps the legacy 6xl + sidebar layout. */
+  wide?: boolean
 }>()
 </script>
 
@@ -50,7 +55,17 @@ defineProps<{
     <!-- Content -->
     <ScrollArea v-else class="flex-1">
       <div class="p-6">
-        <div class="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Wide canvas: page owns its own bento grid in the default slot.
+             The sidebar slot (if any) stacks above the content. -->
+        <div v-if="wide" class="max-w-[1600px] mx-auto space-y-6">
+          <div v-if="$slots.sidebar" class="space-y-6">
+            <slot name="sidebar" />
+          </div>
+          <slot />
+        </div>
+
+        <!-- Legacy 2/3 + 1/3 layout (default for all other detail pages). -->
+        <div v-else class="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div class="lg:col-span-2 space-y-6">
             <slot />
           </div>

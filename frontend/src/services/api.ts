@@ -641,6 +641,20 @@ export const callAutoRejectService = {
     api.put(`/accounts/${accountId}/call-auto-reject`, data)
 }
 
+export interface ChatResetSettings {
+  enabled: boolean
+  time: string
+  timezone: string
+}
+
+// Per-account daily assigned-chat reset schedule (settings live on the WhatsApp account)
+export const dailyResetService = {
+  getSettings: (accountId: string) =>
+    api.get<{ data: ChatResetSettings }>(`/accounts/${accountId}/daily-reset`),
+  updateSettings: (accountId: string, data: ChatResetSettings) =>
+    api.put(`/accounts/${accountId}/daily-reset`, data)
+}
+
 // Organizations
 export interface Organization {
   id: string

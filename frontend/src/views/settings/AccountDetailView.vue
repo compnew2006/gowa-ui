@@ -8,11 +8,11 @@ import { toast } from 'vue-sonner'
 import { getErrorMessage } from '@/lib/api-utils'
 import { useUnsavedChangesGuard } from '@/composables/useUnsavedChangesGuard'
 import DetailPageLayout from '@/components/shared/DetailPageLayout.vue'
-import MetadataPanel from '@/components/shared/MetadataPanel.vue'
 import AuditLogPanel from '@/components/shared/AuditLogPanel.vue'
 import UnsavedChangesDialog from '@/components/shared/UnsavedChangesDialog.vue'
 import AccountCloseRatingPanel from '@/components/settings/AccountCloseRatingPanel.vue'
 import AccountCallRejectPanel from '@/components/settings/AccountCallRejectPanel.vue'
+import AccountChatResetPanel from '@/components/settings/AccountChatResetPanel.vue'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -41,7 +41,11 @@ import {
   CheckCircle2,
   QrCode,
   Link2,
-  Smartphone
+  Smartphone,
+  Lightbulb,
+  ServerCog,
+  Route,
+  Cpu,
 } from 'lucide-vue-next'
 import {
   Dialog,
@@ -56,6 +60,13 @@ import {
   TabsTrigger,
   TabsContent,
 } from '@/components/ui/tabs'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 interface WhatsAppAccount {
   id: string
@@ -98,18 +109,34 @@ const canDelete = computed(() => authStore.hasPermission('accounts', 'delete'))
 const canWriteDevices = computed(() => authStore.hasPermission('devices', 'write'))
 
 // Single Activity Log aggregates every audit entry tied to this account: the
-// account itself plus its per-account settings blocks (close_rating and
-// call_auto_reject), which share the account's resource_id. Bumped after the
-// account or a child panel saves to remount the panel and refetch.
+// account itself plus its per-account settings blocks (close_rating,
+// call_auto_reject and daily_reset), which share the account's resource_id.
+// Bumped after the account or a child panel saves to remount the panel and
+// refetch.
 const accountLogKey = ref(0)
 const accountLogResourceTypes = [
   'account',
   'settings.close_rating',
   'settings.call_auto_reject',
+  'settings.chat_reset',
 ]
 function bumpAccountLog() {
   accountLogKey.value++
 }
+
+// Connection status summary for the sidebar Quick-Ref card. The account
+// `status` field means "configured/active" on the platform; the GOWA device
+// connection (live WhatsApp session) is reflected by `gowa_status`, which we
+// fetch lazily here for the glance card. Both default to a safe "unknown".
+const connectionSummary = computed(() => {
+  if (!account.value) return { tone: 'unknown', label: t('accounts.deviceStatusUnknown') }
+  const isActive = account.value.status === 'active'
+  return {
+    tone: isActive ? 'active' : 'inactive',
+    label: isActive ? t('accounts.statusActive') : t('accounts.statusInactive'),
+    desc: isActive ? t('accounts.statusActiveDesc') : t('accounts.statusInactiveDesc'),
+  }
+})
 
 const form = ref({
   name: '',
@@ -380,15 +407,16 @@ onMounted(async () => {
       :breadcrumbs="breadcrumbs"
       :is-loading="isLoading"
       :is-not-found="isNotFound"
+      wide
     >
       <template #actions>
         <div class="flex items-center gap-2">
           <Button v-if="!isNew && account && canWriteDevices" variant="outline" size="sm" @click="openGowaConnect">
-            <QrCode class="h-4 w-4 mr-1" />
+            <QrCode class="h-4 w-4 me-1.5" />
             {{ $t('accounts.connectDevice', 'Connect Device') }}
           </Button>
           <Button v-if="canWrite && (hasChanges || isNew)" size="sm" @click="save" :disabled="isSaving" class="bg-emerald-600 hover:bg-emerald-700 text-white font-medium">
-            <Save class="h-4 w-4 mr-1" /> {{ isSaving ? $t('common.saving', 'Saving...') : isNew ? $t('common.create', 'Create') : $t('common.save', 'Save') }}
+            <Save class="h-4 w-4 me-1.5" /> {{ isSaving ? $t('common.saving', 'Saving...') : isNew ? $t('common.create', 'Create') : $t('common.save', 'Save') }}
           </Button>
           <Button v-if="!isNew && canDelete" variant="ghost" size="icon" class="text-destructive hover:text-destructive" @click="deleteDialogOpen = true">
             <Trash2 class="h-4 w-4" />
@@ -396,140 +424,296 @@ onMounted(async () => {
         </div>
       </template>
 
-      <!-- Account Details Card -->
-      <Card>
-        <CardHeader class="pb-3">
-          <div class="flex items-center justify-between">
-            <div>
-              <CardTitle class="text-sm font-medium">{{ $t('accounts.accountDetails', 'GOWA Account Details') }}</CardTitle>
-              <CardDescription class="text-xs">{{ $t('accounts.gowaAccountDesc', 'Configure GOWA server connection parameters') }}</CardDescription>
-            </div>
-            <Badge v-if="account" :variant="account.status === 'active' ? 'default' : 'secondary'">
-              {{ account.status }}
-            </Badge>
+      <!-- ════════════ SECTION 1 — Identity & Connection ════════════ -->
+      <section class="space-y-3">
+        <header class="flex items-start gap-3">
+          <div class="h-7 w-7 rounded-md bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0">
+            <ServerCog class="h-4 w-4" />
           </div>
-        </CardHeader>
-        <CardContent class="space-y-4">
-          <div class="space-y-1.5">
-            <Label class="text-xs">{{ $t('accounts.accountName', 'Account Name') }} *</Label>
-            <Input v-model="form.name" placeholder="e.g. Sales WhatsApp" :disabled="!canWrite" />
+          <div class="min-w-0">
+            <h2 class="text-sm font-semibold leading-tight">{{ $t('accounts.sectionIdentity') }}</h2>
+            <p class="text-xs text-muted-foreground mt-0.5">{{ $t('accounts.sectionIdentityDesc') }}</p>
           </div>
+        </header>
 
-          <Separator />
-
-          <!-- New account provisioning options -->
-          <div v-if="isNew" class="space-y-4">
-            <div class="space-y-1.5" v-if="gowaInstances.length > 0">
-              <Label class="text-xs">{{ $t('accounts.gowaInstance', 'Select GOWA Server Instance') }}</Label>
-              <select
-                v-model="selectedGowaInstance"
-                class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                :disabled="!canWrite"
+        <Card>
+          <CardHeader class="pb-4">
+            <div class="flex items-center justify-between gap-3">
+              <div class="min-w-0">
+                <CardTitle class="text-sm font-medium">{{ $t('accounts.accountDetails') }}</CardTitle>
+                <CardDescription class="text-xs">{{ $t('accounts.sectionConnectionDesc') }}</CardDescription>
+              </div>
+              <!-- Prominent status pill -->
+              <div
+                v-if="account"
+                class="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-xs font-medium shrink-0"
+                :class="connectionSummary.tone === 'active'
+                  ? 'bg-emerald-500/15 text-emerald-400'
+                  : 'bg-muted text-muted-foreground'"
               >
-                <option value="">{{ $t('accounts.selectInstance', 'Select an instance or enter manually below...') }}</option>
-                <option v-for="inst in gowaInstances" :key="inst.base_url" :value="inst.base_url">{{ inst.name }} ({{ inst.base_url }})</option>
-              </select>
+                <span
+                  class="h-1.5 w-1.5 rounded-full"
+                  :class="connectionSummary.tone === 'active' ? 'bg-emerald-400' : 'bg-muted-foreground/60'"
+                />
+                {{ connectionSummary.label }}
+              </div>
+            </div>
+          </CardHeader>
+
+          <CardContent class="space-y-5">
+            <!-- Account name — full width, slightly taller for identity emphasis -->
+            <div class="space-y-1.5">
+              <Label for="account_name" class="text-xs">
+                {{ $t('accounts.accountName') }} <span class="text-destructive">*</span>
+              </Label>
+              <Input
+                id="account_name"
+                v-model="form.name"
+                :placeholder="$t('accounts.accountNamePlaceholder', 'e.g. Sales WhatsApp')"
+                :disabled="!canWrite"
+                class="h-9"
+              />
+              <p class="text-[11px] text-muted-foreground">{{ $t('accounts.nameHint') }}</p>
             </div>
 
-            <div v-if="selectedGowaInstance && !form.gowa_device_id" class="flex items-center gap-2 p-3 bg-muted/40 rounded-lg border border-border/50">
-              <Button variant="outline" size="sm" :disabled="creatingDevice" @click="createGowaDevice">
-                <Loader2 v-if="creatingDevice" class="h-4 w-4 animate-spin mr-1" />
-                <Smartphone v-else class="h-4 w-4 mr-1 text-emerald-500" />
-                {{ $t('accounts.createDevice', 'Auto-Provision Device') }}
+            <Separator />
+
+            <!-- Provisioning (new accounts only) -->
+            <div v-if="isNew && gowaInstances.length > 0" class="space-y-3">
+              <div class="space-y-1.5">
+                <Label class="text-xs">{{ $t('accounts.gowaInstance') }}</Label>
+                <Select v-model="selectedGowaInstance" :disabled="!canWrite">
+                  <SelectTrigger class="h-9">
+                    <SelectValue :placeholder="$t('accounts.selectInstance')" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">{{ $t('accounts.selectInstance') }}</SelectItem>
+                    <SelectItem v-for="inst in gowaInstances" :key="inst.base_url" :value="inst.base_url">
+                      {{ inst.name }} ({{ inst.base_url }})
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div
+                v-if="selectedGowaInstance && !form.gowa_device_id"
+                class="flex flex-col sm:flex-row sm:items-center gap-3 p-3 rounded-lg border border-border/60 bg-muted/30"
+              >
+                <Button variant="outline" size="sm" :disabled="creatingDevice" @click="createGowaDevice" class="shrink-0">
+                  <Loader2 v-if="creatingDevice" class="h-4 w-4 me-1.5 animate-spin" />
+                  <Smartphone v-else class="h-4 w-4 me-1.5 text-emerald-500" />
+                  {{ $t('accounts.createDevice') }}
+                </Button>
+                <span class="text-xs text-muted-foreground">{{ $t('accounts.createDeviceDesc') }}</span>
+              </div>
+            </div>
+
+            <!-- GOWA connection grid — unified for new + existing accounts -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div class="space-y-1.5">
+                <Label for="gowa_base_url" class="text-xs">
+                  {{ $t('accounts.gowaBaseUrl') }} <span class="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="gowa_base_url"
+                  v-model="form.gowa_base_url"
+                  :placeholder="isNew ? 'http://127.0.0.1:3000' : ''"
+                  class="font-mono text-xs h-9"
+                  :disabled="!canWrite"
+                />
+              </div>
+              <div class="space-y-1.5">
+                <Label for="gowa_device_id" class="text-xs">
+                  {{ $t('accounts.gowaDeviceId') }} <span class="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="gowa_device_id"
+                  v-model="form.gowa_device_id"
+                  :placeholder="isNew ? 'e.g. device_1' : ''"
+                  class="font-mono text-xs h-9"
+                  :disabled="!canWrite"
+                />
+              </div>
+              <div class="space-y-1.5">
+                <Label for="gowa_username" class="text-xs">{{ $t('accounts.gowaUsernameOptional') }}</Label>
+                <Input
+                  id="gowa_username"
+                  v-model="form.gowa_username"
+                  :placeholder="isNew ? 'basic-auth user' : ''"
+                  class="h-9"
+                  :disabled="!canWrite"
+                />
+              </div>
+              <div class="space-y-1.5">
+                <Label for="gowa_password" class="text-xs">{{ $t('accounts.gowaPasswordOptional') }}</Label>
+                <Input
+                  id="gowa_password"
+                  v-model="form.gowa_password"
+                  type="password"
+                  :placeholder="isNew ? 'basic-auth password' : ''"
+                  class="h-9"
+                  :disabled="!canWrite"
+                />
+              </div>
+            </div>
+            <p class="text-[11px] text-muted-foreground -mt-2">{{ $t('accounts.gowaAuthHint') }}</p>
+          </CardContent>
+        </Card>
+      </section>
+
+      <!-- ════════════ Row 2 — Routing ‖ Quick-Ref ‖ Tips ════════════ -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        <!-- Routing Defaults -->
+        <section class="space-y-3">
+          <header class="flex items-start gap-3">
+            <div class="h-7 w-7 rounded-md bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0">
+              <Route class="h-4 w-4" />
+            </div>
+            <div class="min-w-0">
+              <h2 class="text-sm font-semibold leading-tight">{{ $t('accounts.sectionRouting') }}</h2>
+              <p class="text-xs text-muted-foreground mt-0.5">{{ $t('accounts.sectionRoutingDesc') }}</p>
+            </div>
+          </header>
+          <Card>
+            <CardContent class="pt-6">
+              <ul class="divide-y divide-border/50">
+                <li class="flex items-center justify-between gap-4 py-3 first:pt-0">
+                  <div class="min-w-0">
+                    <Label class="text-xs">{{ $t('accounts.defaultIncoming') }}</Label>
+                    <p class="text-[11px] text-muted-foreground mt-0.5">{{ $t('settings.incomingRoutingDesc') }}</p>
+                  </div>
+                  <Switch :checked="form.is_default_incoming" @update:checked="form.is_default_incoming = $event" :disabled="!canWrite" class="shrink-0" />
+                </li>
+                <li class="flex items-center justify-between gap-4 py-3">
+                  <div class="min-w-0">
+                    <Label class="text-xs">{{ $t('accounts.defaultOutgoing') }}</Label>
+                    <p class="text-[11px] text-muted-foreground mt-0.5">{{ $t('settings.outgoingRoutingDesc') }}</p>
+                  </div>
+                  <Switch :checked="form.is_default_outgoing" @update:checked="form.is_default_outgoing = $event" :disabled="!canWrite" class="shrink-0" />
+                </li>
+                <li class="flex items-center justify-between gap-4 py-3 last:pb-0">
+                  <div class="min-w-0">
+                    <Label class="text-xs">{{ $t('accounts.autoReadReceipt') }}</Label>
+                    <p class="text-[11px] text-muted-foreground mt-0.5">{{ $t('settings.readReceiptDesc') }}</p>
+                  </div>
+                  <Switch :checked="form.auto_read_receipt" @update:checked="form.auto_read_receipt = $event" :disabled="!canWrite" class="shrink-0" />
+                </li>
+              </ul>
+            </CardContent>
+          </Card>
+        </section>
+
+        <!-- Device Quick-Ref (existing accounts only) -->
+        <section v-if="account && !isNew" class="space-y-3">
+          <header class="flex items-start gap-3">
+            <div class="h-7 w-7 rounded-md bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0">
+              <Smartphone class="h-4 w-4" />
+            </div>
+            <div class="min-w-0">
+              <h2 class="text-sm font-semibold leading-tight">{{ $t('accounts.deviceQuickRef') }}</h2>
+              <p class="text-xs text-muted-foreground mt-0.5">{{ $t('accounts.deviceQuickRefDesc') }}</p>
+            </div>
+          </header>
+          <Card>
+            <CardContent class="space-y-4 pt-6">
+              <!-- status row -->
+              <div class="flex items-center gap-2 flex-wrap">
+                <span
+                  class="h-2 w-2 rounded-full shrink-0"
+                  :class="connectionSummary.tone === 'active' ? 'bg-emerald-400' : 'bg-muted-foreground/50'"
+                />
+                <span class="text-sm font-medium">{{ connectionSummary.label }}</span>
+                <span class="text-xs text-muted-foreground">·</span>
+                <span class="text-xs text-muted-foreground">{{ connectionSummary.desc }}</span>
+              </div>
+              <Separator />
+              <!-- key/value reference -->
+              <dl class="space-y-3 text-xs">
+                <div class="flex items-start justify-between gap-3">
+                  <dt class="text-muted-foreground shrink-0">{{ $t('accounts.gowaDeviceId') }}</dt>
+                  <dd class="font-mono text-end truncate min-w-0" :title="form.gowa_device_id">{{ form.gowa_device_id || '—' }}</dd>
+                </div>
+                <div class="flex items-start justify-between gap-3">
+                  <dt class="text-muted-foreground shrink-0">{{ $t('accounts.gowaBaseUrl') }}</dt>
+                  <dd class="font-mono text-end truncate min-w-0" :title="form.gowa_base_url">{{ form.gowa_base_url || '—' }}</dd>
+                </div>
+              </dl>
+              <Button
+                v-if="canWriteDevices"
+                variant="outline"
+                size="sm"
+                class="w-full"
+                @click="openGowaConnect"
+              >
+                <QrCode class="h-4 w-4 me-1.5" />
+                {{ $t('accounts.deviceConnectCta') }}
               </Button>
-              <span class="text-xs text-muted-foreground">{{ $t('accounts.createDeviceDesc', 'Automatically provisions a new device ID on the selected server') }}</span>
-            </div>
+            </CardContent>
+          </Card>
+        </section>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
-              <div class="space-y-1.5">
-                <Label class="text-xs">{{ $t('accounts.gowaBaseUrl', 'GOWA Base URL') }} *</Label>
-                <Input v-model="form.gowa_base_url" placeholder="http://127.0.0.1:3000 or http://localhost:8080" class="font-mono text-xs" :disabled="!canWrite" />
-              </div>
-              <div class="space-y-1.5">
-                <Label class="text-xs">{{ $t('accounts.gowaDeviceId', 'GOWA Device ID') }} *</Label>
-                <Input v-model="form.gowa_device_id" placeholder="e.g. device_1 or my_wa_account" class="font-mono text-xs" :disabled="!canWrite" />
-              </div>
+        <!-- Tips (fills the third column for new accounts) -->
+        <section class="space-y-3">
+          <header class="flex items-start gap-3">
+            <div class="h-7 w-7 rounded-md bg-amber-500/15 text-amber-500 flex items-center justify-center shrink-0">
+              <Lightbulb class="h-4 w-4" />
             </div>
+            <div class="min-w-0">
+              <h2 class="text-sm font-semibold leading-tight">{{ $t('accounts.tips.title') }}</h2>
+              <p class="text-xs text-muted-foreground mt-0.5">{{ $t('accounts.sectionIdentityDesc') }}</p>
+            </div>
+          </header>
+          <Card>
+            <CardContent class="pt-6">
+              <ul class="space-y-2.5 text-xs text-muted-foreground leading-relaxed">
+                <li class="flex gap-2">
+                  <span class="text-emerald-500 mt-0.5 shrink-0">→</span>
+                  <span>{{ $t('accounts.tips.name') }}</span>
+                </li>
+                <li class="flex gap-2">
+                  <span class="text-emerald-500 mt-0.5 shrink-0">→</span>
+                  <span>{{ $t('accounts.tips.connect') }}</span>
+                </li>
+                <li class="flex gap-2">
+                  <span class="text-emerald-500 mt-0.5 shrink-0">→</span>
+                  <span>{{ $t('accounts.tips.save') }}</span>
+                </li>
+              </ul>
+            </CardContent>
+          </Card>
+        </section>
+      </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div class="space-y-1.5">
-                <Label class="text-xs">{{ $t('accounts.gowaUsername', 'Username (Optional)') }}</Label>
-                <Input v-model="form.gowa_username" placeholder="Basic auth username if required" class="text-xs" :disabled="!canWrite" />
-              </div>
-              <div class="space-y-1.5">
-                <Label class="text-xs">{{ $t('accounts.gowaPassword', 'Password (Optional)') }}</Label>
-                <Input v-model="form.gowa_password" type="password" placeholder="Basic auth password if required" class="text-xs" :disabled="!canWrite" />
-              </div>
-            </div>
+      <!-- ════════════ Section 3 — Automation (3 columns) ════════════ -->
+      <section v-if="account && !isNew" class="space-y-3">
+        <header class="flex items-start gap-3">
+          <div class="h-7 w-7 rounded-md bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0">
+            <Cpu class="h-4 w-4" />
           </div>
-
-          <!-- Existing account params -->
-          <div v-else class="space-y-3">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div class="space-y-1.5">
-                <Label class="text-xs">{{ $t('accounts.gowaBaseUrl', 'GOWA Base URL') }} *</Label>
-                <Input v-model="form.gowa_base_url" class="font-mono text-xs" :disabled="!canWrite" />
-              </div>
-              <div class="space-y-1.5">
-                <Label class="text-xs">{{ $t('accounts.gowaDeviceId', 'GOWA Device ID') }} *</Label>
-                <Input v-model="form.gowa_device_id" class="font-mono text-xs" :disabled="!canWrite" />
-              </div>
-            </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div class="space-y-1.5">
-                <Label class="text-xs">{{ $t('accounts.gowaUsername', 'Username (Optional)') }}</Label>
-                <Input v-model="form.gowa_username" placeholder="Basic auth username if required" class="text-xs" :disabled="!canWrite" />
-              </div>
-              <div class="space-y-1.5">
-                <Label class="text-xs">{{ $t('accounts.gowaPassword', 'Password (Optional)') }}</Label>
-                <Input v-model="form.gowa_password" type="password" placeholder="Basic auth password if required" class="text-xs" :disabled="!canWrite" />
-              </div>
-            </div>
+          <div class="min-w-0">
+            <h2 class="text-sm font-semibold leading-tight">{{ $t('accounts.sectionAutomation') }}</h2>
+            <p class="text-xs text-muted-foreground mt-0.5">{{ $t('accounts.sectionAutomationDesc') }}</p>
           </div>
+        </header>
 
-          <Separator />
-
-          <div class="space-y-3">
-            <div class="flex items-center justify-between">
-              <div>
-                <Label class="text-xs">{{ $t('accounts.defaultIncoming', 'Default for Incoming') }}</Label>
-                <p class="text-[11px] text-muted-foreground">Route unassigned incoming WhatsApp messages to this account</p>
-              </div>
-              <Switch :checked="form.is_default_incoming" @update:checked="form.is_default_incoming = $event" :disabled="!canWrite" />
-            </div>
-            <div class="flex items-center justify-between">
-              <div>
-                <Label class="text-xs">{{ $t('accounts.defaultOutgoing', 'Default for Outgoing') }}</Label>
-                <p class="text-[11px] text-muted-foreground">Use this account for default outgoing campaign dispatch</p>
-              </div>
-              <Switch :checked="form.is_default_outgoing" @update:checked="form.is_default_outgoing = $event" :disabled="!canWrite" />
-            </div>
-            <div class="flex items-center justify-between">
-              <div>
-                <Label class="text-xs">{{ $t('accounts.autoReadReceipt', 'Auto Read Receipt') }}</Label>
-                <p class="text-[11px] text-muted-foreground">Automatically send read receipts for incoming messages</p>
-              </div>
-              <Switch :checked="form.auto_read_receipt" @update:checked="form.auto_read_receipt = $event" :disabled="!canWrite" />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <!-- Per-account chat-close rating (prompt/thanks/lexicon + CSAT stats) -->
-      <AccountCloseRatingPanel
-        v-if="account && !isNew"
-        :account-id="account.id"
-        :can-write="canWrite"
-        @saved="bumpAccountLog"
-      />
-
-      <!-- Per-account call auto-reject (toggle + automated message) -->
-      <AccountCallRejectPanel
-        v-if="account && !isNew"
-        :account-id="account.id"
-        :can-write="canWrite"
-        @saved="bumpAccountLog"
-      />
+        <div class="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
+          <AccountCloseRatingPanel
+            :account-id="account.id"
+            :can-write="canWrite"
+            @saved="bumpAccountLog"
+          />
+          <AccountCallRejectPanel
+            :account-id="account.id"
+            :can-write="canWrite"
+            @saved="bumpAccountLog"
+          />
+          <AccountChatResetPanel
+            :account-id="account.id"
+            :can-write="canWrite"
+            @saved="bumpAccountLog"
+          />
+        </div>
+      </section>
 
       <!-- Activity Log (aggregated: account + per-account settings blocks) -->
       <AuditLogPanel
@@ -538,33 +722,6 @@ onMounted(async () => {
         :resource-type="accountLogResourceTypes"
         :resource-id="account.id"
       />
-
-      <!-- Sidebar -->
-      <template #sidebar>
-        <MetadataPanel
-          v-if="!isNew"
-          :created-at="account?.created_at"
-          :updated-at="account?.updated_at"
-          :created-by-name="account?.created_by_name"
-          :updated-by-name="account?.updated_by_name"
-        />
-
-        <!-- GOWA Setup Guide -->
-        <Card>
-          <CardHeader class="pb-3">
-            <CardTitle class="text-sm font-medium">{{ $t('accounts.setupGuide', 'GOWA Connection Guide') }}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ol class="list-decimal list-inside space-y-2.5 text-xs text-muted-foreground leading-relaxed">
-              <li>Enter an <strong>Account Name</strong> for identification.</li>
-              <li>Set or select the <strong>GOWA Base URL</strong> (e.g. server URL).</li>
-              <li>Provide a unique <strong>Device ID</strong>.</li>
-              <li>Click <strong>Save / Create</strong> to register the account.</li>
-              <li>Click <strong>Connect Device</strong> to scan QR code or enter Pair Code on WhatsApp.</li>
-            </ol>
-          </CardContent>
-        </Card>
-      </template>
     </DetailPageLayout>
 
     <!-- Delete Confirmation -->

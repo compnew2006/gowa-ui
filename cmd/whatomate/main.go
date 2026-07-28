@@ -310,6 +310,13 @@ func runServer(args []string) {
 	go slaProcessor.Start(slaCtx)
 	lo.Info("SLA processor started")
 
+	// Start daily chat-reset processor (polls every minute, resets assigned
+	// chats to pending per account schedule).
+	chatResetProcessor := handlers.NewChatResetProcessor(app, time.Minute)
+	chatResetCtx, chatResetCancel := context.WithCancel(context.Background())
+	go chatResetProcessor.Start(chatResetCtx)
+	lo.Info("Chat reset processor started")
+
 	// Start embedded workers
 	var workers []*worker.Worker
 	var workerCancel context.CancelFunc
@@ -354,6 +361,12 @@ func runServer(args []string) {
 	slaCancel()
 	slaProcessor.Stop()
 	lo.Info("SLA processor stopped")
+
+	// Stop chat reset processor
+	lo.Info("Stopping chat reset processor...")
+	chatResetCancel()
+	chatResetProcessor.Stop()
+	lo.Info("Chat reset processor stopped")
 
 	// Stop workers first
 	if workerCancel != nil {
@@ -675,6 +688,10 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	// Per-account call auto-reject (settings live on the WhatsApp account)
 	g.GET("/api/accounts/{id}/call-auto-reject", app.GetCallAutoRejectSettings)
 	g.PUT("/api/accounts/{id}/call-auto-reject", app.UpdateCallAutoRejectSettings)
+
+	// Per-account daily assigned-chat reset schedule (settings live on the WhatsApp account)
+	g.GET("/api/accounts/{id}/daily-reset", app.GetChatResetSettings)
+	g.PUT("/api/accounts/{id}/daily-reset", app.UpdateChatResetSettings)
 
 	// GOWA device management (QR code, pair code, connection status)
 	g.POST("/api/accounts/{id}/gowa/pair-code", app.GowaPairCode)

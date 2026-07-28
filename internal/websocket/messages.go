@@ -70,6 +70,9 @@ const (
 	TypeChatReleased         = "chat_released"
 	TypeCollaboratorJoined   = "collaborator_joined"
 	TypeCollaboratorLeft     = "collaborator_left"
+
+	// Scheduled maintenance types
+	TypeDailyChatReset = "daily_chat_reset"
 )
 
 // BroadcastMessage represents a message to be broadcast to clients
