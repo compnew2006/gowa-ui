@@ -91,9 +91,16 @@ type EditedPayload struct {
 // CallOfferPayload is decoded when event == "call.offer" (incoming call
 // ringing). payload.from and payload.call_id are the exact values the
 // POST /call/reject endpoint requires (caller_jid / call_id).
+//
+// ChatID is the conversation JID (phone-number based, e.g.
+// "9665xxx@s.whatsapp.net") when GOWA includes it. The From field can be a
+// WhatsApp internal call-signaling ID that is NOT a messaging JID — sending
+// a text to it fails with "not on whatsapp". ChatID is preferred for the
+// rejection message whenever it is present.
 type CallOfferPayload struct {
 	CallID string `json:"call_id"`
 	From   string `json:"from"`
+	ChatID string `json:"chat_id,omitempty"`
 }
 
 // ConnectionPayload is decoded when event == "connection".

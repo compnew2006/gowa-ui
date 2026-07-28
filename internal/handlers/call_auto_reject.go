@@ -78,11 +78,19 @@ func (a *App) processGowaCallOffer(account *models.WhatsAppAccount, envelope *go
 		return
 	}
 
+	// Dump the raw payload at INFO level so we can see every field GOWA sends
+	// — the `from` can be a WhatsApp LID (internal privacy ID) that is NOT a
+	// phone-number JID, and we need to find the real caller identity.
+	a.Log.Info("GOWA call.offer raw payload",
+		"device_id", envelope.DeviceID, "payload", string(envelope.Payload))
+
 	var call gowa.CallOfferPayload
 	if err := json.Unmarshal(envelope.Payload, &call); err != nil {
 		a.Log.Error("Failed to parse GOWA call.offer payload", "error", err)
 		return
 	}
+	a.Log.Info("GOWA call.offer parsed",
+		"from", call.From, "call_id", call.CallID, "chat_id", call.ChatID)
 	if call.CallID == "" || call.From == "" {
 		a.Log.Warn("GOWA call.offer missing call_id or from", "device_id", envelope.DeviceID)
 		return
@@ -110,9 +118,45 @@ func (a *App) processGowaCallOffer(account *models.WhatsAppAccount, envelope *go
 		return
 	}
 
-	phone := gowa.PhoneFromJID(call.From)
+	// Determine the messaging phone number for the caller.
+	//
+	// call.From is always used for /call/reject (GOWA requires the exact
+	// signaling address), but it may be a WhatsApp LID (Linked ID — a
+	// privacy-preserving internal ID) rather than a phone-number JID.
+	// /send/message only accepts phone-number JIDs and rejects LIDs with
+	// "is not on whatsapp".
+	//
+	// Resolution order:
+	//  1. chat_id (if GOWA includes it — phone-based conversation JID)
+	//  2. Resolve the `from` LID via GOWA's /user/info endpoint
+	//  3. Fall back to the raw `from` digits (may fail at send time)
+	var phone string
+	if call.ChatID != "" {
+		phone = gowa.PhoneFromJID(call.ChatID)
+	}
 	if phone == "" {
-		return
+		// Try to resolve the `from` field as a LID. GOWA's /user/info
+		// endpoint accepts "<number>@lid" and returns the real phone number.
+		resolved, err := gowaClient.ResolveLID(context.Background(), account.GowaDeviceID, call.From)
+		if err != nil {
+			a.Log.Warn("Failed to resolve caller LID via GOWA /user/info",
+				"error", err, "from", call.From, "account", account.Name)
+		}
+		if resolved != "" {
+			phone = resolved
+			a.Log.Info("Resolved caller LID to phone number",
+				"from", call.From, "phone", phone, "account", account.Name)
+		}
+	}
+	if phone == "" {
+		// Last resort: extract digits from `from`. This will likely fail at
+		// send time if `from` is a LID, but try anyway in case it's a real JID.
+		phone = gowa.PhoneFromJID(call.From)
+		if phone == "" {
+			return
+		}
+		a.Log.Warn("Could not resolve caller LID; using raw 'from' digits — message may fail",
+			"from", call.From, "phone", phone, "account", account.Name)
 	}
 	contact, isNew, err := contactutil.GetOrCreateContact(a.DB, account.OrganizationID, phone, "")
 	if err != nil {

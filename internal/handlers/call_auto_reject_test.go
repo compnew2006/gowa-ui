@@ -88,6 +88,9 @@ type callRejectMock struct {
 	rejectCalled  bool
 	webhookEvents string // served on GET /devices/{id}/webhook
 	patchedEvents string // captured from PATCH /devices/{id}/webhook
+	// lidMap maps a LID number (without suffix) to a phone number, simulating
+	// GOWA's /user/info?phone=<lid>@lid resolved_phone field.
+	lidMap map[string]string
 }
 
 func newCallRejectMock(t *testing.T) *callRejectMock {
@@ -117,6 +120,21 @@ func newCallRejectMock(t *testing.T) *callRejectMock {
 					"webhook_events": events,
 				},
 			})
+			return
+		}
+		if r.URL.Path == "/user/info" {
+			phone := r.URL.Query().Get("phone")
+			m.mu.Unlock()
+			w.Header().Set("Content-Type", "application/json")
+			if strings.HasSuffix(phone, "@lid") {
+				bare := strings.TrimSuffix(phone, "@lid")
+				if resolved, ok := m.lidMap[bare]; ok {
+					_, _ = w.Write([]byte(`{"code":"SUCCESS","message":"Success get user info","results":{"resolved_phone":"` + resolved + `"}}`))
+					return
+				}
+			}
+			// Default: return a minimal success so the fallback path works.
+			_, _ = w.Write([]byte(`{"code":"SUCCESS","message":"Success get user info","results":{}}`))
 			return
 		}
 		if r.URL.Path == "/call/reject" {
@@ -182,6 +200,24 @@ func newCallRejectTestApp(t *testing.T, mock *callRejectMock) *App {
 func callOfferEnvelope(t *testing.T, deviceID, from, callID string) *gowa.WebhookPayload {
 	t.Helper()
 	payload, err := json.Marshal(map[string]string{"call_id": callID, "from": from})
+	require.NoError(t, err)
+	return &gowa.WebhookPayload{
+		Event:    "call.offer",
+		DeviceID: deviceID,
+		Payload:  payload,
+	}
+}
+
+// callOfferEnvelopeWithChat is like callOfferEnvelope but also includes chat_id
+// in the payload — the phone-number-based conversation JID that GOWA may send
+// alongside the internal call-signaling `from` address.
+func callOfferEnvelopeWithChat(t *testing.T, deviceID, from, callID, chatID string) *gowa.WebhookPayload {
+	t.Helper()
+	payload, err := json.Marshal(map[string]string{
+		"call_id": callID,
+		"from":    from,
+		"chat_id": chatID,
+	})
 	require.NoError(t, err)
 	return &gowa.WebhookPayload{
 		Event:    "call.offer",
@@ -300,6 +336,90 @@ func TestProcessGowaCallOffer_MalformedPayloadIgnored(t *testing.T) {
 	})
 
 	assert.Empty(t, mock.calledPaths())
+}
+
+// TestProcessGowaCallOffer_ChatIDPreferredForMessage verifies that when GOWA
+// includes chat_id (the phone-number-based conversation JID) alongside an
+// internal call-signaling from address, the rejection message is sent to the
+// chat_id — not to the internal ID that /send/message can't reach.
+func TestProcessGowaCallOffer_ChatIDPreferredForMessage(t *testing.T) {
+	mock := newCallRejectMock(t)
+	app := newCallRejectTestApp(t, mock)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+
+	settings := models.JSONB{
+		"call_auto_reject": map[string]any{
+			"enabled": true,
+			"message": "Sorry we can't take calls",
+		},
+	}
+	require.NoError(t, app.DB.Model(account).Update("settings", settings).Error)
+	require.NoError(t, app.DB.First(account, account.ID).Error)
+
+	// from is an internal WhatsApp call-signaling ID; chat_id is the real phone.
+	app.processGowaCallOffer(account, callOfferEnvelopeWithChat(t,
+		account.GowaDeviceID,
+		"149641526026409@s.whatsapp.net", // internal ID
+		"CALL_005",
+		"966561853319@s.whatsapp.net", // real phone JID
+	))
+
+	// Rejection still uses the exact signaling `from` value.
+	require.True(t, mock.rejectCalled)
+	assert.Equal(t, "149641526026409@s.whatsapp.net", mock.rejectBody["caller_jid"])
+
+	// The automated message is stored against the chat_id phone number, not
+	// the internal ID.
+	var contact models.Contact
+	require.NoError(t, app.DB.Where("organization_id = ? AND phone_number = ?", org.ID, "966561853319").First(&contact).Error)
+	var msgs []models.Message
+	require.NoError(t, app.DB.Where("contact_id = ? AND direction = ?", contact.ID, models.DirectionOutgoing).Find(&msgs).Error)
+	require.Len(t, msgs, 1)
+	assert.Equal(t, "Sorry we can't take calls", msgs[0].Content)
+}
+
+// TestProcessGowaCallOffer_LIDResolvedToPhoneNumber verifies that when the
+// call.offer `from` field is a WhatsApp LID (not a phone JID) and no chat_id
+// is provided, the handler resolves the LID to a real phone number via GOWA's
+// /user/info endpoint before sending the automated message.
+func TestProcessGowaCallOffer_LIDResolvedToPhoneNumber(t *testing.T) {
+	mock := newCallRejectMock(t)
+	mock.lidMap = map[string]string{
+		"149641526026409": "966561853319",
+	}
+	app := newCallRejectTestApp(t, mock)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+
+	settings := models.JSONB{
+		"call_auto_reject": map[string]any{
+			"enabled": true,
+			"message": "Please text us instead",
+		},
+	}
+	require.NoError(t, app.DB.Model(account).Update("settings", settings).Error)
+	require.NoError(t, app.DB.First(account, account.ID).Error)
+
+	// No chat_id — from is a LID disguised as @s.whatsapp.net.
+	app.processGowaCallOffer(account, callOfferEnvelope(t,
+		account.GowaDeviceID,
+		"149641526026409@s.whatsapp.net",
+		"CALL_006",
+	))
+
+	// Rejection still uses the exact `from` value.
+	require.True(t, mock.rejectCalled)
+	assert.Equal(t, "149641526026409@s.whatsapp.net", mock.rejectBody["caller_jid"])
+
+	// The message was saved against the RESOLVED phone number, not the LID.
+	var contact models.Contact
+	require.NoError(t, app.DB.Where("organization_id = ? AND phone_number = ?", org.ID, "966561853319").First(&contact).Error,
+		"contact must be created with the resolved phone number")
+	var msgs []models.Message
+	require.NoError(t, app.DB.Where("contact_id = ? AND direction = ?", contact.ID, models.DirectionOutgoing).Find(&msgs).Error)
+	require.Len(t, msgs, 1)
+	assert.Equal(t, "Please text us instead", msgs[0].Content)
 }
 
 func TestEnsureCallOfferSubscription(t *testing.T) {
