@@ -115,6 +115,8 @@ func runMigrations(db *gorm.DB) error {
 		&models.CannedResponse{},
 		// Chat close rating (CSAT)
 		&models.ChatClosureRating{},
+		// Scheduled outgoing messages
+		&models.ScheduledMessage{},
 		// Dashboard
 		&models.Widget{},
 		// Conversation Notes
@@ -148,6 +150,7 @@ func cleanupTables(db *gorm.DB) {
 		"ai_contexts",
 		"agent_transfers",
 		// WhatsApp tables
+		"scheduled_messages",
 		"messages",
 		"tags",
 		"contacts",

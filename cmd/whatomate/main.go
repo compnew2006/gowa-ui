@@ -317,6 +317,13 @@ func runServer(args []string) {
 	go chatResetProcessor.Start(chatResetCtx)
 	lo.Info("Chat reset processor started")
 
+	// Start scheduled-message processor (polls every minute, fires due
+	// scheduled messages through the unified sender).
+	scheduledMsgProcessor := handlers.NewScheduledMessageProcessor(app, time.Minute)
+	scheduledMsgCtx, scheduledMsgCancel := context.WithCancel(context.Background())
+	go scheduledMsgProcessor.Start(scheduledMsgCtx)
+	lo.Info("Scheduled message processor started")
+
 	// Start embedded workers
 	var workers []*worker.Worker
 	var workerCancel context.CancelFunc
@@ -367,6 +374,12 @@ func runServer(args []string) {
 	chatResetCancel()
 	chatResetProcessor.Stop()
 	lo.Info("Chat reset processor stopped")
+
+	// Stop scheduled message processor
+	lo.Info("Stopping scheduled message processor...")
+	scheduledMsgCancel()
+	scheduledMsgProcessor.Stop()
+	lo.Info("Scheduled message processor stopped")
 
 	// Stop workers first
 	if workerCancel != nil {
@@ -731,6 +744,13 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.PUT("/api/contacts/{id}/assign", app.AssignContact)
 	g.PUT("/api/contacts/{id}/tags", app.UpdateContactTags)
 	g.GET("/api/contacts/{id}/session-data", app.GetContactSessionData)
+
+	// Scheduled messages
+	g.POST("/api/contacts/{id}/scheduled-messages", app.CreateScheduledMessage)
+	g.GET("/api/contacts/{id}/scheduled-messages", app.ListContactScheduledMessages)
+	g.GET("/api/scheduled-messages", app.ListScheduledMessages)
+	g.PUT("/api/scheduled-messages/{id}", app.UpdateScheduledMessage)
+	g.DELETE("/api/scheduled-messages/{id}", app.CancelScheduledMessage)
 
 	// Chat Lifecycle
 	g.PUT("/api/contacts/{id}/claim", app.ClaimChat)

@@ -64,15 +64,19 @@ const (
 	// Call permission types
 	TypeCallPermissionUpdate = "call_permission_update"
 
-	TypeChatClaimed          = "chat_claimed"
-	TypeChatClosed           = "chat_closed"
-	TypeChatReopened         = "chat_reopened"
-	TypeChatReleased         = "chat_released"
-	TypeCollaboratorJoined   = "collaborator_joined"
-	TypeCollaboratorLeft     = "collaborator_left"
+	TypeChatClaimed        = "chat_claimed"
+	TypeChatClosed         = "chat_closed"
+	TypeChatReopened       = "chat_reopened"
+	TypeChatReleased       = "chat_released"
+	TypeCollaboratorJoined = "collaborator_joined"
+	TypeCollaboratorLeft   = "collaborator_left"
 
 	// Scheduled maintenance types
 	TypeDailyChatReset = "daily_chat_reset"
+
+	// Scheduled message types
+	TypeScheduledMessageCreated = "scheduled_message_created"
+	TypeScheduledMessageUpdated = "scheduled_message_updated"
 )
 
 // BroadcastMessage represents a message to be broadcast to clients

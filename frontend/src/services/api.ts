@@ -939,6 +939,54 @@ export const notesService = {
     api.delete(`/contacts/${contactId}/notes/${noteId}`)
 }
 
+// Scheduled Messages
+export interface ScheduledMessage {
+  id: string
+  organization_id: string
+  whatsapp_account: string
+  contact_id: string
+  message_type: string
+  content: string
+  media_url?: string
+  media_mime_type?: string
+  media_filename?: string
+  template_id?: string
+  template_params?: Record<string, any>
+  scheduled_at: string
+  status: 'pending' | 'processing' | 'sent' | 'failed' | 'cancelled'
+  sent_message_id?: string
+  error_message?: string
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ScheduledMessagePayload {
+  type?: string
+  content: {
+    body?: string
+    media_data?: string
+    media_mime_type?: string
+    media_filename?: string
+  }
+  whatsapp_account?: string
+  scheduled_at: string
+  template_id?: string
+  template_params?: Record<string, any>
+}
+
+export const scheduledMessagesService = {
+  listForContact: (contactId: string, params?: { status?: string; page?: number; limit?: number }) =>
+    api.get<{ scheduled_messages: ScheduledMessage[]; total: number }>(`/contacts/${contactId}/scheduled-messages`, { params }),
+  list: (params?: { status?: string; whatsapp_account?: string; page?: number; limit?: number }) =>
+    api.get<{ scheduled_messages: ScheduledMessage[]; total: number }>('/scheduled-messages', { params }),
+  create: (contactId: string, data: ScheduledMessagePayload) =>
+    api.post<ScheduledMessage>(`/contacts/${contactId}/scheduled-messages`, data),
+  update: (id: string, data: { content?: { body?: string }; scheduled_at?: string }) =>
+    api.put<ScheduledMessage>(`/scheduled-messages/${id}`, data),
+  cancel: (id: string) => api.delete(`/scheduled-messages/${id}`)
+}
+
 interface IVRNodePosition {
   x: number
   y: number

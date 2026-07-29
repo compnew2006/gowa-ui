@@ -91,6 +91,7 @@ import {
   Trash2,
   Filter,
   StickyNote,
+  CalendarClock,
   Lock,
   Hand,
   Users,
@@ -108,6 +109,9 @@ import TemplatePicker from '@/components/chat/TemplatePicker.vue'
 import ContactInfoPanel from '@/components/chat/ContactInfoPanel.vue'
 import ConversationNotes from '@/components/chat/ConversationNotes.vue'
 import { useNotesStore } from '@/stores/notes'
+import ScheduleMessageDialog from '@/components/chat/ScheduleMessageDialog.vue'
+import ScheduledMessagesPanel from '@/components/chat/ScheduledMessagesPanel.vue'
+import { useScheduledMessagesStore } from '@/stores/scheduledMessages'
 import { useHeaderMedia } from '@/composables/useHeaderMedia'
 import { CreateContactDialog } from '@/components/shared'
 import HeaderMediaUpload from '@/components/shared/HeaderMediaUpload.vue'
@@ -178,6 +182,7 @@ function startSidebarResize(e: MouseEvent) {
   document.addEventListener('mouseup', onMouseUp)
 }
 const notesStore = useNotesStore()
+const scheduledStore = useScheduledMessagesStore()
 const { isDark } = useColorMode()
 
 const canWriteContacts = authStore.hasPermission('contacts', 'write')
@@ -201,6 +206,8 @@ const isAtBottom = ref(true)
 const SCROLL_BOTTOM_THRESHOLD = 80
 const isInfoPanelOpen = ref(false)
 const isNotesPanelOpen = ref(false)
+const isScheduledPanelOpen = ref(false)
+const isScheduleDialogOpen = ref(false)
 const contactSessionData = ref<any>(null)
 
 
@@ -765,6 +772,7 @@ onUnmounted(() => {
   // Clear current contact when leaving chat view so notifications work on other pages
   contactsStore.setCurrentContact(null)
   notesStore.clearNotes()
+  scheduledStore.clear()
   // Clear sticky date timeout
   if (stickyDateTimeout) clearTimeout(stickyDateTimeout)
   document.removeEventListener('visibilitychange', onUserActive)
@@ -817,6 +825,7 @@ watch(contactId, async (newId) => {
     contactsStore.setCurrentContact(null)
     contactsStore.clearMessages()
     notesStore.clearNotes()
+    scheduledStore.clear()
   }
 })
 
@@ -897,9 +906,10 @@ async function selectContact(id: string) {
       messagesScroll.setup()
     }, 50)
 
-    // Fetch notes and session data in parallel (independent requests)
-    const [, sessionResult] = await Promise.all([
+    // Fetch notes, scheduled messages and session data in parallel (independent requests)
+    const [, , sessionResult] = await Promise.all([
       notesStore.fetchNotes(id),
+      scheduledStore.fetchForContact(id),
       contactsService.getSessionData(id).catch(() => null)
     ])
     if (sessionResult) {
@@ -2515,6 +2525,28 @@ async function sendMediaMessage() {
               </TooltipTrigger>
               <TooltipContent>{{ $t('chat.internalNotes') }}</TooltipContent>
             </Tooltip>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  id="scheduled-button"
+                  class="h-8 w-8 relative text-white/50 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100"
+                  :class="isScheduledPanelOpen && 'bg-sky-500/10 text-sky-400 light:bg-sky-50 light:text-sky-600'"
+                  @click="isScheduledPanelOpen = !isScheduledPanelOpen"
+                >
+                  <CalendarClock class="h-4 w-4" />
+                  <span
+                    v-if="scheduledStore.pendingCount > 0 && !isScheduledPanelOpen"
+                    id="scheduled-badge"
+                    class="absolute -top-0.5 -right-0.5 h-4 min-w-[16px] rounded-full bg-sky-500 text-[10px] text-white flex items-center justify-center px-1"
+                  >
+                    {{ scheduledStore.pendingCount }}
+                  </span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{{ $t('chat.scheduledMessages') }}</TooltipContent>
+            </Tooltip>
             <!-- Collect a burst of incoming files (ZIP or separate) — hidden for unclaimed/closed chats -->
             <Tooltip v-if="canExportMedia && !contactsStore.isPendingClaim && !contactsStore.isChatClosed">
               <TooltipTrigger as-child>
@@ -3205,6 +3237,20 @@ async function sendMediaMessage() {
               </TooltipTrigger>
               <TooltipContent>{{ $t('chat.attachFile') }}</TooltipContent>
             </Tooltip>
+            <Tooltip>
+              <TooltipTrigger as-child>
+                <button
+                  type="button"
+                  id="schedule-message-button"
+                  class="w-9 h-9 rounded-lg hover:bg-white/[0.08] light:hover:bg-gray-200 flex items-center justify-center transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  :disabled="!messageInput.trim()"
+                  @click="isScheduleDialogOpen = true"
+                >
+                  <CalendarClock class="w-[18px] h-[18px] text-white/40 light:text-gray-500" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>{{ $t('chat.scheduleMessageTitle') }}</TooltipContent>
+            </Tooltip>
             <input
               ref="fileInputRef"
               type="file"
@@ -3235,6 +3281,23 @@ async function sendMediaMessage() {
       v-if="contactsStore.currentContact && isNotesPanelOpen"
       :contact-id="contactsStore.currentContact.id"
       @close="isNotesPanelOpen = false"
+    />
+
+    <!-- Scheduled Messages Side Panel -->
+    <ScheduledMessagesPanel
+      v-if="contactsStore.currentContact && isScheduledPanelOpen"
+      :contact-id="contactsStore.currentContact.id"
+      @close="isScheduledPanelOpen = false"
+    />
+
+    <!-- Schedule Message Dialog -->
+    <ScheduleMessageDialog
+      v-if="contactsStore.currentContact"
+      v-model:open="isScheduleDialogOpen"
+      :contact-id="contactsStore.currentContact.id"
+      :body="messageInput"
+      :whatsapp-account="selectedAccount"
+      @scheduled="messageInput = ''"
     />
 
     <!-- Contact Info Panel -->

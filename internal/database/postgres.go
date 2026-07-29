@@ -111,6 +111,9 @@ func GetMigrationModels() []MigrationModel {
 
 		// Chat closure CSAT rating cycles
 		{"ChatClosureRating", &models.ChatClosureRating{}},
+
+		// Scheduled outgoing messages
+		{"ScheduledMessage", &models.ScheduledMessage{}},
 	}
 }
 
@@ -265,6 +268,10 @@ func getIndexes() []string {
 		// One pending rating cycle per contact — closes the check-then-insert race
 		// between concurrent chat closes at the database level.
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_closure_ratings_pending ON chat_closure_ratings(contact_id) WHERE status = 'pending' AND deleted_at IS NULL`,
+		// Due-scan index for the ScheduledMessageProcessor poller: only pending
+		// rows matter, so a partial index keeps it small and hot.
+		`CREATE INDEX IF NOT EXISTS idx_scheduled_messages_due ON scheduled_messages(scheduled_at) WHERE status = 'pending' AND deleted_at IS NULL`,
+		`CREATE INDEX IF NOT EXISTS idx_scheduled_messages_contact ON scheduled_messages(contact_id, status)`,
 		`CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_contacts_org_phone ON contacts(organization_id, phone_number)`,
 		`CREATE INDEX IF NOT EXISTS idx_contacts_assigned_read ON contacts(assigned_user_id, is_read)`,
