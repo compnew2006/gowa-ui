@@ -190,9 +190,9 @@ func (a *App) ListUsers(r *fastglue.Request) error {
 
 // GetUser returns a single user
 func (a *App) GetUser(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
+	orgID, err := a.requireOrgID(r)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return nil
 	}
 
 	id, err := parsePathUUID(r, "id", "user")
@@ -377,9 +377,9 @@ func (a *App) CreateUser(r *fastglue.Request) error {
 
 // UpdateUser updates a user
 func (a *App) UpdateUser(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
+	orgID, err := a.requireOrgID(r)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return nil
 	}
 
 	currentUserID, _ := r.RequestCtx.UserValue("user_id").(uuid.UUID)
@@ -549,9 +549,9 @@ func (a *App) UpdateUser(r *fastglue.Request) error {
 
 // DeleteUser deletes a user or removes a member from the organization
 func (a *App) DeleteUser(r *fastglue.Request) error {
-	orgID, err := a.getOrgID(r)
+	orgID, err := a.requireOrgID(r)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return nil
 	}
 
 	currentUserID, _ := r.RequestCtx.UserValue("user_id").(uuid.UUID)
@@ -697,9 +697,9 @@ func splitPermission(p string) []string {
 
 // UpdateCurrentUserSettings updates the current user's notification/preferences settings
 func (a *App) UpdateCurrentUserSettings(r *fastglue.Request) error {
-	orgID, userID, err := a.getOrgAndUserID(r)
+	orgID, userID, err := a.requireOrgAndUserID(r)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return nil
 	}
 
 	var user models.User
@@ -915,9 +915,9 @@ type AvailabilityRequest struct {
 
 // UpdateAvailability updates the current user's availability status (away/available)
 func (a *App) UpdateAvailability(r *fastglue.Request) error {
-	orgID, userID, err := a.getOrgAndUserID(r)
+	orgID, userID, err := a.requireOrgAndUserID(r)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return nil
 	}
 
 	var user models.User

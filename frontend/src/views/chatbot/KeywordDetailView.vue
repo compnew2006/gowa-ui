@@ -10,9 +10,8 @@ import DetailPageLayout from '@/components/shared/DetailPageLayout.vue'
 import MetadataPanel from '@/components/shared/MetadataPanel.vue'
 import AuditLogPanel from '@/components/shared/AuditLogPanel.vue'
 import UnsavedChangesDialog from '@/components/shared/UnsavedChangesDialog.vue'
+import DetailSectionCard from '@/components/shared/DetailSectionCard.vue'
 import { IconButton } from '@/components/shared'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -227,16 +226,11 @@ onMounted(async () => {
     </template>
 
     <!-- Keyword Details Card -->
-    <Card>
-      <CardHeader class="pb-3">
-        <div class="flex items-center justify-between">
-          <CardTitle class="text-sm font-medium">{{ $t('keywords.details', 'Details') }}</CardTitle>
-          <Badge :variant="(keyword?.enabled ?? form.enabled) ? 'default' : 'secondary'">
-            {{ (keyword?.enabled ?? form.enabled) ? $t('keywords.active', 'Active') : $t('keywords.inactive', 'Inactive') }}
-          </Badge>
-        </div>
-      </CardHeader>
-      <CardContent class="space-y-4">
+    <DetailSectionCard
+      :title="$t('keywords.details', 'Details')"
+      :badge-label="(keyword?.enabled ?? form.enabled) ? $t('keywords.active', 'Active') : $t('keywords.inactive', 'Inactive')"
+      :badge-variant="(keyword?.enabled ?? form.enabled) ? 'default' : 'secondary'"
+    >
         <div class="space-y-1.5">
           <Label class="text-xs">{{ $t('keywords.keywordsLabel', 'Keywords') }} *</Label>
           <Input
@@ -346,8 +340,7 @@ onMounted(async () => {
           <Switch :checked="form.enabled" @update:checked="form.enabled = $event" :disabled="!canWrite" />
           <Label class="text-xs">{{ $t('keywords.enabled', 'Enabled') }}</Label>
         </div>
-      </CardContent>
-    </Card>
+    </DetailSectionCard>
 
     <!-- Activity Log -->
     <AuditLogPanel

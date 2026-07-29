@@ -185,9 +185,9 @@ type ExportRequest struct {
 
 // ExportData handles generic data export
 func (a *App) ExportData(r *fastglue.Request) error {
-	orgID, userID, err := a.getOrgAndUserID(r)
+	orgID, userID, err := a.requireOrgAndUserID(r)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return nil
 	}
 
 	var req ExportRequest
@@ -361,9 +361,9 @@ type ImportDataRequest struct {
 
 // ImportData handles generic data import
 func (a *App) ImportData(r *fastglue.Request) error {
-	orgID, userID, err := a.getOrgAndUserID(r)
+	orgID, userID, err := a.requireOrgAndUserID(r)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return nil
 	}
 
 	// Parse multipart form
@@ -634,9 +634,9 @@ func (a *App) ImportData(r *fastglue.Request) error {
 
 // GetExportConfig returns the export configuration for a table
 func (a *App) GetExportConfig(r *fastglue.Request) error {
-	orgID, userID, err := a.getOrgAndUserID(r)
+	orgID, userID, err := a.requireOrgAndUserID(r)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return nil
 	}
 
 	tableName := r.RequestCtx.UserValue("table").(string)
@@ -673,9 +673,9 @@ func (a *App) GetExportConfig(r *fastglue.Request) error {
 
 // GetImportConfig returns the import configuration for a table
 func (a *App) GetImportConfig(r *fastglue.Request) error {
-	orgID, userID, err := a.getOrgAndUserID(r)
+	orgID, userID, err := a.requireOrgAndUserID(r)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return nil
 	}
 
 	tableName := r.RequestCtx.UserValue("table").(string)

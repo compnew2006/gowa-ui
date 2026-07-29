@@ -34,9 +34,9 @@ const maxZipTotalSize = 250 * 1024 * 1024 // 250 MB
 //
 // Example: GET /api/media/zip?ids=<uuid>,<uuid>,...
 func (a *App) ServeMediaZip(r *fastglue.Request) error {
-	orgID, userID, err := a.getOrgAndUserID(r)
+	orgID, userID, err := a.requireOrgAndUserID(r)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return nil
 	}
 
 	// ZIP download requires contacts:export permission (FR-013).

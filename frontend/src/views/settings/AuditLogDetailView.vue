@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import DetailPageLayout from '@/components/shared/DetailPageLayout.vue'
 import { auditLogsService, type AuditLogEntry } from '@/services/api'
 import { formatDateTime, formatLabel } from '@/lib/utils'
+import { useAuditFormat } from '@/composables/useAuditFormat'
 import { ScrollText, Info, ExternalLink, ArrowRight } from 'lucide-vue-next'
 
 const route = useRoute()
@@ -54,22 +55,7 @@ const breadcrumbs = computed(() => [
   { label: title.value },
 ])
 
-function formatValue(val: any): string {
-  if (val === null || val === undefined || val === '') return '—'
-  if (typeof val === 'boolean') return val ? 'Yes' : 'No'
-  if (Array.isArray(val)) {
-    if (val.length === 0) return '—'
-    if (typeof val[0] === 'object' && val[0] !== null) {
-      return val.map(item => item.text || item.name || item.title || JSON.stringify(item)).join(', ')
-    }
-    return val.join(', ') || '—'
-  }
-  if (typeof val === 'object') {
-    if (val.body) return String(val.body)
-    return JSON.stringify(val)
-  }
-  return String(val)
-}
+const { formatValue } = useAuditFormat()
 
 function actionVariant(action: string): string {
   switch (action) {

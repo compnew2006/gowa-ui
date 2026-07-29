@@ -962,6 +962,53 @@ func (a *App) fetchAPIContext(apiConfig models.JSONB, session *models.ChatbotSes
 	return string(respBody), nil
 }
 
+// applyAIContext folds the fetched context data into the configured system
+// prompt. Shared by all AI providers so the prompt-composition rule stays in
+// one place.
+func applyAIContext(systemPrompt, contextData string) string {
+	if contextData == "" {
+		return systemPrompt
+	}
+	if systemPrompt != "" {
+		return systemPrompt + "\n\n" + contextData
+	}
+	return contextData
+}
+
+// aiHistoryMessages builds the role/content history slice shared by the OpenAI
+// and Anthropic request bodies (both use the same {role, content} shape with
+// user/assistant roles). Returns nil when history is disabled.
+func (a *App) aiHistoryMessages(settings *models.ChatbotSettings, session *models.ChatbotSession) []map[string]string {
+	if !settings.AI.IncludeHistory || session == nil {
+		return nil
+	}
+	history := a.getSessionHistory(session.ID, settings.AI.HistoryLimit)
+	messages := make([]map[string]string, 0, len(history))
+	for _, msg := range history {
+		role := "user"
+		if msg.Direction == models.DirectionOutgoing {
+			role = "assistant"
+		}
+		messages = append(messages, map[string]string{
+			"role":    role,
+			"content": msg.Message,
+		})
+	}
+	return messages
+}
+
+// parseAIProviderError decodes the standard {error:{message}} envelope returned
+// by the AI providers on a non-2xx status and wraps it with the given label.
+func parseAIProviderError(label string, body []byte) error {
+	var errResp struct {
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	_ = json.Unmarshal(body, &errResp)
+	return fmt.Errorf("%s: %s", label, errResp.Error.Message)
+}
+
 // generateOpenAIResponse generates a response using OpenAI API
 func (a *App) generateOpenAIResponse(settings *models.ChatbotSettings, session *models.ChatbotSession, userMessage string, contextData string) (string, error) {
 	url := "https://api.openai.com/v1/chat/completions"
@@ -970,14 +1017,7 @@ func (a *App) generateOpenAIResponse(settings *models.ChatbotSettings, session *
 	messages := []map[string]string{}
 
 	// Build system prompt with context
-	systemPrompt := settings.AI.SystemPrompt
-	if contextData != "" {
-		if systemPrompt != "" {
-			systemPrompt = systemPrompt + "\n\n" + contextData
-		} else {
-			systemPrompt = contextData
-		}
-	}
+	systemPrompt := applyAIContext(settings.AI.SystemPrompt, contextData)
 
 	// Add system prompt if configured
 	if systemPrompt != "" {
@@ -988,19 +1028,7 @@ func (a *App) generateOpenAIResponse(settings *models.ChatbotSettings, session *
 	}
 
 	// Add conversation history if enabled
-	if settings.AI.IncludeHistory && session != nil {
-		history := a.getSessionHistory(session.ID, settings.AI.HistoryLimit)
-		for _, msg := range history {
-			role := "user"
-			if msg.Direction == models.DirectionOutgoing {
-				role = "assistant"
-			}
-			messages = append(messages, map[string]string{
-				"role":    role,
-				"content": msg.Message,
-			})
-		}
-	}
+	messages = append(messages, a.aiHistoryMessages(settings, session)...)
 
 	// Add current user message
 	messages = append(messages, map[string]string{
@@ -1040,13 +1068,7 @@ func (a *App) generateOpenAIResponse(settings *models.ChatbotSettings, session *
 	body, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode != 200 {
-		var errResp struct {
-			Error struct {
-				Message string `json:"message"`
-			} `json:"error"`
-		}
-		_ = json.Unmarshal(body, &errResp)
-		return "", fmt.Errorf("OpenAI API error: %s", errResp.Error.Message)
+		return "", parseAIProviderError("OpenAI API error", body)
 	}
 
 	var result struct {
@@ -1075,19 +1097,7 @@ func (a *App) generateAnthropicResponse(settings *models.ChatbotSettings, sessio
 	messages := []map[string]string{}
 
 	// Add conversation history if enabled
-	if settings.AI.IncludeHistory && session != nil {
-		history := a.getSessionHistory(session.ID, settings.AI.HistoryLimit)
-		for _, msg := range history {
-			role := "user"
-			if msg.Direction == models.DirectionOutgoing {
-				role = "assistant"
-			}
-			messages = append(messages, map[string]string{
-				"role":    role,
-				"content": msg.Message,
-			})
-		}
-	}
+	messages = append(messages, a.aiHistoryMessages(settings, session)...)
 
 	// Add current user message
 	messages = append(messages, map[string]string{
@@ -1102,14 +1112,7 @@ func (a *App) generateAnthropicResponse(settings *models.ChatbotSettings, sessio
 	}
 
 	// Build system prompt with context
-	systemPrompt := settings.AI.SystemPrompt
-	if contextData != "" {
-		if systemPrompt != "" {
-			systemPrompt = systemPrompt + "\n\n" + contextData
-		} else {
-			systemPrompt = contextData
-		}
-	}
+	systemPrompt := applyAIContext(settings.AI.SystemPrompt, contextData)
 
 	// Add system prompt if configured
 	if systemPrompt != "" {
@@ -1143,13 +1146,7 @@ func (a *App) generateAnthropicResponse(settings *models.ChatbotSettings, sessio
 	body, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode != 200 {
-		var errResp struct {
-			Error struct {
-				Message string `json:"message"`
-			} `json:"error"`
-		}
-		_ = json.Unmarshal(body, &errResp)
-		return "", fmt.Errorf("anthropic API error: %s", errResp.Error.Message)
+		return "", parseAIProviderError("anthropic API error", body)
 	}
 
 	var result struct {
@@ -1212,14 +1209,7 @@ func (a *App) generateGoogleResponse(settings *models.ChatbotSettings, session *
 	}
 
 	// Build system prompt with context
-	systemPrompt := settings.AI.SystemPrompt
-	if contextData != "" {
-		if systemPrompt != "" {
-			systemPrompt = systemPrompt + "\n\n" + contextData
-		} else {
-			systemPrompt = contextData
-		}
-	}
+	systemPrompt := applyAIContext(settings.AI.SystemPrompt, contextData)
 
 	// Add system instruction if configured
 	if systemPrompt != "" {
@@ -1255,13 +1245,7 @@ func (a *App) generateGoogleResponse(settings *models.ChatbotSettings, session *
 	body, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode != 200 {
-		var errResp struct {
-			Error struct {
-				Message string `json:"message"`
-			} `json:"error"`
-		}
-		_ = json.Unmarshal(body, &errResp)
-		return "", fmt.Errorf("google AI API error: %s", errResp.Error.Message)
+		return "", parseAIProviderError("google AI API error", body)
 	}
 
 	var result struct {

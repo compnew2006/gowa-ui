@@ -5,19 +5,18 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useTagsStore } from '@/stores/tags'
 import { useUsersStore } from '@/stores/users'
-import { contactsService, accountsService, type Tag } from '@/services/api'
+import { contactsService, accountsService } from '@/services/api'
 import type { Contact } from '@/stores/contacts'
 import { toast } from 'vue-sonner'
 import { getErrorMessage } from '@/lib/api-utils'
-import { getTagColorClass } from '@/lib/constants'
 import { useUnsavedChangesGuard } from '@/composables/useUnsavedChangesGuard'
 import DetailPageLayout from '@/components/shared/DetailPageLayout.vue'
 import MetadataPanel from '@/components/shared/MetadataPanel.vue'
 import AuditLogPanel from '@/components/shared/AuditLogPanel.vue'
 import UnsavedChangesDialog from '@/components/shared/UnsavedChangesDialog.vue'
+import TagSelector from '@/components/shared/TagSelector.vue'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { TagBadge } from '@/components/ui/tag-badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -77,7 +76,6 @@ const isNotFound = ref(false)
 const isSaving = ref(false)
 const hasChanges = ref(false)
 const deleteDialogOpen = ref(false)
-const tagSelectorOpen = ref(false)
 const agentSelectorOpen = ref(false)
 
 const accounts = ref<{ id: string; name: string; phone_number: string }[]>([])
@@ -179,27 +177,6 @@ async function deleteContact() {
 function openChat() {
   if (!contact.value) return
   router.push({ name: 'chat-conversation', params: { contactId: contact.value.id } })
-}
-
-function toggleTag(tagName: string) {
-  const index = form.value.tags.indexOf(tagName)
-  if (index === -1) {
-    form.value.tags.push(tagName)
-  } else {
-    form.value.tags.splice(index, 1)
-  }
-}
-
-function removeTag(tagName: string) {
-  form.value.tags = form.value.tags.filter(t => t !== tagName)
-}
-
-function isTagSelected(tagName: string): boolean {
-  return form.value.tags.includes(tagName)
-}
-
-function getTagDetails(tagName: string): Tag | undefined {
-  return tagsStore.getTagByName(tagName)
 }
 
 function selectAgent(userId: string | null) {
@@ -308,55 +285,7 @@ onMounted(async () => {
 
           <div class="space-y-1.5">
             <Label class="text-xs">{{ $t('contacts.tags') }}</Label>
-            <Popover v-model:open="tagSelectorOpen">
-              <PopoverTrigger as-child>
-                <Button variant="outline" role="combobox" class="w-full justify-between" :disabled="!canWrite">
-                  <span v-if="form.tags.length === 0" class="text-muted-foreground">{{ $t('contacts.selectTags') }}</span>
-                  <span v-else>{{ form.tags.length }} {{ $t('contacts.tagsSelected') }}</span>
-                  <ChevronsUpDown class="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent class="w-[300px] p-0" @interact-outside="(e: Event) => e.preventDefault()">
-                <Command>
-                  <CommandInput :placeholder="$t('contacts.searchTags')" />
-                  <CommandList>
-                    <CommandEmpty>{{ $t('contacts.noTagsFound') }}</CommandEmpty>
-                    <CommandGroup>
-                      <CommandItem
-                        v-for="tag in tagsStore.tags"
-                        :key="tag.name"
-                        :value="tag.name"
-                        class="flex items-center gap-2 cursor-pointer"
-                        @select.prevent="toggleTag(tag.name)"
-                      >
-                        <div class="flex items-center gap-2 flex-1">
-                          <span :class="['w-2 h-2 rounded-full', getTagColorClass(tag.color).split(' ')[0]]"></span>
-                          <span>{{ tag.name }}</span>
-                        </div>
-                        <Check v-if="isTagSelected(tag.name)" class="h-4 w-4 text-primary" />
-                      </CommandItem>
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-            <div v-if="form.tags.length > 0" class="flex flex-wrap gap-1 mt-2">
-              <TagBadge
-                v-for="tagName in form.tags"
-                :key="tagName"
-                :color="getTagDetails(tagName)?.color"
-              >
-                {{ tagName }}
-                <button
-                  v-if="canWrite"
-                  type="button"
-                  class="ml-1 rounded-full hover:bg-black/10 dark:hover:bg-white/10 p-0.5 transition-colors"
-                  @click.stop="removeTag(tagName)"
-                >
-                  <X class="h-3 w-3" />
-                </button>
-              </TagBadge>
-            </div>
+            <TagSelector v-model="form.tags" :tags="tagsStore.tags" :disabled="!canWrite" />
           </div>
 
           <div class="space-y-1.5">

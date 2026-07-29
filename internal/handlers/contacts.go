@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -96,9 +94,9 @@ type ReactionInfo struct {
 // ListContacts returns all contacts for the organization
 // Users without contacts:read permission only see contacts assigned to them
 func (a *App) ListContacts(r *fastglue.Request) error {
-	orgID, userID, err := a.getOrgAndUserID(r)
+	orgID, userID, err := a.requireOrgAndUserID(r)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return nil
 	}
 
 	// Pagination
@@ -303,9 +301,9 @@ func (a *App) hasActiveTransfer(userID, contactID, orgID uuid.UUID) bool {
 // GetContact returns a single contact
 // Users without contacts:read permission can only access contacts assigned to them
 func (a *App) GetContact(r *fastglue.Request) error {
-	orgID, userID, err := a.getOrgAndUserID(r)
+	orgID, userID, err := a.requireOrgAndUserID(r)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return nil
 	}
 	contactID, err := parsePathUUID(r, "id", "contact")
 	if err != nil {
@@ -338,9 +336,9 @@ func (a *App) GetContact(r *fastglue.Request) error {
 //
 // GET /api/contacts/{id}/avatar
 func (a *App) RefreshContactAvatar(r *fastglue.Request) error {
-	orgID, _, err := a.getOrgAndUserID(r)
+	orgID, _, err := a.requireOrgAndUserID(r)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return nil
 	}
 	contactID, err := parsePathUUID(r, "id", "contact")
 	if err != nil {
@@ -383,9 +381,9 @@ func (a *App) RefreshContactAvatar(r *fastglue.Request) error {
 // Agents can only access messages for their assigned contacts
 // Supports cursor-based pagination with before_id for loading older messages
 func (a *App) GetMessages(r *fastglue.Request) error {
-	orgID, userID, err := a.getOrgAndUserID(r)
+	orgID, userID, err := a.requireOrgAndUserID(r)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return nil
 	}
 	contactID, err := parsePathUUID(r, "id", "contact")
 	if err != nil {
@@ -659,9 +657,9 @@ func (a *App) buildMessagesResponse(messages []models.Message) []MessageResponse
 // Called from the frontend when a new message arrives for the chat the
 // user is currently viewing, so the sidebar unread badge stays at zero.
 func (a *App) MarkContactRead(r *fastglue.Request) error {
-	orgID, userID, err := a.getOrgAndUserID(r)
+	orgID, userID, err := a.requireOrgAndUserID(r)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return nil
 	}
 	contactID, err := parsePathUUID(r, "id", "contact")
 	if err != nil {
@@ -780,9 +778,9 @@ type ButtonContent struct {
 // SendMessage sends a message to a contact
 // Agents can only send messages to their assigned contacts
 func (a *App) SendMessage(r *fastglue.Request) error {
-	orgID, userID, err := a.getOrgAndUserID(r)
+	orgID, userID, err := a.requireOrgAndUserID(r)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return nil
 	}
 	contactID, err := parsePathUUID(r, "id", "contact")
 	if err != nil {
@@ -953,9 +951,9 @@ func truncateString(s string, maxLen int) string {
 
 // SendMediaMessage sends a media message (image, document, video, audio) to a contact
 func (a *App) SendMediaMessage(r *fastglue.Request) error {
-	orgID, userID, err := a.getOrgAndUserID(r)
+	orgID, userID, err := a.requireOrgAndUserID(r)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return nil
 	}
 
 	// Parse multipart form
@@ -1086,24 +1084,6 @@ func (a *App) SendMediaMessage(r *fastglue.Request) error {
 
 // saveMediaLocally saves media data to local storage and returns the relative path
 func (a *App) saveMediaLocally(data []byte, mimeType, filename string) (string, error) {
-	// Determine subdirectory based on MIME type
-	var subdir string
-	switch {
-	case strings.HasPrefix(mimeType, "image/"):
-		subdir = "images"
-	case strings.HasPrefix(mimeType, "video/"):
-		subdir = "videos"
-	case strings.HasPrefix(mimeType, "audio/"):
-		subdir = "audio"
-	default:
-		subdir = "documents"
-	}
-
-	// Ensure directory exists
-	if err := a.ensureMediaDir(subdir); err != nil {
-		return "", fmt.Errorf("failed to create media directory: %w", err)
-	}
-
 	// Get extension from MIME type or filename
 	ext := getExtensionFromMimeType(mimeType)
 	if ext == "" {
@@ -1115,17 +1095,10 @@ func (a *App) saveMediaLocally(data []byte, mimeType, filename string) (string, 
 		}
 	}
 
-	// Generate unique filename
-	newFilename := uuid.New().String() + ext
-	filePath := filepath.Join(a.getMediaStoragePath(), subdir, newFilename)
-
-	// Save file
-	if err := os.WriteFile(filePath, data, 0644); err != nil {
-		return "", fmt.Errorf("failed to save media file: %w", err)
+	relativePath, err := a.writeMediaFile(data, mimeType, ext)
+	if err != nil {
+		return "", err
 	}
-
-	// Return relative path
-	relativePath := filepath.Join(subdir, newFilename)
 	a.Log.Info("Media saved locally", "path", relativePath, "size", len(data))
 
 	return relativePath, nil
@@ -1138,9 +1111,9 @@ type SendReactionRequest struct {
 
 // SendReaction sends a reaction to a message
 func (a *App) SendReaction(r *fastglue.Request) error {
-	orgID, userID, err := a.getOrgAndUserID(r)
+	orgID, userID, err := a.requireOrgAndUserID(r)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return nil
 	}
 	contactID, err := parsePathUUID(r, "id", "contact")
 	if err != nil {
@@ -1391,9 +1364,9 @@ type TypingRequest struct {
 // The indicator is outbound-only (it shows on the recipient's WhatsApp), so
 // no WebSocket event is broadcast back to the Whatomate UI.
 func (a *App) SendTypingIndicator(r *fastglue.Request) error {
-	orgID, userID, err := a.getOrgAndUserID(r)
+	orgID, userID, err := a.requireOrgAndUserID(r)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return nil
 	}
 	contactID, err := parsePathUUID(r, "id", "contact")
 	if err != nil {
@@ -1452,9 +1425,9 @@ type RevokeMessageRequest struct{}
 // here mirror the inbound message.revoked webhook handler so the two paths
 // stay consistent.
 func (a *App) RevokeMessage(r *fastglue.Request) error {
-	orgID, userID, err := a.getOrgAndUserID(r)
+	orgID, userID, err := a.requireOrgAndUserID(r)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return nil
 	}
 	contactID, err := parsePathUUID(r, "id", "contact")
 	if err != nil {
@@ -1548,9 +1521,9 @@ type AssignContactRequest struct {
 // AssignContact assigns a contact to a user (agent)
 // Only users with write permission can assign contacts
 func (a *App) AssignContact(r *fastglue.Request) error {
-	orgID, userID, err := a.getOrgAndUserID(r)
+	orgID, userID, err := a.requireOrgAndUserID(r)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return nil
 	}
 
 	// Only users with write permission can assign contacts
@@ -1609,9 +1582,9 @@ type ContactSessionDataResponse struct {
 // GetContactSessionData returns session data and panel configuration for a contact
 // Used by the contact info panel in the chat view
 func (a *App) GetContactSessionData(r *fastglue.Request) error {
-	orgID, userID, err := a.getOrgAndUserID(r)
+	orgID, userID, err := a.requireOrgAndUserID(r)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return nil
 	}
 	contactID, err := parsePathUUID(r, "id", "contact")
 	if err != nil {
@@ -1704,9 +1677,9 @@ type UpdateContactTagsRequest struct {
 
 // UpdateContactTags updates the tags on a contact
 func (a *App) UpdateContactTags(r *fastglue.Request) error {
-	orgID, userID, err := a.getOrgAndUserID(r)
+	orgID, userID, err := a.requireOrgAndUserID(r)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return nil
 	}
 
 	// Check permission - need contacts:write to update tags on contacts
@@ -1774,9 +1747,9 @@ type CreateContactRequest struct {
 
 // CreateContact creates a new contact or restores a soft-deleted one
 func (a *App) CreateContact(r *fastglue.Request) error {
-	orgID, userID, err := a.getOrgAndUserID(r)
+	orgID, userID, err := a.requireOrgAndUserID(r)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return nil
 	}
 
 	// Check permission
@@ -1881,9 +1854,9 @@ type UpdateContactRequest struct {
 
 // UpdateContact updates an existing contact
 func (a *App) UpdateContact(r *fastglue.Request) error {
-	orgID, userID, err := a.getOrgAndUserID(r)
+	orgID, userID, err := a.requireOrgAndUserID(r)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return nil
 	}
 
 	// Check permission
@@ -1957,9 +1930,9 @@ func (a *App) UpdateContact(r *fastglue.Request) error {
 
 // DeleteContact soft-deletes a contact
 func (a *App) DeleteContact(r *fastglue.Request) error {
-	orgID, userID, err := a.getOrgAndUserID(r)
+	orgID, userID, err := a.requireOrgAndUserID(r)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return nil
 	}
 
 	// Check permission

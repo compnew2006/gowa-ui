@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { auditLogsService, type AuditLogEntry } from '@/services/api'
 import { formatDateTime, formatLabel } from '@/lib/utils'
+import { useAuditFormat } from '@/composables/useAuditFormat'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -34,25 +35,7 @@ const actionConfig: Record<string, { icon: any; color: string; label: string }> 
   deleted: { icon: Trash2, color: 'bg-red-500', label: 'Deleted' },
 }
 
-function formatValue(val: any): string {
-  if (val === null || val === undefined || val === '') return '—'
-  if (typeof val === 'boolean') return val ? 'Yes' : 'No'
-  if (Array.isArray(val)) {
-    if (val.length === 0) return '—'
-    // Format array of objects (e.g. buttons) as readable text
-    if (typeof val[0] === 'object' && val[0] !== null) {
-      return val.map(item => item.text || item.name || item.title || JSON.stringify(item)).join(', ')
-    }
-    return val.join(', ') || '—'
-  }
-  if (typeof val === 'object') {
-    // For simple objects with a "body" key (like response_content), show the body
-    if (val.body) return String(val.body)
-    const s = JSON.stringify(val)
-    return s.length > 120 ? s.slice(0, 120) + '…' : s
-  }
-  return String(val)
-}
+const { formatValue } = useAuditFormat({ maxObjectChars: 120 })
 
 async function loadLogs(append = false) {
   isLoading.value = true

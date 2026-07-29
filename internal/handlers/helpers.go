@@ -31,6 +31,55 @@ func parsePathUUID(r *fastglue.Request, param, label string) (uuid.UUID, error) 
 	return id, nil
 }
 
+// requireOrgID resolves the caller's organization ID from the request context.
+// On failure it sends a 401 Unauthorized error envelope and returns
+// errEnvelopeSent, so callers can simply `return nil` to the framework. This
+// collapses the org-preamble that was repeated across ~37 handlers.
+func (a *App) requireOrgID(r *fastglue.Request) (uuid.UUID, error) {
+	orgID, err := a.getOrgID(r)
+	if err != nil {
+		_ = r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return uuid.Nil, errEnvelopeSent
+	}
+	return orgID, nil
+}
+
+// requireOrgAndUserID resolves both the organization and user IDs from the
+// request context. On failure it sends a 401 Unauthorized error envelope and
+// returns errEnvelopeSent, so callers can `return nil`. Parallels requireOrgID
+// for the many handlers that also need the acting user's ID.
+func (a *App) requireOrgAndUserID(r *fastglue.Request) (orgID, userID uuid.UUID, err error) {
+	orgID, userID, err = a.getOrgAndUserID(r)
+	if err != nil {
+		_ = r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return uuid.Nil, uuid.Nil, errEnvelopeSent
+	}
+	return orgID, userID, nil
+}
+
+// resolveOrgEntity combines the three-step request preamble used by most
+// single-entity handlers: resolve the org, parse the path UUID, and load the
+// record scoped by ID and organization. On any failure it has already written
+// the appropriate error envelope and returns errEnvelopeSent, so callers can
+// `return nil`. Use only for the simple id+organization_id lookup; handlers that
+// need Preload or a custom query should call requireOrgID + findByIDAndOrg
+// (or their own query) directly.
+func resolveOrgEntity[T any](a *App, r *fastglue.Request, param, label string) (uuid.UUID, *T, error) {
+	orgID, err := a.requireOrgID(r)
+	if err != nil {
+		return uuid.Nil, nil, err
+	}
+	id, err := parsePathUUID(r, param, label)
+	if err != nil {
+		return uuid.Nil, nil, err
+	}
+	entity, err := findByIDAndOrg[T](a.DB, r, id, orgID, label)
+	if err != nil {
+		return uuid.Nil, nil, err
+	}
+	return orgID, entity, nil
+}
+
 // Pagination holds parsed pagination parameters.
 type Pagination struct {
 	Page   int

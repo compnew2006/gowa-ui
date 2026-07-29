@@ -139,6 +139,34 @@ func (a *App) CreateConversationNote(r *fastglue.Request) error {
 	return r.SendEnvelope(resp)
 }
 
+// resolveOwnedNote validates the {id} contact path param, loads the {note_id}
+// note scoped to orgID, and verifies the caller (userID) is its creator. On any
+// failure it sends the HTTP response and returns ok=false — callers should
+// `return nil`. verb is used in the forbidden message (e.g. "edit"/"delete").
+func (a *App) resolveOwnedNote(r *fastglue.Request, orgID, userID uuid.UUID, verb string) (*models.ConversationNote, bool) {
+	if _, err := parsePathUUID(r, "id", "contact"); err != nil {
+		return nil, false
+	}
+
+	noteID, err := parsePathUUID(r, "note_id", "note")
+	if err != nil {
+		return nil, false
+	}
+
+	note, err := findByIDAndOrg[models.ConversationNote](a.DB, r, noteID, orgID, "Note")
+	if err != nil {
+		return nil, false
+	}
+
+	// Only the creator can modify their own notes
+	if note.CreatedByID != userID {
+		_ = r.SendErrorEnvelope(fasthttp.StatusForbidden, "You can only "+verb+" your own notes", nil, "")
+		return nil, false
+	}
+
+	return note, true
+}
+
 // UpdateConversationNote updates an existing note (creator only).
 func (a *App) UpdateConversationNote(r *fastglue.Request) error {
 	orgID, userID, err := a.requireAuth(r, models.ResourceChat, models.ActionWrite)
@@ -146,24 +174,9 @@ func (a *App) UpdateConversationNote(r *fastglue.Request) error {
 		return nil
 	}
 
-	_, err = parsePathUUID(r, "id", "contact")
-	if err != nil {
+	note, ok := a.resolveOwnedNote(r, orgID, userID, "edit")
+	if !ok {
 		return nil
-	}
-
-	noteID, err := parsePathUUID(r, "note_id", "note")
-	if err != nil {
-		return nil
-	}
-
-	note, err := findByIDAndOrg[models.ConversationNote](a.DB, r, noteID, orgID, "Note")
-	if err != nil {
-		return nil
-	}
-
-	// Only the creator can update their own notes
-	if note.CreatedByID != userID {
-		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You can only edit your own notes", nil, "")
 	}
 
 	var req ConversationNoteRequest
@@ -207,27 +220,13 @@ func (a *App) DeleteConversationNote(r *fastglue.Request) error {
 		return nil
 	}
 
-	_, err = parsePathUUID(r, "id", "contact")
-	if err != nil {
+	note, ok := a.resolveOwnedNote(r, orgID, userID, "delete")
+	if !ok {
 		return nil
-	}
-
-	noteID, err := parsePathUUID(r, "note_id", "note")
-	if err != nil {
-		return nil
-	}
-
-	note, err := findByIDAndOrg[models.ConversationNote](a.DB, r, noteID, orgID, "Note")
-	if err != nil {
-		return nil
-	}
-
-	// Only the creator can delete their own notes
-	if note.CreatedByID != userID {
-		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You can only delete your own notes", nil, "")
 	}
 
 	contactID := note.ContactID
+	noteID := note.ID
 
 	if err := a.DB.Delete(note).Error; err != nil {
 		a.Log.Error("Failed to delete conversation note", "error", err)

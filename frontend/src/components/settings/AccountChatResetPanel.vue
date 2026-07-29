@@ -3,13 +3,9 @@ import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { toast } from 'vue-sonner'
 import { dailyResetService } from '@/services/api'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import AccountSettingsPanel from './AccountSettingsPanel.vue'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
-import { Switch } from '@/components/ui/switch'
-import { Separator } from '@/components/ui/separator'
-import { Loader2 } from 'lucide-vue-next'
 
 // Per-account daily assigned-chat reset: at the configured wall-clock time,
 // once per day, every assigned (open) conversation is returned to the pending
@@ -86,57 +82,40 @@ async function saveSettings() {
 </script>
 
 <template>
-  <div class="space-y-4">
-    <Card>
-      <CardHeader class="pb-3">
-        <CardTitle class="text-sm font-medium">{{ $t('settings.chatResetSettings') }}</CardTitle>
-        <CardDescription class="text-xs">{{ $t('settings.chatResetSettingsDesc') }}</CardDescription>
-      </CardHeader>
-      <CardContent class="space-y-4">
-        <div class="flex items-center justify-between">
-          <div>
-            <Label class="text-xs">{{ $t('settings.chatResetEnable') }}</Label>
-            <p class="text-[11px] text-muted-foreground">{{ $t('settings.chatResetEnableDesc') }}</p>
-          </div>
-          <Switch
-            :checked="settings.enabled"
-            @update:checked="settings.enabled = $event"
-            :disabled="!canWrite"
-          />
-        </div>
-        <Separator />
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div class="space-y-1.5">
-            <Label for="chat_reset_time" class="text-xs">{{ $t('settings.chatResetTime') }}</Label>
-            <Input
-              id="chat_reset_time"
-              v-model="settings.time"
-              type="time"
-              placeholder="02:00"
-              :disabled="!canWrite"
-              @blur="validateTime"
-            />
-            <p v-if="timeError" class="text-[11px] text-destructive">{{ timeError }}</p>
-            <p v-else class="text-[11px] text-muted-foreground">{{ $t('settings.chatResetTimeDesc') }}</p>
-          </div>
-          <div class="space-y-1.5">
-            <Label for="chat_reset_tz" class="text-xs">{{ $t('settings.chatResetTimezone') }}</Label>
-            <Input
-              id="chat_reset_tz"
-              v-model="settings.timezone"
-              placeholder="Asia/Dubai"
-              :disabled="!canWrite"
-            />
-            <p class="text-[11px] text-muted-foreground">{{ $t('settings.chatResetTimezoneDesc') }}</p>
-          </div>
-        </div>
-        <div v-if="canWrite" class="flex justify-end">
-          <Button variant="outline" size="sm" @click="saveSettings" :disabled="isSubmitting">
-            <Loader2 v-if="isSubmitting" class="mr-2 h-4 w-4 animate-spin" />
-            {{ $t('settings.save') }}
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  </div>
+  <AccountSettingsPanel
+    :title="$t('settings.chatResetSettings')"
+    :description="$t('settings.chatResetSettingsDesc')"
+    :enable-label="$t('settings.chatResetEnable')"
+    :enable-desc="$t('settings.chatResetEnableDesc')"
+    v-model:enabled="settings.enabled"
+    :can-write="canWrite"
+    :is-submitting="isSubmitting"
+    @save="saveSettings"
+  >
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div class="space-y-1.5">
+        <Label for="chat_reset_time" class="text-xs">{{ $t('settings.chatResetTime') }}</Label>
+        <Input
+          id="chat_reset_time"
+          v-model="settings.time"
+          type="time"
+          placeholder="02:00"
+          :disabled="!canWrite"
+          @blur="validateTime"
+        />
+        <p v-if="timeError" class="text-[11px] text-destructive">{{ timeError }}</p>
+        <p v-else class="text-[11px] text-muted-foreground">{{ $t('settings.chatResetTimeDesc') }}</p>
+      </div>
+      <div class="space-y-1.5">
+        <Label for="chat_reset_tz" class="text-xs">{{ $t('settings.chatResetTimezone') }}</Label>
+        <Input
+          id="chat_reset_tz"
+          v-model="settings.timezone"
+          placeholder="Asia/Dubai"
+          :disabled="!canWrite"
+        />
+        <p class="text-[11px] text-muted-foreground">{{ $t('settings.chatResetTimezoneDesc') }}</p>
+      </div>
+    </div>
+  </AccountSettingsPanel>
 </template>

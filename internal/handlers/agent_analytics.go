@@ -58,9 +58,9 @@ type AgentAnalyticsResponse struct {
 // GetAgentAnalytics returns agent analytics for the organization
 // Agents see only their own stats; Admin/Manager see all agents
 func (a *App) GetAgentAnalytics(r *fastglue.Request) error {
-	orgID, userID, err := a.getOrgAndUserID(r)
+	orgID, userID, err := a.requireOrgAndUserID(r)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return nil
 	}
 
 	// Parse date range

@@ -86,24 +86,7 @@ func (a *App) Login(r *fastglue.Request) error {
 	}
 
 	// Generate tokens
-	accessToken, err := a.generateAccessToken(&user)
-	if err != nil {
-		a.Log.Error("Failed to generate access token", "error", err)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to generate token", nil, "")
-	}
-
-	refreshToken, err := a.generateRefreshToken(&user)
-	if err != nil {
-		a.Log.Error("Failed to generate refresh token", "error", err)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to generate token", nil, "")
-	}
-
-	a.setAuthCookies(r, accessToken, refreshToken)
-
-	return r.SendEnvelope(CookieAuthResponse{
-		ExpiresIn: a.Config.JWT.AccessExpiryMins * 60,
-		User:      user,
-	})
+	return a.issueAuthTokens(r, &user)
 }
 
 // Register creates a new user in an existing organization
@@ -173,23 +156,7 @@ func (a *App) Register(r *fastglue.Request) error {
 		existingUser.Role = &defaultRole
 		existingUser.RoleID = &defaultRole.ID
 
-		accessToken, err := a.generateAccessToken(&existingUser)
-		if err != nil {
-			a.Log.Error("Failed to generate access token", "error", err)
-			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to generate token", nil, "")
-		}
-		refreshToken, err := a.generateRefreshToken(&existingUser)
-		if err != nil {
-			a.Log.Error("Failed to generate refresh token", "error", err)
-			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to generate token", nil, "")
-		}
-
-		a.setAuthCookies(r, accessToken, refreshToken)
-
-		return r.SendEnvelope(CookieAuthResponse{
-			ExpiresIn: a.Config.JWT.AccessExpiryMins * 60,
-			User:      existingUser,
-		})
+		return a.issueAuthTokens(r, &existingUser)
 	}
 
 	// New user — run dummy bcrypt to prevent timing-based account enumeration
@@ -244,23 +211,7 @@ func (a *App) Register(r *fastglue.Request) error {
 
 	user.Role = &defaultRole
 
-	accessToken, err := a.generateAccessToken(&user)
-	if err != nil {
-		a.Log.Error("Failed to generate access token", "error", err)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to generate token", nil, "")
-	}
-	refreshToken, err := a.generateRefreshToken(&user)
-	if err != nil {
-		a.Log.Error("Failed to generate refresh token", "error", err)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to generate token", nil, "")
-	}
-
-	a.setAuthCookies(r, accessToken, refreshToken)
-
-	return r.SendEnvelope(CookieAuthResponse{
-		ExpiresIn: a.Config.JWT.AccessExpiryMins * 60,
-		User:      user,
-	})
+	return a.issueAuthTokens(r, &user)
 }
 
 // RefreshToken refreshes access token using refresh token with rotation.
@@ -313,22 +264,27 @@ func (a *App) RefreshToken(r *fastglue.Request) error {
 	}
 
 	// Generate new tokens (rotation: new refresh token with new JTI)
-	accessToken, err := a.generateAccessToken(&user)
+	return a.issueAuthTokens(r, &user)
+}
+
+// issueAuthTokens generates the access and refresh tokens for user, sets the
+// auth cookies, and writes the standard CookieAuthResponse. It centralizes the
+// token-issuance block shared by Login, Register, and RefreshToken.
+func (a *App) issueAuthTokens(r *fastglue.Request, user *models.User) error {
+	accessToken, err := a.generateAccessToken(user)
 	if err != nil {
 		a.Log.Error("Failed to generate access token", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to generate token", nil, "")
 	}
-	newRefreshToken, err := a.generateRefreshToken(&user)
+	refreshToken, err := a.generateRefreshToken(user)
 	if err != nil {
 		a.Log.Error("Failed to generate refresh token", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to generate token", nil, "")
 	}
-
-	a.setAuthCookies(r, accessToken, newRefreshToken)
-
+	a.setAuthCookies(r, accessToken, refreshToken)
 	return r.SendEnvelope(CookieAuthResponse{
 		ExpiresIn: a.Config.JWT.AccessExpiryMins * 60,
-		User:      user,
+		User:      *user,
 	})
 }
 

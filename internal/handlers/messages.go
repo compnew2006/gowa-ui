@@ -744,9 +744,9 @@ type SendTemplateMessageRequest struct {
 // SendTemplateMessage sends a template message to a contact or phone number.
 // Accepts either JSON body or multipart/form-data (when a header media file is included).
 func (a *App) SendTemplateMessage(r *fastglue.Request) error {
-	orgID, userID, err := a.getOrgAndUserID(r)
+	orgID, userID, err := a.requireOrgAndUserID(r)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return nil
 	}
 
 	var req SendTemplateMessageRequest

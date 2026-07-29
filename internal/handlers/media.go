@@ -126,6 +126,37 @@ func (a *App) DownloadAndSaveMedia(ctx context.Context, mediaID string, mimeType
 	return a.saveMediaBytes(data, mimeType)
 }
 
+// writeMediaFile picks the media subdirectory from mimeType, ensures it
+// exists, writes data under a fresh uuid+ext filename, and returns the path
+// relative to the media storage root (suitable for Message.MediaURL). Shared
+// by saveMediaBytes (downloaded bytes) and saveMediaLocally (uploaded bytes)
+// so the subdir/write rule lives in one place.
+func (a *App) writeMediaFile(data []byte, mimeType, ext string) (string, error) {
+	var subdir string
+	switch {
+	case strings.HasPrefix(mimeType, "image/"):
+		subdir = "images"
+	case strings.HasPrefix(mimeType, "video/"):
+		subdir = "videos"
+	case strings.HasPrefix(mimeType, "audio/"):
+		subdir = "audio"
+	default:
+		subdir = "documents"
+	}
+
+	if err := a.ensureMediaDir(subdir); err != nil {
+		return "", fmt.Errorf("failed to create media directory: %w", err)
+	}
+
+	filename := uuid.New().String() + ext
+	filePath := filepath.Join(a.getMediaStoragePath(), subdir, filename)
+	if err := os.WriteFile(filePath, data, 0644); err != nil {
+		return "", fmt.Errorf("failed to save media file: %w", err)
+	}
+
+	return filepath.Join(subdir, filename), nil
+}
+
 // saveMediaBytes sniffs the content type of already-downloaded bytes, writes
 // them to the appropriate media subdirectory, and returns the relative path
 // suitable for Message.MediaURL. Extracted from DownloadAndSaveMedia so the
@@ -152,35 +183,10 @@ func (a *App) saveMediaBytes(data []byte, mimeType string) (string, error) {
 		ext = ".bin"
 	}
 
-	// Generate unique filename
-	filename := uuid.New().String() + ext
-
-	// Determine subdirectory based on media type
-	var subdir string
-	switch {
-	case strings.HasPrefix(mimeType, "image/"):
-		subdir = "images"
-	case strings.HasPrefix(mimeType, "video/"):
-		subdir = "videos"
-	case strings.HasPrefix(mimeType, "audio/"):
-		subdir = "audio"
-	default:
-		subdir = "documents"
+	relativePath, err := a.writeMediaFile(data, mimeType, ext)
+	if err != nil {
+		return "", err
 	}
-
-	// Ensure directory exists
-	if err := a.ensureMediaDir(subdir); err != nil {
-		return "", fmt.Errorf("failed to create media directory: %w", err)
-	}
-
-	// Save file
-	filePath := filepath.Join(a.getMediaStoragePath(), subdir, filename)
-	if err := os.WriteFile(filePath, data, 0644); err != nil {
-		return "", fmt.Errorf("failed to save media file: %w", err)
-	}
-
-	// Return relative path for storage in database
-	relativePath := filepath.Join(subdir, filename)
 	a.Log.Info("Media saved", "path", relativePath, "size", len(data))
 
 	return relativePath, nil
@@ -190,9 +196,9 @@ func (a *App) saveMediaBytes(data []byte, mimeType string) (string, error) {
 // Only authorized users who have access to the message can view the media
 func (a *App) ServeMedia(r *fastglue.Request) error {
 	// Get auth context
-	orgID, userID, err := a.getOrgAndUserID(r)
+	orgID, userID, err := a.requireOrgAndUserID(r)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return nil
 	}
 
 	// Get the message ID from URL parameter

@@ -33,9 +33,9 @@ const redownloadCooldown = 60 * time.Second
 //
 //	POST /api/media/{message_id}/redownload
 func (a *App) RedownloadMedia(r *fastglue.Request) error {
-	orgID, userID, err := a.getOrgAndUserID(r)
+	orgID, userID, err := a.requireOrgAndUserID(r)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return nil
 	}
 
 	messageIDStr := r.RequestCtx.UserValue("message_id").(string)

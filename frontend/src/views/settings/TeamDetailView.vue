@@ -14,6 +14,7 @@ import DetailPageLayout from '@/components/shared/DetailPageLayout.vue'
 import MetadataPanel from '@/components/shared/MetadataPanel.vue'
 import AuditLogPanel from '@/components/shared/AuditLogPanel.vue'
 import UnsavedChangesDialog from '@/components/shared/UnsavedChangesDialog.vue'
+import DetailSectionCard from '@/components/shared/DetailSectionCard.vue'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -255,16 +256,11 @@ onMounted(async () => {
     </template>
 
     <!-- Team Details Card -->
-    <Card>
-      <CardHeader class="pb-3">
-        <div class="flex items-center justify-between">
-          <CardTitle class="text-sm font-medium">{{ $t('teams.details', 'Details') }}</CardTitle>
-          <Badge :variant="(team?.is_active ?? true) ? 'default' : 'secondary'">
-            {{ (team?.is_active ?? true) ? $t('common.active', 'Active') : $t('common.inactive', 'Inactive') }}
-          </Badge>
-        </div>
-      </CardHeader>
-      <CardContent class="space-y-4">
+    <DetailSectionCard
+      :title="$t('teams.details', 'Details')"
+      :badge-label="(team?.is_active ?? true) ? $t('common.active', 'Active') : $t('common.inactive', 'Inactive')"
+      :badge-variant="(team?.is_active ?? true) ? 'default' : 'secondary'"
+    >
         <div class="space-y-1.5">
           <Label class="text-xs">{{ $t('teams.name', 'Name') }} *</Label>
           <Input v-model="form.name" :disabled="!canWrite" />
@@ -292,8 +288,7 @@ onMounted(async () => {
           <Switch :checked="form.is_active" @update:checked="form.is_active = $event" :disabled="!canWrite" />
           <Label class="text-xs">{{ $t('common.active', 'Active') }}</Label>
         </div>
-      </CardContent>
-    </Card>
+    </DetailSectionCard>
 
     <!-- Members Card -->
     <Card>

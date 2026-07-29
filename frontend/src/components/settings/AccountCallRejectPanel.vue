@@ -3,13 +3,9 @@ import { ref, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { toast } from 'vue-sonner'
 import { callAutoRejectService } from '@/services/api'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import AccountSettingsPanel from './AccountSettingsPanel.vue'
 import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
-import { Separator } from '@/components/ui/separator'
 import { Textarea } from '@/components/ui/textarea'
-import { Loader2 } from 'lucide-vue-next'
 
 // Per-account call auto-reject: incoming WhatsApp calls are rejected while
 // still ringing and the caller optionally receives an automated text. Each
@@ -68,42 +64,25 @@ async function saveSettings() {
 </script>
 
 <template>
-  <div class="space-y-4">
-    <Card>
-      <CardHeader class="pb-3">
-        <CardTitle class="text-sm font-medium">{{ $t('settings.callRejectSettings') }}</CardTitle>
-        <CardDescription class="text-xs">{{ $t('settings.callRejectSettingsDesc') }}</CardDescription>
-      </CardHeader>
-      <CardContent class="space-y-4">
-        <div class="flex items-center justify-between">
-          <div>
-            <Label class="text-xs">{{ $t('settings.callRejectEnable') }}</Label>
-            <p class="text-[11px] text-muted-foreground">{{ $t('settings.callRejectEnableDesc') }}</p>
-          </div>
-          <Switch
-            :checked="settings.enabled"
-            @update:checked="settings.enabled = $event"
-            :disabled="!canWrite"
-          />
-        </div>
-        <Separator />
-        <div class="space-y-1.5">
-          <Label for="call_reject_message" class="text-xs">{{ $t('settings.callRejectMessage') }}</Label>
-          <Textarea
-            id="call_reject_message"
-            v-model="settings.message"
-            :rows="3"
-            :disabled="!canWrite"
-          />
-          <p class="text-[11px] text-muted-foreground">{{ $t('settings.callRejectMessageDesc') }}</p>
-        </div>
-        <div v-if="canWrite" class="flex justify-end">
-          <Button variant="outline" size="sm" @click="saveSettings" :disabled="isSubmitting">
-            <Loader2 v-if="isSubmitting" class="mr-2 h-4 w-4 animate-spin" />
-            {{ $t('settings.save') }}
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  </div>
+  <AccountSettingsPanel
+    :title="$t('settings.callRejectSettings')"
+    :description="$t('settings.callRejectSettingsDesc')"
+    :enable-label="$t('settings.callRejectEnable')"
+    :enable-desc="$t('settings.callRejectEnableDesc')"
+    v-model:enabled="settings.enabled"
+    :can-write="canWrite"
+    :is-submitting="isSubmitting"
+    @save="saveSettings"
+  >
+    <div class="space-y-1.5">
+      <Label for="call_reject_message" class="text-xs">{{ $t('settings.callRejectMessage') }}</Label>
+      <Textarea
+        id="call_reject_message"
+        v-model="settings.message"
+        :rows="3"
+        :disabled="!canWrite"
+      />
+      <p class="text-[11px] text-muted-foreground">{{ $t('settings.callRejectMessageDesc') }}</p>
+    </div>
+  </AccountSettingsPanel>
 </template>

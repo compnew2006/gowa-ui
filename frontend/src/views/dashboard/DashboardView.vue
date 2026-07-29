@@ -33,6 +33,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { relativeTimeDiff } from '@/lib/utils'
 import { Switch } from '@/components/ui/switch'
 import { widgetsService, type DashboardWidget, type WidgetData, type LayoutItem } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
@@ -301,12 +302,7 @@ const formatNumber = (num: number): string => {
 }
 
 const formatTime = (dateStr: string): string => {
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffMins = Math.floor(diffMs / 60000)
-  const diffHours = Math.floor(diffMs / 3600000)
-  const diffDays = Math.floor(diffMs / 86400000)
+  const { diffMins, diffHours, diffDays } = relativeTimeDiff(dateStr)
 
   if (diffMins < 1) return t('dashboard.justNow')
   if (diffMins < 60) return t('dashboard.minutesAgo', { count: diffMins })

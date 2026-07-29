@@ -10,7 +10,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'vue-sonner'
 import { useInfiniteScroll } from '@/composables/useInfiniteScroll'
-import { getInitials, getAvatarGradient } from '@/lib/utils'
+import { getInitials, getAvatarGradient, relativeTimeDiff } from '@/lib/utils'
 import {
   StickyNote, Pencil, Trash2, X, Check, Loader2, Send
 } from 'lucide-vue-next'
@@ -144,12 +144,7 @@ async function deleteNote(noteId: string) {
 }
 
 function formatNoteTime(dateStr: string) {
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  const diffMins = Math.floor(diffMs / 60000)
-  const diffHours = Math.floor(diffMs / 3600000)
-  const diffDays = Math.floor(diffMs / 86400000)
+  const { date, diffMins, diffHours, diffDays } = relativeTimeDiff(dateStr)
 
   if (diffMins < 1) return 'Just now'
   if (diffMins < 60) return `${diffMins}m ago`

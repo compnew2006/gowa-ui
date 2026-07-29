@@ -55,9 +55,9 @@ type TeamMemberResponse struct {
 
 // ListTeams returns teams based on user access
 func (a *App) ListTeams(r *fastglue.Request) error {
-	orgID, userID, err := a.getOrgAndUserID(r)
+	orgID, userID, err := a.requireOrgAndUserID(r)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return nil
 	}
 
 	pg := parsePagination(r)
@@ -105,9 +105,9 @@ func (a *App) ListTeams(r *fastglue.Request) error {
 
 // GetTeam returns a single team with members
 func (a *App) GetTeam(r *fastglue.Request) error {
-	orgID, userID, err := a.getOrgAndUserID(r)
+	orgID, userID, err := a.requireOrgAndUserID(r)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return nil
 	}
 
 	teamID, err := parsePathUUID(r, "id", "team")
@@ -192,9 +192,9 @@ func (a *App) CreateTeam(r *fastglue.Request) error {
 
 // UpdateTeam updates a team
 func (a *App) UpdateTeam(r *fastglue.Request) error {
-	orgID, userID, err := a.getOrgAndUserID(r)
+	orgID, userID, err := a.requireOrgAndUserID(r)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return nil
 	}
 
 	teamID, err := parsePathUUID(r, "id", "team")
@@ -308,9 +308,9 @@ func (a *App) DeleteTeam(r *fastglue.Request) error {
 
 // ListTeamMembers lists members of a team
 func (a *App) ListTeamMembers(r *fastglue.Request) error {
-	orgID, userID, err := a.getOrgAndUserID(r)
+	orgID, userID, err := a.requireOrgAndUserID(r)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return nil
 	}
 
 	teamID, err := parsePathUUID(r, "id", "team")
@@ -358,9 +358,9 @@ func (a *App) ListTeamMembers(r *fastglue.Request) error {
 
 // AddTeamMember adds a member to a team
 func (a *App) AddTeamMember(r *fastglue.Request) error {
-	orgID, userID, err := a.getOrgAndUserID(r)
+	orgID, userID, err := a.requireOrgAndUserID(r)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return nil
 	}
 
 	teamID, err := parsePathUUID(r, "id", "team")
@@ -454,9 +454,9 @@ func (a *App) AddTeamMember(r *fastglue.Request) error {
 
 // RemoveTeamMember removes a member from a team
 func (a *App) RemoveTeamMember(r *fastglue.Request) error {
-	orgID, userID, err := a.getOrgAndUserID(r)
+	orgID, userID, err := a.requireOrgAndUserID(r)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
+		return nil
 	}
 
 	teamID, err := parsePathUUID(r, "id", "team")

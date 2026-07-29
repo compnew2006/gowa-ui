@@ -61,17 +61,28 @@ type gowaInstanceBundle struct {
 	client   *gowa.Client
 }
 
+// findGowaInstanceByPath loads the {id} GOWA instance scoped to orgID (without
+// decrypting credentials or building a client). On error it sends the HTTP
+// response and returns ok=false — callers should `return nil` immediately.
+func (a *App) findGowaInstanceByPath(r *fastglue.Request, orgID uuid.UUID) (*models.GowaInstance, bool) {
+	id, err := parsePathUUID(r, "id", "GOWA instance")
+	if err != nil {
+		return nil, false
+	}
+	instance, err := findByIDAndOrg[models.GowaInstance](a.DB, r, id, orgID, "GOWA instance")
+	if err != nil {
+		return nil, false
+	}
+	return instance, true
+}
+
 // resolveGowaInstance loads the DB instance by {id} scoped to orgID, decrypts
 // its credentials, and builds a gowa.Client. On error it sends the HTTP
 // response and returns ok=false — callers should `return nil` immediately.
 // Permission checks must already have been done by the caller.
 func (a *App) resolveGowaInstance(r *fastglue.Request, orgID uuid.UUID) (gowaInstanceBundle, bool) {
-	id, err := parsePathUUID(r, "id", "GOWA instance")
-	if err != nil {
-		return gowaInstanceBundle{}, false
-	}
-	instance, err := findByIDAndOrg[models.GowaInstance](a.DB, r, id, orgID, "GOWA instance")
-	if err != nil {
+	instance, ok := a.findGowaInstanceByPath(r, orgID)
+	if !ok {
 		return gowaInstanceBundle{}, false
 	}
 	instance.DecryptCredentials(a.Config.App.EncryptionKey)
@@ -109,12 +120,8 @@ func (a *App) GetGowaInstance(r *fastglue.Request) error {
 		return nil
 	}
 
-	id, err := parsePathUUID(r, "id", "GOWA instance")
-	if err != nil {
-		return nil
-	}
-	instance, err := findByIDAndOrg[models.GowaInstance](a.DB, r, id, orgID, "GOWA instance")
-	if err != nil {
+	instance, ok := a.findGowaInstanceByPath(r, orgID)
+	if !ok {
 		return nil
 	}
 	return r.SendEnvelope(map[string]any{"instance": instance.ToResponse()})
@@ -200,12 +207,8 @@ func (a *App) UpdateGowaInstance(r *fastglue.Request) error {
 		return nil
 	}
 
-	id, err := parsePathUUID(r, "id", "GOWA instance")
-	if err != nil {
-		return nil
-	}
-	instance, err := findByIDAndOrg[models.GowaInstance](a.DB, r, id, orgID, "GOWA instance")
-	if err != nil {
+	instance, ok := a.findGowaInstanceByPath(r, orgID)
+	if !ok {
 		return nil
 	}
 
@@ -266,12 +269,8 @@ func (a *App) DeleteGowaInstance(r *fastglue.Request) error {
 		return nil
 	}
 
-	id, err := parsePathUUID(r, "id", "GOWA instance")
-	if err != nil {
-		return nil
-	}
-	instance, err := findByIDAndOrg[models.GowaInstance](a.DB, r, id, orgID, "GOWA instance")
-	if err != nil {
+	instance, ok := a.findGowaInstanceByPath(r, orgID)
+	if !ok {
 		return nil
 	}
 	if err := a.DB.Delete(instance).Error; err != nil {

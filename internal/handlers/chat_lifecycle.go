@@ -32,6 +32,23 @@ func (a *App) ensureClaimableChatStatus(orgID uuid.UUID, contact *models.Contact
 	a.ChatLifecycle.CustomerReopen(context.Background(), orgID, contact, reopenNote)
 }
 
+// loadContactByPath parses the {id} contact path param and loads the contact
+// scoped to orgID. On error it sends the HTTP response and returns ok=false —
+// callers should `return nil`. It returns a value (not a pointer) so callers
+// keep passing &contact to the lifecycle service unchanged.
+func (a *App) loadContactByPath(r *fastglue.Request, orgID uuid.UUID) (models.Contact, bool) {
+	var contact models.Contact
+	contactID, err := parsePathUUID(r, "id", "contact")
+	if err != nil {
+		return contact, false
+	}
+	if err := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID).First(&contact).Error; err != nil {
+		_ = r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
+		return contact, false
+	}
+	return contact, true
+}
+
 // ClaimChat allows an agent to claim a pending (unassigned) conversation.
 // Thin HTTP adapter over Service.Claim. Route: PUT /api/contacts/{id}/claim
 // Permission: chat.assign:write
@@ -41,14 +58,9 @@ func (a *App) ClaimChat(r *fastglue.Request) error {
 		return nil
 	}
 
-	contactID, err := parsePathUUID(r, "id", "contact")
-	if err != nil {
+	contact, ok := a.loadContactByPath(r, orgID)
+	if !ok {
 		return nil
-	}
-
-	var contact models.Contact
-	if err := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID).First(&contact).Error; err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
 	}
 
 	hasCollaborate := a.HasPermission(userID, models.ResourceChatCollaborate, models.ActionWrite, orgID)
@@ -105,14 +117,9 @@ func (a *App) ReleaseChat(r *fastglue.Request) error {
 		return nil
 	}
 
-	contactID, err := parsePathUUID(r, "id", "contact")
-	if err != nil {
+	contact, ok := a.loadContactByPath(r, orgID)
+	if !ok {
 		return nil
-	}
-
-	var contact models.Contact
-	if err := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID).First(&contact).Error; err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
 	}
 
 	// Authorization: assignee or admin/manager (ghost-release). The service
@@ -164,14 +171,9 @@ func (a *App) JoinChat(r *fastglue.Request) error {
 		return nil
 	}
 
-	contactID, err := parsePathUUID(r, "id", "contact")
-	if err != nil {
+	contact, ok := a.loadContactByPath(r, orgID)
+	if !ok {
 		return nil
-	}
-
-	var contact models.Contact
-	if err := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID).First(&contact).Error; err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
 	}
 
 	res, err := a.ChatLifecycle.Join(r.RequestCtx, orgID, userID, &contact)
@@ -245,19 +247,14 @@ func (a *App) InviteCollaborator(r *fastglue.Request) error {
 // is closed; if collaborators remain, ownership is transferred.
 // Route: DELETE /api/contacts/{id}/join
 func (a *App) LeaveChat(r *fastglue.Request) error {
-	orgID, userID, err := a.getOrgAndUserID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
-	}
-
-	contactID, err := parsePathUUID(r, "id", "contact")
+	orgID, userID, err := a.requireOrgAndUserID(r)
 	if err != nil {
 		return nil
 	}
 
-	var contact models.Contact
-	if err := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID).First(&contact).Error; err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
+	contact, ok := a.loadContactByPath(r, orgID)
+	if !ok {
+		return nil
 	}
 
 	isOwner := contact.AssignedUserID != nil && *contact.AssignedUserID == userID
@@ -350,19 +347,14 @@ func (a *App) RemoveCollaborator(r *fastglue.Request) error {
 // Only the assigned agent, a collaborator, or a manager/admin may close.
 // Route: PUT /api/contacts/{id}/close
 func (a *App) CloseChat(r *fastglue.Request) error {
-	orgID, userID, err := a.getOrgAndUserID(r)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
-	}
-
-	contactID, err := parsePathUUID(r, "id", "contact")
+	orgID, userID, err := a.requireOrgAndUserID(r)
 	if err != nil {
 		return nil
 	}
 
-	var contact models.Contact
-	if err := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID).First(&contact).Error; err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
+	contact, ok := a.loadContactByPath(r, orgID)
+	if !ok {
+		return nil
 	}
 
 	isOwner := contact.AssignedUserID != nil && *contact.AssignedUserID == userID
@@ -404,14 +396,9 @@ func (a *App) ReopenChat(r *fastglue.Request) error {
 		return nil
 	}
 
-	contactID, err := parsePathUUID(r, "id", "contact")
-	if err != nil {
+	contact, ok := a.loadContactByPath(r, orgID)
+	if !ok {
 		return nil
-	}
-
-	var contact models.Contact
-	if err := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID).First(&contact).Error; err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
 	}
 
 	reopened, err := a.ChatLifecycle.Reopen(r.RequestCtx, orgID, userID, &contact)

@@ -27,6 +27,28 @@ export function formatDateTime(date: string | Date): string {
   return `${formatDate(date)} ${formatTime(date)}`
 }
 
+export interface RelativeTimeDiff {
+  date: Date
+  diffMins: number
+  diffHours: number
+  diffDays: number
+}
+
+// relativeTimeDiff computes the elapsed minutes/hours/days between now and the
+// given date. Shared by the relative "x ago" formatters (ConversationNotes,
+// DashboardView) which each render the buckets differently (plain text vs
+// i18n), so only the duplicated diff computation is factored out here.
+export function relativeTimeDiff(date: string | Date): RelativeTimeDiff {
+  const d = typeof date === 'string' ? new Date(date) : date
+  const diffMs = Date.now() - d.getTime()
+  return {
+    date: d,
+    diffMins: Math.floor(diffMs / 60000),
+    diffHours: Math.floor(diffMs / 3600000),
+    diffDays: Math.floor(diffMs / 86400000)
+  }
+}
+
 export function getInitials(name: string): string {
   return name
     .split(' ')
