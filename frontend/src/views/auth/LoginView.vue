@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { api } from '@/services/api'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
@@ -24,8 +25,37 @@ const authStore = useAuthStore()
 
 const email = ref('')
 const password = ref('')
+const rememberMe = ref(false)
 const isLoading = ref(false)
 const ssoProviders = ref<SSOProvider[]>([])
+
+const REMEMBERED_CREDENTIALS_KEY = 'whatomate_remembered_credentials'
+
+const loadRememberedCredentials = () => {
+  try {
+    const saved = localStorage.getItem(REMEMBERED_CREDENTIALS_KEY)
+    if (!saved) return
+    const creds = JSON.parse(saved)
+    if (creds?.email && creds?.password) {
+      email.value = creds.email
+      password.value = creds.password
+      rememberMe.value = true
+    }
+  } catch {
+    localStorage.removeItem(REMEMBERED_CREDENTIALS_KEY)
+  }
+}
+
+const persistRememberedCredentials = () => {
+  if (rememberMe.value) {
+    localStorage.setItem(
+      REMEMBERED_CREDENTIALS_KEY,
+      JSON.stringify({ email: email.value, password: password.value })
+    )
+  } else {
+    localStorage.removeItem(REMEMBERED_CREDENTIALS_KEY)
+  }
+}
 
 // SSO provider icons (using simple SVG paths)
 const providerIcons: Record<string, string> = {
@@ -46,6 +76,8 @@ const providerColors: Record<string, string> = {
 }
 
 onMounted(async () => {
+  loadRememberedCredentials()
+
   // Check for SSO error in query params
   const ssoError = route.query.sso_error as string
   if (ssoError) {
@@ -73,6 +105,7 @@ const handleLogin = async () => {
 
   try {
     await authStore.login(email.value, password.value)
+    persistRememberedCredentials()
     toast.success(t('auth.loginSuccess'))
 
     const redirect = route.query.redirect as string
@@ -129,6 +162,18 @@ const initiateSSO = (provider: string) => {
               :disabled="isLoading"
               autocomplete="current-password"
             />
+          </div>
+          <div class="flex items-center gap-2">
+            <Checkbox
+              id="remember-me"
+              :checked="rememberMe"
+              :disabled="isLoading"
+              class="border-white/[0.2] light:border-gray-300"
+              @update:checked="rememberMe = $event === true"
+            />
+            <Label for="remember-me" class="text-white/70 light:text-gray-700 cursor-pointer font-normal">
+              {{ $t('auth.rememberMe') }}
+            </Label>
           </div>
           <Button type="submit" class="w-full bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white shadow-lg shadow-emerald-500/20" :disabled="isLoading">
             <Loader2 v-if="isLoading" class="mr-2 h-4 w-4 animate-spin" />

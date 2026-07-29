@@ -23,10 +23,22 @@ export interface Credentials {
   password: string
 }
 
-export async function loginAs(page: Page, creds: Credentials): Promise<void> {
+export interface LoginOptions {
+  /** Check the "Remember me" checkbox before submitting (persists creds in localStorage). */
+  rememberMe?: boolean
+}
+
+export async function loginAs(page: Page, creds: Credentials, options: LoginOptions = {}): Promise<void> {
   await page.goto('/login')
   await page.locator('input[type="email"], input[name="email"]').fill(creds.email)
   await page.locator('input[type="password"], input[name="password"]').fill(creds.password)
+  if (options.rememberMe) {
+    // reka-ui Checkbox renders a button[role="checkbox"], not an <input>
+    const checkbox = page.locator('#remember-me')
+    if ((await checkbox.getAttribute('data-state')) !== 'checked') {
+      await checkbox.click()
+    }
+  }
   await page.locator('button[type="submit"]').click()
   await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 10_000 })
 }
