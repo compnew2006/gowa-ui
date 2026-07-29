@@ -40,10 +40,6 @@ type RolePermission struct {
 	PermissionID uuid.UUID `gorm:"type:uuid;primaryKey" json:"permission_id"`
 }
 
-func (RolePermission) TableName() string {
-	return "role_permissions"
-}
-
 // PermissionResource constants for available resources
 const (
 	ResourceUsers                = "users"

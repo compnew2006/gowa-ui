@@ -430,7 +430,7 @@ export const chatbotService = {
     api.put(`/chatbot/transfers/${id}/assign`, { agent_id: agentId, team_id: teamId })
 }
 
-export interface CannedResponseButton {
+interface CannedResponseButton {
   id: string
   title: string
   type?: 'reply' | 'url' | 'phone'
@@ -752,7 +752,7 @@ export const teamsService = {
 }
 
 // Audit Logs
-export interface AuditLogChange {
+interface AuditLogChange {
   field: string
   old_value: any
   new_value: any
@@ -939,7 +939,7 @@ export const notesService = {
     api.delete(`/contacts/${contactId}/notes/${noteId}`)
 }
 
-export interface IVRNodePosition {
+interface IVRNodePosition {
   x: number
   y: number
 }

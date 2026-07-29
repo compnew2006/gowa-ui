@@ -496,35 +496,6 @@ func (a *App) HasPermission(userID uuid.UUID, resource, action string, orgIDs ..
 	return false
 }
 
-// HasAnyPermission checks if a user has any of the specified permissions.
-// Super admins have all permissions automatically.
-// To check in a specific org, use HasAnyPermissionInOrg instead.
-func (a *App) HasAnyPermission(userID uuid.UUID, permissions ...string) bool {
-	perms, err := a.getUserPermissionsCached(userID)
-	if err != nil {
-		a.Log.Error("Failed to get user permissions", "error", err, "user_id", userID)
-		return false
-	}
-
-	// Super admins have all permissions
-	if perms.IsSuperAdmin {
-		return true
-	}
-
-	permSet := make(map[string]bool)
-	for _, p := range perms.Permissions {
-		permSet[p] = true
-	}
-
-	for _, p := range permissions {
-		if permSet[p] {
-			return true
-		}
-	}
-
-	return false
-}
-
 // IsSuperAdmin checks if a user is a super admin
 func (a *App) IsSuperAdmin(userID uuid.UUID) bool {
 	perms, err := a.getUserPermissionsCached(userID)
@@ -532,12 +503,6 @@ func (a *App) IsSuperAdmin(userID uuid.UUID) bool {
 		return false
 	}
 	return perms.IsSuperAdmin
-}
-
-// ScopedQuery returns a gorm query scoped to the organization
-// Always filters by organization - uuid.Nil is not allowed
-func (a *App) ScopedQuery(userID, orgID uuid.UUID) *gorm.DB {
-	return a.DB.Where("organization_id = ?", orgID)
 }
 
 // ScopeToOrg adds organization scoping to an existing query
@@ -632,20 +597,6 @@ func (a *App) InvalidateRolePermissionsCache(roleID uuid.UUID) {
 	// Invalidate cache for all affected users (both base and org-specific keys)
 	for uid := range userIDs {
 		a.InvalidateUserPermissionsCache(uid)
-	}
-}
-
-// InvalidateOrgPermissionsCache invalidates all permission caches for an organization
-func (a *App) InvalidateOrgPermissionsCache(orgID uuid.UUID) {
-	// Find all roles in this org
-	var roles []models.CustomRole
-	if err := a.DB.Select("id").Where("organization_id = ?", orgID).Find(&roles).Error; err != nil {
-		a.Log.Error("Failed to find roles for org permission cache invalidation", "error", err, "org_id", orgID)
-		return
-	}
-
-	for _, role := range roles {
-		a.InvalidateRolePermissionsCache(role.ID)
 	}
 }
 

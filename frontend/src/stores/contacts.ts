@@ -39,14 +39,14 @@ export interface Contact {
   updated_at: string
 }
 
-export interface Collaborator {
+interface Collaborator {
   user_id: string
   name: string
   role: string
   joined_at: string
 }
 
-export interface ReplyPreview {
+interface ReplyPreview {
   id: string
   content: any
   message_type: string

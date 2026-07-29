@@ -2,20 +2,20 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '@/services/api'
 
-export interface UserSettings {
+interface UserSettings {
   email_notifications?: boolean
   new_message_alerts?: boolean
   campaign_updates?: boolean
 }
 
-export interface Permission {
+interface Permission {
   id: string
   resource: string
   action: string
   description?: string
 }
 
-export interface UserRole {
+interface UserRole {
   id: string
   name: string
   description?: string
@@ -34,10 +34,6 @@ export interface User {
   settings?: UserSettings
   is_available?: boolean
   is_super_admin?: boolean
-}
-
-export interface AuthState {
-  user: User | null
 }
 
 export const useAuthStore = defineStore('auth', () => {

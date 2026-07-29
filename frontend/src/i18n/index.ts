@@ -41,8 +41,6 @@ export const SUPPORTED_LOCALES = Object.keys(localeModules).map(path => {
   return { code, ...names }
 })
 
-export type SupportedLocale = string
-
 // Build messages object from all locale files
 const messages: Record<string, MessageSchema> = {}
 for (const path in localeModules) {
@@ -83,9 +81,4 @@ export function setLocale(locale: string) {
   i18n.global.locale.value = locale
   localStorage.setItem('locale', locale)
   document.documentElement.setAttribute('lang', locale)
-}
-
-// Get current locale
-export function getLocale(): string {
-  return i18n.global.locale.value
 }

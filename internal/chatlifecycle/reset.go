@@ -9,7 +9,6 @@ import (
 	"github.com/shridarpatil/whatomate/internal/audit"
 	"github.com/shridarpatil/whatomate/internal/models"
 	"github.com/shridarpatil/whatomate/internal/websocket"
-	"gorm.io/gorm"
 )
 
 // ResetSummary captures the outcome of a batch reset for logging, audit, and
@@ -150,14 +149,4 @@ func contactIDStrings(ids []uuid.UUID) []string {
 		out[i] = id.String()
 	}
 	return out
-}
-
-// ResetAssignedChatsTx is a thin wrapper that runs ResetAssignedChats inside a
-// transaction. Exported so the processor can pass an externally-managed tx
-// when it needs to coordinate with other writes. Today the processor calls
-// ResetAssignedChats directly (the service's own db handle is used), but this
-// is here for future callers that need transactional isolation.
-func (s *Service) ResetAssignedChatsTx(ctx context.Context, tx *gorm.DB, orgID uuid.UUID, accountName, actorName string) (ResetSummary, error) {
-	txSvc := &Service{db: tx, wsHub: s.wsHub, log: s.log}
-	return txSvc.ResetAssignedChats(ctx, orgID, accountName, actorName)
 }

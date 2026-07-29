@@ -209,23 +209,6 @@ func (a *App) getOrgAndUserID(r *fastglue.Request) (orgID, userID uuid.UUID, err
 	return orgID, userID, nil
 }
 
-// requirePermission checks if the user has the required permission.
-// Returns nil if permitted, otherwise sends a 403 error envelope and returns errEnvelopeSent.
-// Automatically extracts orgID from the request for org-aware permission checks.
-func (a *App) requirePermission(r *fastglue.Request, userID uuid.UUID, resource, action string) error {
-	orgID, err := a.getOrgID(r)
-	if err != nil {
-		a.Log.Error("Failed to get organization ID for permission check", "error", err, "user_id", userID)
-		_ = r.SendErrorEnvelope(fasthttp.StatusForbidden, "Insufficient permissions", nil, "")
-		return errEnvelopeSent
-	}
-	if !a.HasPermission(userID, resource, action, orgID) {
-		_ = r.SendErrorEnvelope(fasthttp.StatusForbidden, "Insufficient permissions", nil, "")
-		return errEnvelopeSent
-	}
-	return nil
-}
-
 // requireAuth extracts the organization ID and user ID from the request and
 // verifies the user holds the given permission. On failure it writes the
 // appropriate error envelope (401 if unauthenticated, 403 if the permission is

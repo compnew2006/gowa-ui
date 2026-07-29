@@ -15,7 +15,7 @@ export function formatDate(date: string | Date, options?: Intl.DateTimeFormatOpt
   })
 }
 
-export function formatTime(date: string | Date): string {
+function formatTime(date: string | Date): string {
   const d = typeof date === 'string' ? new Date(date) : date
   return d.toLocaleTimeString('en-US', {
     hour: '2-digit',
@@ -25,26 +25,6 @@ export function formatTime(date: string | Date): string {
 
 export function formatDateTime(date: string | Date): string {
   return `${formatDate(date)} ${formatTime(date)}`
-}
-
-export function truncate(str: string, length: number): string {
-  if (str.length <= length) return str
-  return str.slice(0, length) + '...'
-}
-
-export function debounce<T extends (...args: any[]) => any>(
-  fn: T,
-  delay: number
-): (...args: Parameters<T>) => void {
-  let timeoutId: ReturnType<typeof setTimeout>
-  return (...args: Parameters<T>) => {
-    clearTimeout(timeoutId)
-    timeoutId = setTimeout(() => fn(...args), delay)
-  }
-}
-
-export function generateId(): string {
-  return Math.random().toString(36).substring(2, 15)
 }
 
 export function getInitials(name: string): string {
@@ -92,20 +72,5 @@ export function formatLabel(key: string): string {
     .replace(/_/g, ' ')
     .replace(/([a-z])([A-Z])/g, '$1 $2')
     .replace(/\b\w/g, c => c.toUpperCase())
-}
-
-// Formats a price stored in minor units (cents) into a currency string.
-// e.g. formatPrice(1999, 'USD') -> "$19.99"
-export function formatPrice(cents: number | null | undefined, currency = 'USD'): string {
-  if (cents === null || cents === undefined || isNaN(cents)) return '—'
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: 'currency',
-      currency,
-      minimumFractionDigits: 2,
-    }).format(cents / 100)
-  } catch {
-    return `${(cents / 100).toFixed(2)} ${currency}`
-  }
 }
 

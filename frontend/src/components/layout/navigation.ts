@@ -22,7 +22,7 @@ import {
 } from 'lucide-vue-next'
 import type { Component } from 'vue'
 
-export interface NavItem {
+interface NavItem {
   name: string
   path: string
   icon: Component

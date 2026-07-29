@@ -44,8 +44,6 @@ export const RESOURCE_LABELS: Record<string, string> = {
   devices: 'Devices',
 } as const
 
-// Default pagination settings
-export const DEFAULT_PAGE_SIZE = 20
 // Tag colors with their CSS classes
 export const TAG_COLORS = [
   { value: 'blue', label: 'Blue', class: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' },

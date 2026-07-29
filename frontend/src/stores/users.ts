@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { usersService } from '@/services/api'
 
-export interface UserRole {
+interface UserRole {
   id: string
   name: string
   description?: string

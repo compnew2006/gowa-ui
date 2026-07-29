@@ -17,7 +17,7 @@ export interface ApiConfig {
   response_mapping: Record<string, string>
 }
 
-export interface TransferConfig {
+interface TransferConfig {
   team_id: string
   notes: string
 }
@@ -59,8 +59,8 @@ export interface FlowData {
 
 // Simulation Types
 
-export type SimulationStatus = 'idle' | 'running' | 'paused' | 'waiting_input' | 'completed' | 'error'
-export type MessageType = 'bot' | 'user' | 'system' | 'debug'
+type SimulationStatus = 'idle' | 'running' | 'paused' | 'waiting_input' | 'completed' | 'error'
+type MessageType = 'bot' | 'user' | 'system' | 'debug'
 
 export interface SimulationMessage {
   id: string
@@ -75,7 +75,7 @@ export interface SimulationMessage {
   isApiMessage?: boolean
 }
 
-export interface SimulationSnapshot {
+interface SimulationSnapshot {
   stepIndex: number
   stepName: string
   variables: Record<string, any>

@@ -114,17 +114,6 @@ func GetMigrationModels() []MigrationModel {
 	}
 }
 
-// AutoMigrate runs auto migration for all models (silent mode)
-func AutoMigrate(db *gorm.DB) error {
-	migrationModels := GetMigrationModels()
-	for _, m := range migrationModels {
-		if err := db.AutoMigrate(m.Model); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // RunMigrationWithProgress runs migrations with a progress bar display
 func RunMigrationWithProgress(db *gorm.DB, adminCfg *config.DefaultAdminConfig) error {
 	// Silence GORM logging during migration
@@ -315,16 +304,6 @@ func getIndexes() []string {
 		// Conversation notes
 		`CREATE INDEX IF NOT EXISTS idx_conversation_notes_contact ON conversation_notes(organization_id, contact_id, created_at DESC)`,
 	}
-}
-
-// CreateIndexes creates additional indexes not handled by GORM tags
-func CreateIndexes(db *gorm.DB) error {
-	for _, idx := range getIndexes() {
-		if err := db.Exec(idx).Error; err != nil {
-			return fmt.Errorf("failed to create index: %w", err)
-		}
-	}
-	return nil
 }
 
 // CreateDefaultAdmin creates a default admin user if no users exist

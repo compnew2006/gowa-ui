@@ -8,7 +8,7 @@ import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
-export interface PanelField {
+interface PanelField {
   key: string
   label: string
   order: number
@@ -16,7 +16,7 @@ export interface PanelField {
   color?: 'default' | 'success' | 'warning' | 'error' | 'info'
 }
 
-export interface PanelSection {
+interface PanelSection {
   id: string
   label: string
   columns: 1 | 2

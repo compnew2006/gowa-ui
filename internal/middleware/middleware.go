@@ -243,48 +243,6 @@ func validateAPIKey(r *fastglue.Request, key string, db *gorm.DB) bool {
 	return false
 }
 
-// OrganizationContext loads organization and user from database
-func OrganizationContext(db *gorm.DB) fastglue.FastMiddleware {
-	return func(r *fastglue.Request) *fastglue.Request {
-		userID, ok := r.RequestCtx.UserValue(ContextKeyUserID).(uuid.UUID)
-		if !ok {
-			_ = r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "User ID not found in context", nil, "")
-			return nil
-		}
-
-		orgID, ok := r.RequestCtx.UserValue(ContextKeyOrganizationID).(uuid.UUID)
-		if !ok {
-			_ = r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Organization ID not found in context", nil, "")
-			return nil
-		}
-
-		// Load user
-		var user models.User
-		if err := db.Where("id = ?", userID).First(&user).Error; err != nil {
-			_ = r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "User not found", nil, "")
-			return nil
-		}
-
-		if !user.IsActive {
-			_ = r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Account is disabled", nil, "")
-			return nil
-		}
-
-		// Load organization
-		var org models.Organization
-		if err := db.Where("id = ?", orgID).First(&org).Error; err != nil {
-			_ = r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Organization not found", nil, "")
-			return nil
-		}
-
-		// Store in context
-		r.RequestCtx.SetUserValue(ContextKeyUser, &user)
-		r.RequestCtx.SetUserValue(ContextKeyOrganization, &org)
-
-		return r
-	}
-}
-
 // PermissionChecker is a function that checks if a user has a permission
 type PermissionChecker func(userID uuid.UUID, resource, action string) bool
 
@@ -337,22 +295,4 @@ func GetUserID(r *fastglue.Request) (uuid.UUID, bool) {
 func GetOrganizationID(r *fastglue.Request) (uuid.UUID, bool) {
 	orgID, ok := r.RequestCtx.UserValue(ContextKeyOrganizationID).(uuid.UUID)
 	return orgID, ok
-}
-
-// GetUser extracts user from request context
-func GetUser(r *fastglue.Request) (*models.User, bool) {
-	user, ok := r.RequestCtx.UserValue(ContextKeyUser).(*models.User)
-	return user, ok
-}
-
-// GetOrganization extracts organization from request context
-func GetOrganization(r *fastglue.Request) (*models.Organization, bool) {
-	org, ok := r.RequestCtx.UserValue(ContextKeyOrganization).(*models.Organization)
-	return org, ok
-}
-
-// IsSuperAdmin checks if the current user is a super admin
-func IsSuperAdmin(r *fastglue.Request) bool {
-	isSuperAdmin, ok := r.RequestCtx.UserValue(ContextKeyIsSuperAdmin).(bool)
-	return ok && isSuperAdmin
 }
