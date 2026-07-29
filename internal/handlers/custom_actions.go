@@ -141,7 +141,7 @@ func (a *App) CreateCustomAction(r *fastglue.Request) error {
 	if req.ActionType == "" {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Action type is required", nil, "")
 	}
-	if req.ActionType != models.ActionTypeWebhook && req.ActionType != models.ActionTypeURL && req.ActionType != models.ActionTypeJavascript {
+	if !isValidActionType(req.ActionType) {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid action type. Must be webhook, url, or javascript", nil, "")
 	}
 
@@ -200,7 +200,7 @@ func (a *App) UpdateCustomAction(r *fastglue.Request) error {
 		updates["icon"] = req.Icon
 	}
 	if req.ActionType != "" {
-		if req.ActionType != models.ActionTypeWebhook && req.ActionType != models.ActionTypeURL && req.ActionType != models.ActionTypeJavascript {
+		if !isValidActionType(req.ActionType) {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid action type", nil, "")
 		}
 		updates["action_type"] = req.ActionType
@@ -457,27 +457,35 @@ func (a *App) executeURLAction(action models.CustomAction, context map[string]an
 	// Replace variables in URL
 	finalURL := replaceVariables(config.URL, context)
 
-	// Generate a random token
-	tokenBytes := make([]byte, 16)
-	_, _ = rand.Read(tokenBytes)
-	token := hex.EncodeToString(tokenBytes)
-
-	// Store the redirect token (expires in 30 seconds)
-	redirectTokenMutex.Lock()
-	redirectTokens[token] = redirectToken{
-		URL:       finalURL,
-		ExpiresAt: time.Now().Add(30 * time.Second),
-	}
-	redirectTokenMutex.Unlock()
-
-	// Return the redirect URL
-	redirectURL := "/api/custom-actions/redirect/" + token
+	redirectURL := createRedirectToken(finalURL)
 
 	return &ActionResult{
 		Success:     true,
 		Message:     "Opening URL",
 		RedirectURL: redirectURL,
 	}, nil
+}
+
+// isValidActionType reports whether t is one of the supported custom-action types.
+func isValidActionType(t models.ActionType) bool {
+	return t == models.ActionTypeWebhook || t == models.ActionTypeURL || t == models.ActionTypeJavascript
+}
+
+// createRedirectToken stores destURL under a random single-use token (valid
+// 30s) and returns the redirect endpoint path that clients should hit.
+func createRedirectToken(destURL string) string {
+	tokenBytes := make([]byte, 16)
+	_, _ = rand.Read(tokenBytes)
+	token := hex.EncodeToString(tokenBytes)
+
+	redirectTokenMutex.Lock()
+	redirectTokens[token] = redirectToken{
+		URL:       destURL,
+		ExpiresAt: time.Now().Add(30 * time.Second),
+	}
+	redirectTokenMutex.Unlock()
+
+	return "/api/custom-actions/redirect/" + token
 }
 
 // executeJavaScriptAction executes a JavaScript action server-side using goja.
@@ -542,16 +550,7 @@ func (a *App) executeJavaScriptAction(action models.CustomAction, context map[st
 				result.Clipboard = clip
 			}
 			if url, ok := jsResult["url"].(string); ok {
-				tokenBytes := make([]byte, 16)
-				_, _ = rand.Read(tokenBytes)
-				token := hex.EncodeToString(tokenBytes)
-				redirectTokenMutex.Lock()
-				redirectTokens[token] = redirectToken{
-					URL:       url,
-					ExpiresAt: time.Now().Add(30 * time.Second),
-				}
-				redirectTokenMutex.Unlock()
-				result.RedirectURL = "/api/custom-actions/redirect/" + token
+				result.RedirectURL = createRedirectToken(url)
 			}
 			if msg, ok := jsResult["message"].(string); ok {
 				result.Message = msg

@@ -4,6 +4,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/shridarpatil/whatomate/internal/models"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
@@ -118,6 +119,27 @@ func (a *App) CreateTag(r *fastglue.Request) error {
 	return r.SendEnvelope(tagToResponse(tag))
 }
 
+// resolveTagByPathName reads the URL-encoded "name" path parameter and loads
+// the org-scoped tag. It also returns the decoded tag name. On a decode or
+// lookup failure it sends the appropriate error envelope and returns
+// errEnvelopeSent, so callers can `return nil`.
+func (a *App) resolveTagByPathName(r *fastglue.Request, orgID uuid.UUID) (models.Tag, string, error) {
+	// Tag name comes URL-encoded in the path.
+	tagNameEncoded := r.RequestCtx.UserValue("name").(string)
+	tagName, err := url.PathUnescape(tagNameEncoded)
+	if err != nil {
+		_ = r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid tag name", nil, "")
+		return models.Tag{}, "", errEnvelopeSent
+	}
+
+	var tag models.Tag
+	if err := a.DB.Where("organization_id = ? AND name = ?", orgID, tagName).First(&tag).Error; err != nil {
+		_ = r.SendErrorEnvelope(fasthttp.StatusNotFound, "Tag not found", nil, "")
+		return models.Tag{}, "", errEnvelopeSent
+	}
+	return tag, tagName, nil
+}
+
 // UpdateTag updates an existing tag
 func (a *App) UpdateTag(r *fastglue.Request) error {
 	orgID, _, err := a.requireAuth(r, models.ResourceTags, models.ActionWrite)
@@ -125,16 +147,9 @@ func (a *App) UpdateTag(r *fastglue.Request) error {
 		return nil
 	}
 
-	// Get tag name from path (URL-encoded)
-	tagNameEncoded := r.RequestCtx.UserValue("name").(string)
-	tagName, err := url.PathUnescape(tagNameEncoded)
+	tag, tagName, err := a.resolveTagByPathName(r, orgID)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid tag name", nil, "")
-	}
-
-	var tag models.Tag
-	if err := a.DB.Where("organization_id = ? AND name = ?", orgID, tagName).First(&tag).Error; err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Tag not found", nil, "")
+		return nil
 	}
 
 	var req TagRequest
@@ -234,16 +249,9 @@ func (a *App) DeleteTag(r *fastglue.Request) error {
 		return nil
 	}
 
-	// Get tag name from path (URL-encoded)
-	tagNameEncoded := r.RequestCtx.UserValue("name").(string)
-	tagName, err := url.PathUnescape(tagNameEncoded)
+	tag, tagName, err := a.resolveTagByPathName(r, orgID)
 	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid tag name", nil, "")
-	}
-
-	var tag models.Tag
-	if err := a.DB.Where("organization_id = ? AND name = ?", orgID, tagName).First(&tag).Error; err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Tag not found", nil, "")
+		return nil
 	}
 
 	// Remove tag from all contacts that have it

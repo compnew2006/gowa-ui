@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { chatbotService } from '@/services/api'
 import { toast } from 'vue-sonner'
-import { useUnsavedChangesGuard } from '@/composables/useUnsavedChangesGuard'
+import { useEntityDetail } from '@/composables/useEntityDetail'
 import DetailPageLayout from '@/components/shared/DetailPageLayout.vue'
 import MetadataPanel from '@/components/shared/MetadataPanel.vue'
 import AuditLogPanel from '@/components/shared/AuditLogPanel.vue'
@@ -32,12 +32,7 @@ const { t } = useI18n()
 const contextId = computed(() => route.params.id as string)
 const isNew = computed(() => contextId.value === 'new')
 const contextData = ref<any>(null)
-const isLoading = ref(true)
-const isNotFound = ref(false)
-const isSaving = ref(false)
-const hasChanges = ref(false)
-
-const { showLeaveDialog, confirmLeave, cancelLeave } = useUnsavedChangesGuard(hasChanges)
+const { isLoading, isNotFound, isSaving, hasChanges, showLeaveDialog, confirmLeave, cancelLeave, load } = useEntityDetail()
 
 const form = ref({
   name: '',
@@ -61,20 +56,13 @@ const breadcrumbs = computed(() => [
 // Helper to display variable placeholders without Vue parsing issues
 const variableExample = (name: string) => `{{${name}}}`
 
-async function loadContext() {
-  isLoading.value = true
-  isNotFound.value = false
-  try {
+function loadContext() {
+  return load(async () => {
     const response = await chatbotService.getAIContext(contextId.value)
     const data = (response.data as any).data?.context || (response.data as any).data || response.data
     contextData.value = data
     syncForm(data)
-    nextTick(() => { hasChanges.value = false })
-  } catch {
-    isNotFound.value = true
-  } finally {
-    isLoading.value = false
-  }
+  })
 }
 
 function syncForm(data: any) {

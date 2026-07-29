@@ -9,6 +9,7 @@ import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Trash2, Plus } from 'lucide-vue-next'
+import KeyValueListEditor from '@/components/chatbot/KeyValueListEditor.vue'
 
 const props = defineProps<{
   node: ChatNode
@@ -135,60 +136,6 @@ const replyCount = computed(() =>
 const ctaCount = computed(() =>
   (config.value.buttons || []).filter((b: any) => b.type === 'url' || b.type === 'phone').length,
 )
-
-// HTTP headers helpers (api_call / webhook)
-function addHeader() {
-  const headers = { ...(config.value.headers || {}) }
-  headers[''] = ''
-  updateConfig('headers', headers)
-}
-
-function removeHeader(key: string) {
-  const headers = { ...(config.value.headers || {}) }
-  delete headers[key]
-  updateConfig('headers', headers)
-}
-
-function updateHeaderKey(oldKey: string, newKey: string) {
-  if (oldKey === newKey) return
-  const headers = { ...(config.value.headers || {}) }
-  headers[newKey] = headers[oldKey]
-  delete headers[oldKey]
-  updateConfig('headers', headers)
-}
-
-function updateHeaderValue(key: string, value: string) {
-  const headers = { ...(config.value.headers || {}) }
-  headers[key] = value
-  updateConfig('headers', headers)
-}
-
-// Response mapping helpers (api_call)
-function addResponseMapping() {
-  const m = { ...(config.value.response_mapping || {}) }
-  m[''] = ''
-  updateConfig('response_mapping', m)
-}
-
-function removeResponseMapping(key: string) {
-  const m = { ...(config.value.response_mapping || {}) }
-  delete m[key]
-  updateConfig('response_mapping', m)
-}
-
-function updateResponseMappingKey(oldKey: string, newKey: string) {
-  if (oldKey === newKey) return
-  const m = { ...(config.value.response_mapping || {}) }
-  m[newKey] = m[oldKey]
-  delete m[oldKey]
-  updateConfig('response_mapping', m)
-}
-
-function updateResponseMappingValue(key: string, value: string) {
-  const m = { ...(config.value.response_mapping || {}) }
-  m[key] = value
-  updateConfig('response_mapping', m)
-}
 
 // Timing schedule
 const defaultSchedule = [
@@ -428,21 +375,11 @@ const typeLabel: Record<string, string> = {
           </SelectContent>
         </Select>
       </div>
-      <div class="space-y-1.5">
-        <div class="flex items-center justify-between">
-          <Label class="text-xs">Headers</Label>
-          <Button variant="outline" size="sm" class="h-6 text-xs" @click="addHeader">
-            <Plus class="h-3 w-3 mr-1" /> Add
-          </Button>
-        </div>
-        <div v-for="(val, key) in (config.headers || {})" :key="String(key)" class="flex items-center gap-1">
-          <Input :model-value="String(key)" @update:model-value="(v: string) => updateHeaderKey(String(key), v)" placeholder="Key" class="h-7 text-xs flex-1" />
-          <Input :model-value="String(val)" @update:model-value="(v: string) => updateHeaderValue(String(key), v)" placeholder="Value" class="h-7 text-xs flex-1" />
-          <Button variant="ghost" size="icon" class="h-6 w-6" @click="removeHeader(String(key))">
-            <Trash2 class="h-3 w-3 text-destructive" />
-          </Button>
-        </div>
-      </div>
+      <KeyValueListEditor
+        :model-value="config.headers || {}"
+        @update:model-value="(v: Record<string, any>) => updateConfig('headers', v)"
+        label="Headers"
+      />
       <div class="space-y-1.5">
         <Label class="text-xs">Body</Label>
         <Textarea
@@ -452,22 +389,18 @@ const typeLabel: Record<string, string> = {
           class="min-h-[60px] text-xs font-mono"
         />
       </div>
-      <div class="space-y-1.5">
-        <div class="flex items-center justify-between">
-          <Label class="text-xs">Response mapping</Label>
-          <Button variant="outline" size="sm" class="h-6 text-xs" @click="addResponseMapping">
-            <Plus class="h-3 w-3 mr-1" /> Add
-          </Button>
-        </div>
-        <p class="text-[10px] text-muted-foreground">Map JSON paths into session variables (e.g. <code>data.user.name</code>).</p>
-        <div v-for="(val, key) in (config.response_mapping || {})" :key="String(key)" class="flex items-center gap-1">
-          <Input :model-value="String(key)" @update:model-value="(v: string) => updateResponseMappingKey(String(key), v)" placeholder="var_name" class="h-7 text-xs flex-1 font-mono" />
-          <Input :model-value="String(val)" @update:model-value="(v: string) => updateResponseMappingValue(String(key), v)" placeholder="path.to.field" class="h-7 text-xs flex-1 font-mono" />
-          <Button variant="ghost" size="icon" class="h-6 w-6" @click="removeResponseMapping(String(key))">
-            <Trash2 class="h-3 w-3 text-destructive" />
-          </Button>
-        </div>
-      </div>
+      <KeyValueListEditor
+        :model-value="config.response_mapping || {}"
+        @update:model-value="(v: Record<string, any>) => updateConfig('response_mapping', v)"
+        label="Response mapping"
+        key-placeholder="var_name"
+        value-placeholder="path.to.field"
+        mono
+      >
+        <template #description>
+          <p class="text-[10px] text-muted-foreground">Map JSON paths into session variables (e.g. <code>data.user.name</code>).</p>
+        </template>
+      </KeyValueListEditor>
       <div class="space-y-1.5">
         <Label class="text-xs">Message template (optional)</Label>
         <Textarea
@@ -608,21 +541,11 @@ const typeLabel: Record<string, string> = {
           </SelectContent>
         </Select>
       </div>
-      <div class="space-y-1.5">
-        <div class="flex items-center justify-between">
-          <Label class="text-xs">Headers</Label>
-          <Button variant="outline" size="sm" class="h-6 text-xs" @click="addHeader">
-            <Plus class="h-3 w-3 mr-1" /> Add
-          </Button>
-        </div>
-        <div v-for="(val, key) in (config.headers || {})" :key="String(key)" class="flex items-center gap-1">
-          <Input :model-value="String(key)" @update:model-value="(v: string) => updateHeaderKey(String(key), v)" placeholder="Key" class="h-7 text-xs flex-1" />
-          <Input :model-value="String(val)" @update:model-value="(v: string) => updateHeaderValue(String(key), v)" placeholder="Value" class="h-7 text-xs flex-1" />
-          <Button variant="ghost" size="icon" class="h-6 w-6" @click="removeHeader(String(key))">
-            <Trash2 class="h-3 w-3 text-destructive" />
-          </Button>
-        </div>
-      </div>
+      <KeyValueListEditor
+        :model-value="config.headers || {}"
+        @update:model-value="(v: Record<string, any>) => updateConfig('headers', v)"
+        label="Headers"
+      />
       <div class="space-y-1.5">
         <Label class="text-xs">Body</Label>
         <Textarea

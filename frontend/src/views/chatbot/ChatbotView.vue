@@ -69,7 +69,9 @@ const isToggling = ref(false)
 const error = ref(false)
 const showToggleConfirm = ref(false)
 
-onMounted(async () => {
+async function fetchSettings() {
+  isLoading.value = true
+  error.value = false
   try {
     const response = await chatbotService.getSettings()
     // API response is wrapped in { status: "success", data: { settings: {...}, stats: {...} } }
@@ -82,7 +84,9 @@ onMounted(async () => {
   } finally {
     isLoading.value = false
   }
-})
+}
+
+onMounted(fetchSettings)
 
 async function toggleChatbot() {
   isToggling.value = true
@@ -99,21 +103,7 @@ async function toggleChatbot() {
   }
 }
 
-async function retryFetch() {
-  isLoading.value = true
-  error.value = false
-  try {
-    const response = await chatbotService.getSettings()
-    const data = response.data.data || response.data
-    settings.value = data.settings || settings.value
-    stats.value = data.stats || stats.value
-  } catch (err) {
-    console.error('Failed to load chatbot settings:', err)
-    error.value = true
-  } finally {
-    isLoading.value = false
-  }
-}
+const retryFetch = fetchSettings
 
 const statCards = computed(() => [
   { title: t('chatbot.totalSessions'), key: 'total_sessions', icon: Users, color: 'text-blue-500' },

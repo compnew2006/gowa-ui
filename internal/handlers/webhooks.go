@@ -181,6 +181,16 @@ func (a *App) GetWebhook(r *fastglue.Request) error {
 	return r.SendEnvelope(webhookToResponse(*webhook))
 }
 
+// headersToJSONB copies a request's string header map into a models.JSONB
+// value for persistence.
+func headersToJSONB(headers map[string]string) models.JSONB {
+	out := models.JSONB{}
+	for k, v := range headers {
+		out[k] = v
+	}
+	return out
+}
+
 // CreateWebhook creates a new webhook
 func (a *App) CreateWebhook(r *fastglue.Request) error {
 	orgID, userID, err := a.requireOrgAndUserID(r)
@@ -206,10 +216,7 @@ func (a *App) CreateWebhook(r *fastglue.Request) error {
 	}
 
 	// Convert headers to JSONB
-	headers := models.JSONB{}
-	for k, v := range req.Headers {
-		headers[k] = v
-	}
+	headers := headersToJSONB(req.Headers)
 
 	// Auto-generate secret if not provided
 	secret := req.Secret
@@ -280,11 +287,7 @@ func (a *App) UpdateWebhook(r *fastglue.Request) error {
 
 	// Update headers if provided
 	if req.Headers != nil {
-		headers := models.JSONB{}
-		for k, v := range req.Headers {
-			headers[k] = v
-		}
-		webhook.Headers = headers
+		webhook.Headers = headersToJSONB(req.Headers)
 	}
 
 	// Update secret if provided (empty string clears it)

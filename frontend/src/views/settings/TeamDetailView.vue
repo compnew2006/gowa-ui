@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useTeamsStore } from '@/stores/teams'
@@ -9,7 +9,7 @@ import { teamsService, type Team, type TeamMember } from '@/services/api'
 import { toast } from 'vue-sonner'
 import { ASSIGNMENT_STRATEGIES } from '@/lib/constants'
 import { useDebounceFn } from '@vueuse/core'
-import { useUnsavedChangesGuard } from '@/composables/useUnsavedChangesGuard'
+import { useEntityDetail } from '@/composables/useEntityDetail'
 import DetailPageLayout from '@/components/shared/DetailPageLayout.vue'
 import MetadataPanel from '@/components/shared/MetadataPanel.vue'
 import AuditLogPanel from '@/components/shared/AuditLogPanel.vue'
@@ -60,16 +60,11 @@ const teamId = computed(() => route.params.id as string)
 const isNew = computed(() => teamId.value === 'new')
 const team = ref<Team | null>(null)
 const members = ref<TeamMember[]>([])
-const isLoading = ref(true)
-const isNotFound = ref(false)
-const isSaving = ref(false)
-const hasChanges = ref(false)
+const { isLoading, isNotFound, isSaving, hasChanges, showLeaveDialog, confirmLeave, cancelLeave, load } = useEntityDetail()
 const deleteDialogOpen = ref(false)
 const memberSearch = ref('')
 const removeMemberDialogOpen = ref(false)
 const memberToRemove = ref<TeamMember | null>(null)
-
-const { showLeaveDialog, confirmLeave, cancelLeave } = useUnsavedChangesGuard(hasChanges)
 
 const canWrite = computed(() => authStore.hasPermission('teams', 'write'))
 const canDelete = computed(() => authStore.hasPermission('teams', 'delete'))
@@ -95,21 +90,13 @@ const availableUsers = computed(() => {
 })
 
 async function loadTeam() {
-  isLoading.value = true
-  isNotFound.value = false
-  try {
+  await load(async () => {
     const response = await teamsService.get(teamId.value)
     const data = (response.data as any).data?.team || response.data?.team
     team.value = data
     members.value = data.members || []
     syncForm()
-    // Reset after syncForm so the watcher doesn't trigger
-    nextTick(() => { hasChanges.value = false })
-  } catch {
-    isNotFound.value = true
-  } finally {
-    isLoading.value = false
-  }
+  })
 }
 
 function syncForm() {

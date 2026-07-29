@@ -188,6 +188,24 @@ func (a *App) ListUsers(r *fastglue.Request) error {
 	})
 }
 
+// findOrgUserWithRole loads a user scoped to the organization via the
+// user_organizations join (supporting cross-org members), preloading the Role.
+// On failure it sends a 404 envelope and returns errEnvelopeSent. The returned
+// bool reports whether the user is a cross-org member (their home org differs).
+func (a *App) findOrgUserWithRole(r *fastglue.Request, orgID, id uuid.UUID) (models.User, bool, error) {
+	var user models.User
+	if err := a.DB.
+		Select("users.*").
+		Joins("JOIN user_organizations ON user_organizations.user_id = users.id AND user_organizations.organization_id = ? AND user_organizations.deleted_at IS NULL", orgID).
+		Where("users.id = ? AND users.deleted_at IS NULL", id).
+		Preload("Role").
+		First(&user).Error; err != nil {
+		_ = r.SendErrorEnvelope(fasthttp.StatusNotFound, "User not found", nil, "")
+		return models.User{}, false, errEnvelopeSent
+	}
+	return user, user.OrganizationID != orgID, nil
+}
+
 // GetUser returns a single user
 func (a *App) GetUser(r *fastglue.Request) error {
 	orgID, err := a.requireOrgID(r)
@@ -394,19 +412,10 @@ func (a *App) UpdateUser(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Insufficient permissions", nil, "")
 	}
 
-	// Find user via user_organizations (supports cross-org members).
-	// Select("users.*") avoids column conflict with user_organizations.organization_id.
-	var user models.User
-	if err := a.DB.
-		Select("users.*").
-		Joins("JOIN user_organizations ON user_organizations.user_id = users.id AND user_organizations.organization_id = ? AND user_organizations.deleted_at IS NULL", orgID).
-		Where("users.id = ? AND users.deleted_at IS NULL", id).
-		Preload("Role").
-		First(&user).Error; err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "User not found", nil, "")
+	user, isMember, err := a.findOrgUserWithRole(r, orgID, id)
+	if err != nil {
+		return nil
 	}
-
-	isMember := user.OrganizationID != orgID
 
 	// Load org-specific role for members
 	if isMember {
@@ -569,19 +578,10 @@ func (a *App) DeleteUser(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Cannot delete yourself", nil, "")
 	}
 
-	// Find user via user_organizations (supports cross-org members).
-	// Select("users.*") avoids column conflict with user_organizations.organization_id.
-	var user models.User
-	if err := a.DB.
-		Select("users.*").
-		Joins("JOIN user_organizations ON user_organizations.user_id = users.id AND user_organizations.organization_id = ? AND user_organizations.deleted_at IS NULL", orgID).
-		Where("users.id = ? AND users.deleted_at IS NULL", id).
-		Preload("Role").
-		First(&user).Error; err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "User not found", nil, "")
+	user, isMember, err := a.findOrgUserWithRole(r, orgID, id)
+	if err != nil {
+		return nil
 	}
-
-	isMember := user.OrganizationID != orgID
 
 	if isMember {
 		// Cross-org member: only remove from this organization

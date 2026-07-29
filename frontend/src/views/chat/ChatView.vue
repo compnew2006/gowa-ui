@@ -3052,38 +3052,8 @@ async function sendMediaMessage() {
                   <span>{{ message.error_message || 'Failed to send' }}</span>
                 </span>
               </div>
-              <!-- Action buttons for incoming messages -->
-              <div v-if="message.direction === 'incoming'" class="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity self-center ml-1">
-                <Popover :open="reactionPickerMessageId === message.id" @update:open="(open: boolean) => reactionPickerMessageId = open ? message.id : null">
-                  <PopoverTrigger as-child>
-                    <Button variant="ghost" size="icon" class="h-6 w-6">
-                      <SmilePlus class="h-3 w-3" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent side="top" class="w-auto p-2">
-                    <div class="flex gap-1">
-                      <button
-                        v-for="emoji in quickReactionEmojis"
-                        :key="emoji"
-                        class="text-lg hover:bg-muted p-1 rounded cursor-pointer"
-                        @click="sendReaction(message.id, emoji)"
-                      >
-                        {{ emoji }}
-                      </button>
-                    </div>
-                  </PopoverContent>
-                </Popover>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  class="h-6 w-6"
-                  @click="replyToMessage(message)"
-                >
-                  <Reply class="h-3 w-3" />
-                </Button>
-              </div>
-              <!-- Reply button for outgoing messages (shown on hover) -->
-              <div v-if="message.direction === 'outgoing'" class="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity self-center ml-1">
+              <!-- Hover actions: reaction + reply for all messages; retry/revoke for outgoing -->
+              <div class="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity self-center ml-1">
                 <Popover :open="reactionPickerMessageId === message.id" @update:open="(open: boolean) => reactionPickerMessageId = open ? message.id : null">
                   <PopoverTrigger as-child>
                     <Button variant="ghost" size="icon" class="h-6 w-6">
@@ -3112,7 +3082,7 @@ async function sendMediaMessage() {
                   <Reply class="h-3 w-3" />
                 </Button>
                 <Button
-                  v-if="message.status === 'failed' && message.message_type !== 'template'"
+                  v-if="message.direction === 'outgoing' && message.status === 'failed' && message.message_type !== 'template'"
                   variant="ghost"
                   size="icon"
                   class="h-6 w-6 text-destructive hover:text-destructive"
@@ -3127,7 +3097,7 @@ async function sendMediaMessage() {
                      outgoing messages that have a WhatsApp ID and aren't already
                      revoked. The backend re-validates the GOWA guard. -->
                 <Button
-                  v-if="isCurrentAccountGowa && message.status !== 'revoked' && message.status !== 'failed' && message.wamid"
+                  v-if="message.direction === 'outgoing' && isCurrentAccountGowa && message.status !== 'revoked' && message.status !== 'failed' && message.wamid"
                   variant="ghost"
                   size="icon"
                   class="h-6 w-6 text-muted-foreground hover:text-destructive"

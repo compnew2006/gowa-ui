@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, computed } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -11,7 +11,7 @@ import { toast } from 'vue-sonner'
 import { PageHeader, DataTable, DeleteConfirmDialog, SearchInput, IconButton, ErrorState, type Column } from '@/components/shared'
 import { getErrorMessage } from '@/lib/api-utils'
 import { Plus, Pencil, Trash2, Sparkles } from 'lucide-vue-next'
-import { useDebounceFn } from '@vueuse/core'
+import { useSearchPagination } from '@/composables/useSearchPagination'
 
 const { t } = useI18n()
 
@@ -37,9 +37,10 @@ const contexts = ref<AIContext[]>([])
 const isLoading = ref(true)
 const isDeleting = ref(false)
 const error = ref<string | null>(null)
-const searchQuery = ref('')
 const deleteDialogOpen = ref(false)
 const contextToDelete = ref<AIContext | null>(null)
+
+const { searchQuery, currentPage, totalItems, pageSize, handlePageChange } = useSearchPagination({ fetchFn: fetchContexts })
 
 function openDeleteDialog(context: AIContext) {
   contextToDelete.value = context
@@ -51,10 +52,7 @@ function closeDeleteDialog() {
   contextToDelete.value = null
 }
 
-// Pagination state
-const currentPage = ref(1)
-const totalItems = ref(0)
-const pageSize = 20
+// Pagination handled by useSearchPagination
 
 const columns = computed<Column<AIContext>[]>(() => [
   { key: 'name', label: t('aiContexts.name'), sortable: true },
@@ -93,23 +91,6 @@ async function fetchContexts() {
     isLoading.value = false
   }
 }
-
-// Debounced search to avoid too many API calls
-const debouncedSearch = useDebounceFn(() => {
-  currentPage.value = 1
-  fetchContexts()
-}, 300)
-
-// Watch search query changes
-watch(searchQuery, () => {
-  debouncedSearch()
-})
-
-function handlePageChange(page: number) {
-  currentPage.value = page
-  fetchContexts()
-}
-
 
 async function confirmDeleteContext() {
   if (!contextToDelete.value) return

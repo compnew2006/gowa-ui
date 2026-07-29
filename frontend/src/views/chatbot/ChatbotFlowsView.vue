@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, computed } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Button } from '@/components/ui/button'
@@ -12,7 +12,7 @@ import { toast } from 'vue-sonner'
 import { PageHeader, DataTable, DeleteConfirmDialog, SearchInput, IconButton, ErrorState, type Column } from '@/components/shared'
 import { getErrorMessage } from '@/lib/api-utils'
 import { Plus, Pencil, Trash2, Workflow } from 'lucide-vue-next'
-import { useDebounceFn } from '@vueuse/core'
+import { useSearchPagination } from '@/composables/useSearchPagination'
 
 const { t } = useI18n()
 
@@ -30,15 +30,11 @@ const router = useRouter()
 const flows = ref<ChatbotFlow[]>([])
 const isLoading = ref(true)
 const error = ref<string | null>(null)
-const searchQuery = ref('')
 const deleteDialogOpen = ref(false)
 const isDeleting = ref(false)
 const flowToDelete = ref<ChatbotFlow | null>(null)
 
-// Pagination state
-const currentPage = ref(1)
-const totalItems = ref(0)
-const pageSize = 20
+const { searchQuery, currentPage, totalItems, pageSize, handlePageChange } = useSearchPagination({ fetchFn: fetchFlows })
 
 const columns = computed<Column<ChatbotFlow>[]>(() => [
   { key: 'name', label: t('chatbotFlows.name'), sortable: true },
@@ -77,18 +73,7 @@ async function fetchFlows() {
   }
 }
 
-// Debounced search
-const debouncedSearch = useDebounceFn(() => {
-  currentPage.value = 1
-  fetchFlows()
-}, 300)
-
-watch(searchQuery, () => debouncedSearch())
-
-function handlePageChange(page: number) {
-  currentPage.value = page
-  fetchFlows()
-}
+// Debounced search + pagination handled by useSearchPagination
 
 function createFlow() {
   router.push('/chatbot/flows/new')
