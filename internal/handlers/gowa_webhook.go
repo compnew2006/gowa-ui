@@ -703,6 +703,14 @@ func (a *App) processGowaConnection(account *models.WhatsAppAccount, envelope *g
 			},
 		})
 	}
+
+	// A (re)connected device has just completed GOWA's own history sync, and
+	// GOWA never replays that history via webhook — pull it into the messages
+	// table now so conversations appear without any manual action. Cooldown
+	// inside AutoSyncGowaHistory dedupes bursts of connection events.
+	if conn.Event == gowa.ConnectionConnected {
+		go a.AutoSyncGowaHistory(account)
+	}
 }
 
 // processGowaReaction handles incoming reaction events.

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
@@ -42,6 +43,11 @@ type App struct {
 	ChatLifecycle *chatlifecycle.Service
 	// wg tracks background goroutines for graceful shutdown
 	wg sync.WaitGroup
+
+	// gowaHistorySyncMu guards gowaHistoryLastSync, the per-account cooldown
+	// state for automatic GOWA history backfills (see gowa_history_sync.go).
+	gowaHistorySyncMu   sync.Mutex
+	gowaHistoryLastSync map[uuid.UUID]time.Time
 }
 
 // WaitForBackgroundTasks blocks until all background goroutines complete.

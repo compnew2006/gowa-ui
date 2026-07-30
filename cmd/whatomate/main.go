@@ -324,6 +324,16 @@ func runServer(args []string) {
 	go scheduledMsgProcessor.Start(scheduledMsgCtx)
 	lo.Info("Scheduled message processor started")
 
+	// Start GOWA history-sync processor (initial pass at startup, then periodic
+	// re-sync). GOWA syncs message history itself but never replays it via
+	// webhook, so this pulls synced history into the messages table
+	// automatically. A device "connected" webhook also triggers an immediate
+	// sync; the per-account cooldown keeps overlapping triggers cheap.
+	gowaHistoryProcessor := handlers.NewGowaHistorySyncProcessor(app, 15*time.Minute)
+	gowaHistoryCtx, gowaHistoryCancel := context.WithCancel(context.Background())
+	go gowaHistoryProcessor.Start(gowaHistoryCtx)
+	lo.Info("GOWA history sync processor started")
+
 	// Start embedded workers
 	var workers []*worker.Worker
 	var workerCancel context.CancelFunc
@@ -380,6 +390,12 @@ func runServer(args []string) {
 	scheduledMsgCancel()
 	scheduledMsgProcessor.Stop()
 	lo.Info("Scheduled message processor stopped")
+
+	// Stop GOWA history sync processor
+	lo.Info("Stopping GOWA history sync processor...")
+	gowaHistoryCancel()
+	gowaHistoryProcessor.Stop()
+	lo.Info("GOWA history sync processor stopped")
 
 	// Stop workers first
 	if workerCancel != nil {

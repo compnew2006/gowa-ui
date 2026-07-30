@@ -149,3 +149,68 @@ func TestSyncGowaInstanceMessages_MediaUrlNotWrittenForUndownloadedBytes(t *test
 	assert.Equal(t, true, msg.Metadata["synced_from_history"],
 		"synced_from_history flag must be preserved")
 }
+
+// TestAutoSyncGowaHistory covers the automatic (no-button) backfill path:
+// AutoSyncGowaHistory must import history on first run, then honor the
+// per-account cooldown on immediate re-runs, and no-op for accounts without
+// a GOWA device.
+func TestAutoSyncGowaHistory(t *testing.T) {
+	t.Parallel()
+
+	mock := newMessagesSyncMock(t)
+	defer mock.Close()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	deviceID := "dev-auto-sync-" + uuid.New().String()[:8]
+	accountName := "gowa-auto-sync-" + uuid.New().String()[:8]
+	acc := &models.WhatsAppAccount{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		Name:           accountName,
+		GowaDeviceID:   deviceID,
+		GowaBaseURL:    mock.URL,
+		Status:         "active",
+	}
+	require.NoError(t, app.DB.Create(acc).Error)
+
+	// First run: history is imported without any user action.
+	app.AutoSyncGowaHistory(acc)
+
+	var msg models.Message
+	require.NoError(t, app.DB.
+		Where("whats_app_message_id = ? AND whats_app_account = ?", "HIST_IMG_MSG_001", accountName).
+		First(&msg).Error,
+		"auto-sync must import history messages")
+	assert.Equal(t, true, msg.Metadata["synced_from_history"])
+
+	// Second run within the cooldown window: must be skipped entirely. Delete
+	// the imported row so a (wrong) re-sync would visibly re-create it.
+	require.NoError(t, app.DB.Unscoped().Delete(&msg).Error)
+	app.AutoSyncGowaHistory(acc)
+
+	var count int64
+	app.DB.Model(&models.Message{}).
+		Where("whats_app_message_id = ? AND whats_app_account = ?", "HIST_IMG_MSG_001", accountName).
+		Count(&count)
+	assert.Equal(t, int64(0), count,
+		"a second auto-sync within the cooldown window must be skipped")
+
+	// Accounts without a GOWA device are ignored (no panic, no import).
+	noDevice := &models.WhatsAppAccount{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		Name:           "no-device-" + uuid.New().String()[:8],
+		GowaBaseURL:    mock.URL,
+		Status:         "active",
+	}
+	require.NoError(t, app.DB.Create(noDevice).Error)
+	app.AutoSyncGowaHistory(noDevice)
+
+	app.DB.Model(&models.Message{}).
+		Where("whats_app_account = ?", noDevice.Name).
+		Count(&count)
+	assert.Equal(t, int64(0), count,
+		"accounts without a GOWA device must not be synced")
+}

@@ -711,15 +711,10 @@ func gowaMsgTypeToWhatomate(mediaType string) models.MessageType {
 }
 
 // SyncGowaInstanceMessages backfills a device's message history from GOWA into
-// the messages table. It iterates the device's chat list (GET /chats), and for
-// each chat pulls recent messages (GET /chat/{jid}/messages), upserting them as
-// messages rows keyed by whats_app_message_id (idempotent), and stamps each
-// contact's last_message_at/preview from its newest message.
-//
-// This is required because GOWA only delivers NEW messages via webhook; the
-// device's existing chat history is never replayed. Without this backfill,
-// contacts imported via /sync-contacts have zero messages and the chat view
-// shows an empty conversation even though the device has history.
+// the messages table via the shared syncGowaHistory core (which also runs
+// automatically at startup, on a periodic ticker, and when a device connects —
+// see gowa_history_sync.go). This endpoint remains as a manual/API trigger
+// that bypasses the auto-sync cooldown.
 //
 // PerChatLimit caps messages fetched per chat (default 50, newest-first) so
 // the operation stays bounded for large histories.
@@ -760,231 +755,25 @@ func (a *App) SyncGowaInstanceMessages(r *fastglue.Request) error {
 		req.PerChatLimit = 50
 	}
 
-	ctx := context.Background()
-	chats, totalChats, err := bundle.client.ListChats(ctx, deviceID, gowa.ListChatsOptions{Limit: 100})
+	stats, err := a.syncGowaHistory(context.Background(), bundle.client, account, deviceID, req.PerChatLimit, req.MaxChats)
 	if err != nil {
-		a.Log.Error("Failed to list GOWA chats for message sync", "error", err, "device", deviceID)
+		a.Log.Error("Failed to sync GOWA message history", "error", err, "device", deviceID)
 		return r.SendErrorEnvelope(fasthttp.StatusBadGateway, "Failed to fetch chat list from GOWA", nil, "")
-	}
-	if req.MaxChats > 0 && len(chats) > req.MaxChats {
-		chats = chats[:req.MaxChats]
-	}
-
-	chatsWithMsgs := 0
-	msgsStored := 0
-	for _, ch := range chats {
-		jid := strings.TrimSpace(ch.JID)
-		if jid == "" {
-			continue
-		}
-
-		isGroup := strings.HasSuffix(jid, "@g.us")
-		isNewsletter := strings.HasSuffix(jid, "@newsletter")
-		identity := jid
-		if !isGroup && !isNewsletter {
-			identity = gowa.PhoneFromJID(jid)
-			if identity == "" {
-				continue
-			}
-		}
-
-		contact, _, err := contactutil.GetOrCreateContact(a.DB, orgID, identity, strings.TrimSpace(ch.Name))
-		if err != nil {
-			a.Log.Error("Failed to upsert contact during GOWA message sync", "error", err, "jid", jid)
-			continue
-		}
-
-		// Fetch recent history (newest-first). GOWA returns the newest page
-		// first at offset 0, so per_chat_limit gives us the tail of the convo.
-		msgs, _, err := bundle.client.GetChatMessages(ctx, deviceID, jid, gowa.ChatMessagesOptions{Limit: req.PerChatLimit})
-		if err != nil {
-			a.Log.Error("Failed to fetch GOWA chat messages", "error", err, "device", deviceID, "jid", jid)
-			continue
-		}
-		if len(msgs) == 0 {
-			continue
-		}
-
-		// Stamp the owning account name (mirrors /sync-contacts): always
-		// overwrite so an empty or stale value self-heals. The DB column is
-		// whats_app_account (GORM's mapping of the WhatsAppAccount field),
-		// not whatsapp_account.
-		if contact.WhatsAppAccount != account.Name {
-			if err := a.DB.Model(contact).Update("whats_app_account", account.Name).Error; err != nil {
-				a.Log.Error("Failed to stamp whats_app_account during GOWA message sync", "error", err, "jid", jid)
-			} else {
-				contact.WhatsAppAccount = account.Name
-			}
-		}
-
-		// Stamp group/newsletter metadata if not already set (mirrors
-		// /sync-contacts). Groups and newsletters are distinct categories.
-		metaKey := ""
-		if isGroup {
-			metaKey = "is_group_chat"
-		} else if isNewsletter {
-			metaKey = "is_newsletter"
-		}
-		if metaKey != "" {
-			needsMetaUpdate := false
-			if contact.Metadata == nil {
-				contact.Metadata = models.JSONB{}
-				needsMetaUpdate = true
-			}
-			// Groups and newsletters are mutually exclusive. Setting one clears
-			// the other so legacy contacts that carry both flags self-heal.
-			otherKey := ""
-			if metaKey == "is_group_chat" {
-				otherKey = "is_newsletter"
-			} else if metaKey == "is_newsletter" {
-				otherKey = "is_group_chat"
-			}
-			_, hasOther := contact.Metadata[otherKey]
-			if contact.Metadata[metaKey] != true {
-				contact.Metadata[metaKey] = true
-				needsMetaUpdate = true
-			}
-			if hasOther {
-				delete(contact.Metadata, otherKey)
-				needsMetaUpdate = true
-			}
-			if needsMetaUpdate {
-				a.DB.Model(contact).Update("metadata", contact.Metadata)
-			}
-		}
-
-		// Bulk-insert messages, skipping any whose whats_app_message_id already
-		// exists (idempotent re-sync). GORM Clause OnConflict would need a
-		// unique constraint on the message id; we instead pre-filter by querying
-		// existing ids for this chat to avoid a schema change. Scoped to this
-		// account: two org accounts chatting with each other share wamids across
-		// their copies, and syncing one device must not skip messages that only
-		// exist as the other account's copy.
-		existing := make(map[string]bool, len(msgs))
-		{
-			ids := make([]string, 0, len(msgs))
-			for _, m := range msgs {
-				if m.ID != "" {
-					ids = append(ids, m.ID)
-				}
-			}
-			if len(ids) > 0 {
-				var found []string
-				a.DB.Model(&models.Message{}).
-					Where("whats_app_message_id IN ? AND organization_id = ? AND whats_app_account = ?",
-						ids, account.OrganizationID, account.Name).
-					Pluck("whats_app_message_id", &found)
-				for _, id := range found {
-					existing[id] = true
-				}
-			}
-		}
-
-		var newest models.Message
-		for _, m := range msgs {
-			if m.ID == "" || existing[m.ID] {
-				continue
-			}
-			ts := gowa.ParseTimestamp(m.Timestamp)
-			if ts.IsZero() {
-				ts = time.Now()
-			}
-			direction := models.DirectionIncoming
-			status := models.MessageStatusReceived
-			if m.IsFromMe {
-				direction = models.DirectionOutgoing
-				status = models.MessageStatusSent
-			}
-			msgType := gowaMsgTypeToWhatomate(m.MediaType)
-			// For media messages, prefer the stored content as caption only if
-			// it's a text body; otherwise leave content empty (media lives in
-			// MediaURL/Filename).
-			content := m.Content
-			if msgType != models.MessageTypeText {
-				content = "" // caption is not reliably separated by GOWA history
-			}
-
-			msg := models.Message{
-				// Set CreatedAt to the message's real timestamp so historical
-				// messages render in chronological order in the chat view
-				// (GORM's autoCreateTime honors an explicitly-set value).
-				BaseModel:         models.BaseModel{ID: uuid.New(), CreatedAt: ts},
-				OrganizationID:    orgID,
-				WhatsAppAccount:   account.Name,
-				ContactID:         contact.ID,
-				WhatsAppMessageID: m.ID,
-				Direction:         direction,
-				MessageType:       msgType,
-				Content:           content,
-				// NOTE: MediaURL is intentionally left empty here. History sync
-				// gives us GOWA's server-side URL (m.URL), NOT a local file path —
-				// the bytes were never downloaded to disk. Writing m.URL into
-				// media_url would create a lying row: ServeMedia would try to serve
-				// a non-existent local file and 404. Instead, leave media_url empty
-				// so the row is honest ("no local media yet"), and let ServeMedia's
-				// auto-recovery lazily download the bytes via WhatsAppMessageID on
-				// first view. See internal/handlers/media.go ServeMedia for the
-				// recovery path. Stash the original GOWA URL in metadata as a
-				// fallback in case the message-ID-based recovery is unavailable.
-				MediaURL:      "",
-				MediaFilename: m.Filename,
-				Status:        status,
-			}
-			// Preserve the original timestamp via Metadata so the UI can render
-			// historical order even though created_at is now.
-			if msg.Metadata == nil {
-				msg.Metadata = models.JSONB{}
-			}
-			msg.Metadata["synced_from_history"] = true
-			msg.Metadata["gowa_timestamp"] = m.Timestamp
-			if m.URL != "" {
-				// Keep GOWA's original URL for potential lazy recovery. Not used
-				// as a local path — only as a hint for future download attempts.
-				msg.Metadata["gowa_media_url"] = m.URL
-			}
-
-			if err := a.DB.Create(&msg).Error; err != nil {
-				a.Log.Error("Failed to store GOWA history message", "error", err, "msg_id", m.ID)
-				continue
-			}
-			msgsStored++
-
-			// Track the newest message (largest timestamp) for the contact stamp.
-			// GOWA returns newest-first, so the first non-skipped msg is newest.
-			if newest.ID == uuid.Nil {
-				newest = msg
-			}
-		}
-
-		// Stamp the contact's last_message_at/preview from the newest message.
-		if newest.ID != uuid.Nil {
-			preview := getMessagePreviewFromContent(newest.MessageType, newest.Content)
-			// Use the chat's last_message_time (authoritative from GOWA) when available.
-			lastAt := gowa.ParseTimestamp(ch.LastMessageTime)
-			if lastAt.IsZero() {
-				lastAt = time.Now()
-			}
-			a.DB.Model(contact).Updates(map[string]any{
-				"last_message_at":      lastAt,
-				"last_message_preview": preview,
-			})
-			chatsWithMsgs++
-		}
 	}
 
 	a.logAudit(orgID, userID, "devices", uuid.Nil, models.AuditActionUpdated, nil, map[string]any{
 		"device_id":       deviceID,
 		"action":          "sync_messages",
-		"chats_seen":      totalChats,
-		"chats_with_msgs": chatsWithMsgs,
-		"messages_stored": msgsStored,
+		"chats_seen":      stats.ChatsSeen,
+		"chats_with_msgs": stats.ChatsWithMsgs,
+		"messages_stored": stats.MessagesStored,
 		"per_chat_limit":  req.PerChatLimit,
 	})
 	return r.SendEnvelope(map[string]any{
 		"device_id":       deviceID,
-		"chats_seen":      totalChats,
-		"chats_with_msgs": chatsWithMsgs,
-		"messages_stored": msgsStored,
+		"chats_seen":      stats.ChatsSeen,
+		"chats_with_msgs": stats.ChatsWithMsgs,
+		"messages_stored": stats.MessagesStored,
 	})
 }
 
