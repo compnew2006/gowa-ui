@@ -166,8 +166,9 @@ func (a *App) processGowaCallOffer(account *models.WhatsAppAccount, envelope *go
 	// Stamp the receiving account on fresh contacts so the conversation shows
 	// up under the correct account tab (mirrors the GOWA contact sync).
 	if isNew && contact.WhatsAppAccount == "" {
-		a.DB.Model(contact).Update("whats_app_account", account.Name)
-		contact.WhatsAppAccount = account.Name
+		if err := contactutil.StampAccountName(a.DB, contact, account.Name); err != nil {
+			a.Log.Error("Failed to stamp whats_app_account for rejected call contact", "error", err, "contact_id", contact.ID)
+		}
 	}
 
 	if err := a.sendAndSaveTextMessage(account, contact, settings.Message); err != nil {

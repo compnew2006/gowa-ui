@@ -412,6 +412,48 @@ func TestApp_GetContactSessionData(t *testing.T) {
 		assert.NotNil(t, resp.Data.PanelConfig)
 	})
 
+	// Regression: a contact whose only sessions are cancelled (none active or
+	// completed) must get an empty panel with 200 — the empty lookup result is
+	// an expected state, not an error (previously First() raised
+	// gorm.ErrRecordNotFound here, logging a spurious "record not found").
+	t.Run("success with only cancelled sessions", func(t *testing.T) {
+		app := newTestApp(t)
+		org := testutil.CreateTestOrganization(t, app.DB)
+		adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+		user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+		account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+		contact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+		cancelled := &models.ChatbotSession{
+			BaseModel:       models.BaseModel{ID: uuid.New()},
+			OrganizationID:  org.ID,
+			ContactID:       contact.ID,
+			WhatsAppAccount: account.Name,
+			PhoneNumber:     contact.PhoneNumber,
+			Status:          models.SessionStatusCancelled,
+			SessionData:     models.JSONB{"name": "Cancelled User"},
+			StartedAt:       time.Now(),
+			LastActivityAt:  time.Now(),
+		}
+		require.NoError(t, app.DB.Create(cancelled).Error)
+
+		req := testutil.NewGETRequest(t)
+		testutil.SetAuthContext(req, org.ID, user.ID)
+		testutil.SetPathParam(req, "id", contact.ID.String())
+
+		err := app.GetContactSessionData(req)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+		var resp struct {
+			Data handlers.ContactSessionDataResponse `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+		assert.Nil(t, resp.Data.SessionID, "cancelled sessions must not surface in the panel")
+		assert.Empty(t, resp.Data.SessionData, "no session data should leak from cancelled sessions")
+		assert.NotNil(t, resp.Data.PanelConfig)
+	})
+
 	t.Run("success with active session", func(t *testing.T) {
 		app := newTestApp(t)
 		org := testutil.CreateTestOrganization(t, app.DB)

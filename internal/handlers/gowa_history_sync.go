@@ -7,9 +7,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/shridarpatil/whatomate/internal/config"
 	"github.com/shridarpatil/whatomate/internal/contactutil"
 	"github.com/shridarpatil/whatomate/internal/models"
 	"github.com/shridarpatil/whatomate/pkg/gowa"
+	"gorm.io/gorm"
 )
 
 // GOWA performs its own history synchronization when a device (re)connects,
@@ -73,15 +75,9 @@ func (a *App) syncGowaHistory(ctx context.Context, client *gowa.Client, account 
 		if jid == "" {
 			continue
 		}
-
-		isGroup := strings.HasSuffix(jid, "@g.us")
-		isNewsletter := strings.HasSuffix(jid, "@newsletter")
-		identity := jid
-		if !isGroup && !isNewsletter {
-			identity = gowa.PhoneFromJID(jid)
-			if identity == "" {
-				continue
-			}
+		identity, isGroup, isNewsletter := gowaChatIdentity(jid)
+		if identity == "" {
+			continue
 		}
 
 		contact, _, err := contactutil.GetOrCreateContact(a.DB, orgID, identity, strings.TrimSpace(ch.Name))
@@ -101,52 +97,13 @@ func (a *App) syncGowaHistory(ctx context.Context, client *gowa.Client, account 
 			continue
 		}
 
-		// Stamp the owning account name (mirrors /sync-contacts): always
-		// overwrite so an empty or stale value self-heals. The DB column is
-		// whats_app_account (GORM's mapping of the WhatsAppAccount field),
-		// not whatsapp_account.
-		if contact.WhatsAppAccount != account.Name {
-			if err := a.DB.Model(contact).Update("whats_app_account", account.Name).Error; err != nil {
-				a.Log.Error("Failed to stamp whats_app_account during GOWA message sync", "error", err, "jid", jid)
-			} else {
-				contact.WhatsAppAccount = account.Name
-			}
+		// Stamp the owning account name and group/newsletter metadata (mirrors
+		// /sync-contacts — shared helpers, see contactutil).
+		if err := contactutil.StampAccountName(a.DB, contact, account.Name); err != nil {
+			a.Log.Error("Failed to stamp whats_app_account during GOWA message sync", "error", err, "jid", jid)
 		}
-
-		// Stamp group/newsletter metadata if not already set (mirrors
-		// /sync-contacts). Groups and newsletters are distinct categories.
-		metaKey := ""
-		if isGroup {
-			metaKey = "is_group_chat"
-		} else if isNewsletter {
-			metaKey = "is_newsletter"
-		}
-		if metaKey != "" {
-			needsMetaUpdate := false
-			if contact.Metadata == nil {
-				contact.Metadata = models.JSONB{}
-				needsMetaUpdate = true
-			}
-			// Groups and newsletters are mutually exclusive. Setting one clears
-			// the other so legacy contacts that carry both flags self-heal.
-			otherKey := ""
-			if metaKey == "is_group_chat" {
-				otherKey = "is_newsletter"
-			} else if metaKey == "is_newsletter" {
-				otherKey = "is_group_chat"
-			}
-			_, hasOther := contact.Metadata[otherKey]
-			if contact.Metadata[metaKey] != true {
-				contact.Metadata[metaKey] = true
-				needsMetaUpdate = true
-			}
-			if hasOther {
-				delete(contact.Metadata, otherKey)
-				needsMetaUpdate = true
-			}
-			if needsMetaUpdate {
-				a.DB.Model(contact).Update("metadata", contact.Metadata)
-			}
+		if err := contactutil.StampChatCategory(a.DB, contact, isGroup, isNewsletter); err != nil {
+			a.Log.Error("Failed to set chat metadata during GOWA message sync", "error", err, "jid", jid)
 		}
 
 		// Bulk-insert messages, skipping any whose whats_app_message_id already
@@ -271,31 +228,63 @@ func (a *App) syncGowaHistory(ctx context.Context, client *gowa.Client, account 
 	return stats, nil
 }
 
-// gowaClientForAccount builds a gowa.Client for the account's GOWA base URL,
-// resolving Basic Auth credentials the same way as the provider registry
-// (resolveGowaCreds in main): DB-managed instance first, config-file fallback,
-// empty credentials last.
+// gowaChatIdentity derives the contact identity for a GOWA chat JID, matching
+// the webhook convention: group/newsletter chats are keyed by their full JID
+// (the @g.us/@newsletter suffix is part of the identity), while 1:1 chats use
+// the bare phone digits. identity is "" when the JID is unusable. Shared by
+// the contact-sync and history-sync chat loops.
+func gowaChatIdentity(jid string) (identity string, isGroup, isNewsletter bool) {
+	isGroup = strings.HasSuffix(jid, "@g.us")
+	isNewsletter = strings.HasSuffix(jid, "@newsletter")
+	identity = jid
+	if !isGroup && !isNewsletter {
+		identity = gowa.PhoneFromJID(jid)
+	}
+	return identity, isGroup, isNewsletter
+}
+
+// ResolveGowaCreds resolves the Basic Auth credentials for a GOWA server by
+// its base URL. It prefers the DB-managed instance (created via the UI;
+// credentials are encrypted at rest) and falls back to the config-file
+// [[gowa_instances]] section for backward compatibility, then to empty
+// credentials. This is the single source of truth for GOWA Basic Auth: the
+// provider-registry factory (main) and gowaClientForAccount both call it.
+func ResolveGowaCreds(db *gorm.DB, cfg *config.Config, baseURL string) (username, password string) {
+	// 1. DB-managed instance (UI-created). Credentials are encrypted at rest.
+	var inst models.GowaInstance
+	err := db.Where("base_url = ? AND is_active = ?", baseURL, true).
+		Order("created_at DESC").
+		First(&inst).Error
+	if err == nil {
+		inst.DecryptCredentials(cfg.App.EncryptionKey)
+		if inst.HasCredentials() {
+			return inst.Username, inst.Password
+		}
+	}
+
+	// 2. Config-file fallback (legacy/manual provisioning).
+	if c := cfg.FindGOWAInstance(baseURL); c != nil {
+		return c.Username, c.Password
+	}
+	return "", ""
+}
+
+// gowaClientForAccount returns a gowa.Client for the account's GOWA base URL.
+// It prefers the shared provider registry (cached client, invalidated when
+// credentials change) and falls back to building one via ResolveGowaCreds
+// when the registry isn't wired (e.g. tests).
 func (a *App) gowaClientForAccount(account *models.WhatsAppAccount) *gowa.Client {
+	if a.WARegistry != nil {
+		if c, ok := a.WARegistry.Get(account.ToWAAccount()).(*gowa.Client); ok && c != nil {
+			return c
+		}
+	}
 	baseURL := account.GowaBaseURL
 	if baseURL == "" {
 		baseURL = "http://localhost:3000"
 	}
-
-	var inst models.GowaInstance
-	err := a.DB.Where("base_url = ? AND is_active = ?", baseURL, true).
-		Order("created_at DESC").
-		First(&inst).Error
-	if err == nil {
-		inst.DecryptCredentials(a.Config.App.EncryptionKey)
-		if inst.HasCredentials() {
-			return gowa.New(baseURL, inst.Username, inst.Password)
-		}
-	}
-
-	if c := a.Config.FindGOWAInstance(baseURL); c != nil {
-		return gowa.New(baseURL, c.Username, c.Password)
-	}
-	return gowa.New(baseURL, "", "")
+	user, pass := ResolveGowaCreds(a.DB, a.Config, baseURL)
+	return gowa.New(baseURL, user, pass)
 }
 
 // tryAcquireGowaHistorySync records a sync attempt for the account and reports

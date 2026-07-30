@@ -1604,14 +1604,27 @@ func (a *App) GetContactSessionData(r *fastglue.Request) error {
 		PanelConfig: map[string]any{"sections": []any{}},
 	}
 
-	// Get the most recent completed or active session for this contact
-	var session models.ChatbotSession
-	err = a.DB.Where("contact_id = ? AND organization_id = ?", contactID, orgID).
+	// Get the most recent completed or active session for this contact.
+	// A contact that never entered a chatbot flow (or whose sessions were all
+	// cancelled/expired) legitimately has no such row — use Limit(1).Find
+	// instead of First so the empty result is not treated as an error (First
+	// raises gorm.ErrRecordNotFound and logs a spurious "record not found"
+	// trace). The panel simply renders empty in that case.
+	var sessions []models.ChatbotSession
+	if err := a.DB.Where("contact_id = ? AND organization_id = ?", contactID, orgID).
 		Where("status IN ?", []models.SessionStatus{models.SessionStatusActive, models.SessionStatusCompleted}).
 		Order("created_at DESC").
-		First(&session).Error
+		Limit(1).
+		Find(&sessions).Error; err != nil {
+		// A genuine DB error (not an empty result) — log it instead of
+		// silently returning an empty panel that masks the failure.
+		a.Log.Error("Failed to load chatbot session for contact panel",
+			"error", err, "contact_id", contactID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load session data", nil, "")
+	}
 
-	if err == nil {
+	if len(sessions) > 0 {
+		session := sessions[0]
 		response.SessionID = &session.ID
 		response.FlowID = session.CurrentFlowID
 

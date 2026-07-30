@@ -19,7 +19,6 @@ import (
 	"github.com/shridarpatil/whatomate/internal/frontend"
 	"github.com/shridarpatil/whatomate/internal/handlers"
 	"github.com/shridarpatil/whatomate/internal/middleware"
-	"github.com/shridarpatil/whatomate/internal/models"
 	"github.com/shridarpatil/whatomate/internal/queue"
 	"github.com/shridarpatil/whatomate/internal/websocket"
 	"github.com/shridarpatil/whatomate/internal/worker"
@@ -28,41 +27,12 @@ import (
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 	"github.com/zerodha/logf"
-	"gorm.io/gorm"
 )
 
 var (
 	Version   = "dev"
 	BuildTime = "unknown"
 )
-
-// resolveGowaCreds returns the Basic Auth credentials for a GOWA instance,
-// looking the server up by its base URL. It prefers the DB-managed instance
-// (created via the UI; credentials are encrypted at rest) and falls back to
-// the config-file [[gowa_instances]] section for backward compatibility.
-//
-// This is the single source of truth for GOWA Basic Auth at runtime: every
-// message/revoke/typing call resolves its provider through the registry, which
-// calls this resolver when first creating a client for a base URL.
-func resolveGowaCreds(db *gorm.DB, cfg *config.Config, baseURL string) (username, password string) {
-	// 1. DB-managed instance (UI-created). Credentials are encrypted at rest.
-	var inst models.GowaInstance
-	err := db.Where("base_url = ? AND is_active = ?", baseURL, true).
-		Order("created_at DESC").
-		First(&inst).Error
-	if err == nil {
-		inst.DecryptCredentials(cfg.App.EncryptionKey)
-		if inst.HasCredentials() {
-			return inst.Username, inst.Password
-		}
-	}
-
-	// 2. Config-file fallback (legacy/manual provisioning).
-	if c := cfg.FindGOWAInstance(baseURL); c != nil {
-		return c.Username, c.Password
-	}
-	return "", ""
-}
 
 func main() {
 	if len(os.Args) < 2 {
@@ -217,7 +187,7 @@ func runServer(args []string) {
 	// Basic Auth credentials from the DB (UI-managed) with a config-file fallback.
 	whatsapp.RegisterGowaFactory(
 		func(baseURL string) (string, string) {
-			return resolveGowaCreds(db, cfg, baseURL)
+			return handlers.ResolveGowaCreds(db, cfg, baseURL)
 		},
 		func(baseURL, username, password string) whatsapp.Provider {
 			return gowa.New(baseURL, username, password)
@@ -469,7 +439,7 @@ func runWorker(args []string) {
 	// Basic Auth credentials from the DB (UI-managed) with a config-file fallback.
 	whatsapp.RegisterGowaFactory(
 		func(baseURL string) (string, string) {
-			return resolveGowaCreds(db, cfg, baseURL)
+			return handlers.ResolveGowaCreds(db, cfg, baseURL)
 		},
 		func(baseURL, username, password string) whatsapp.Provider {
 			return gowa.New(baseURL, username, password)

@@ -71,3 +71,53 @@ func GetOrCreateContact(db *gorm.DB, orgID uuid.UUID, phoneNumber, profileName s
 	}
 	return &contact, true, nil
 }
+
+// StampChatCategory marks the contact as a group chat (is_group_chat) or
+// newsletter (is_newsletter) in its metadata. The two categories are mutually
+// exclusive — a @newsletter JID is NOT a group — so setting one clears the
+// other, letting legacy contacts that carry both flags self-heal on the next
+// stamp. No-op for plain 1:1 chats or when the flags are already correct.
+// Shared by the webhook, chatbot-processor, and GOWA sync paths so the badge
+// convention lives in one place.
+func StampChatCategory(db *gorm.DB, contact *models.Contact, isGroup, isNewsletter bool) error {
+	metaKey := ""
+	if isGroup {
+		metaKey = "is_group_chat"
+	} else if isNewsletter {
+		metaKey = "is_newsletter"
+	}
+	if metaKey == "" {
+		return nil
+	}
+	if contact.Metadata == nil {
+		contact.Metadata = models.JSONB{}
+	}
+	otherKey := "is_newsletter"
+	if metaKey == "is_newsletter" {
+		otherKey = "is_group_chat"
+	}
+	_, hasOther := contact.Metadata[otherKey]
+	if contact.Metadata[metaKey] == true && !hasOther {
+		return nil
+	}
+	contact.Metadata[metaKey] = true
+	delete(contact.Metadata, otherKey)
+	return db.Model(contact).Update("metadata", contact.Metadata).Error
+}
+
+// StampAccountName overwrites the contact's owning WhatsApp account name so
+// an empty or stale value self-heals (webhook-created rows can carry one that
+// would otherwise break the Contacts UI's account filter). NOTE: the DB
+// column is whats_app_account — GORM's mapping of the WhatsAppAccount field,
+// not whatsapp_account — so the raw Update must use that name. No-op when the
+// contact already carries the account.
+func StampAccountName(db *gorm.DB, contact *models.Contact, accountName string) error {
+	if contact.WhatsAppAccount == accountName {
+		return nil
+	}
+	if err := db.Model(contact).Update("whats_app_account", accountName).Error; err != nil {
+		return err
+	}
+	contact.WhatsAppAccount = accountName
+	return nil
+}

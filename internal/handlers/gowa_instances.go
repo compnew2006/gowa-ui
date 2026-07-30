@@ -589,17 +589,12 @@ func (a *App) SyncGowaInstanceDeviceContacts(r *fastglue.Request) error {
 		}
 		name := strings.TrimSpace(ch.Name)
 
-		isGroup := strings.HasSuffix(jid, "@g.us")
-		isNewsletter := strings.HasSuffix(jid, "@newsletter")
 		// Match the webhook convention: group/newsletter chats are keyed by their
 		// full JID (the @g.us/@newsletter suffix is part of the identity), while
 		// 1:1 chats use the bare phone digits.
-		identity := jid
-		if !isGroup && !isNewsletter {
-			identity = gowa.PhoneFromJID(jid)
-			if identity == "" {
-				continue
-			}
+		identity, isGroup, isNewsletter := gowaChatIdentity(jid)
+		if identity == "" {
+			continue
 		}
 
 		contact, isNew, err := contactutil.GetOrCreateContact(a.DB, orgID, identity, name)
@@ -611,58 +606,18 @@ func (a *App) SyncGowaInstanceDeviceContacts(r *fastglue.Request) error {
 
 		// Set group/newsletter metadata to match how the webhook path marks
 		// these chats (chatbot_processor.go), so the contact list renders the
-		// correct badge consistently. Groups and newsletters are distinct
-		// categories — a @newsletter JID is NOT a group. We only write when the
-		// flag isn't already set.
-		metaKey := ""
-		if isGroup {
-			metaKey = "is_group_chat"
-		} else if isNewsletter {
-			metaKey = "is_newsletter"
-		}
-		if metaKey != "" {
-			needsMetaUpdate := false
-			if contact.Metadata == nil {
-				contact.Metadata = models.JSONB{}
-				needsMetaUpdate = true
-			}
-			// Groups and newsletters are mutually exclusive. Setting one clears
-			// the other so legacy contacts that carry both flags self-heal.
-			otherKey := ""
-			if metaKey == "is_group_chat" {
-				otherKey = "is_newsletter"
-			} else if metaKey == "is_newsletter" {
-				otherKey = "is_group_chat"
-			}
-			_, hasOther := contact.Metadata[otherKey]
-			if contact.Metadata[metaKey] != true {
-				contact.Metadata[metaKey] = true
-				needsMetaUpdate = true
-			}
-			if hasOther {
-				delete(contact.Metadata, otherKey)
-				needsMetaUpdate = true
-			}
-			if needsMetaUpdate {
-				if err := a.DB.Model(contact).Update("metadata", contact.Metadata).Error; err != nil {
-					a.Log.Error("Failed to set chat metadata during GOWA sync", "error", err, "jid", jid)
-				}
-			}
+		// correct badge consistently.
+		if err := contactutil.StampChatCategory(a.DB, contact, isGroup, isNewsletter); err != nil {
+			a.Log.Error("Failed to set chat metadata during GOWA sync", "error", err, "jid", jid)
 		}
 
 		// Stamp the owning account name. A sync from a specific GOWA server
 		// means the contact belongs to that server's account, so always
 		// overwrite — webhook-created rows can carry an empty or stale value
 		// that would otherwise never self-heal, breaking the Contacts UI's
-		// account filter. NOTE: the column is whats_app_account (GORM maps
-		// the WhatsAppAccount field to whats_app_account, not
-		// whatsapp_account), so the raw Update must use the DB column name.
-		if contact.WhatsAppAccount != account.Name {
-			if err := a.DB.Model(contact).Update("whats_app_account", account.Name).Error; err != nil {
-				a.Log.Error("Failed to stamp whats_app_account during GOWA sync", "error", err, "jid", jid)
-			} else {
-				contact.WhatsAppAccount = account.Name
-			}
+		// account filter.
+		if err := contactutil.StampAccountName(a.DB, contact, account.Name); err != nil {
+			a.Log.Error("Failed to stamp whats_app_account during GOWA sync", "error", err, "jid", jid)
 		}
 
 		// Populate the contact's WhatsApp profile picture (or group icon) so

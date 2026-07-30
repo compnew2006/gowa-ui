@@ -161,31 +161,8 @@ func (a *App) processIncomingMessageFull(phoneNumberID string, msg IncomingTextM
 	// (@newsletter) set is_newsletter. The two are mutually exclusive — a
 	// newsletter is NOT a group. The contact's phone_number already holds the
 	// full @g.us / @newsletter JID (set by processGowaMessage).
-	metaKey := ""
-	if isGroup {
-		metaKey = "is_group_chat"
-	} else if isNewsletter {
-		metaKey = "is_newsletter"
-	}
-	if metaKey != "" {
-		if contact.Metadata == nil {
-			contact.Metadata = models.JSONB{}
-		}
-		// Groups and newsletters are mutually exclusive. Setting one clears the
-		// other so legacy contacts that carry both flags (written before the
-		// mutual-exclusivity fix) self-heal on the next message.
-		otherKey := ""
-		if metaKey == "is_group_chat" {
-			otherKey = "is_newsletter"
-		} else if metaKey == "is_newsletter" {
-			otherKey = "is_group_chat"
-		}
-		_, hasOther := contact.Metadata[otherKey]
-		if contact.Metadata[metaKey] != true || hasOther {
-			contact.Metadata[metaKey] = true
-			delete(contact.Metadata, otherKey)
-			a.DB.Model(contact).Update("metadata", contact.Metadata)
-		}
+	if err := contactutil.StampChatCategory(a.DB, contact, isGroup, isNewsletter); err != nil {
+		a.Log.Error("Failed to set chat metadata for incoming message", "error", err, "from", msg.From)
 	}
 
 	// A reply to a pending close-rating cycle is consumed as the rating and

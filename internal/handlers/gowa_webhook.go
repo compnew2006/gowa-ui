@@ -374,31 +374,8 @@ func (a *App) processGowaOutgoingMessage(account *models.WhatsAppAccount, msg *g
 	// contact list and info panel display the correct badge regardless of which
 	// path created the contact. Groups and newsletters are distinct categories:
 	// a @newsletter JID sets is_newsletter, NOT is_group_chat.
-	var metaKey string
-	if msg.IsGroup() {
-		metaKey = "is_group_chat"
-	} else if msg.IsNewsletter() {
-		metaKey = "is_newsletter"
-	}
-	if metaKey != "" {
-		if contact.Metadata == nil {
-			contact.Metadata = models.JSONB{}
-		}
-		// Groups and newsletters are mutually exclusive. Setting one clears the
-		// other so legacy contacts that carry both flags self-heal on the next
-		// incoming message.
-		otherKey := ""
-		if metaKey == "is_group_chat" {
-			otherKey = "is_newsletter"
-		} else if metaKey == "is_newsletter" {
-			otherKey = "is_group_chat"
-		}
-		_, hasOther := contact.Metadata[otherKey]
-		if contact.Metadata[metaKey] != true || hasOther {
-			contact.Metadata[metaKey] = true
-			delete(contact.Metadata, otherKey)
-			a.DB.Model(contact).Update("metadata", contact.Metadata)
-		}
+	if err := contactutil.StampChatCategory(a.DB, contact, msg.IsGroup(), msg.IsNewsletter()); err != nil {
+		a.Log.Error("Failed to set chat metadata for outgoing GOWA message", "error", err, "chat_id", msg.ChatID)
 	}
 
 	// Determine message type, content, and media from the GOWA payload.
