@@ -37,6 +37,7 @@ frontend/.env.local
 frontend/.env.*.local
 .playwright-mcp/
 graphify-out/
+
 # Playwright
 frontend/playwright-report/
 frontend/test-results/
@@ -55,6 +56,7 @@ tmp/
 temp/
 uploads/
 audio/
+whatsapp_9.0.0_darwin_arm64/
 
 # Test results
 test-results/

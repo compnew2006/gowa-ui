@@ -432,6 +432,8 @@
     "scheduleMessageTitle": "Schedule Message",
     "scheduleMessageDesc": "Pick when this message should be sent",
     "scheduledAtLabel": "Send at",
+    "scheduleInFiveMinutes": "In 5 min",
+    "scheduleInThirtyMinutes": "In 30 min",
     "scheduleInOneHour": "In 1 hour",
     "scheduleTomorrowMorning": "Tomorrow 9 AM",
     "scheduleMondayMorning": "Monday 9 AM",

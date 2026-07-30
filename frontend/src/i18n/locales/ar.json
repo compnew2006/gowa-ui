@@ -432,6 +432,8 @@
     "scheduleMessageTitle": "جدولة رسالة",
     "scheduleMessageDesc": "اختر موعد إرسال هذه الرسالة",
     "scheduledAtLabel": "الإرسال في",
+    "scheduleInFiveMinutes": "بعد 5 دقائق",
+    "scheduleInThirtyMinutes": "بعد 30 دقيقة",
     "scheduleInOneHour": "بعد ساعة",
     "scheduleTomorrowMorning": "غدًا 9 صباحًا",
     "scheduleMondayMorning": "الاثنين 9 صباحًا",

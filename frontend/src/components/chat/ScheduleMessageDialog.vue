@@ -39,16 +39,20 @@ function toLocalInputValue(d: Date): string {
 
 const minLocal = computed(() => toLocalInputValue(new Date(Date.now() + 2 * 60 * 1000)))
 
-// Default to one hour from now every time the dialog opens
+// Default to five minutes from now every time the dialog opens
 watch(open, (isOpen) => {
   if (isOpen) {
-    scheduledAtLocal.value = toLocalInputValue(new Date(Date.now() + 60 * 60 * 1000))
+    scheduledAtLocal.value = toLocalInputValue(new Date(Date.now() + 5 * 60 * 1000))
   }
 })
 
-function applyPreset(preset: 'hour' | 'tomorrow' | 'monday') {
+function applyPreset(preset: '5min' | '30min' | 'hour' | 'tomorrow' | 'monday') {
   const d = new Date()
-  if (preset === 'hour') {
+  if (preset === '5min') {
+    d.setMinutes(d.getMinutes() + 5)
+  } else if (preset === '30min') {
+    d.setMinutes(d.getMinutes() + 30)
+  } else if (preset === 'hour') {
     d.setHours(d.getHours() + 1)
   } else if (preset === 'tomorrow') {
     d.setDate(d.getDate() + 1)
@@ -155,6 +159,12 @@ async function submit() {
         </div>
 
         <div class="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" type="button" @click="applyPreset('5min')">
+            {{ $t('chat.scheduleInFiveMinutes') }}
+          </Button>
+          <Button variant="outline" size="sm" type="button" @click="applyPreset('30min')">
+            {{ $t('chat.scheduleInThirtyMinutes') }}
+          </Button>
           <Button variant="outline" size="sm" type="button" @click="applyPreset('hour')">
             {{ $t('chat.scheduleInOneHour') }}
           </Button>
