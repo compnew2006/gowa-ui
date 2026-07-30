@@ -347,6 +347,22 @@
   font-size: 0.80rem;
 }
 
+/* Clickable links inside chat bubbles - WhatsApp style cyan blue */
+.chat-bubble-link {
+  color: #53bdeb;
+  text-decoration: underline;
+  word-break: break-all;
+  cursor: pointer;
+}
+
+.chat-bubble-link:hover {
+  opacity: 0.85;
+}
+
+.light .chat-bubble-link {
+  color: #027eb5;
+}
+
 /* Time and status */
 .chat-bubble-time {
   @apply text-[10px] mt-1 flex items-center gap-1.5 float-right;

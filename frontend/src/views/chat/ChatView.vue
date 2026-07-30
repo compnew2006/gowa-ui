@@ -101,7 +101,7 @@ import {
   Megaphone,
   RotateCcw
 } from 'lucide-vue-next'
-import { getInitials, getAvatarGradient } from '@/lib/utils'
+import { getInitials, getAvatarGradient, linkifySegments } from '@/lib/utils'
 import { useColorMode } from '@/composables/useColorMode'
 import { useInfiniteScroll } from '@/composables/useInfiniteScroll'
 import CannedResponsePicker from '@/components/chat/CannedResponsePicker.vue'
@@ -2998,11 +2998,11 @@ async function sendMediaMessage() {
                 </div>
                 <!-- Button reply - WhatsApp style -->
                 <div v-if="message.message_type === 'button_reply'" class="button-reply-bubble">
-                  <span class="whitespace-pre-wrap break-words">{{ getMessageContent(message) }}</span>
+                  <span class="whitespace-pre-wrap break-words"><template v-for="(seg, idx) in linkifySegments(getMessageContent(message))" :key="idx"><a v-if="seg.href" :href="seg.href" target="_blank" rel="noopener noreferrer" class="chat-bubble-link" @click.stop>{{ seg.text }}</a><template v-else>{{ seg.text }}</template></template></span>
                   <span class="chat-bubble-time"><span>{{ formatMessageTime(message.created_at) }}</span></span>
                 </div>
                 <!-- Text content (for text messages or captions) -->
-                <span v-else-if="getMessageContent(message)" class="whitespace-pre-wrap break-words">{{ getMessageContent(message) }}<span class="chat-bubble-time"><span>{{ formatMessageTime(message.created_at) }}</span><component v-if="message.direction === 'outgoing'" :is="getMessageStatusIcon(message.status)" :class="['h-4 w-4 status-icon', getMessageStatusClass(message.status)]" /></span></span>
+                <span v-else-if="getMessageContent(message)" class="whitespace-pre-wrap break-words"><template v-for="(seg, idx) in linkifySegments(getMessageContent(message))" :key="idx"><a v-if="seg.href" :href="seg.href" target="_blank" rel="noopener noreferrer" class="chat-bubble-link" @click.stop>{{ seg.text }}</a><template v-else>{{ seg.text }}</template></template><span class="chat-bubble-time"><span>{{ formatMessageTime(message.created_at) }}</span><component v-if="message.direction === 'outgoing'" :is="getMessageStatusIcon(message.status)" :class="['h-4 w-4 status-icon', getMessageStatusClass(message.status)]" /></span></span>
                 <!-- Fallback for media without URL -->
                 <span v-else-if="isMediaMessage(message) && !message.media_url" class="text-muted-foreground italic">[{{ message.message_type.charAt(0).toUpperCase() + message.message_type.slice(1) }}]<span class="chat-bubble-time"><span>{{ formatMessageTime(message.created_at) }}</span><component v-if="message.direction === 'outgoing'" :is="getMessageStatusIcon(message.status)" :class="['h-4 w-4 status-icon', getMessageStatusClass(message.status)]" /></span></span>
                 <!-- Interactive buttons - WhatsApp style -->

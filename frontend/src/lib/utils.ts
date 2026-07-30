@@ -96,3 +96,58 @@ export function formatLabel(key: string): string {
     .replace(/\b\w/g, c => c.toUpperCase())
 }
 
+export interface LinkSegment {
+  text: string
+  href?: string
+}
+
+// Trailing sentence punctuation (and unbalanced closing brackets) is usually
+// not part of the URL, e.g. "see https://example.com." or "(https://example.com)".
+function trimTrailingPunctuation(url: string): string {
+  let result = url
+  for (;;) {
+    const last = result[result.length - 1]
+    if ('.,!?;:\'"'.includes(last)) {
+      result = result.slice(0, -1)
+      continue
+    }
+    if (last === ')' && (result.match(/\(/g) || []).length < (result.match(/\)/g) || []).length) {
+      result = result.slice(0, -1)
+      continue
+    }
+    if (last === ']' && (result.match(/\[/g) || []).length < (result.match(/\]/g) || []).length) {
+      result = result.slice(0, -1)
+      continue
+    }
+    break
+  }
+  return result
+}
+
+// linkifySegments splits message text into plain-text and URL segments so chat
+// bubbles can render clickable anchors without resorting to v-html.
+export function linkifySegments(text: string): LinkSegment[] {
+  if (!text) return []
+  const segments: LinkSegment[] = []
+  const regex = /(https?:\/\/[^\s<>]+|www\.[^\s<>]+)/gi
+  let cursor = 0
+  let match: RegExpExecArray | null
+  while ((match = regex.exec(text)) !== null) {
+    const url = trimTrailingPunctuation(match[0])
+    if (!url) continue
+    if (match.index > cursor) {
+      segments.push({ text: text.slice(cursor, match.index) })
+    }
+    segments.push({
+      text: url,
+      href: url.toLowerCase().startsWith('www.') ? `https://${url}` : url
+    })
+    cursor = match.index + url.length
+    regex.lastIndex = cursor
+  }
+  if (cursor < text.length) {
+    segments.push({ text: text.slice(cursor) })
+  }
+  return segments
+}
+
