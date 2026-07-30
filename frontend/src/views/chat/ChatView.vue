@@ -5,9 +5,8 @@ import { useI18n } from 'vue-i18n'
 import { useContactsStore, type Contact, type Message } from '@/stores/contacts'
 import { useAuthStore } from '@/stores/auth'
 import { useUsersStore } from '@/stores/users'
-import { useTransfersStore } from '@/stores/transfers'
 import { wsService } from '@/services/websocket'
-import { contactsService, chatbotService, messagesService, customActionsService, accountsService, cannedResponsesService, getRequestHeaders, type CustomAction, type ActionResult, type CannedResponse } from '@/services/api'
+import { contactsService, messagesService, customActionsService, accountsService, cannedResponsesService, getRequestHeaders, type CustomAction, type ActionResult, type CannedResponse } from '@/services/api'
 import { useTagsStore } from '@/stores/tags'
 import { TagBadge } from '@/components/ui/tag-badge'
 import { getTagColorClass } from '@/lib/constants'
@@ -72,8 +71,6 @@ import {
   User,
   UserPlus,
   UserMinus,
-  UserX,
-  Play,
   Reply,
   X,
   SmilePlus,
@@ -101,7 +98,7 @@ import {
   Megaphone,
   RotateCcw
 } from 'lucide-vue-next'
-import { getInitials, getAvatarGradient, linkifySegments } from '@/lib/utils'
+import { getInitials, getAvatarGradient, avatarSrc, linkifySegments } from '@/lib/utils'
 import { useColorMode } from '@/composables/useColorMode'
 import { useInfiniteScroll } from '@/composables/useInfiniteScroll'
 import CannedResponsePicker from '@/components/chat/CannedResponsePicker.vue'
@@ -127,7 +124,6 @@ const router = useRouter()
 const contactsStore = useContactsStore()
 const authStore = useAuthStore()
 const usersStore = useUsersStore()
-const transfersStore = useTransfersStore()
 const tagsStore = useTagsStore()
 
 // Resizable contacts sidebar state
@@ -194,8 +190,6 @@ const messageInputRef = ref<HTMLTextAreaElement | null>(null)
 const isSending = ref(false)
 const isAssignDialogOpen = ref(false)
 const isInviteDialogOpen = ref(false)
-const isTransferring = ref(false)
-const isResuming = ref(false)
 // Tracks incoming messages that arrived while the chat is open.
 // Surfaced as a "N unread messages" pill at the top of the chat panel
 // (WhatsApp-style). Click the pill to jump up to the first message of
@@ -208,7 +202,6 @@ const isInfoPanelOpen = ref(false)
 const isNotesPanelOpen = ref(false)
 const isScheduledPanelOpen = ref(false)
 const isScheduleDialogOpen = ref(false)
-const contactSessionData = ref<any>(null)
 
 
 // Multi-account state
@@ -397,14 +390,6 @@ function updateAtBottom(el: HTMLElement) {
 }
 
 const contactId = computed(() => route.params.contactId as string | undefined)
-
-// Get active transfer for current contact from the store (reactive)
-const activeTransfer = computed(() => {
-  if (!contactsStore.currentContact) return null
-  return transfersStore.getActiveTransferForContact(contactsStore.currentContact.id)
-})
-
-const activeTransferId = computed(() => activeTransfer.value?.id || null)
 
 // ─── Chat lifecycle: claim & collaboration ───
 const isClaiming = ref(false)
@@ -711,9 +696,6 @@ onMounted(async () => {
   await nextTick()
   contactsScroll.setup()
 
-  // Fetch transfers to track active transfers
-  transfersStore.fetchTransfers({ status: 'active' })
-
   // Fetch users if can assign contacts
   if (canAssignContacts.value) {
     usersStore.fetchUsers().catch(() => {
@@ -906,20 +888,11 @@ async function selectContact(id: string) {
       messagesScroll.setup()
     }, 50)
 
-    // Fetch notes, scheduled messages and session data in parallel (independent requests)
-    const [, , sessionResult] = await Promise.all([
+    // Fetch notes and scheduled messages in parallel (independent requests)
+    await Promise.all([
       notesStore.fetchNotes(id),
-      scheduledStore.fetchForContact(id),
-      contactsService.getSessionData(id).catch(() => null)
+      scheduledStore.fetchForContact(id)
     ])
-    if (sessionResult) {
-      contactSessionData.value = sessionResult.data.data || sessionResult.data
-      if (contactSessionData.value?.panel_config?.sections?.length > 0) {
-        isInfoPanelOpen.value = true
-      }
-    } else {
-      contactSessionData.value = null
-    }
   }
 }
 
@@ -1530,62 +1503,6 @@ async function assignContactToUser(userId: string | null) {
   } catch (error: any) {
     const message = error.response?.data?.message || t('chat.assignFailed')
     toast.error(message)
-  }
-}
-
-async function transferToAgent() {
-  if (!contactsStore.currentContact) return
-
-  isTransferring.value = true
-  try {
-    await chatbotService.createTransfer({
-      contact_id: contactsStore.currentContact.id,
-      whatsapp_account: (contactsStore.currentContact as any).whatsapp_account,
-      source: 'manual'
-    })
-    toast.success(t('chat.transferSuccess'), {
-      description: t('chat.transferSuccessDesc')
-    })
-    // Refresh transfers store (WebSocket will also update, but this ensures immediate sync)
-    await transfersStore.fetchTransfers({ status: 'active' })
-  } catch (error: any) {
-    const message = error.response?.data?.message || t('chat.transferFailed')
-    toast.error(message)
-  } finally {
-    isTransferring.value = false
-  }
-}
-
-async function resumeChatbot() {
-  if (!activeTransferId.value) return
-
-  const currentContactId = contactsStore.currentContact?.id
-  isResuming.value = true
-  try {
-    await chatbotService.resumeTransfer(activeTransferId.value)
-    toast.success(t('chat.resumeSuccess'), {
-      description: t('chat.resumeSuccessDesc')
-    })
-    // Refresh transfers store to update UI
-    await transfersStore.fetchTransfers({ status: 'active' })
-    // Refresh contacts list (assignment may have changed)
-    await contactsStore.fetchContacts()
-
-    // Check if current contact is still in the list (may have been unassigned)
-    if (currentContactId) {
-      const stillExists = contactsStore.contacts.some(c => c.id === currentContactId)
-      if (!stillExists) {
-        // Contact no longer visible to this user, navigate away
-        contactsStore.setCurrentContact(null)
-        contactsStore.clearMessages()
-        router.push('/chat')
-      }
-    }
-  } catch (error: any) {
-    const message = error.response?.data?.message || t('chat.resumeFailed')
-    toast.error(message)
-  } finally {
-    isResuming.value = false
   }
 }
 
@@ -2239,7 +2156,7 @@ async function sendMediaMessage() {
               @click.stop
             />
             <Avatar class="h-9 w-9 ring-2 ring-white/[0.1] light:ring-gray-200">
-              <AvatarImage :src="contact.avatar_url" />
+              <AvatarImage :src="avatarSrc(contact.avatar_url)" />
               <AvatarFallback :class="'text-xs bg-gradient-to-br text-white ' + getAvatarGradient(contact.name || contact.phone_number)">
                 {{ getInitials(contact.name || contact.phone_number) }}
               </AvatarFallback>
@@ -2350,7 +2267,7 @@ async function sendMediaMessage() {
         <div class="h-14 flex-shrink-0 px-4 border-b border-white/[0.08] light:border-gray-200 flex items-center justify-between bg-[#0f0f10] light:bg-white">
           <div class="flex items-center gap-2">
             <Avatar class="h-8 w-8 ring-2 ring-white/[0.1] light:ring-gray-200">
-              <AvatarImage :src="contactsStore.currentContact.avatar_url" />
+              <AvatarImage :src="avatarSrc(contactsStore.currentContact.avatar_url)" />
               <AvatarFallback :class="'text-xs bg-gradient-to-br text-white ' + getAvatarGradient(contactsStore.currentContact.name || contactsStore.currentContact.phone_number)">
                 {{ getInitials(contactsStore.currentContact.name || contactsStore.currentContact.phone_number) }}
               </AvatarFallback>
@@ -2367,9 +2284,6 @@ async function sendMediaMessage() {
                 <Badge v-if="contactsStore.isChatClosed"
                        class="text-[10px] h-5 bg-gray-500/20 text-gray-400 light:bg-gray-100 light:text-gray-600">
                   {{ $t('chat.conversationClosed') }}
-                </Badge>
-                <Badge v-if="activeTransferId" class="text-[10px] h-5 bg-orange-500/20 text-orange-400 light:bg-orange-100 light:text-orange-700">
-                  {{ $t('chat.paused') }}
                 </Badge>
                 <Badge v-if="contactsStore.currentContact?.marketing_opt_out" class="text-[10px] h-5 bg-red-500/20 text-red-400 light:bg-red-100 light:text-red-700" :title="$t('chat.marketingOptOut')">
                   {{ $t('chat.marketingOptOut') }}
@@ -2478,14 +2392,6 @@ async function sendMediaMessage() {
                 </Button>
               </TooltipTrigger>
               <TooltipContent>{{ $t('chat.assignToAgent') }}</TooltipContent>
-            </Tooltip>
-            <Tooltip v-if="activeTransferId">
-              <TooltipTrigger as-child>
-                <Button variant="ghost" size="icon" class="h-8 w-8 text-white/50 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100" :disabled="isResuming" @click="resumeChatbot">
-                  <Play class="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{{ $t('chat.resumeChatbot') }}</TooltipContent>
             </Tooltip>
             <!-- Custom Action Buttons -->
             <Tooltip v-for="action in customActions" :key="action.id">
@@ -2596,14 +2502,6 @@ async function sendMediaMessage() {
                 <DropdownMenuItem v-if="canAssignContacts" @click="isAssignDialogOpen = true">
                   <UserPlus class="mr-2 h-4 w-4" />
                   <span>{{ $t('chat.assignToAgent') }}</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem v-if="!activeTransferId" @click="transferToAgent" :disabled="isTransferring">
-                  <UserX class="mr-2 h-4 w-4" />
-                  <span>{{ $t('chat.transferToAgent') }}</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem v-if="activeTransferId" @click="resumeChatbot" :disabled="isResuming">
-                  <Play class="mr-2 h-4 w-4" />
-                  <span>{{ $t('chat.resumeChatbot') }}</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem @click="isInfoPanelOpen = !isInfoPanelOpen">
                   <Info class="mr-2 h-4 w-4" />
@@ -3304,7 +3202,6 @@ async function sendMediaMessage() {
     <ContactInfoPanel
       v-if="contactsStore.currentContact && isInfoPanelOpen"
       :contact="contactsStore.currentContact"
-      :session-data="contactSessionData"
       @close="isInfoPanelOpen = false"
       @tags-updated="(tags) => contactsStore.updateContactTags(contactsStore.currentContact!.id, tags)"
     />

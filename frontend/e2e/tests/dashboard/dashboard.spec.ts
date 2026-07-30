@@ -17,7 +17,6 @@ test.describe('Dashboard', () => {
     // Wait for widget cards to load (not skeleton) - use exact text matching to avoid duplicates
     await expect(page.getByText('Total Messages', { exact: true })).toBeVisible({ timeout: 15000 })
     await expect(page.getByText('Active Contacts', { exact: true })).toBeVisible()
-    await expect(page.getByText('Chatbot Sessions', { exact: true })).toBeVisible()
     await expect(page.getByText('Total Campaigns', { exact: true })).toBeVisible()
   })
 
@@ -56,18 +55,16 @@ test.describe('Dashboard', () => {
     await expect(main.locator('a[href="/chat"]')).toBeVisible()
     await expect(main.locator('a[href="/campaigns"]')).toBeVisible()
     await expect(main.locator('a[href="/templates"]')).toBeVisible()
-    await expect(main.locator('a[href="/chatbot"]')).toBeVisible()
   })
 
-  // Rule 3: collapsed four near-duplicate quick-action navigation tests
-  // (chat / campaigns / templates / chatbot — identical bodies, differing
+  // Rule 3: collapsed three near-duplicate quick-action navigation tests
+  // (chat / campaigns / templates — identical bodies, differing
   // only by href) into one data-driven test.
   test('quick actions navigate to each destination', async ({ page }) => {
     const destinations: Array<{ href: string; urlRegex: RegExp }> = [
       { href: '/chat', urlRegex: /\/chat/ },
       { href: '/campaigns', urlRegex: /\/campaigns/ },
       { href: '/templates', urlRegex: /\/templates/ },
-      { href: '/chatbot', urlRegex: /\/chatbot/ },
     ]
 
     for (const { href, urlRegex } of destinations) {

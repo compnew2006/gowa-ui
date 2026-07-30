@@ -383,163 +383,6 @@ func TestApp_GetContact(t *testing.T) {
 	})
 }
 
-// --- GetContactSessionData Tests ---
-
-func TestApp_GetContactSessionData(t *testing.T) {
-	t.Parallel()
-
-	t.Run("success with no session", func(t *testing.T) {
-		app := newTestApp(t)
-		org := testutil.CreateTestOrganization(t, app.DB)
-		adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
-		user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
-		contact := testutil.CreateTestContact(t, app.DB, org.ID)
-
-		req := testutil.NewGETRequest(t)
-		testutil.SetAuthContext(req, org.ID, user.ID)
-		testutil.SetPathParam(req, "id", contact.ID.String())
-
-		err := app.GetContactSessionData(req)
-		require.NoError(t, err)
-		assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
-
-		var resp struct {
-			Data handlers.ContactSessionDataResponse `json:"data"`
-		}
-		require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
-		assert.Nil(t, resp.Data.SessionID)
-		assert.NotNil(t, resp.Data.SessionData)
-		assert.NotNil(t, resp.Data.PanelConfig)
-	})
-
-	// Regression: a contact whose only sessions are cancelled (none active or
-	// completed) must get an empty panel with 200 — the empty lookup result is
-	// an expected state, not an error (previously First() raised
-	// gorm.ErrRecordNotFound here, logging a spurious "record not found").
-	t.Run("success with only cancelled sessions", func(t *testing.T) {
-		app := newTestApp(t)
-		org := testutil.CreateTestOrganization(t, app.DB)
-		adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
-		user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
-		account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
-		contact := testutil.CreateTestContact(t, app.DB, org.ID)
-
-		cancelled := &models.ChatbotSession{
-			BaseModel:       models.BaseModel{ID: uuid.New()},
-			OrganizationID:  org.ID,
-			ContactID:       contact.ID,
-			WhatsAppAccount: account.Name,
-			PhoneNumber:     contact.PhoneNumber,
-			Status:          models.SessionStatusCancelled,
-			SessionData:     models.JSONB{"name": "Cancelled User"},
-			StartedAt:       time.Now(),
-			LastActivityAt:  time.Now(),
-		}
-		require.NoError(t, app.DB.Create(cancelled).Error)
-
-		req := testutil.NewGETRequest(t)
-		testutil.SetAuthContext(req, org.ID, user.ID)
-		testutil.SetPathParam(req, "id", contact.ID.String())
-
-		err := app.GetContactSessionData(req)
-		require.NoError(t, err)
-		assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
-
-		var resp struct {
-			Data handlers.ContactSessionDataResponse `json:"data"`
-		}
-		require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
-		assert.Nil(t, resp.Data.SessionID, "cancelled sessions must not surface in the panel")
-		assert.Empty(t, resp.Data.SessionData, "no session data should leak from cancelled sessions")
-		assert.NotNil(t, resp.Data.PanelConfig)
-	})
-
-	t.Run("success with active session", func(t *testing.T) {
-		app := newTestApp(t)
-		org := testutil.CreateTestOrganization(t, app.DB)
-		adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
-		user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
-		account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
-		contact := testutil.CreateTestContact(t, app.DB, org.ID)
-
-		// Create an active chatbot session
-		session := &models.ChatbotSession{
-			BaseModel:       models.BaseModel{ID: uuid.New()},
-			OrganizationID:  org.ID,
-			ContactID:       contact.ID,
-			WhatsAppAccount: account.Name,
-			PhoneNumber:     contact.PhoneNumber,
-			Status:          models.SessionStatusActive,
-			SessionData:     models.JSONB{"name": "Test User", "email": "test@example.com"},
-			StartedAt:       time.Now(),
-			LastActivityAt:  time.Now(),
-		}
-		require.NoError(t, app.DB.Create(session).Error)
-
-		req := testutil.NewGETRequest(t)
-		testutil.SetAuthContext(req, org.ID, user.ID)
-		testutil.SetPathParam(req, "id", contact.ID.String())
-
-		err := app.GetContactSessionData(req)
-		require.NoError(t, err)
-		assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
-
-		var resp struct {
-			Data handlers.ContactSessionDataResponse `json:"data"`
-		}
-		require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
-		assert.NotNil(t, resp.Data.SessionID)
-		assert.Equal(t, session.ID, *resp.Data.SessionID)
-	})
-
-	t.Run("not found - contact does not exist", func(t *testing.T) {
-		app := newTestApp(t)
-		org := testutil.CreateTestOrganization(t, app.DB)
-		adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
-		user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
-
-		req := testutil.NewGETRequest(t)
-		testutil.SetAuthContext(req, org.ID, user.ID)
-		testutil.SetPathParam(req, "id", uuid.New().String())
-
-		err := app.GetContactSessionData(req)
-		require.NoError(t, err)
-		assert.Equal(t, fasthttp.StatusNotFound, testutil.GetResponseStatusCode(req))
-	})
-
-	t.Run("invalid contact ID", func(t *testing.T) {
-		app := newTestApp(t)
-		org := testutil.CreateTestOrganization(t, app.DB)
-		adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
-		user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
-
-		req := testutil.NewGETRequest(t)
-		testutil.SetAuthContext(req, org.ID, user.ID)
-		testutil.SetPathParam(req, "id", "not-a-uuid")
-
-		err := app.GetContactSessionData(req)
-		require.NoError(t, err)
-		assert.Equal(t, fasthttp.StatusBadRequest, testutil.GetResponseStatusCode(req))
-	})
-
-	t.Run("cross-org isolation", func(t *testing.T) {
-		app := newTestApp(t)
-		org1 := testutil.CreateTestOrganization(t, app.DB)
-		org2 := testutil.CreateTestOrganization(t, app.DB)
-		adminRole := testutil.CreateAdminRole(t, app.DB, org1.ID)
-		user1 := testutil.CreateTestUser(t, app.DB, org1.ID, testutil.WithRoleID(&adminRole.ID))
-		contact := testutil.CreateTestContact(t, app.DB, org2.ID)
-
-		req := testutil.NewGETRequest(t)
-		testutil.SetAuthContext(req, org1.ID, user1.ID)
-		testutil.SetPathParam(req, "id", contact.ID.String())
-
-		err := app.GetContactSessionData(req)
-		require.NoError(t, err)
-		assert.Equal(t, fasthttp.StatusNotFound, testutil.GetResponseStatusCode(req))
-	})
-}
-
 // --- AssignContact Tests ---
 
 func TestApp_AssignContact(t *testing.T) {
@@ -1528,12 +1371,11 @@ func TestApp_ListContacts_Page2(t *testing.T) {
 
 // --- GetContact additional tests ---
 
-// TestApp_GetMessages_AssignedViaActiveTransfer verifies the agent-visibility
-// rules for a user without contacts:read:
-//   - an active agent transfer grants access (even when assigned_user_id is unset),
-//   - resuming the chatbot ends that access,
-//   - a persistent assigned_user_id keeps access after the transfer is resumed.
-func TestApp_GetMessages_AssignedViaActiveTransfer(t *testing.T) {
+// TestApp_GetMessages_AssignedUserOnly verifies the agent-visibility rules for
+// a user without contacts:read:
+//   - an unassigned pending contact is not visible,
+//   - a persistent assigned_user_id grants access.
+func TestApp_GetMessages_AssignedUserOnly(t *testing.T) {
 	t.Parallel()
 
 	app := newTestApp(t)
@@ -1541,12 +1383,12 @@ func TestApp_GetMessages_AssignedViaActiveTransfer(t *testing.T) {
 
 	// Agent role WITHOUT contacts:read — agents only see assigned chats.
 	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "agent-no-read",
-		[]string{"chat:read", "chat:write", "transfers:read", "transfers:pickup"})
+		[]string{"chat:read", "chat:write"})
 	agent := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&role.ID))
 
 	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
 	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
-	// assigned_user_id intentionally nil — assignment is via the transfer only.
+	// assigned_user_id intentionally nil — the pending chat is unassigned.
 
 	msg := &models.Message{
 		BaseModel:       models.BaseModel{ID: uuid.New()},
@@ -1560,8 +1402,6 @@ func TestApp_GetMessages_AssignedViaActiveTransfer(t *testing.T) {
 	}
 	require.NoError(t, app.DB.Create(msg).Error)
 
-	transfer := createTestTransfer(t, app, org.ID, contact.ID, account.Name, models.TransferStatusActive, &agent.ID)
-
 	getMessagesStatus := func() int {
 		req := testutil.NewGETRequest(t)
 		testutil.SetAuthContext(req, org.ID, agent.ID)
@@ -1570,19 +1410,14 @@ func TestApp_GetMessages_AssignedViaActiveTransfer(t *testing.T) {
 		return testutil.GetResponseStatusCode(req)
 	}
 
-	// Active transfer → agent can load messages despite no contacts:read.
-	assert.Equal(t, fasthttp.StatusOK, getMessagesStatus(),
-		"active transfer should grant the agent access to the assigned contact")
-
-	// Resume the chatbot → transfer no longer active → access ends.
-	require.NoError(t, app.DB.Model(transfer).Update("status", models.TransferStatusResumed).Error)
+	// Unassigned pending chat → agent without contacts:read cannot load it.
 	assert.Equal(t, fasthttp.StatusNotFound, getMessagesStatus(),
-		"resuming the chatbot should end transfer-only access")
+		"an unassigned pending contact must not be visible without contacts:read")
 
-	// Persistent assignment → agent retains access even after resume.
+	// Persistent assignment → agent gains access.
 	require.NoError(t, app.DB.Model(contact).Update("assigned_user_id", agent.ID).Error)
 	assert.Equal(t, fasthttp.StatusOK, getMessagesStatus(),
-		"a persistent assigned_user_id should keep access after resume")
+		"a persistent assigned_user_id should grant the agent access")
 }
 
 func TestApp_GetContact_WithAssignedUser(t *testing.T) {
@@ -1679,104 +1514,6 @@ func TestApp_GetContact_MultipleUnreadMessages(t *testing.T) {
 	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
 	// Only 3 incoming delivered (not read) messages should be counted
 	assert.Equal(t, 3, resp.Data.UnreadCount)
-}
-
-// --- GetContactSessionData additional tests ---
-
-func TestApp_GetContactSessionData_CompletedSession(t *testing.T) {
-	t.Parallel()
-
-	app := newTestApp(t)
-	org := testutil.CreateTestOrganization(t, app.DB)
-	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
-	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
-	contact := testutil.CreateTestContact(t, app.DB, org.ID)
-
-	completedAt := time.Now()
-	session := &models.ChatbotSession{
-		BaseModel:       models.BaseModel{ID: uuid.New()},
-		OrganizationID:  org.ID,
-		ContactID:       contact.ID,
-		WhatsAppAccount: account.Name,
-		PhoneNumber:     contact.PhoneNumber,
-		Status:          models.SessionStatusCompleted,
-		SessionData:     models.JSONB{"order_id": "ORD-123", "amount": 99.99},
-		StartedAt:       time.Now().Add(-1 * time.Hour),
-		LastActivityAt:  time.Now(),
-		CompletedAt:     &completedAt,
-	}
-	require.NoError(t, app.DB.Create(session).Error)
-
-	req := testutil.NewGETRequest(t)
-	testutil.SetAuthContext(req, org.ID, user.ID)
-	testutil.SetPathParam(req, "id", contact.ID.String())
-
-	err := app.GetContactSessionData(req)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
-
-	var resp struct {
-		Data handlers.ContactSessionDataResponse `json:"data"`
-	}
-	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
-	assert.NotNil(t, resp.Data.SessionID)
-	assert.Equal(t, session.ID, *resp.Data.SessionID)
-}
-
-func TestApp_GetContactSessionData_MostRecentSessionReturned(t *testing.T) {
-	t.Parallel()
-
-	app := newTestApp(t)
-	org := testutil.CreateTestOrganization(t, app.DB)
-	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
-	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
-	contact := testutil.CreateTestContact(t, app.DB, org.ID)
-
-	// Create an older completed session
-	oldSession := &models.ChatbotSession{
-		BaseModel:       models.BaseModel{ID: uuid.New(), CreatedAt: time.Now().Add(-2 * time.Hour)},
-		OrganizationID:  org.ID,
-		ContactID:       contact.ID,
-		WhatsAppAccount: account.Name,
-		PhoneNumber:     contact.PhoneNumber,
-		Status:          models.SessionStatusCompleted,
-		SessionData:     models.JSONB{"key": "old"},
-		StartedAt:       time.Now().Add(-2 * time.Hour),
-		LastActivityAt:  time.Now().Add(-2 * time.Hour),
-	}
-	require.NoError(t, app.DB.Create(oldSession).Error)
-
-	// Create a newer active session
-	newSession := &models.ChatbotSession{
-		BaseModel:       models.BaseModel{ID: uuid.New(), CreatedAt: time.Now()},
-		OrganizationID:  org.ID,
-		ContactID:       contact.ID,
-		WhatsAppAccount: account.Name,
-		PhoneNumber:     contact.PhoneNumber,
-		Status:          models.SessionStatusActive,
-		SessionData:     models.JSONB{"key": "new"},
-		StartedAt:       time.Now(),
-		LastActivityAt:  time.Now(),
-	}
-	require.NoError(t, app.DB.Create(newSession).Error)
-
-	req := testutil.NewGETRequest(t)
-	testutil.SetAuthContext(req, org.ID, user.ID)
-	testutil.SetPathParam(req, "id", contact.ID.String())
-
-	err := app.GetContactSessionData(req)
-	require.NoError(t, err)
-	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
-
-	var resp struct {
-		Data handlers.ContactSessionDataResponse `json:"data"`
-	}
-	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
-	// Should return the most recent session
-	require.NotNil(t, resp.Data.SessionID)
-	assert.Equal(t, newSession.ID, *resp.Data.SessionID)
 }
 
 // --- AssignContact additional tests ---

@@ -71,64 +71,6 @@ const router = createRouter({
           meta: { permission: 'campaigns' }
         },
         {
-          path: 'chatbot',
-          name: 'chatbot',
-          component: () => import('@/views/chatbot/ChatbotView.vue'),
-          meta: { permission: 'settings.chatbot' }
-        },
-        {
-          path: 'chatbot/settings',
-          redirect: '/settings/chatbot'
-        },
-        {
-          path: 'chatbot/keywords',
-          name: 'chatbot-keywords',
-          component: () => import('@/views/chatbot/KeywordsView.vue'),
-          meta: { permission: 'chatbot.keywords' }
-        },
-        {
-          path: 'chatbot/keywords/:id',
-          name: 'keyword-detail',
-          component: () => import('@/views/chatbot/KeywordDetailView.vue'),
-          meta: { permission: 'chatbot.keywords' }
-        },
-        {
-          path: 'chatbot/flows',
-          name: 'chatbot-flows',
-          component: () => import('@/views/chatbot/ChatbotFlowsView.vue'),
-          meta: { permission: 'flows.chatbot' }
-        },
-        {
-          path: 'chatbot/flows/new',
-          name: 'chatbot-flow-new',
-          component: () => import('@/views/chatbot/ChatbotFlowBuilderView.vue'),
-          meta: { permission: 'flows.chatbot' }
-        },
-        {
-          path: 'chatbot/flows/:id/edit',
-          name: 'chatbot-flow-edit',
-          component: () => import('@/views/chatbot/ChatbotFlowBuilderView.vue'),
-          meta: { permission: 'flows.chatbot' }
-        },
-        {
-          path: 'chatbot/ai',
-          name: 'chatbot-ai',
-          component: () => import('@/views/chatbot/AIContextsView.vue'),
-          meta: { permission: 'chatbot.ai' }
-        },
-        {
-          path: 'chatbot/ai/:id',
-          name: 'ai-context-detail',
-          component: () => import('@/views/chatbot/AIContextDetailView.vue'),
-          meta: { permission: 'chatbot.ai' }
-        },
-        {
-          path: 'chatbot/transfers',
-          name: 'chatbot-transfers',
-          component: () => import('@/views/chatbot/AgentTransfersView.vue'),
-          meta: { permission: 'transfers' }
-        },
-        {
           path: 'analytics/agents',
           name: 'agent-analytics',
           component: () => import('@/views/analytics/AgentAnalyticsView.vue'),
@@ -139,12 +81,6 @@ const router = createRouter({
           name: 'settings',
           component: () => import('@/views/settings/SettingsView.vue'),
           meta: { permission: 'settings.general' }
-        },
-        {
-          path: 'settings/chatbot',
-          name: 'chatbot-settings',
-          component: () => import('@/views/settings/ChatbotSettingsView.vue'),
-          meta: { permission: 'settings.chatbot' }
         },
         {
           path: 'settings/accounts',
@@ -302,18 +238,10 @@ const router = createRouter({
 const navigationOrder = [
   { path: '/', permission: 'analytics' },
   { path: '/chat', permission: 'chat' },
-  { path: '/chatbot', permission: 'settings.chatbot', childPaths: [
-    { path: '/chatbot', permission: 'settings.chatbot' },
-    { path: '/chatbot/keywords', permission: 'chatbot.keywords' },
-    { path: '/chatbot/flows', permission: 'flows.chatbot' },
-    { path: '/chatbot/ai', permission: 'chatbot.ai' }
-  ]},
-  { path: '/chatbot/transfers', permission: 'transfers' },
   { path: '/analytics/agents', permission: 'analytics.agents' },
   { path: '/campaigns', permission: 'campaigns' },
   { path: '/settings', permission: 'settings.general', childPaths: [
     { path: '/settings', permission: 'settings.general' },
-    { path: '/settings/chatbot', permission: 'settings.chatbot' },
     { path: '/settings/accounts', permission: 'accounts' },
     { path: '/settings/canned-responses', permission: 'canned_responses' },
     { path: '/settings/contacts', permission: 'contacts' },

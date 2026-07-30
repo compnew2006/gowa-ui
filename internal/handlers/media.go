@@ -192,6 +192,56 @@ func (a *App) saveMediaBytes(data []byte, mimeType string) (string, error) {
 	return relativePath, nil
 }
 
+// readLocalMedia resolves a storage-relative path against the media root with
+// directory-traversal and symlink protection, then reads and returns the file
+// bytes. ok is false when relPath is empty/invalid or the file is missing,
+// unreadable, or a symlink. Shared by media/avatar serving handlers so the
+// path-safety rules live in one place.
+func (a *App) readLocalMedia(relPath string) ([]byte, bool) {
+	if relPath == "" {
+		return nil, false
+	}
+	baseDir, err := filepath.Abs(a.getMediaStoragePath())
+	if err != nil {
+		a.Log.Error("Storage configuration error", "error", err)
+		return nil, false
+	}
+	fullPath, err := filepath.Abs(filepath.Join(baseDir, filepath.Clean(relPath)))
+	if err != nil || !strings.HasPrefix(fullPath, baseDir+string(os.PathSeparator)) {
+		return nil, false
+	}
+	info, err := os.Lstat(fullPath)
+	if err != nil || info.Mode()&os.ModeSymlink != 0 {
+		return nil, false
+	}
+	data, err := os.ReadFile(fullPath)
+	if err != nil {
+		return nil, false
+	}
+	return data, true
+}
+
+// removeLocalMedia best-effort deletes a storage-relative file using the same
+// traversal/symlink guards as readLocalMedia. Errors are ignored — used to
+// clean up superseded cached files (e.g. a replaced avatar).
+func (a *App) removeLocalMedia(relPath string) {
+	if relPath == "" {
+		return
+	}
+	baseDir, err := filepath.Abs(a.getMediaStoragePath())
+	if err != nil {
+		return
+	}
+	fullPath, err := filepath.Abs(filepath.Join(baseDir, filepath.Clean(relPath)))
+	if err != nil || !strings.HasPrefix(fullPath, baseDir+string(os.PathSeparator)) {
+		return
+	}
+	if info, err := os.Lstat(fullPath); err != nil || info.Mode()&os.ModeSymlink != 0 {
+		return
+	}
+	_ = os.Remove(fullPath)
+}
+
 // ServeMedia serves media files from local storage
 // Only authorized users who have access to the message can view the media
 func (a *App) ServeMedia(r *fastglue.Request) error {
@@ -215,24 +265,13 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 	}
 
 	// Users without contacts:read permission can only access media from contacts
-	// assigned to them — the persistent owner or an active transfer assigned
-	// directly to them (via scopeAssignedContact) — or from contacts with an
-	// active team transfer where the user is a team member.
+	// assigned to them (the persistent owner or a collaborator, via
+	// scopeAssignedContact).
 	if !a.HasPermission(userID, models.ResourceContacts, models.ActionRead, orgID) {
 		var contact models.Contact
 		q := a.scopeAssignedContact(a.DB.Where("id = ? AND organization_id = ?", message.ContactID, orgID), userID, orgID)
 		if err := q.First(&contact).Error; err != nil {
-			// Not owner / not directly assigned — check team membership via active transfer
-			var transfer models.AgentTransfer
-			if err := a.DB.Where("contact_id = ? AND organization_id = ? AND status = ? AND team_id IS NOT NULL",
-				message.ContactID, orgID, models.TransferStatusActive).First(&transfer).Error; err != nil {
-				return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Access denied", nil, "")
-			}
-			var count int64
-			a.DB.Model(&models.TeamMember{}).Where("team_id = ? AND user_id = ?", transfer.TeamID, userID).Count(&count)
-			if count == 0 {
-				return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Access denied", nil, "")
-			}
+			return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Access denied", nil, "")
 		}
 	}
 

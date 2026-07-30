@@ -160,7 +160,7 @@ func TestApp_SendOutgoingMessage_TextMessage_Success(t *testing.T) {
 	}
 
 	// Use sync options to wait for result
-	opts := handlers.ChatbotSendOptions()
+	opts := handlers.AutoReplySendOptions()
 
 	msg, err := app.SendOutgoingMessage(ctx, req, opts)
 
@@ -209,7 +209,7 @@ func TestApp_SendOutgoingMessage_TextMessage_APIError(t *testing.T) {
 		Content: "Hello!",
 	}
 
-	opts := handlers.ChatbotSendOptions()
+	opts := handlers.AutoReplySendOptions()
 
 	msg, err := app.SendOutgoingMessage(ctx, req, opts)
 
@@ -244,7 +244,7 @@ func TestApp_SendOutgoingMessage_ImageMessage_WithMediaID(t *testing.T) {
 		Caption:       "Check this out!",
 	}
 
-	opts := handlers.ChatbotSendOptions()
+	opts := handlers.AutoReplySendOptions()
 
 	msg, err := app.SendOutgoingMessage(ctx, req, opts)
 
@@ -282,7 +282,7 @@ func TestApp_SendOutgoingMessage_ImageMessage_WithMediaData(t *testing.T) {
 		Caption:       "Photo caption",
 	}
 
-	opts := handlers.ChatbotSendOptions()
+	opts := handlers.AutoReplySendOptions()
 
 	msg, err := app.SendOutgoingMessage(ctx, req, opts)
 
@@ -322,7 +322,7 @@ func TestApp_SendOutgoingMessage_DocumentMessage(t *testing.T) {
 		Caption:       "Monthly report",
 	}
 
-	opts := handlers.ChatbotSendOptions()
+	opts := handlers.AutoReplySendOptions()
 
 	msg, err := app.SendOutgoingMessage(ctx, req, opts)
 
@@ -358,7 +358,7 @@ func TestApp_SendOutgoingMessage_VideoMessage(t *testing.T) {
 		Caption:       "Watch this!",
 	}
 
-	opts := handlers.ChatbotSendOptions()
+	opts := handlers.AutoReplySendOptions()
 
 	msg, err := app.SendOutgoingMessage(ctx, req, opts)
 
@@ -392,7 +392,7 @@ func TestApp_SendOutgoingMessage_AudioMessage(t *testing.T) {
 		MediaMimeType: "audio/ogg",
 	}
 
-	opts := handlers.ChatbotSendOptions()
+	opts := handlers.AutoReplySendOptions()
 
 	msg, err := app.SendOutgoingMessage(ctx, req, opts)
 
@@ -429,7 +429,7 @@ func TestApp_SendOutgoingMessage_InteractiveButtons(t *testing.T) {
 		},
 	}
 
-	opts := handlers.ChatbotSendOptions()
+	opts := handlers.AutoReplySendOptions()
 
 	msg, err := app.SendOutgoingMessage(ctx, req, opts)
 
@@ -470,7 +470,7 @@ func TestApp_SendOutgoingMessage_InteractiveCTAURL(t *testing.T) {
 		URL:             "https://example.com",
 	}
 
-	opts := handlers.ChatbotSendOptions()
+	opts := handlers.AutoReplySendOptions()
 
 	msg, err := app.SendOutgoingMessage(ctx, req, opts)
 
@@ -523,7 +523,7 @@ func TestApp_SendOutgoingMessage_TemplateMessage(t *testing.T) {
 		BodyParams: map[string]string{"1": "John", "2": "ORD-123"},
 	}
 
-	opts := handlers.ChatbotSendOptions()
+	opts := handlers.AutoReplySendOptions()
 
 	msg, err := app.SendOutgoingMessage(ctx, req, opts)
 
@@ -565,7 +565,7 @@ func TestApp_SendOutgoingMessage_TemplateMessage_MissingTemplate(t *testing.T) {
 		BodyParams: map[string]string{"1": "param1"},
 	}
 
-	opts := handlers.ChatbotSendOptions()
+	opts := handlers.AutoReplySendOptions()
 
 	msg, err := app.SendOutgoingMessage(ctx, req, opts)
 
@@ -635,8 +635,8 @@ func TestApp_SendOutgoingMessage_SyncOption(t *testing.T) {
 		Content: "Sync message",
 	}
 
-	// Use sync options (ChatbotSendOptions has Async: false)
-	opts := handlers.ChatbotSendOptions()
+	// Use sync options (AutoReplySendOptions has Async: false)
+	opts := handlers.AutoReplySendOptions()
 	assert.False(t, opts.Async)
 
 	msg, err := app.SendOutgoingMessage(ctx, req, opts)
@@ -715,7 +715,7 @@ func TestApp_SendOutgoingMessage_UnsupportedType(t *testing.T) {
 		Content: "Some content",
 	}
 
-	opts := handlers.ChatbotSendOptions()
+	opts := handlers.AutoReplySendOptions()
 
 	msg, err := app.SendOutgoingMessage(ctx, req, opts)
 
@@ -736,17 +736,15 @@ func TestDefaultSendOptions(t *testing.T) {
 
 	assert.True(t, opts.BroadcastWebSocket)
 	assert.True(t, opts.DispatchWebhook)
-	assert.False(t, opts.TrackSLA)
 	assert.True(t, opts.Async)
 	assert.Nil(t, opts.SentByUserID)
 }
 
-func TestChatbotSendOptions(t *testing.T) {
-	opts := handlers.ChatbotSendOptions()
+func TestAutoReplySendOptions(t *testing.T) {
+	opts := handlers.AutoReplySendOptions()
 
 	assert.True(t, opts.BroadcastWebSocket)
 	assert.False(t, opts.DispatchWebhook)
-	assert.True(t, opts.TrackSLA)
 	assert.False(t, opts.Async)
 	assert.Nil(t, opts.SentByUserID)
 }
@@ -756,18 +754,7 @@ func TestAPISendOptions(t *testing.T) {
 
 	assert.False(t, opts.BroadcastWebSocket)
 	assert.True(t, opts.DispatchWebhook)
-	assert.False(t, opts.TrackSLA)
 	assert.True(t, opts.Async)
-	assert.Nil(t, opts.SentByUserID)
-}
-
-func TestSLASendOptions(t *testing.T) {
-	opts := handlers.SLASendOptions()
-
-	assert.True(t, opts.BroadcastWebSocket)
-	assert.False(t, opts.DispatchWebhook)
-	assert.False(t, opts.TrackSLA)
-	assert.False(t, opts.Async)
 	assert.Nil(t, opts.SentByUserID)
 }
 
@@ -791,7 +778,7 @@ func TestApp_SendOutgoingMessage_ContactLastMessageUpdated(t *testing.T) {
 		Content: "This is a test message for preview",
 	}
 
-	opts := handlers.ChatbotSendOptions()
+	opts := handlers.AutoReplySendOptions()
 
 	_, err := app.SendOutgoingMessage(ctx, req, opts)
 	require.NoError(t, err)
@@ -823,7 +810,7 @@ func TestApp_SendOutgoingMessage_MediaPreview(t *testing.T) {
 		MediaMimeType: "image/jpeg",
 	}
 
-	opts := handlers.ChatbotSendOptions()
+	opts := handlers.AutoReplySendOptions()
 
 	_, err := app.SendOutgoingMessage(ctx, req, opts)
 	require.NoError(t, err)
@@ -852,7 +839,7 @@ func TestApp_SendOutgoingMessage_DocumentPreview(t *testing.T) {
 		MediaFilename: "report.pdf",
 	}
 
-	opts := handlers.ChatbotSendOptions()
+	opts := handlers.AutoReplySendOptions()
 
 	_, err := app.SendOutgoingMessage(ctx, req, opts)
 	require.NoError(t, err)

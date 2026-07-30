@@ -80,6 +80,21 @@ export function getAvatarGradient(name: string): string {
   return avatarGradients[Math.abs(hash) % avatarGradients.length]
 }
 
+// avatarSrc resolves a contact's avatar_url for use in an <img>/<AvatarImage>.
+// Backend now returns a stable relative route (/api/contacts/{id}/avatar/image)
+// that must be prefixed with the runtime base path (subpath deployments), while
+// absolute http(s) URLs (legacy rows, external avatars) pass through untouched.
+// Returns undefined for empty input so the initials fallback renders.
+export function avatarSrc(url?: string | null): string | undefined {
+  if (!url) return undefined
+  if (/^https?:\/\//i.test(url)) return url
+  if (url.startsWith('/')) {
+    const basePath = ((window as any).__BASE_PATH__ ?? '').replace(/\/$/, '')
+    return `${basePath}${url}`
+  }
+  return url
+}
+
 export function formatBytes(bytes: number | undefined | null, decimals = 1): string {
   if (bytes === undefined || bytes === null || isNaN(bytes) || bytes === 0) return '0 B'
   const k = 1024

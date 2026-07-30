@@ -282,7 +282,7 @@ func (a *App) expireRatingCycle(cycleID uuid.UUID) {
 
 // maybeCaptureCloseRating intercepts a customer reply to a pending rating
 // cycle. Returns true when the reply was consumed as a rating — the caller
-// must then skip ensureClaimableChatStatus (no reopen) and chatbot processing.
+// must then skip ensureClaimableChatStatus (no reopen) and further processing.
 // Unmatched or late replies return false and flow through normally.
 func (a *App) maybeCaptureCloseRating(account *models.WhatsAppAccount, contact *models.Contact, msg IncomingTextMessage) bool {
 	if msg.Type != "text" || msg.Text == nil {

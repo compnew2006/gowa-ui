@@ -122,8 +122,6 @@ var widgetDataSources = map[string][]string{
 	"messages":  {"status", "direction", "message_type", "whatsapp_account"},
 	"contacts":  {"whatsapp_account", "is_read"},
 	"campaigns": {"status", "message_status"},
-	"transfers": {"status", "source"},
-	"sessions":  {"status"},
 }
 
 // Available metrics
@@ -812,14 +810,6 @@ func (a *App) executeWidgetQuery(orgID uuid.UUID, widget models.Widget, fromStr,
 	case "campaigns":
 		currentValue = a.queryCampaigns(orgID, widget.Metric, filters, periodStart, periodEnd)
 		previousValue = a.queryCampaigns(orgID, widget.Metric, filters, previousPeriodStart, previousPeriodEnd)
-
-	case "transfers":
-		currentValue = a.queryTransfers(orgID, widget.Metric, widget.Field, filters, periodStart, periodEnd)
-		previousValue = a.queryTransfers(orgID, widget.Metric, widget.Field, filters, previousPeriodStart, previousPeriodEnd)
-
-	case "sessions":
-		currentValue = a.querySessions(orgID, widget.Metric, filters, periodStart, periodEnd)
-		previousValue = a.querySessions(orgID, widget.Metric, filters, previousPeriodStart, previousPeriodEnd)
 	}
 
 	response.Value = currentValue
@@ -895,43 +885,6 @@ func (a *App) queryCampaigns(orgID uuid.UUID, _ string, filters []FilterInput, s
 
 	for _, f := range filters {
 		query = applyFilter("campaigns", query, f)
-	}
-
-	var count int64
-	query.Count(&count)
-	return float64(count)
-}
-
-func (a *App) queryTransfers(orgID uuid.UUID, metric, field string, filters []FilterInput, start, end time.Time) float64 {
-	query := a.DB.Model(&models.AgentTransfer{}).Where("organization_id = ? AND transferred_at >= ? AND transferred_at <= ?", orgID, start, end)
-
-	for _, f := range filters {
-		query = applyFilter("transfers", query, f)
-	}
-
-	var result float64
-	switch metric {
-	case "count":
-		var count int64
-		query.Count(&count)
-		result = float64(count)
-	case "avg":
-		if field == "resolution_time" {
-			var val float64
-			query.Where("status = ? AND resumed_at IS NOT NULL", models.TransferStatusResumed).
-				Select("COALESCE(AVG(EXTRACT(EPOCH FROM (resumed_at - transferred_at))/60), 0)").
-				Scan(&val)
-			result = val
-		}
-	}
-	return result
-}
-
-func (a *App) querySessions(orgID uuid.UUID, _ string, filters []FilterInput, start, end time.Time) float64 {
-	query := a.DB.Model(&models.ChatbotSession{}).Where("organization_id = ? AND created_at >= ? AND created_at <= ?", orgID, start, end)
-
-	for _, f := range filters {
-		query = applyFilter("sessions", query, f)
 	}
 
 	var count int64
@@ -1040,10 +993,6 @@ func resolveDataSourceTable(dataSource string) (tableName, dateField string, ok 
 		return "contacts", "last_message_at", true
 	case "campaigns":
 		return "bulk_message_campaigns", "created_at", true
-	case "transfers":
-		return "agent_transfers", "transferred_at", true
-	case "sessions":
-		return "chatbot_sessions", "created_at", true
 	default:
 		return "", "", false
 	}
@@ -1370,20 +1319,6 @@ var tableQuerySQL = map[string]struct{ base, orderBy string }{
 			FROM bulk_message_campaigns
 			WHERE organization_id = ? AND created_at >= ? AND created_at <= ?`,
 		orderBy: " ORDER BY created_at DESC LIMIT 10",
-	},
-	"transfers": {
-		base: `SELECT t.id, COALESCE(c.profile_name, c.phone_number) as label,
-			t.source as sub_label, t.status, '' as direction, t.transferred_at as created_at
-			FROM agent_transfers t LEFT JOIN contacts c ON c.id = t.contact_id
-			WHERE t.organization_id = ? AND t.transferred_at >= ? AND t.transferred_at <= ?`,
-		orderBy: " ORDER BY t.transferred_at DESC LIMIT 10",
-	},
-	"sessions": {
-		base: `SELECT s.id, COALESCE(c.profile_name, c.phone_number) as label,
-			s.status as sub_label, s.status, '' as direction, s.created_at
-			FROM chatbot_sessions s LEFT JOIN contacts c ON c.id = s.contact_id
-			WHERE s.organization_id = ? AND s.created_at >= ? AND s.created_at <= ?`,
-		orderBy: " ORDER BY s.created_at DESC LIMIT 10",
 	},
 }
 

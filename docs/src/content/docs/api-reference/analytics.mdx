@@ -7,7 +7,7 @@ import { Aside } from '@astrojs/starlight/components';
 
 ## Overview
 
-The Analytics API provides access to messaging statistics, chatbot performance, and dashboard metrics.
+The Analytics API provides access to messaging statistics and dashboard metrics.
 
 ## Dashboard Stats
 
@@ -46,12 +46,6 @@ GET /api/analytics/dashboard
       "total": 20,
       "active": 2,
       "completed_this_month": 5
-    },
-    "chatbot": {
-      "conversations_today": 100,
-      "auto_resolved": 75,
-      "transferred_to_agent": 25,
-      "resolution_rate": 75.0
     }
   }
 }
@@ -115,73 +109,6 @@ GET /api/analytics/messages
 }
 ```
 
-## Chatbot Analytics
-
-Get chatbot performance metrics.
-
-```bash
-GET /api/analytics/chatbot
-```
-
-### Query Parameters
-
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `account_id` | string | Filter by WhatsApp account |
-| `start_date` | string | Start date (ISO 8601) |
-| `end_date` | string | End date (ISO 8601) |
-
-### Response
-
-```json
-{
-  "status": "success",
-  "data": {
-    "summary": {
-      "total_conversations": 1000,
-      "auto_resolved": 750,
-      "transferred_to_agent": 200,
-      "abandoned": 50,
-      "resolution_rate": 75.0,
-      "avg_messages_per_conversation": 5.2,
-      "avg_resolution_time_seconds": 120
-    },
-    "by_flow": [
-      {
-        "flow_name": "Order Status",
-        "conversations": 300,
-        "completion_rate": 85.0
-      },
-      {
-        "flow_name": "FAQ",
-        "conversations": 200,
-        "completion_rate": 92.0
-      }
-    ],
-    "top_keywords": [
-      {
-        "keyword": "order",
-        "count": 450
-      },
-      {
-        "keyword": "shipping",
-        "count": 230
-      },
-      {
-        "keyword": "return",
-        "count": 180
-      }
-    ],
-    "ai_usage": {
-      "total_requests": 500,
-      "avg_tokens_per_request": 250,
-      "total_tokens": 125000,
-      "estimated_cost": 2.50
-    }
-  }
-}
-```
-
 ## Metrics Explained
 
 ### Message Metrics
@@ -191,16 +118,8 @@ GET /api/analytics/chatbot
 | `delivery_rate` | Percentage of sent messages that were delivered |
 | `read_rate` | Percentage of delivered messages that were read |
 
-### Chatbot Metrics
-
-| Metric | Description |
-|--------|-------------|
-| `resolution_rate` | Percentage of conversations resolved without agent |
-| `avg_resolution_time` | Average time to resolve a conversation |
-| `completion_rate` | Percentage of started flows that were completed |
-
 <Aside type="tip">
-  Use analytics to identify popular topics and optimize your chatbot flows for better automation.
+  Use analytics to identify messaging trends and optimize your campaigns for better delivery and engagement.
 </Aside>
 
 ## Data Retention

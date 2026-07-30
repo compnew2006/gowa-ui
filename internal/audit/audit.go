@@ -28,7 +28,6 @@ var skipFields = map[string]bool{
 	"canvas_layout":           true,
 	"steps":                   true,
 	"initial_template":        true,
-	"cancel_keywords":         true,
 	"trigger_button_id":       true,
 	"initial_message_type":    true,
 	"initial_template_id":     true,

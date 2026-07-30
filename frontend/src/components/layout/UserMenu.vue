@@ -3,8 +3,7 @@ import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
-import { useContactsStore } from '@/stores/contacts'
-import { usersService, chatbotService } from '@/services/api'
+import { usersService } from '@/services/api'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Separator } from '@/components/ui/separator'
@@ -15,14 +14,6 @@ import {
   PopoverContent,
   PopoverTrigger
 } from '@/components/ui/popover'
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle
-} from '@/components/ui/alert-dialog'
 import { LogOut, User } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import { getInitials } from '@/lib/utils'
@@ -40,42 +31,8 @@ const emit = defineEmits<{
 }>()
 
 const authStore = useAuthStore()
-const contactsStore = useContactsStore()
 const isUserMenuOpen = ref(false)
 const isUpdatingAvailability = ref(false)
-const isCheckingTransfers = ref(false)
-const showAwayWarning = ref(false)
-const awayWarningTransferCount = ref(0)
-
-const handleAvailabilityChange = async (checked: boolean) => {
-  if (!checked) {
-    isCheckingTransfers.value = true
-    try {
-      const response = await chatbotService.listTransfers({ status: 'active' })
-      const data = response.data.data || response.data
-      const transfers = data.transfers || []
-      const userId = authStore.user?.id
-      const myActiveTransfers = transfers.filter((t: any) => t.agent_id === userId)
-
-      if (myActiveTransfers.length > 0) {
-        awayWarningTransferCount.value = myActiveTransfers.length
-        showAwayWarning.value = true
-        return
-      }
-    } catch (error) {
-      console.error('Failed to check transfers:', error)
-    } finally {
-      isCheckingTransfers.value = false
-    }
-  }
-
-  await setAvailability(checked)
-}
-
-const confirmGoAway = async () => {
-  showAwayWarning.value = false
-  await setAvailability(false)
-}
 
 const setAvailability = async (checked: boolean) => {
   isUpdatingAvailability.value = true
@@ -89,16 +46,9 @@ const setAvailability = async (checked: boolean) => {
         description: t('userMenu.availableDesc')
       })
     } else {
-      const transfersReturned = data.transfers_to_queue || 0
       toast.success(t('userMenu.away'), {
-        description: transfersReturned > 0
-          ? t('userMenu.transfersReturned', { count: transfersReturned })
-          : t('userMenu.awayDesc')
+        description: t('userMenu.awayDesc')
       })
-
-      if (transfersReturned > 0) {
-        contactsStore.fetchContacts()
-      }
     }
   } catch (error) {
     toast.error(t('common.error'), {
@@ -210,9 +160,9 @@ const handleLogout = () => {
           </div>
           <Switch
             :checked="authStore.isAvailable"
-            :disabled="isUpdatingAvailability || isCheckingTransfers"
+            :disabled="isUpdatingAvailability"
             aria-label="Toggle availability status"
-            @update:checked="handleAvailabilityChange"
+            @update:checked="setAvailability"
           />
         </div>
         <Separator class="my-1 bg-white/[0.08] light:bg-gray-200" />
@@ -246,20 +196,4 @@ const handleLogout = () => {
       </PopoverContent>
     </Popover>
   </div>
-
-  <!-- Away Warning Dialog -->
-  <AlertDialog :open="showAwayWarning">
-    <AlertDialogContent>
-      <AlertDialogHeader>
-        <AlertDialogTitle>{{ $t('userMenu.awayWarningTitle') }}</AlertDialogTitle>
-        <AlertDialogDescription>
-          {{ $t('userMenu.awayWarningDesc', { count: awayWarningTransferCount }) }}
-        </AlertDialogDescription>
-      </AlertDialogHeader>
-      <AlertDialogFooter>
-        <Button variant="outline" @click="showAwayWarning = false">{{ $t('common.cancel') }}</Button>
-        <Button @click="confirmGoAway" :disabled="isUpdatingAvailability">{{ $t('userMenu.goAway') }}</Button>
-      </AlertDialogFooter>
-    </AlertDialogContent>
-  </AlertDialog>
 </template>

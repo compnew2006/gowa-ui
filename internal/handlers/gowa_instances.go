@@ -605,7 +605,7 @@ func (a *App) SyncGowaInstanceDeviceContacts(r *fastglue.Request) error {
 		touched++
 
 		// Set group/newsletter metadata to match how the webhook path marks
-		// these chats (chatbot_processor.go), so the contact list renders the
+		// these chats (incoming.go), so the contact list renders the
 		// correct badge consistently.
 		if err := contactutil.StampChatCategory(a.DB, contact, isGroup, isNewsletter); err != nil {
 			a.Log.Error("Failed to set chat metadata during GOWA sync", "error", err, "jid", jid)

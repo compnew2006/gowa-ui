@@ -19,9 +19,6 @@ const log = ref<AuditLogEntry | null>(null)
 const isLoading = ref(true)
 
 const resourceRouteMap: Record<string, (id: string) => string> = {
-  chatbot_settings: () => `/settings/chatbot`,
-  chatbot_flow: (id) => `/chatbot/flows/${id}`,
-  keyword_rule: (id) => `/chatbot/keywords/${id}`,
   account: (id) => `/settings/accounts/${id}`,
   organization: () => `/settings`,
   user: (id) => `/settings/users/${id}`,
@@ -33,7 +30,6 @@ const resourceRouteMap: Record<string, (id: string) => string> = {
   custom_action: () => `/settings/custom-actions`,
   canned_response: () => `/settings/canned-responses`,
   api_key: () => `/settings/api-keys`,
-  ai_context: () => `/chatbot/ai`,
   contact: (id) => `/chat?contact=${id}`,
   tag: () => `/settings/tags`,
 }

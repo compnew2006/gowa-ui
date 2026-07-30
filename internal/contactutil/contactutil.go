@@ -77,7 +77,7 @@ func GetOrCreateContact(db *gorm.DB, orgID uuid.UUID, phoneNumber, profileName s
 // exclusive — a @newsletter JID is NOT a group — so setting one clears the
 // other, letting legacy contacts that carry both flags self-heal on the next
 // stamp. No-op for plain 1:1 chats or when the flags are already correct.
-// Shared by the webhook, chatbot-processor, and GOWA sync paths so the badge
+// Shared by the webhook and GOWA sync paths so the badge
 // convention lives in one place.
 func StampChatCategory(db *gorm.DB, contact *models.Contact, isGroup, isNewsletter bool) error {
 	metaKey := ""

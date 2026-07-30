@@ -161,14 +161,6 @@ export class ChatPage extends BasePage {
     await this.assignDialog.waitFor({ state: 'visible' })
   }
 
-  async transferToAgent() {
-    await this.page.getByRole('button', { name: /Transfer/i }).click()
-  }
-
-  async resumeChatbot() {
-    await this.page.getByRole('button', { name: /Resume/i }).click()
-  }
-
   // Assign dialog helpers
   async selectAgentInAssignDialog(agentName: string) {
     await this.assignDialog.locator('button[role="combobox"]').click()

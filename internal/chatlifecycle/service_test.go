@@ -184,10 +184,10 @@ func TestService_Release_Admin_CanReleaseClosed(t *testing.T) {
 	assert.Nil(t, updated.AssignedUserID)
 }
 
-// TestService_CustomerReopen_SubsumesChatbotProcessorBlock pins the service
+// TestService_CustomerReopen_SubsumesReopenBlock pins the service
 // API behind ensureClaimableChatStatus (internal/handlers/chat_lifecycle.go),
 // which routes both the incoming and phone-sent reopen paths through here.
-func TestService_CustomerReopen_SubsumesChatbotProcessorBlock(t *testing.T) {
+func TestService_CustomerReopen_SubsumesReopenBlock(t *testing.T) {
 	svc, db, org := newService(t)
 	contact := testutil.CreateTestContact(t, db, org.ID)
 	contact.SetStatus(models.ChatStatusClosed)

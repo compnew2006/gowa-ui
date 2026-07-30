@@ -36,4 +36,4 @@ ChartJS.defaults.interaction.mode = 'index'
 ChartJS.defaults.interaction.intersect = false
 
 // Re-export chart components for convenience
-export { Line, Bar, Pie, Doughnut } from 'vue-chartjs'
+export { Line, Bar, Pie } from 'vue-chartjs'

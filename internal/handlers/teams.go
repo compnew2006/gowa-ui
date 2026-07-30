@@ -250,10 +250,6 @@ func (a *App) UpdateTeam(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update team", nil, "")
 	}
 
-	if a.Assigner != nil {
-		a.Assigner.InvalidateTeamCache(teamID)
-	}
-
 	// Preload relations for response
 	a.DB.Preload("CreatedBy").Preload("UpdatedBy").Preload("Members").Preload("Members.User").First(&team, "id = ?", team.ID)
 
@@ -294,10 +290,6 @@ func (a *App) DeleteTeam(r *fastglue.Request) error {
 
 	if result.RowsAffected == 0 {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Team not found", nil, "")
-	}
-
-	if a.Assigner != nil {
-		a.Assigner.InvalidateTeamCache(teamID)
 	}
 
 	a.logAudit(orgID, userID,
@@ -438,10 +430,6 @@ func (a *App) AddTeamMember(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to add member", nil, "")
 	}
 
-	if a.Assigner != nil {
-		a.Assigner.InvalidateTeamCache(teamID)
-	}
-
 	return r.SendEnvelope(map[string]any{"member": TeamMemberResponse{
 		ID:          member.ID,
 		UserID:      member.UserID,
@@ -507,10 +495,6 @@ func (a *App) RemoveTeamMember(r *fastglue.Request) error {
 
 	if result.RowsAffected == 0 {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Member not found in team", nil, "")
-	}
-
-	if a.Assigner != nil {
-		a.Assigner.InvalidateTeamCache(teamID)
 	}
 
 	return r.SendEnvelope(map[string]string{"message": "Member removed from team"})

@@ -12,7 +12,7 @@ Whatomate keeps a record-level audit trail of every create / update / delete on 
 Two surfaces, same data:
 
 - **Settings → Audit Logs** — the global activity feed across all resources, with filters (resource type, user, action, date range).
-- **Per-resource activity tab** — every detail view (Account, Team, Campaign, Template, etc.) embeds an activity panel showing only the entries for that one record. The Chatbot Settings page goes further: each tab (Messages, Agents, Hours, SLA, AI) has its own activity feed for just that section.
+- **Per-resource activity tab** — every detail view (Account, Team, Campaign, Template, etc.) embeds an activity panel showing only the entries for that one record.
 
 ## What gets logged
 
@@ -22,7 +22,6 @@ Audit logging is hooked into the handlers that mutate user-facing resources. The
 |---|---|
 | `account` | WhatsApp account create / update / delete |
 | `campaign` | Campaign lifecycle |
-| `chatbot` | Chatbot flow create / update / delete |
 | `contact` | Contact create / update / delete |
 | `organization` | Org settings changes |
 | `role` | Custom role create / update / delete |
@@ -30,13 +29,6 @@ Audit logging is hooked into the handlers that mutate user-facing resources. The
 | `template` | Template create / publish / delete |
 | `user` | User create / update / disable |
 | `webhook` | Outbound webhook config |
-| `ai_context` | Chatbot AI context entries |
-| `keyword_rule` | Chatbot keyword auto-reply rules |
-| `settings.chatbot.messages` | Chatbot greeting / fallback / out-of-hours messages |
-| `settings.chatbot.agents` | Chatbot routing config |
-| `settings.chatbot.hours` | Business-hours config |
-| `settings.chatbot.sla` | SLA / escalation config |
-| `settings.chatbot.ai` | AI provider / model config |
 
 <Aside type="note">
   This list is the source of truth as of the current release. New audited resources are added by calling `audit.LogAudit(...)` in the relevant handler — if you don't see something audited that you expect, it's an open item rather than intentional.
@@ -75,9 +67,9 @@ A small set of fields is excluded from diffs to keep the audit log readable and 
 
 - **Metadata**: `id`, `created_at`, `updated_at`, `deleted_at`, `organization_id`, `created_by`, `updated_by`, `created_by_id`, `updated_by_id`.
 - **Sensitive / opaque values**: `webhook_verify_token`, `header_media_id`, `header_media_local_path`, `meta_template_id`, `api_config`.
-- **Bulk / structural fields** that would dwarf the diff: `members`, `recipients`, `steps`, `buttons`, `sample_values`, `menu`, `panel_config`, `canvas_layout`, `completion_config`, `conditions`, `cancel_keywords`, `welcome_audio_url`.
+- **Bulk / structural fields** that would dwarf the diff: `members`, `recipients`, `steps`, `buttons`, `sample_values`, `menu`, `panel_config`, `canvas_layout`, `completion_config`, `conditions`, `welcome_audio_url`.
 
-A few fields are **flattened** instead of dropped — for example, an updated keyword rule logs `response_content` as just its `body` sub-field rather than the entire JSON blob, so you see the human-readable change.
+A few fields are **flattened** instead of dropped — a JSONB field is logged as just its readable sub-field rather than the entire JSON blob, so you see the human-readable change.
 
 <Aside type="note">
   Sensitive credentials (WhatsApp access tokens, SSO client secrets) are stored encrypted at rest using `app.encryption_key` and never appear in audit changes — they are never set as plaintext fields on the audited models.
@@ -144,7 +136,7 @@ A few classes of state change deliberately or incidentally don't show up in audi
 
 - **Message sends** — sending a WhatsApp message is a routine operation; it shows up in conversation history rather than the audit log.
 - **Authentication events** — logins, refreshes, SSO callbacks, API key uses. These are in the application log (`slog`), not the audit table.
-- **Chat-side operations** — assigning a conversation, transferring to an agent, marking resolved. Tracked in conversation state rather than the audit log.
-- **Background job runs** — campaign worker progress, SLA breach checks, webhook delivery. These are operational signals, logged elsewhere.
+- **Chat-side operations** — assigning a conversation, claiming, marking resolved. Tracked in conversation state rather than the audit log.
+- **Background job runs** — campaign worker progress, webhook delivery. These are operational signals, logged elsewhere.
 
-If you need any of the above for compliance, treat the application log + the conversation/transfer/job tables as additional sources alongside the audit log.
+If you need any of the above for compliance, treat the application log + the conversation/job tables as additional sources alongside the audit log.

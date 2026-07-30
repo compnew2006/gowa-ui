@@ -246,18 +246,6 @@ func (a *App) CreateOrganization(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create organization", nil, "")
 	}
 
-	// Create default chatbot settings
-	chatbotSettings := models.ChatbotSettings{
-		OrganizationID:     org.ID,
-		IsEnabled:          false,
-		SessionTimeoutMins: 30,
-	}
-	if err := tx.Create(&chatbotSettings).Error; err != nil {
-		tx.Rollback()
-		a.Log.Error("Failed to create chatbot settings", "error", err, "org_id", org.ID)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create organization", nil, "")
-	}
-
 	// Get admin role for this org and add the creator as admin
 	var adminRole models.CustomRole
 	if err := tx.Where("organization_id = ? AND name = ? AND is_system = ?", org.ID, "admin", true).First(&adminRole).Error; err != nil {

@@ -11,40 +11,30 @@ import (
 
 // AgentAnalyticsSummary represents overall agent analytics
 type AgentAnalyticsSummary struct {
-	TotalTransfersHandled int64            `json:"total_transfers_handled"`
-	ActiveTransfers       int64            `json:"active_transfers"`
-	AvgQueueTimeMins      float64          `json:"avg_queue_time_mins"`
-	AvgFirstResponseMins  float64          `json:"avg_first_response_mins"`
-	AvgResolutionMins     float64          `json:"avg_resolution_mins"`
-	TransfersBySource     map[string]int64 `json:"transfers_by_source"`
-	TotalBreakTimeMins    float64          `json:"total_break_time_mins"`
-	BreakCount            int64            `json:"break_count"`
-	AvgRating             float64          `json:"avg_rating"`
-	RatingsCount          int64            `json:"ratings_count"`
+	TotalBreakTimeMins float64 `json:"total_break_time_mins"`
+	BreakCount         int64   `json:"break_count"`
+	AvgRating          float64 `json:"avg_rating"`
+	RatingsCount       int64   `json:"ratings_count"`
 }
 
 // AgentPerformanceStats represents performance metrics for an agent
 type AgentPerformanceStats struct {
-	AgentID              string  `json:"agent_id"`
-	AgentName            string  `json:"agent_name"`
-	AvgFirstResponseMins float64 `json:"avg_first_response_mins"`
-	AvgResolutionMins    float64 `json:"avg_resolution_mins"`
-	TransfersHandled     int64   `json:"transfers_handled"`
-	ActiveTransfers      int64   `json:"active_transfers"`
-	MessagesSent         int64   `json:"messages_sent"`
-	TotalBreakTimeMins   float64 `json:"total_break_time_mins"`
-	BreakCount           int64   `json:"break_count"`
-	IsAvailable          bool    `json:"is_available"`
-	CurrentBreakStart    *string `json:"current_break_start,omitempty"`
-	AvgRating            float64 `json:"avg_rating"`
-	RatingsCount         int64   `json:"ratings_count"`
+	AgentID            string  `json:"agent_id"`
+	AgentName          string  `json:"agent_name"`
+	MessagesSent       int64   `json:"messages_sent"`
+	TotalBreakTimeMins float64 `json:"total_break_time_mins"`
+	BreakCount         int64   `json:"break_count"`
+	IsAvailable        bool    `json:"is_available"`
+	CurrentBreakStart  *string `json:"current_break_start,omitempty"`
+	AvgRating          float64 `json:"avg_rating"`
+	RatingsCount       int64   `json:"ratings_count"`
 }
 
-// TrendPoint represents a data point for time-series charts
+// TrendPoint represents a data point for time-series charts (rated closures)
 type TrendPoint struct {
-	Date             string  `json:"date"`
-	TransfersHandled int64   `json:"transfers_handled"`
-	AvgResponseMins  float64 `json:"avg_response_mins"`
+	Date         string  `json:"date"`
+	RatingsCount int64   `json:"ratings_count"`
+	AvgRating    float64 `json:"avg_rating"`
 }
 
 // AgentAnalyticsResponse is the full API response
@@ -88,9 +78,6 @@ func (a *App) GetAgentAnalytics(r *fastglue.Request) error {
 	}
 
 	response := AgentAnalyticsResponse{
-		Summary: AgentAnalyticsSummary{
-			TransfersBySource: make(map[string]int64),
-		},
 		TrendData: []TrendPoint{},
 	}
 
@@ -129,105 +116,14 @@ func (a *App) GetAgentAnalytics(r *fastglue.Request) error {
 	return r.SendEnvelope(response)
 }
 
-// GetAgentDetails returns detailed analytics for a specific agent
-
-// GetAgentComparison returns comparison data for multiple agents
-
 // Helper functions
 
 func (a *App) calculateSummaryStats(orgID uuid.UUID, start, end time.Time, summary *AgentAnalyticsSummary) {
-	// Total transfers handled (resumed)
-	a.DB.Model(&models.AgentTransfer{}).
-		Where("organization_id = ? AND status = ? AND transferred_at >= ? AND transferred_at <= ?",
-			orgID, models.TransferStatusResumed, start, end).
-		Count(&summary.TotalTransfersHandled)
-
-	// Active transfers
-	a.DB.Model(&models.AgentTransfer{}).
-		Where("organization_id = ? AND status = ?", orgID, models.TransferStatusActive).
-		Count(&summary.ActiveTransfers)
-
-	// Average queue time (time from transfer to assignment for assigned transfers)
-	type AvgResult struct {
-		Avg float64
-	}
-	var queueTimeResult AvgResult
-	a.DB.Model(&models.AgentTransfer{}).
-		Select("AVG(EXTRACT(EPOCH FROM (updated_at - transferred_at))/60) as avg").
-		Where("organization_id = ? AND agent_id IS NOT NULL AND transferred_at >= ? AND transferred_at <= ?",
-			orgID, start, end).
-		Scan(&queueTimeResult)
-	summary.AvgQueueTimeMins = queueTimeResult.Avg
-
-	// Average resolution time (time from transfer to resume)
-	var resolutionTimeResult AvgResult
-	a.DB.Model(&models.AgentTransfer{}).
-		Select("AVG(EXTRACT(EPOCH FROM (resumed_at - transferred_at))/60) as avg").
-		Where("organization_id = ? AND status = ? AND resumed_at IS NOT NULL AND transferred_at >= ? AND transferred_at <= ?",
-			orgID, models.TransferStatusResumed, start, end).
-		Scan(&resolutionTimeResult)
-	summary.AvgResolutionMins = resolutionTimeResult.Avg
-
-	// Transfers by source
-	type SourceCount struct {
-		Source string
-		Count  int64
-	}
-	var sourceCounts []SourceCount
-	a.DB.Model(&models.AgentTransfer{}).
-		Select("source, COUNT(*) as count").
-		Where("organization_id = ? AND transferred_at >= ? AND transferred_at <= ?", orgID, start, end).
-		Group("source").
-		Scan(&sourceCounts)
-
-	for _, sc := range sourceCounts {
-		summary.TransfersBySource[sc.Source] = sc.Count
-	}
-
 	// Customer satisfaction from close-rating cycles (org-wide)
 	summary.AvgRating, summary.RatingsCount = a.calculateClosureRatingStats(orgID, nil, start, end)
 }
 
 func (a *App) calculateAgentSummaryStats(orgID, agentID uuid.UUID, start, end time.Time, summary *AgentAnalyticsSummary) {
-	// Total transfers handled by this agent (resumed)
-	a.DB.Model(&models.AgentTransfer{}).
-		Where("organization_id = ? AND agent_id = ? AND status = ? AND transferred_at >= ? AND transferred_at <= ?",
-			orgID, agentID, models.TransferStatusResumed, start, end).
-		Count(&summary.TotalTransfersHandled)
-
-	// Active transfers for this agent
-	a.DB.Model(&models.AgentTransfer{}).
-		Where("organization_id = ? AND agent_id = ? AND status = ?", orgID, agentID, models.TransferStatusActive).
-		Count(&summary.ActiveTransfers)
-
-	// Average resolution time for this agent
-	type AvgResult struct {
-		Avg float64
-	}
-	var resolutionTimeResult AvgResult
-	a.DB.Model(&models.AgentTransfer{}).
-		Select("AVG(EXTRACT(EPOCH FROM (resumed_at - transferred_at))/60) as avg").
-		Where("organization_id = ? AND agent_id = ? AND status = ? AND resumed_at IS NOT NULL AND transferred_at >= ? AND transferred_at <= ?",
-			orgID, agentID, models.TransferStatusResumed, start, end).
-		Scan(&resolutionTimeResult)
-	summary.AvgResolutionMins = resolutionTimeResult.Avg
-
-	// Transfers by source for this agent
-	type SourceCount struct {
-		Source string
-		Count  int64
-	}
-	var sourceCounts []SourceCount
-	a.DB.Model(&models.AgentTransfer{}).
-		Select("source, COUNT(*) as count").
-		Where("organization_id = ? AND agent_id = ? AND transferred_at >= ? AND transferred_at <= ?", orgID, agentID, start, end).
-		Group("source").
-		Scan(&sourceCounts)
-
-	for _, sc := range sourceCounts {
-		summary.TransfersBySource[sc.Source] = sc.Count
-	}
-
 	// Calculate break time
 	summary.TotalBreakTimeMins, summary.BreakCount = a.calculateBreakTime(agentID, start, end)
 
@@ -247,35 +143,11 @@ func (a *App) calculateAgentStats(orgID, agentID uuid.UUID, start, end time.Time
 		stats.IsAvailable = agent.IsAvailable
 	}
 
-	// Transfers handled (resumed)
-	a.DB.Model(&models.AgentTransfer{}).
-		Where("organization_id = ? AND agent_id = ? AND status = ? AND transferred_at >= ? AND transferred_at <= ?",
-			orgID, agentID, models.TransferStatusResumed, start, end).
-		Count(&stats.TransfersHandled)
-
-	// Active transfers
-	a.DB.Model(&models.AgentTransfer{}).
-		Where("organization_id = ? AND agent_id = ? AND status = ?", orgID, agentID, models.TransferStatusActive).
-		Count(&stats.ActiveTransfers)
-
-	// Messages sent - count outgoing messages to contacts during agent's active transfers
-	// This captures all messages sent while the agent was handling the conversation
+	// Messages sent by this agent in the period
 	a.DB.Model(&models.Message{}).
-		Where("organization_id = ? AND direction = ? AND created_at >= ? AND created_at <= ?", orgID, models.DirectionOutgoing, start, end).
-		Where("contact_id IN (SELECT contact_id FROM agent_transfers WHERE agent_id = ? AND organization_id = ?)", agentID, orgID).
+		Where("organization_id = ? AND direction = ? AND sent_by_user_id = ? AND created_at >= ? AND created_at <= ?",
+			orgID, models.DirectionOutgoing, agentID, start, end).
 		Count(&stats.MessagesSent)
-
-	// Average resolution time
-	type AvgResult struct {
-		Avg float64
-	}
-	var resolutionTimeResult AvgResult
-	a.DB.Model(&models.AgentTransfer{}).
-		Select("AVG(EXTRACT(EPOCH FROM (resumed_at - transferred_at))/60) as avg").
-		Where("organization_id = ? AND agent_id = ? AND status = ? AND resumed_at IS NOT NULL AND transferred_at >= ? AND transferred_at <= ?",
-			orgID, agentID, models.TransferStatusResumed, start, end).
-		Scan(&resolutionTimeResult)
-	stats.AvgResolutionMins = resolutionTimeResult.Avg
 
 	// Calculate break time from availability logs
 	stats.TotalBreakTimeMins, stats.BreakCount = a.calculateBreakTime(agentID, start, end)
@@ -318,19 +190,17 @@ func (a *App) calculateClosureRatingStats(orgID uuid.UUID, agentID *uuid.UUID, s
 
 func (a *App) calculateAllAgentStats(orgID uuid.UUID, start, end time.Time) []AgentPerformanceStats {
 	// List every user who acts as an agent in this org: team members with the
-	// agent role, plus anyone who actually handled transfers or closed rated
-	// conversations — so orgs that don't use teams still see their staff here.
+	// agent role, plus anyone who closed rated conversations — so orgs that
+	// don't use teams still see their staff here.
 	var agents []models.User
 	if err := a.DB.
 		Where("users.organization_id = ?", orgID).
 		Where(`users.id IN (SELECT team_members.user_id FROM team_members
 				JOIN teams ON teams.id = team_members.team_id
 				WHERE teams.organization_id = ? AND team_members.role = ?)
-			OR users.id IN (SELECT agent_id FROM agent_transfers
-				WHERE organization_id = ? AND agent_id IS NOT NULL)
 			OR users.id IN (SELECT closed_by_user_id FROM chat_closure_ratings
 				WHERE organization_id = ? AND closed_by_user_id IS NOT NULL)`,
-			orgID, models.TeamRoleAgent, orgID, orgID).
+			orgID, models.TeamRoleAgent, orgID).
 		Find(&agents).Error; err != nil {
 		a.Log.Error("Failed to fetch agents for analytics", "error", err, "org_id", orgID)
 		return []AgentPerformanceStats{}
@@ -385,6 +255,7 @@ func (a *App) calculateBreakTime(agentID uuid.UUID, start, end time.Time) (total
 	return totalMins, count
 }
 
+// calculateTrendData builds a time series of rated close-rating cycles.
 func (a *App) calculateTrendData(orgID uuid.UUID, start, end time.Time, groupBy string, agentID *uuid.UUID) []TrendPoint {
 	var dateFormat string
 	var dateTrunc string
@@ -401,27 +272,29 @@ func (a *App) calculateTrendData(orgID uuid.UUID, start, end time.Time, groupBy 
 	type TrendResult struct {
 		Date  time.Time
 		Count int64
+		Avg   float64
 	}
 
-	query := a.DB.Model(&models.AgentTransfer{}).
-		Select("DATE_TRUNC('"+dateTrunc+"', transferred_at) as date, COUNT(*) as count").
-		Where("organization_id = ? AND status = ? AND transferred_at >= ? AND transferred_at <= ?",
-			orgID, models.TransferStatusResumed, start, end)
+	query := a.DB.Model(&models.ChatClosureRating{}).
+		Select("DATE_TRUNC('"+dateTrunc+"', rated_at) as date, COUNT(*) as count, COALESCE(AVG(rating), 0) as avg").
+		Where("organization_id = ? AND status = ? AND rated_at >= ? AND rated_at <= ?",
+			orgID, models.RatingStatusRated, start, end)
 
 	if agentID != nil {
-		query = query.Where("agent_id = ?", *agentID)
+		query = query.Where("closed_by_user_id = ?", *agentID)
 	}
 
 	var results []TrendResult
-	query.Group("DATE_TRUNC('" + dateTrunc + "', transferred_at)").
+	query.Group("DATE_TRUNC('" + dateTrunc + "', rated_at)").
 		Order("date ASC").
 		Scan(&results)
 
 	trendData := make([]TrendPoint, len(results))
 	for i, r := range results {
 		trendData[i] = TrendPoint{
-			Date:             r.Date.Format(dateFormat),
-			TransfersHandled: r.Count,
+			Date:         r.Date.Format(dateFormat),
+			RatingsCount: r.Count,
+			AvgRating:    r.Avg,
 		}
 	}
 

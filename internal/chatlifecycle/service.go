@@ -63,8 +63,8 @@ func New(db *gorm.DB, wsHub *websocket.Hub, log logf.Logger) *Service {
 
 // CreateSystemMessage records a system message in the conversation timeline.
 //
-// Exported so that callers outside the chat-lifecycle handlers (notably
-// internal/handlers/chatbot_processor.go, which writes "Conversation reopened
+// Exported so that callers outside the chat-lifecycle handlers (notably the
+// incoming-message pipeline, which writes "Conversation reopened
 // by customer" on inbound messages) can migrate off the *App helper. Until
 // that migration happens, the handler layer keeps a thin delegator.
 //
@@ -538,7 +538,7 @@ func (s *Service) Invite(ctx context.Context, orgID, inviterID, targetID uuid.UU
 
 	// Verify target user exists in the same org. (The handler currently does
 	// this lookup too; we re-do it here so the service is self-contained for
-	// the follow-up that lets other callers — e.g. chatbot_processor — use it.)
+	// the follow-up that lets other callers use it.)
 	var target models.User
 	if err := s.db.Where("id = ? AND organization_id = ?", targetID, orgID).First(&target).Error; err != nil {
 		return InviteResult{}, fmt.Errorf("chat: target user not found: %w", err)

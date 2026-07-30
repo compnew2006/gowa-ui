@@ -227,53 +227,6 @@ Remove a user from a team. Requires admin role or team manager role.
 DELETE /api/teams/{id}/members/{user_id}
 ```
 
-## Team-Based Transfers
-
-When creating transfers via flows or the API, you can specify a team:
-
-```bash
-POST /api/chatbot/transfers
-```
-
-### Request Body
-
-```json
-{
-  "contact_id": "uuid",
-  "team_id": "uuid",
-  "notes": "Customer needs help with order #12345"
-}
-```
-
-When a transfer is created with a `team_id`:
-1. The team's assignment strategy is applied
-2. For `round_robin` or `load_balanced`, the transfer is auto-assigned to an available team member
-3. For `manual`, the transfer goes to the team queue
-
-### Queue Counts
-
-The list transfers endpoint returns queue counts per team:
-
-```bash
-GET /api/chatbot/transfers?status=active
-```
-
-### Response
-
-```json
-{
-  "status": "success",
-  "data": {
-    "transfers": [...],
-    "general_queue_count": 3,
-    "team_queue_counts": {
-      "team-uuid-1": 5,
-      "team-uuid-2": 2
-    }
-  }
-}
-```
-
 <Aside type="tip">
   Use teams to organize your support structure. For example, create separate teams for Sales, Support, and Billing, each with their own assignment strategy optimized for their workflow.
 </Aside>

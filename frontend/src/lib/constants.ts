@@ -31,7 +31,6 @@ export const RESOURCE_LABELS: Record<string, string> = {
   contacts: 'Contacts',
   messages: 'Messages',
   teams: 'Teams',
-  chatbot: 'Chatbot',
   campaigns: 'Campaigns',
   templates: 'Templates',
   analytics: 'Analytics',

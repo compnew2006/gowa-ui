@@ -40,7 +40,6 @@ import { useAuthStore } from '@/stores/auth'
 import {
   MessageSquare,
   Users,
-  Bot,
   Send,
   TrendingUp,
   TrendingDown,
@@ -56,9 +55,7 @@ import {
   Megaphone,
   Settings,
   Contact,
-  Workflow,
   Key,
-  UserX,
   MessageSquareText,
   Webhook,
   ShieldCheck,
@@ -127,10 +124,7 @@ const selectedShortcuts = ref<string[]>([])
 const SHORTCUT_REGISTRY = computed(() => ({
   chat: { label: t('dashboard.startChat'), to: '/chat', icon: MessageSquare, gradient: 'from-emerald-500 to-green-600' },
   campaigns: { label: t('nav.campaigns'), to: '/campaigns', icon: Megaphone, gradient: 'from-orange-500 to-amber-600' },
-  chatbot: { label: t('nav.chatbot'), to: '/chatbot', icon: Bot, gradient: 'from-purple-500 to-pink-600' },
   contacts: { label: t('nav.contacts'), to: '/settings/contacts', icon: Contact, gradient: 'from-cyan-500 to-blue-600' },
-  flows: { label: t('nav.flows'), to: '/chatbot/flows', icon: Workflow, gradient: 'from-indigo-500 to-violet-600' },
-  transfers: { label: t('nav.transfers'), to: '/chatbot/transfers', icon: UserX, gradient: 'from-rose-500 to-red-600' },
   agentAnalytics: { label: t('nav.agentAnalytics'), to: '/analytics/agents', icon: BarChart3, gradient: 'from-teal-500 to-cyan-600' },
   settings: { label: t('nav.settings'), to: '/settings', icon: Settings, gradient: 'from-gray-500 to-zinc-600' },
   accounts: { label: t('nav.accounts'), to: '/settings/accounts', icon: Users, gradient: 'from-violet-500 to-purple-600' },
@@ -329,12 +323,8 @@ const getWidgetIcon = (dataSource: string) => {
       return MessageSquare
     case 'contacts':
       return Users
-    case 'sessions':
-      return Bot
     case 'campaigns':
       return Send
-    case 'transfers':
-      return Users
     default:
       return BarChart3
   }

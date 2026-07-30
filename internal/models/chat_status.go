@@ -18,7 +18,7 @@ const MaxCollaborators = 10
 // EffectiveStatus reads the chat status from the contact's metadata.
 //
 // When the chat_status key is absent — legacy rows, or contacts created by
-// inbound/GOWA sync that never passed through the chatbot processor or a
+// inbound/GOWA sync that never passed through a
 // claim — the status is INFERRED from assignment instead of blindly
 // defaulting to open:
 //   - unassigned → pending (must be claimed before an agent can view it)
@@ -27,7 +27,7 @@ const MaxCollaborators = 10
 // Defaulting an unassigned contact to open silently bypasses the claim gate
 // in both the backend privacy guard (GetMessages) and the frontend claim
 // screen, exposing an unclaimed conversation. Inferring from assignment keeps
-// the "unassigned == pending" invariant that the chatbot processor enforces on
+// the "unassigned == pending" invariant that the incoming pipeline enforces on
 // write, without needing a data backfill.
 func (c *Contact) EffectiveStatus() ChatStatus {
 	if c.Metadata == nil {

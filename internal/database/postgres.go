@@ -78,20 +78,6 @@ func GetMigrationModels() []MigrationModel {
 		{"BulkMessageRecipient", &models.BulkMessageRecipient{}},
 		{"NotificationRule", &models.NotificationRule{}},
 
-		// Chatbot models
-		{"ChatbotSettings", &models.ChatbotSettings{}},
-		{"KeywordRule", &models.KeywordRule{}},
-		{"ChatbotFlow", &models.ChatbotFlow{}},
-		// ChatbotFlowStep table is no longer managed by AutoMigrate — the
-		// v2 graph runner uses ChatbotFlow.Graph exclusively. The model
-		// type is retained only so BackfillChatbotFlowGraph can read
-		// existing rows once during startup, then the table can be
-		// dropped in a future maintenance migration.
-		{"ChatbotSession", &models.ChatbotSession{}},
-		{"ChatbotSessionMessage", &models.ChatbotSessionMessage{}},
-		{"AIContext", &models.AIContext{}},
-		{"AgentTransfer", &models.AgentTransfer{}},
-
 		// User tracking
 		{"UserAvailabilityLog", &models.UserAvailabilityLog{}},
 
@@ -162,6 +148,16 @@ func RunMigrationWithProgress(db *gorm.DB, adminCfg *config.DefaultAdminConfig) 
 		currentStep++
 	}
 
+	// One-time destructive cleanup of the removed chatbot / agent-transfer /
+	// SLA subsystem. Idempotent (IF EXISTS) — a no-op once the tables and
+	// columns are gone. See the chatbot feature removal.
+	for _, stmt := range dropChatbotArtifacts() {
+		if err := silentDB.Exec(stmt).Error; err != nil {
+			fmt.Printf("\n  \033[31m✗ Chatbot cleanup failed\033[0m\n\n")
+			return fmt.Errorf("failed to drop chatbot artifacts: %w", err)
+		}
+	}
+
 	// Seed permissions (always run, will skip if already seeded)
 	printProgress(currentStep, totalSteps)
 	if err := SeedPermissionsAndRoles(silentDB); err != nil {
@@ -217,6 +213,17 @@ func repeatChar(char string, n int) string {
 	return result
 }
 
+// dropChatbotArtifacts returns the one-time destructive SQL that removes the
+// chatbot, keyword, flow, AI-context, session, and agent-transfer tables plus
+// the chatbot tracking columns on contacts. All statements use IF EXISTS so
+// re-running is a harmless no-op.
+func dropChatbotArtifacts() []string {
+	return []string{
+		`DROP TABLE IF EXISTS chatbot_session_messages, chatbot_sessions, chatbot_flow_steps, chatbot_flows, keyword_rules, ai_contexts, agent_transfers, chatbot_settings CASCADE`,
+		`ALTER TABLE contacts DROP COLUMN IF EXISTS chatbot_last_message_at, DROP COLUMN IF EXISTS chatbot_reminder_sent`,
+	}
+}
+
 // getIndexes returns all index creation SQL statements
 func getIndexes() []string {
 	return []string{
@@ -244,8 +251,6 @@ func getIndexes() []string {
 				UPDATE whatsapp_accounts SET gowa_jid = phone_id WHERE (gowa_jid IS NULL OR gowa_jid = '') AND phone_id LIKE '%@s.whatsapp.net';
 			END IF;
 		END $$`,
-		`ALTER TABLE chatbot_sessions ALTER COLUMN phone_number TYPE varchar(50)`,
-		`ALTER TABLE agent_transfers ALTER COLUMN phone_number TYPE varchar(50)`,
 		`ALTER TABLE bulk_message_recipients ALTER COLUMN phone_number TYPE varchar(50)`,
 		// An earlier prototype of the CSAT feature created chat_closure_ratings
 		// with NOT NULL columns (chat_id, closing_agent_id, closed_at, ...) the
@@ -275,16 +280,7 @@ func getIndexes() []string {
 		`CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_contacts_org_phone ON contacts(organization_id, phone_number)`,
 		`CREATE INDEX IF NOT EXISTS idx_contacts_assigned_read ON contacts(assigned_user_id, is_read)`,
-		`CREATE INDEX IF NOT EXISTS idx_sessions_phone_status ON chatbot_sessions(organization_id, phone_number, status)`,
-		`CREATE INDEX IF NOT EXISTS idx_keyword_rules_priority ON keyword_rules(organization_id, is_enabled, priority DESC)`,
-		`CREATE INDEX IF NOT EXISTS idx_agent_transfers_active ON agent_transfers(organization_id, phone_number, status)`,
-		`CREATE INDEX IF NOT EXISTS idx_agent_transfers_org_contact ON agent_transfers(organization_id, contact_id, status)`,
-		`CREATE INDEX IF NOT EXISTS idx_agent_transfers_agent_active ON agent_transfers(agent_id, status) WHERE status = 'active'`,
-		`CREATE INDEX IF NOT EXISTS idx_agent_transfers_team ON agent_transfers(team_id, status) WHERE team_id IS NOT NULL`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_templates_account_name_lang ON templates(whats_app_account, name, language)`,
-		`CREATE INDEX IF NOT EXISTS idx_keyword_rules_account ON keyword_rules(whats_app_account, is_enabled, priority DESC)`,
-		`CREATE INDEX IF NOT EXISTS idx_chatbot_flows_account ON chatbot_flows(whats_app_account, is_enabled)`,
-		`CREATE INDEX IF NOT EXISTS idx_ai_contexts_account ON ai_contexts(whats_app_account, is_enabled, priority DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_bulk_campaigns_account ON bulk_message_campaigns(whats_app_account, status)`,
 		`CREATE INDEX IF NOT EXISTS idx_notification_rules_account ON notification_rules(whats_app_account, is_enabled)`,
 		`CREATE INDEX IF NOT EXISTS idx_messages_account ON messages(whats_app_account, created_at DESC)`,
@@ -640,7 +636,7 @@ func SeedSystemRolesForOrg(db *gorm.DB, orgID uuid.UUID) error {
 		IsDefault   bool
 	}{
 		{"admin", "Full system access", false},
-		{"manager", "Manage chatbot, campaigns, and team operations", false},
+		{"manager", "Manage campaigns and team operations", false},
 		{"agent", "Handle customer conversations", true},
 	}
 
@@ -719,10 +715,9 @@ func SeedDefaultWidgetsForOrg(db *gorm.DB, orgID, userID uuid.UUID) error {
 	}{
 		{"Total Messages", "Total number of messages sent and received", "messages", "number", "blue", nil, 1, 0, 0, 3, 3},
 		{"Active Contacts", "Number of contacts with recent activity", "contacts", "number", "green", nil, 2, 3, 0, 3, 3},
-		{"Chatbot Sessions", "Active chatbot conversation sessions", "sessions", "number", "purple", nil, 3, 6, 0, 3, 3},
 		{"Total Campaigns", "Number of bulk message campaigns", "campaigns", "number", "orange", nil, 4, 9, 0, 3, 3},
 		{"Recent Messages", "Latest conversations from your contacts", "messages", "table", "", nil, 5, 0, 3, 6, 8},
-		{"Quick Actions", "Common tasks and shortcuts", "shortcuts", "shortcuts", "", models.JSONB{"shortcuts": []any{"chat", "campaigns", "templates", "chatbot"}}, 6, 6, 3, 6, 8},
+		{"Quick Actions", "Common tasks and shortcuts", "shortcuts", "shortcuts", "", models.JSONB{"shortcuts": []any{"chat", "campaigns", "templates"}}, 6, 6, 3, 6, 8},
 	}
 
 	for _, wd := range defaultWidgetsData {

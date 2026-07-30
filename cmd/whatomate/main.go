@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/shridarpatil/whatomate/internal/assignment"
 	"github.com/shridarpatil/whatomate/internal/chatlifecycle"
 	"github.com/shridarpatil/whatomate/internal/config"
 	"github.com/shridarpatil/whatomate/internal/database"
@@ -157,11 +156,6 @@ func runServer(args []string) {
 		if err := database.RunMigrationWithProgress(db, &cfg.DefaultAdmin); err != nil {
 			lo.Fatal("Migration failed", "error", err)
 		}
-		// Backfill v2 graph for any legacy chatbot flow still on Steps[].
-		// Idempotent — re-running is a no-op once every row is converted.
-		if err := handlers.BackfillChatbotFlowGraph(db, lo); err != nil {
-			lo.Fatal("Chatbot flow graph backfill failed", "error", err)
-		}
 		// Backfill GOWA webhook secrets for accounts created without one (FR-017).
 		// Ensures no GOWA account is left webhook-unprotected. Idempotent.
 		if err := handlers.BackfillGowaWebhookSecrets(db, cfg, lo); err != nil {
@@ -223,10 +217,6 @@ func runServer(args []string) {
 		HTTPClient: httpClient,
 	}
 
-	// Initialize shared assignment engine (used by chat transfers)
-	assigner := assignment.New(db, rdb, lo)
-	app.Assigner = assigner
-
 	// Chat-lifecycle state machine: claim/release/close/reopen/join/leave and
 	// the audit + system-message + WS side effects they emit. The handlers in
 	// chat_lifecycle.go are thin HTTP adapters over this service.
@@ -273,12 +263,6 @@ func runServer(args []string) {
 			lo.Fatal("Server failed", "error", err)
 		}
 	}()
-
-	// Start SLA processor (runs every minute)
-	slaProcessor := handlers.NewSLAProcessor(app, time.Minute)
-	slaCtx, slaCancel := context.WithCancel(context.Background())
-	go slaProcessor.Start(slaCtx)
-	lo.Info("SLA processor started")
 
 	// Start daily chat-reset processor (polls every minute, resets assigned
 	// chats to pending per account schedule).
@@ -342,12 +326,6 @@ func runServer(args []string) {
 	lo.Info("Stopping campaign stats subscriber...")
 	app.StopCampaignStatsSubscriber()
 	lo.Info("Campaign stats subscriber stopped")
-
-	// Stop SLA processor
-	lo.Info("Stopping SLA processor...")
-	slaCancel()
-	slaProcessor.Stop()
-	lo.Info("SLA processor stopped")
 
 	// Stop chat reset processor
 	lo.Info("Stopping chat reset processor...")
@@ -725,11 +703,11 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.POST("/api/contacts", app.CreateContact)
 	g.GET("/api/contacts/{id}", app.GetContact)
 	g.GET("/api/contacts/{id}/avatar", app.RefreshContactAvatar)
+	g.GET("/api/contacts/{id}/avatar/image", app.ServeContactAvatar)
 	g.PUT("/api/contacts/{id}", app.UpdateContact)
 	g.DELETE("/api/contacts/{id}", app.DeleteContact)
 	g.PUT("/api/contacts/{id}/assign", app.AssignContact)
 	g.PUT("/api/contacts/{id}/tags", app.UpdateContactTags)
-	g.GET("/api/contacts/{id}/session-data", app.GetContactSessionData)
 
 	// Scheduled messages
 	g.POST("/api/contacts/{id}/scheduled-messages", app.CreateScheduledMessage)
@@ -809,38 +787,6 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.DELETE("/api/campaigns/{id}/recipients/{recipientId}", app.DeleteCampaignRecipient)
 	g.POST("/api/campaigns/{id}/media", app.UploadCampaignMedia)
 	g.GET("/api/campaigns/{id}/media", app.ServeCampaignMedia)
-
-	// Chatbot Settings
-	g.GET("/api/chatbot/settings", app.GetChatbotSettings)
-	g.PUT("/api/chatbot/settings", app.UpdateChatbotSettings)
-
-	// Keyword Rules
-	g.GET("/api/chatbot/keywords", app.ListKeywordRules)
-	g.POST("/api/chatbot/keywords", app.CreateKeywordRule)
-	g.GET("/api/chatbot/keywords/{id}", app.GetKeywordRule)
-	g.PUT("/api/chatbot/keywords/{id}", app.UpdateKeywordRule)
-	g.DELETE("/api/chatbot/keywords/{id}", app.DeleteKeywordRule)
-
-	// Chatbot Flows
-	g.GET("/api/chatbot/flows", app.ListChatbotFlows)
-	g.POST("/api/chatbot/flows", app.CreateChatbotFlow)
-	g.GET("/api/chatbot/flows/{id}", app.GetChatbotFlow)
-	g.PUT("/api/chatbot/flows/{id}", app.UpdateChatbotFlow)
-	g.DELETE("/api/chatbot/flows/{id}", app.DeleteChatbotFlow)
-
-	// AI Contexts
-	g.GET("/api/chatbot/ai-contexts", app.ListAIContexts)
-	g.POST("/api/chatbot/ai-contexts", app.CreateAIContext)
-	g.GET("/api/chatbot/ai-contexts/{id}", app.GetAIContext)
-	g.PUT("/api/chatbot/ai-contexts/{id}", app.UpdateAIContext)
-	g.DELETE("/api/chatbot/ai-contexts/{id}", app.DeleteAIContext)
-
-	// Agent Transfers
-	g.GET("/api/chatbot/transfers", app.ListAgentTransfers)
-	g.POST("/api/chatbot/transfers", app.CreateAgentTransfer)
-	g.POST("/api/chatbot/transfers/pick", app.PickNextTransfer)
-	g.PUT("/api/chatbot/transfers/{id}/resume", app.ResumeFromTransfer)
-	g.PUT("/api/chatbot/transfers/{id}/assign", app.AssignAgentTransfer)
 
 	// Teams (admin/manager - access control in handler)
 	g.GET("/api/teams", app.ListTeams)

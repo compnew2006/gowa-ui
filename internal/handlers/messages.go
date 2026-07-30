@@ -74,9 +74,6 @@ type MessageSendOptions struct {
 	// DispatchWebhook enables webhook dispatch for message.sent event (default: true)
 	DispatchWebhook bool
 
-	// TrackSLA enables SLA tracking for chatbot messages (default: false)
-	TrackSLA bool
-
 	// SentByUserID sets the user who sent the message (for agent messages)
 	SentByUserID *uuid.UUID
 
@@ -85,7 +82,7 @@ type MessageSendOptions struct {
 	Async bool
 
 	// MarkIncomingRead marks the contact's incoming messages as read after a
-	// successful send. Used for chatbot replies so a bot-handled exchange
+	// successful send. Used for automated replies so an auto-handled exchange
 	// doesn't leave an "unread" badge in the agent's contact list.
 	MarkIncomingRead bool
 }
@@ -95,17 +92,16 @@ func DefaultSendOptions() MessageSendOptions {
 	return MessageSendOptions{
 		BroadcastWebSocket: true,
 		DispatchWebhook:    true,
-		TrackSLA:           false,
 		Async:              true,
 	}
 }
 
-// ChatbotSendOptions returns options suitable for chatbot sends
-func ChatbotSendOptions() MessageSendOptions {
+// AutoReplySendOptions returns options suitable for automated replies
+// (call auto-reject, CSAT close-rating prompts).
+func AutoReplySendOptions() MessageSendOptions {
 	return MessageSendOptions{
 		BroadcastWebSocket: true,
 		DispatchWebhook:    false,
-		TrackSLA:           true,
 		Async:              false,
 		MarkIncomingRead:   true,
 	}
@@ -116,18 +112,7 @@ func APISendOptions() MessageSendOptions {
 	return MessageSendOptions{
 		BroadcastWebSocket: false,
 		DispatchWebhook:    true,
-		TrackSLA:           false,
 		Async:              true,
-	}
-}
-
-// SLASendOptions returns options suitable for SLA system notifications
-func SLASendOptions() MessageSendOptions {
-	return MessageSendOptions{
-		BroadcastWebSocket: true,
-		DispatchWebhook:    false,
-		TrackSLA:           false,
-		Async:              false, // Sync to ensure message is sent before continuing
 	}
 }
 
@@ -237,15 +222,25 @@ func (a *App) SendOutgoingMessage(ctx context.Context, req OutgoingMessageReques
 		a.broadcastNewMessage(req.Account.OrganizationID, msg, req.Contact)
 	}
 
-	if opts.TrackSLA {
-		a.UpdateContactChatbotMessage(req.Contact.ID)
-	}
-
 	// Update contact's last message
 	preview := a.getMessagePreview(req)
 	a.updateContactLastMessage(req.Contact, preview)
 
 	return msg, nil
+}
+
+// sendAndSaveTextMessage sends a text message and saves it to the database.
+// Uses the unified SendOutgoingMessage for consistent behavior. Shared by the
+// call auto-reject and CSAT close-rating flows.
+func (a *App) sendAndSaveTextMessage(account *models.WhatsAppAccount, contact *models.Contact, message string) error {
+	ctx := context.Background()
+	_, err := a.SendOutgoingMessage(ctx, OutgoingMessageRequest{
+		Account: account,
+		Contact: contact,
+		Type:    models.MessageTypeText,
+		Content: message,
+	}, AutoReplySendOptions())
+	return err
 }
 
 // ============================================================================
@@ -551,9 +546,9 @@ func (a *App) finalizeMessageSend(msg *models.Message, req OutgoingMessageReques
 		})
 	}
 
-	// Mark the contact's incoming messages as read once a chatbot reply has
+	// Mark the contact's incoming messages as read once an automated reply has
 	// gone out. Keeps the agent's contact-list unread count clean for
-	// conversations the bot is auto-handling. See issue #280.
+	// conversations handled automatically. See issue #280.
 	if opts.MarkIncomingRead {
 		a.markMessagesAsRead(req.Account.OrganizationID, req.Contact.ID, req.Contact)
 	}

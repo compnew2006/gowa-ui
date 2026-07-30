@@ -3,8 +3,6 @@ title: Configuration
 description: Complete configuration reference for Whatomate
 ---
 
-import { Aside } from '@astrojs/starlight/components';
-
 Whatomate uses a TOML configuration file for all settings. By default, it looks for `config.toml` in the current directory; pass `-config /path/to/config.toml` to override.
 
 A complete commented example lives in [`config.example.toml`](https://github.com/shridarpatil/whatomate/blob/main/config.example.toml) at the repository root — copy it to `config.toml` and edit. The reference below documents every section.
@@ -79,10 +77,6 @@ password = "admin"
 full_name = "Admin"
 ```
 
-<Aside type="note">
-  AI provider API keys (OpenAI, Anthropic, Google) are configured **per organization** through the UI under **Settings → Chatbot → AI** — they are not in `config.toml`.
-</Aside>
-
 ## Sections in detail
 
 ### `[app]`
@@ -116,7 +110,6 @@ Required. Used for:
 - Job queue (Redis Streams) for campaign sends
 - Pub/Sub for campaign-stats fan-out
 - Rate-limit counters
-- Cache for chatbot flows / keyword rules
 
 Set `tls = true` and provide `username` + `password` for managed services like Upstash or AWS ElastiCache Serverless.
 

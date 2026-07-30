@@ -138,35 +138,6 @@ test.describe('Chat composer', () => {
   })
 })
 
-test.describe('Chat conditional actions', () => {
-  let chatPage: ChatPage
-  let contactId: string
-
-  test.beforeEach(async ({ page, request }) => {
-    const api = new ApiHelper(request)
-    await api.login(ADMIN_USER.email, ADMIN_USER.password)
-    const contact = await api.createContact(layoutScope.phone(), layoutScope.name('Transfer'))
-    contactId = contact.id
-
-    await loginAsAdmin(page)
-    chatPage = new ChatPage(page)
-    await chatPage.goto(contactId)
-  })
-
-  // transfer / resume are conditional on chatbot session state, which the
-  // chat-layout suite does not seed. Asserting unconditionally would be a
-  // flaky guess; marking fixme with the reason instead of a tautology.
-  test.fixme('transfer button renders when a chatbot session is active', async ({ page }) => {
-    const transferBtn = page.getByRole('button', { name: /Transfer/i })
-    await expect(transferBtn).toBeVisible()
-  })
-
-  test.fixme('resume button renders when a chatbot session is paused', async ({ page }) => {
-    const resumeBtn = page.getByRole('button', { name: /Resume/i })
-    await expect(resumeBtn).toBeVisible()
-  })
-})
-
 test.describe('Chat messages display', () => {
   let chatPage: ChatPage
   let contactId: string

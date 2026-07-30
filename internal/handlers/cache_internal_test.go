@@ -235,52 +235,6 @@ func TestInvalidateWebhooksCache_DeletesKey(t *testing.T) {
 	assert.Equal(t, int64(0), exists)
 }
 
-// --- getSLAEnabledSettingsCached ---
-
-func TestGetSLAEnabledSettingsCached_OnlySLAEnabledRows(t *testing.T) {
-	app := cacheTestApp(t)
-	orgA := testutil.CreateTestOrganization(t, app.DB)
-	orgB := testutil.CreateTestOrganization(t, app.DB)
-
-	// Wipe any pre-existing rows so we can assert exact counts.
-	require.NoError(t, app.DB.Exec("DELETE FROM chatbot_settings").Error)
-	app.InvalidateSLASettingsCache()
-
-	require.NoError(t, app.DB.Create(&models.ChatbotSettings{
-		BaseModel: models.BaseModel{ID: uuid.New()}, OrganizationID: orgA.ID,
-		WhatsAppAccount: "acc-A", IsEnabled: true,
-		SLA: models.SLAConfig{Enabled: true},
-	}).Error)
-	require.NoError(t, app.DB.Create(&models.ChatbotSettings{
-		BaseModel: models.BaseModel{ID: uuid.New()}, OrganizationID: orgB.ID,
-		WhatsAppAccount: "acc-B", IsEnabled: true,
-		SLA: models.SLAConfig{Enabled: true},
-	}).Error)
-	require.NoError(t, app.DB.Create(&models.ChatbotSettings{
-		BaseModel: models.BaseModel{ID: uuid.New()}, OrganizationID: orgA.ID,
-		WhatsAppAccount: "acc-A2", IsEnabled: true,
-		SLA: models.SLAConfig{Enabled: false},
-	}).Error)
-
-	got, err := app.getSLAEnabledSettingsCached()
-	require.NoError(t, err)
-	require.Len(t, got, 2, "only SLA-enabled rows must be returned, regardless of org")
-	for _, s := range got {
-		assert.True(t, s.SLA.Enabled)
-	}
-}
-
-func TestInvalidateSLASettingsCache_DeletesKey(t *testing.T) {
-	app := cacheTestApp(t)
-	require.NoError(t, app.Redis.Set(context.Background(), slaSettingsCacheKey, "[]", time.Hour).Err())
-
-	app.InvalidateSLASettingsCache()
-
-	exists, err := app.Redis.Exists(context.Background(), slaSettingsCacheKey).Result()
-	require.NoError(t, err)
-	assert.Equal(t, int64(0), exists)
-}
-
 // --- deleteKeysByPattern ---
 
 func TestDeleteKeysByPattern_RemovesAllMatchingKeys(t *testing.T) {
@@ -305,48 +259,4 @@ func TestDeleteKeysByPattern_RemovesAllMatchingKeys(t *testing.T) {
 	exists, err := app.Redis.Exists(ctx, other).Result()
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), exists, "non-matching key must be left alone")
-}
-
-// --- InvalidateChatbotFlowsCache (uses Del on a single key) ---
-
-func TestInvalidateChatbotFlowsCache_DeletesKey(t *testing.T) {
-	app := cacheTestApp(t)
-	orgID := uuid.New()
-	cacheKey := fmt.Sprintf("%s%s", flowsCachePrefix, orgID.String())
-	require.NoError(t, app.Redis.Set(context.Background(), cacheKey, "[]", time.Hour).Err())
-
-	app.InvalidateChatbotFlowsCache(orgID)
-
-	exists, err := app.Redis.Exists(context.Background(), cacheKey).Result()
-	require.NoError(t, err)
-	assert.Equal(t, int64(0), exists)
-}
-
-// --- InvalidateChatbotSettingsCache (pattern-based) ---
-
-func TestInvalidateChatbotSettingsCache_DeletesAllAccountVariants(t *testing.T) {
-	app := cacheTestApp(t)
-	ctx := context.Background()
-	orgID := uuid.New()
-
-	// Plant several account-specific cache keys for the same org.
-	keyA := fmt.Sprintf("%s%s:%s", settingsCachePrefix, orgID.String(), "acc-A")
-	keyB := fmt.Sprintf("%s%s:%s", settingsCachePrefix, orgID.String(), "acc-B")
-	keyOther := fmt.Sprintf("%s%s:%s", settingsCachePrefix, uuid.New().String(), "acc-X")
-	require.NoError(t, app.Redis.Set(ctx, keyA, "{}", time.Hour).Err())
-	require.NoError(t, app.Redis.Set(ctx, keyB, "{}", time.Hour).Err())
-	require.NoError(t, app.Redis.Set(ctx, keyOther, "{}", time.Hour).Err())
-
-	app.InvalidateChatbotSettingsCache(orgID)
-
-	// Both org keys gone…
-	for _, k := range []string{keyA, keyB} {
-		exists, err := app.Redis.Exists(ctx, k).Result()
-		require.NoError(t, err)
-		assert.Equal(t, int64(0), exists, "expected %s to be deleted", k)
-	}
-	// …other org's key untouched.
-	exists, err := app.Redis.Exists(ctx, keyOther).Result()
-	require.NoError(t, err)
-	assert.Equal(t, int64(1), exists, "other org's cache must not be invalidated")
 }

@@ -960,11 +960,8 @@ func (a *App) UpdateAvailability(r *fastglue.Request) error {
 	}
 
 	status := "available"
-	transfersReturned := 0
 	if !req.IsAvailable {
 		status = "away"
-		// Return agent's active transfers to queue when going away
-		transfersReturned = a.ReturnAgentTransfersToQueue(userID, orgID)
 	}
 
 	// Get the current break start time if away
@@ -978,10 +975,9 @@ func (a *App) UpdateAvailability(r *fastglue.Request) error {
 	}
 
 	return r.SendEnvelope(map[string]any{
-		"message":            "Availability updated successfully",
-		"is_available":       user.IsAvailable,
-		"status":             status,
-		"break_started_at":   breakStartedAt,
-		"transfers_to_queue": transfersReturned,
+		"message":          "Availability updated successfully",
+		"is_available":     user.IsAvailable,
+		"status":           status,
+		"break_started_at": breakStartedAt,
 	})
 }

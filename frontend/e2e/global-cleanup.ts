@@ -48,15 +48,6 @@ const CLEANUP_STATEMENTS: Array<{ label: string; sql: string }> = [
     label: 'conversation_notes for E2E contacts',
     sql: `DELETE FROM conversation_notes WHERE contact_id IN (SELECT id FROM contacts WHERE profile_name LIKE 'E2E-%' OR profile_name LIKE 'E2E %')`,
   },
-  // Agent transfers reference contacts + users + teams.
-  {
-    label: 'agent_transfers for E2E contacts',
-    sql: `DELETE FROM agent_transfers WHERE contact_id IN (SELECT id FROM contacts WHERE profile_name LIKE 'E2E-%' OR profile_name LIKE 'E2E %')`,
-  },
-  {
-    label: 'agent_transfers assigned to E2E users',
-    sql: `DELETE FROM agent_transfers WHERE agent_id IN (SELECT id FROM users WHERE ${E2E_USER_EMAIL_PREDICATE})`,
-  },
   // User org memberships first — covers both E2E users (so we can delete
   // them) and memberships pointing at E2E roles or orgs (so the role / org
   // delete below isn't blocked by FK).
@@ -121,14 +112,6 @@ const CLEANUP_STATEMENTS: Array<{ label: string; sql: string }> = [
     sql: `DELETE FROM tags WHERE ${E2E_NAME_PREDICATE}`,
   },
   {
-    label: 'E2E keyword rules',
-    sql: `DELETE FROM keyword_rules WHERE ${E2E_NAME_PREDICATE}`,
-  },
-  {
-    label: 'E2E AI contexts',
-    sql: `DELETE FROM ai_contexts WHERE ${E2E_NAME_PREDICATE}`,
-  },
-  {
     label: 'E2E custom actions',
     sql: `DELETE FROM custom_actions WHERE ${E2E_NAME_PREDICATE}`,
   },
@@ -143,10 +126,6 @@ const CLEANUP_STATEMENTS: Array<{ label: string; sql: string }> = [
   {
     label: 'E2E whatsapp_accounts',
     sql: `DELETE FROM whatsapp_accounts WHERE name LIKE 'e2e-%' OR name LIKE 'E2E-%'`,
-  },
-  {
-    label: 'chatbot_settings for E2E orgs',
-    sql: `DELETE FROM chatbot_settings WHERE organization_id IN (SELECT id FROM organizations WHERE ${E2E_NAME_PREDICATE})`,
   },
   // custom_roles in E2E orgs may not match name-based cleanup (a default
   // role auto-created with the org carries the system name). Strip them

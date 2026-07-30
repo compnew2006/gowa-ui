@@ -277,8 +277,8 @@ func (a *App) IncrementCannedResponseUsage(r *fastglue.Request) error {
 // intentionally excluded so the activity log reflects user edits only.
 //
 // Note: the buttons array is serialised under "button_config" because the
-// shared audit "buttons" field is on the global skipFields list (chatbot flow
-// step buttons are noisy on every edit). Stringifying gives a readable
+// shared audit "buttons" field is on the global skipFields list (button
+// arrays are noisy on every edit). Stringifying gives a readable
 // before/after in the activity log.
 func cannedResponseAuditSnapshot(cr *models.CannedResponse) map[string]any {
 	if cr == nil {
@@ -311,7 +311,7 @@ func cannedResponseToResponse(cr models.CannedResponse) CannedResponseResponse {
 
 // buttonsToJSONBArray converts the typed request shape into the JSONBArray
 // column. We round-trip through JSON so the stored shape matches what the
-// chatbot flow steps use (and what the frontend / whatsapp client expect).
+// frontend / whatsapp client expect.
 func buttonsToJSONBArray(buttons []CannedResponseButton) models.JSONBArray {
 	if len(buttons) == 0 {
 		return models.JSONBArray{}

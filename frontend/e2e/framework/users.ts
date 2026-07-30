@@ -7,8 +7,8 @@
  *
  *   const handle = await createUserWithPermissions(api, scope, {
  *     permissions: [
- *       { resource: 'transfers', action: 'read' },
- *       { resource: 'transfers', action: 'write' },
+ *       { resource: 'contacts', action: 'read' },
+ *       { resource: 'contacts', action: 'write' },
  *     ],
  *   })
  *   await loginAs(page, handle)

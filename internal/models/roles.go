@@ -46,7 +46,6 @@ const (
 	ResourceTeams                = "teams"
 	ResourceRoles                = "roles"
 	ResourceSettingsGeneral      = "settings.general"
-	ResourceSettingsChatbot      = "settings.chatbot"
 	ResourceSettingsSSO          = "settings.sso"
 	ResourceSettingsNotification = "settings.notification"
 	// Audit-only resource for the close-rating settings tab (not a permission).
@@ -55,21 +54,11 @@ const (
 	ResourceSettingsCallAutoReject = "settings.call_auto_reject"
 	// Audit-only resource for the daily chat-reset settings tab (not a permission).
 	ResourceSettingsChatReset = "settings.chat_reset"
-	// Chatbot sub-resources — used only as audit_log resource_type values
-	// for per-tab activity feeds, not checked by the permission system.
-	ResourceSettingsChatbotMessages = "settings.chatbot.messages"
-	ResourceSettingsChatbotAgents   = "settings.chatbot.agents"
-	ResourceSettingsChatbotHours    = "settings.chatbot.hours"
-	ResourceSettingsChatbotSLA      = "settings.chatbot.sla"
-	ResourceSettingsChatbotAI       = "settings.chatbot.ai"
 	ResourceAccounts                = "accounts"
 	ResourceDevices                 = "devices"
 	ResourceGowaInstances           = "gowa_instances"
 	ResourceTemplates               = "templates"
-	ResourceFlowsChatbot            = "flows.chatbot"
 	ResourceCampaigns               = "campaigns"
-	ResourceChatbotKeywords         = "chatbot.keywords"
-	ResourceChatbotAI               = "chatbot.ai"
 	ResourceChat                    = "chat"
 	ResourceChatAssign              = "chat.assign"
 	ResourceChatCollaborate         = "chat.collaborate"
@@ -77,7 +66,6 @@ const (
 	ResourceTags                    = "tags"
 	ResourceAnalytics               = "analytics"
 	ResourceAnalyticsAgents         = "analytics.agents"
-	ResourceTransfers               = "transfers"
 	ResourceWebhooks                = "webhooks"
 	ResourceAPIKeys                 = "api_keys"
 	ResourceCannedResponses         = "canned_responses"
@@ -120,8 +108,6 @@ func DefaultPermissions() []Permission {
 		// Settings
 		{Resource: ResourceSettingsGeneral, Action: ActionRead, Description: "View general settings"},
 		{Resource: ResourceSettingsGeneral, Action: ActionWrite, Description: "Edit general settings"},
-		{Resource: ResourceSettingsChatbot, Action: ActionRead, Description: "View chatbot settings"},
-		{Resource: ResourceSettingsChatbot, Action: ActionWrite, Description: "Edit chatbot settings"},
 		{Resource: ResourceSettingsSSO, Action: ActionRead, Description: "View SSO settings"},
 		{Resource: ResourceSettingsSSO, Action: ActionWrite, Description: "Edit SSO settings"},
 
@@ -145,26 +131,11 @@ func DefaultPermissions() []Permission {
 		{Resource: ResourceTemplates, Action: ActionWrite, Description: "Create and edit templates"},
 		{Resource: ResourceTemplates, Action: ActionDelete, Description: "Delete templates"},
 
-		// Chatbot Flows
-		{Resource: ResourceFlowsChatbot, Action: ActionRead, Description: "View chatbot flows"},
-		{Resource: ResourceFlowsChatbot, Action: ActionWrite, Description: "Create and edit chatbot flows"},
-		{Resource: ResourceFlowsChatbot, Action: ActionDelete, Description: "Delete chatbot flows"},
-
 		// Campaigns
 		{Resource: ResourceCampaigns, Action: ActionRead, Description: "View campaigns"},
 		{Resource: ResourceCampaigns, Action: ActionWrite, Description: "Create and edit campaigns"},
 		{Resource: ResourceCampaigns, Action: ActionDelete, Description: "Delete campaigns"},
 		{Resource: ResourceCampaigns, Action: ActionExecute, Description: "Execute campaigns"},
-
-		// Chatbot Keywords
-		{Resource: ResourceChatbotKeywords, Action: ActionRead, Description: "View keyword rules"},
-		{Resource: ResourceChatbotKeywords, Action: ActionWrite, Description: "Create and edit keyword rules"},
-		{Resource: ResourceChatbotKeywords, Action: ActionDelete, Description: "Delete keyword rules"},
-
-		// Chatbot AI
-		{Resource: ResourceChatbotAI, Action: ActionRead, Description: "View AI contexts"},
-		{Resource: ResourceChatbotAI, Action: ActionWrite, Description: "Create and edit AI contexts"},
-		{Resource: ResourceChatbotAI, Action: ActionDelete, Description: "Delete AI contexts"},
 
 		// Chat
 		{Resource: ResourceChat, Action: ActionRead, Description: "View chat conversations"},
@@ -189,11 +160,6 @@ func DefaultPermissions() []Permission {
 		{Resource: ResourceAnalytics, Action: ActionWrite, Description: "Create and edit dashboard widgets"},
 		{Resource: ResourceAnalytics, Action: ActionDelete, Description: "Delete dashboard widgets"},
 		{Resource: ResourceAnalyticsAgents, Action: ActionRead, Description: "View agent analytics"},
-
-		// Transfers
-		{Resource: ResourceTransfers, Action: ActionRead, Description: "View agent transfers"},
-		{Resource: ResourceTransfers, Action: ActionWrite, Description: "Create transfers"},
-		{Resource: ResourceTransfers, Action: ActionPickup, Description: "Pickup transfers from queue"},
 
 		// Webhooks
 		{Resource: ResourceWebhooks, Action: ActionRead, Description: "View webhooks"},
@@ -239,7 +205,6 @@ func SystemRolePermissions() map[string][]string {
 		"teams:read",
 		// Settings
 		"settings.general:read", "settings.general:write",
-		"settings.chatbot:read", "settings.chatbot:write",
 		// Accounts
 		"accounts:read", "accounts:write", "accounts:delete",
 		// Devices
@@ -248,13 +213,8 @@ func SystemRolePermissions() map[string][]string {
 		"gowa_instances:read", "gowa_instances:write", "gowa_instances:delete",
 		// Templates
 		"templates:read", "templates:write", "templates:delete",
-		// Flows
-		"flows.chatbot:read", "flows.chatbot:write", "flows.chatbot:delete",
 		// Campaigns
 		"campaigns:read", "campaigns:write", "campaigns:delete", "campaigns:execute",
-		// Chatbot
-		"chatbot.keywords:read", "chatbot.keywords:write", "chatbot.keywords:delete",
-		"chatbot.ai:read", "chatbot.ai:write", "chatbot.ai:delete",
 		// Chat
 		"chat:read", "chat:write", "chat.assign:write", "chat.collaborate:write",
 		// Contacts
@@ -263,8 +223,6 @@ func SystemRolePermissions() map[string][]string {
 		"tags:read", "tags:write", "tags:delete",
 		// Analytics
 		"analytics:read", "analytics.agents:read",
-		// Transfers
-		"transfers:read", "transfers:write", "transfers:pickup",
 		// Webhooks
 		"webhooks:read", "webhooks:write", "webhooks:delete",
 		// Canned Responses
@@ -286,8 +244,6 @@ func SystemRolePermissions() map[string][]string {
 		"tags:read",
 		// Analytics (own)
 		"analytics.agents:read",
-		// Transfers
-		"transfers:read", "transfers:write", "transfers:pickup",
 		// Canned Responses (read only)
 		"canned_responses:read",
 	}

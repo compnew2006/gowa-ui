@@ -180,25 +180,12 @@ func (a *App) ServeMediaZip(r *fastglue.Request) error {
 }
 
 // canAccessContactMedia reports whether the given user may access media
-// belonging to contactID. It mirrors the ownership logic in ServeMedia
-// (media.go:212-227): assigned owner, direct active transfer, or member of
-// the team an active transfer targets.
+// belonging to contactID. It mirrors the ownership logic in ServeMedia:
+// assigned owner or collaborator (via scopeAssignedContact).
 func (a *App) canAccessContactMedia(userID, orgID, contactID uuid.UUID) bool {
 	var contact models.Contact
 	q := a.scopeAssignedContact(a.DB.Where("id = ? AND organization_id = ?", contactID, orgID), userID, orgID)
-	if err := q.First(&contact).Error; err == nil {
-		return true
-	}
-	// Not owner / not directly assigned — check team membership via an active
-	// team transfer.
-	var transfer models.AgentTransfer
-	if err := a.DB.Where("contact_id = ? AND organization_id = ? AND status = ? AND team_id IS NOT NULL",
-		contactID, orgID, models.TransferStatusActive).First(&transfer).Error; err != nil {
-		return false
-	}
-	var count int64
-	a.DB.Model(&models.TeamMember{}).Where("team_id = ? AND user_id = ?", transfer.TeamID, userID).Count(&count)
-	return count > 0
+	return q.First(&contact).Error == nil
 }
 
 // resolveMediaPath validates a stored MediaURL against the storage base dir,

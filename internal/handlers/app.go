@@ -9,7 +9,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
-	"github.com/shridarpatil/whatomate/internal/assignment"
 	"github.com/shridarpatil/whatomate/internal/chatlifecycle"
 	"github.com/shridarpatil/whatomate/internal/config"
 	"github.com/shridarpatil/whatomate/internal/queue"
@@ -34,8 +33,6 @@ type App struct {
 	CampaignSubCancel context.CancelFunc
 	// HTTPClient is a shared HTTP client with connection pooling for external API calls
 	HTTPClient *http.Client
-	// Assigner provides shared team-based agent assignment
-	Assigner *assignment.Assigner
 	// ChatLifecycle owns the chat conversation state machine (claim/release/
 	// close/reopen/join/leave/invite/remove) and its audit + system-message +
 	// WS side effects. Handlers in chat_lifecycle.go are thin HTTP adapters

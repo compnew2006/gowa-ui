@@ -1,15 +1,11 @@
 import {
   LayoutDashboard,
   MessageSquare,
-  Bot,
   Megaphone,
   Settings,
   Users,
   Contact,
-  Workflow,
-  Sparkles,
   Key,
-  UserX,
   MessageSquareText,
   Webhook,
   BarChart3,
@@ -61,22 +57,8 @@ export const navigationSections: NavSection[] = [
   },
   {
     label: 'nav.sectionMessaging',
-    permissions: ['settings.chatbot', 'chatbot.keywords', 'flows.chatbot', 'chatbot.ai', 'transfers', 'campaigns', 'flows.whatsapp'],
+    permissions: ['campaigns', 'flows.whatsapp'],
     items: [
-      {
-        name: 'nav.chatbot',
-        path: '/chatbot',
-        icon: Bot,
-        permission: 'settings.chatbot',
-        childPermissions: ['settings.chatbot', 'chatbot.keywords', 'flows.chatbot', 'chatbot.ai', 'transfers'],
-        children: [
-          { name: 'nav.overview', path: '/chatbot', icon: Bot, permission: 'settings.chatbot' },
-          { name: 'nav.keywords', path: '/chatbot/keywords', icon: Key, permission: 'chatbot.keywords' },
-          { name: 'nav.flows', path: '/chatbot/flows', icon: Workflow, permission: 'flows.chatbot' },
-          { name: 'nav.aiContexts', path: '/chatbot/ai', icon: Sparkles, permission: 'chatbot.ai' },
-          { name: 'nav.transfers', path: '/chatbot/transfers', icon: UserX, permission: 'transfers' }
-        ]
-      },
       {
         name: 'nav.campaigns',
         path: '/campaigns',
@@ -99,7 +81,7 @@ export const navigationSections: NavSection[] = [
   },
   {
     label: '',
-    permissions: ['settings.general', 'settings.chatbot', 'accounts', 'contacts', 'canned_responses', 'tags', 'teams', 'users', 'roles', 'api_keys', 'webhooks', 'custom_actions', 'settings.sso', 'audit_logs', 'gowa_instances'],
+    permissions: ['settings.general', 'accounts', 'contacts', 'canned_responses', 'tags', 'teams', 'users', 'roles', 'api_keys', 'webhooks', 'custom_actions', 'settings.sso', 'audit_logs', 'gowa_instances'],
     pinBottom: true,
     items: [
       {
@@ -107,10 +89,9 @@ export const navigationSections: NavSection[] = [
         path: '/settings',
         icon: Settings,
         permission: 'settings.general',
-        childPermissions: ['settings.general', 'settings.chatbot', 'accounts', 'contacts', 'canned_responses', 'tags', 'teams', 'users', 'roles', 'api_keys', 'webhooks', 'custom_actions', 'settings.sso', 'audit_logs', 'gowa_instances'],
+        childPermissions: ['settings.general', 'accounts', 'contacts', 'canned_responses', 'tags', 'teams', 'users', 'roles', 'api_keys', 'webhooks', 'custom_actions', 'settings.sso', 'audit_logs', 'gowa_instances'],
         children: [
           { name: 'nav.general', path: '/settings', icon: Settings, permission: 'settings.general' },
-          { name: 'nav.chatbot', path: '/settings/chatbot', icon: Bot, permission: 'settings.chatbot' },
           { name: 'nav.accounts', path: '/settings/accounts', icon: Users, permission: 'accounts' },
           { name: 'nav.contacts', path: '/settings/contacts', icon: Contact, permission: 'contacts' },
           { name: 'nav.cannedResponses', path: '/settings/canned-responses', icon: MessageSquareText, permission: 'canned_responses' },

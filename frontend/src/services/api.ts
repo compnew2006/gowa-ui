@@ -220,7 +220,6 @@ export const contactsService = {
     api.put(`/contacts/${id}/assign`, { user_id: userId }),
   updateTags: (id: string, tags: string[]) =>
     api.put(`/contacts/${id}/tags`, { tags }),
-  getSessionData: (id: string) => api.get(`/contacts/${id}/session-data`),
   markRead: (id: string) => api.post(`/contacts/${encodeURIComponent(id)}/mark-read`),
   // Fetches the contact's current WhatsApp profile picture on demand and
   // returns the freshly-cached avatar_url. Used as a lazy refresh for chats
@@ -377,57 +376,6 @@ export const campaignsService = {
   },
   getMedia: (campaignId: string) =>
     api.get(`/campaigns/${campaignId}/media`, { responseType: 'arraybuffer' })
-}
-
-export const chatbotService = {
-  // Settings
-  getSettings: () => api.get('/chatbot/settings'),
-  updateSettings: (data: any) => api.put('/chatbot/settings', data),
-
-  // Keywords
-  listKeywords: (params?: { search?: string; page?: number; limit?: number }) =>
-    api.get<{ rules: any[]; total?: number }>('/chatbot/keywords', { params }),
-  getKeyword: (id: string) => api.get(`/chatbot/keywords/${id}`),
-  createKeyword: (data: any) => api.post('/chatbot/keywords', data),
-  updateKeyword: (id: string, data: any) => api.put(`/chatbot/keywords/${id}`, data),
-  deleteKeyword: (id: string) => api.delete(`/chatbot/keywords/${id}`),
-
-  // Flows
-  listFlows: (params?: { search?: string; page?: number; limit?: number }) =>
-    api.get<{ flows: any[]; total?: number }>('/chatbot/flows', { params }),
-  getFlow: (id: string) => api.get(`/chatbot/flows/${id}`),
-  createFlow: (data: any) => api.post('/chatbot/flows', data),
-  updateFlow: (id: string, data: any) => api.put(`/chatbot/flows/${id}`, data),
-  deleteFlow: (id: string) => api.delete(`/chatbot/flows/${id}`),
-
-  // AI Contexts
-  listAIContexts: (params?: { search?: string; page?: number; limit?: number }) =>
-    api.get<{ contexts: any[]; total?: number }>('/chatbot/ai-contexts', { params }),
-  getAIContext: (id: string) => api.get(`/chatbot/ai-contexts/${id}`),
-  createAIContext: (data: any) => api.post('/chatbot/ai-contexts', data),
-  updateAIContext: (id: string, data: any) => api.put(`/chatbot/ai-contexts/${id}`, data),
-  deleteAIContext: (id: string) => api.delete(`/chatbot/ai-contexts/${id}`),
-
-  // Agent Transfers
-  listTransfers: (params?: {
-    status?: string
-    agent_id?: string
-    team_id?: string
-    limit?: number
-    offset?: number
-    include?: string // 'all' | 'contact,agent,team' etc.
-  }) => api.get('/chatbot/transfers', { params }),
-  createTransfer: (data: {
-    contact_id: string
-    whatsapp_account: string
-    agent_id?: string
-    notes?: string
-    source?: string
-  }) => api.post('/chatbot/transfers', data),
-  pickNextTransfer: () => api.post('/chatbot/transfers/pick'),
-  resumeTransfer: (id: string) => api.put(`/chatbot/transfers/${id}/resume`),
-  assignTransfer: (id: string, agentId: string | null, teamId?: string | null) =>
-    api.put(`/chatbot/transfers/${id}/assign`, { agent_id: agentId, team_id: teamId })
 }
 
 interface CannedResponseButton {
@@ -985,50 +933,6 @@ export const scheduledMessagesService = {
   update: (id: string, data: { content?: { body?: string }; scheduled_at?: string }) =>
     api.put<ScheduledMessage>(`/scheduled-messages/${id}`, data),
   cancel: (id: string) => api.delete(`/scheduled-messages/${id}`)
-}
-
-interface IVRNodePosition {
-  x: number
-  y: number
-}
-
-// v2 Node-based Chatbot Flow types. Mirrors IVR's graph shape with a
-// chat-specific node-type union. Only types listed in the union are
-// implemented today; others land in Phase 3.
-export type ChatNodeType =
-  | 'start'
-  | 'message'
-  | 'buttons'
-  | 'end'
-  | 'prompt'
-  | 'api_call'
-  | 'condition'
-  | 'timing'
-  | 'set_variable'
-  | 'ai_response'
-  | 'transfer'
-  | 'webhook'
-  | 'goto_flow'
-
-export interface ChatNode {
-  id: string
-  type: ChatNodeType
-  label: string
-  position: IVRNodePosition
-  config: Record<string, any>
-}
-
-export interface ChatEdge {
-  from: string
-  to: string
-  condition: string
-}
-
-export interface ChatFlowGraph {
-  version: 2
-  nodes: ChatNode[]
-  edges: ChatEdge[]
-  entry_node: string
 }
 
 // GOWA Servers (DB-managed GOWA instances + per-instance devices)

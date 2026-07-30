@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -222,7 +224,7 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 			PhoneNumber:        phoneNumber,
 			Name:               profileName,
 			ProfileName:        profileName,
-			AvatarURL:          c.AvatarURL,
+			AvatarURL:          contactAvatarURL(&c),
 			Status:             "active",
 			Tags:               tags,
 			Metadata:           c.Metadata,
@@ -258,44 +260,25 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 
 // scopeAssignedContact narrows a contact query for users who lack the
 // contacts:read permission: they may only access contacts assigned to them
-// (assigned_user_id) or contacts with an active agent transfer to them. With
-// the permission, the query is returned unchanged. Keeping this in one place
-// ensures every contact endpoint enforces the same visibility — assignment
-// via an active transfer counts even when assigned_user_id is unset (which it
-// is unless the AssignToSameAgent setting is on).
+// (assigned_user_id) or contacts where they are a collaborator. With the
+// permission, the query is returned unchanged. Keeping this in one place
+// ensures every contact endpoint enforces the same visibility.
 func (a *App) scopeAssignedContact(query *gorm.DB, userID, orgID uuid.UUID) *gorm.DB {
 	if a.HasPermission(userID, models.ResourceContacts, models.ActionRead, orgID) {
 		return query
 	}
 	// Agents (users without contacts:read) can only access contacts:
-	//   1. assigned to them (assigned_user_id),
-	//   2. with an active agent transfer to them, OR
-	//   3. where they are listed as a collaborator in the contact's metadata.
+	//   1. assigned to them (assigned_user_id), OR
+	//   2. where they are listed as a collaborator in the contact's metadata.
 	// Collaborators are stored in metadata.collaborators as a JSON array of
 	// {user_id, name, role, joined_at}. The @> containment operator reuses the
 	// same pattern as the tags filter above and leverages the GIN index.
 	collaboratorJSON := fmt.Sprintf(`{"collaborators":[{"user_id":"%s"}]}`, userID.String())
 	return query.Where(
-		"assigned_user_id = ? OR id IN (?) OR metadata @> ?::jsonb",
+		"assigned_user_id = ? OR metadata @> ?::jsonb",
 		userID,
-		a.DB.Model(&models.AgentTransfer{}).
-			Select("contact_id").
-			Where("agent_id = ? AND organization_id = ? AND status = ?", userID, orgID, models.TransferStatusActive),
 		collaboratorJSON,
 	)
-}
-
-// hasActiveTransfer reports whether the user has an active agent transfer for
-// the contact. An active transfer is an effective assignment created by the
-// chatbot handoff flow (assigned_user_id stays unset unless AssignToSameAgent
-// is on), so the claim gate must treat the transfer target as the assignee.
-func (a *App) hasActiveTransfer(userID, contactID, orgID uuid.UUID) bool {
-	var n int64
-	a.DB.Model(&models.AgentTransfer{}).
-		Where("contact_id = ? AND agent_id = ? AND organization_id = ? AND status = ?",
-			contactID, userID, orgID, models.TransferStatusActive).
-		Count(&n)
-	return n > 0
 }
 
 // GetContact returns a single contact
@@ -327,12 +310,12 @@ func (a *App) GetContact(r *fastglue.Request) error {
 }
 
 // RefreshContactAvatar fetches the contact's current WhatsApp profile picture
-// (or group icon) on demand and returns the freshly-cached avatar_url. This is
-// the lazy refresh path for contacts created before a GOWA contact sync (e.g.
-// via an inbound message) or whose picture changed after the last sync. The
-// response is always 200 with the current avatar_url (possibly empty when the
-// contact has no picture or no GOWA provider is available); the frontend
-// initials fallback covers the empty case.
+// (or group icon) on demand, caches the bytes locally, and returns the stable
+// backend serve-route URL for them. This is the lazy refresh path for contacts
+// created before a GOWA contact sync (e.g. via an inbound message) or whose
+// picture changed after the last sync. The response is always 200 with an
+// avatar_url (empty when the contact has no picture or no GOWA provider is
+// available); the frontend initials fallback covers the empty case.
 //
 // GET /api/contacts/{id}/avatar
 func (a *App) RefreshContactAvatar(r *fastglue.Request) error {
@@ -357,24 +340,97 @@ func (a *App) RefreshContactAvatar(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
 	}
 
-	// Resolve the owning account. Without one we can't reach GOWA, so return
-	// whatever avatar_url is already cached (may be empty).
-	if contact.WhatsAppAccount == "" {
-		return r.SendEnvelope(map[string]any{"avatar_url": contact.AvatarURL})
+	// Fetch + cache the picture (force so a manual refresh always re-checks the
+	// provider), then return the stable serve-route URL. resolveAndRefreshAvatar
+	// is a no-op when the owning account can't be resolved, so the response
+	// still returns whatever is already cached.
+	a.resolveAndRefreshAvatar(&contact, orgID, true)
+
+	return r.SendEnvelope(map[string]any{"avatar_url": contactAvatarURL(&contact)})
+}
+
+// ServeContactAvatar streams the locally-cached copy of a contact's WhatsApp
+// profile picture. WhatsApp CDN URLs are signed and expire, so the bytes are
+// downloaded once (see refreshContactAvatar) and served from this stable,
+// cookie-authenticated route that plain <img> tags can load directly. When the
+// cache is empty (or the file has vanished) it attempts a best-effort lazy
+// fetch before giving up with a 404, at which point the frontend shows colored
+// initials.
+//
+// GET /api/contacts/{id}/avatar/image
+func (a *App) ServeContactAvatar(r *fastglue.Request) error {
+	orgID, _, err := a.requireOrgAndUserID(r)
+	if err != nil {
+		return nil
+	}
+	contactID, err := parsePathUUID(r, "id", "contact")
+	if err != nil {
+		return nil
+	}
+
+	var contact models.Contact
+	if err := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID).First(&contact).Error; err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
+	}
+
+	// Populate the cache lazily the first time this contact's picture is
+	// requested (contacts created by an inbound message before a GOWA sync).
+	if contact.AvatarLocalPath == "" {
+		a.resolveAndRefreshAvatar(&contact, orgID, false)
+	}
+
+	data, ok := a.readLocalMedia(contact.AvatarLocalPath)
+	if !ok {
+		// The file is missing from disk (e.g. cache cleared or a stale row) —
+		// try one forced re-fetch before giving up.
+		a.resolveAndRefreshAvatar(&contact, orgID, true)
+		if data, ok = a.readLocalMedia(contact.AvatarLocalPath); !ok {
+			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "No avatar", nil, "")
+		}
+	}
+
+	sniffLen := len(data)
+	if sniffLen > 512 {
+		sniffLen = 512
+	}
+	r.RequestCtx.Response.Header.Set("Content-Type", http.DetectContentType(data[:sniffLen]))
+	r.RequestCtx.Response.Header.Set("Cache-Control", "private, max-age=3600")
+	r.RequestCtx.SetBody(data)
+	return nil
+}
+
+// resolveAndRefreshAvatar resolves the contact's owning GOWA account and does a
+// best-effort profile-picture fetch+cache via refreshContactAvatar. It is a
+// no-op (and logs at warn) when the account can't be resolved, so callers can
+// invoke it unconditionally. force=true always re-checks the provider; false
+// skips contacts that already have a locally-cached avatar.
+func (a *App) resolveAndRefreshAvatar(contact *models.Contact, orgID uuid.UUID, force bool) {
+	if contact == nil || contact.WhatsAppAccount == "" {
+		return
 	}
 	var account models.WhatsAppAccount
 	if err := a.DB.Where("name = ? AND organization_id = ?", contact.WhatsAppAccount, orgID).First(&account).Error; err != nil {
 		a.Log.Warn("Contact avatar refresh: account not found", "account", contact.WhatsAppAccount, "contact", contact.ID)
-		return r.SendEnvelope(map[string]any{"avatar_url": contact.AvatarURL})
+		return
 	}
 	a.decryptAccountSecrets(&account)
-
-	// Fetch the profile picture via the GOWA client.
 	provider := a.resolveProvider(&account)
 	gowaClient, _ := provider.(*gowa.Client)
-	a.refreshContactAvatar(gowaClient, &account, &contact, account.GowaDeviceID, true)
+	a.refreshContactAvatar(gowaClient, &account, contact, account.GowaDeviceID, force)
+}
 
-	return r.SendEnvelope(map[string]any{"avatar_url": contact.AvatarURL})
+// contactAvatarURL returns the stable backend route that serves the contact's
+// locally-cached profile picture, or an empty string when nothing is cached
+// yet (the frontend then renders colored initials). A cache-busting token
+// derived from the stored filename (a fresh UUID on every re-download) makes
+// the browser refetch when the picture changes even though the path is stable.
+func contactAvatarURL(contact *models.Contact) string {
+	if contact == nil || contact.AvatarLocalPath == "" {
+		return ""
+	}
+	base := filepath.Base(contact.AvatarLocalPath)
+	token := strings.TrimSuffix(base, filepath.Ext(base))
+	return fmt.Sprintf("/api/contacts/%s/avatar/image?v=%s", contact.ID, token)
 }
 
 // GetMessages returns messages for a contact
@@ -390,8 +446,6 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 		return nil
 	}
 
-	hasContactsReadPermission := a.HasPermission(userID, models.ResourceContacts, models.ActionRead, orgID)
-
 	// Verify contact belongs to org (and to user if no contacts:read permission)
 	var contact models.Contact
 	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
@@ -402,8 +456,6 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 
 	// Managers/admins (contacts:write) can see any chat — no restrictions.
 	// Agents can only see messages if: they own it, are a collaborator, or have collaborate permission.
-	// An active agent transfer counts as ownership — the chatbot handoff
-	// assigns work without setting assigned_user_id (see scopeAssignedContact).
 	// Closed conversations are readable by everyone (read-only).
 	hasContactsWritePermission := a.HasPermission(userID, models.ResourceContacts, models.ActionWrite, orgID)
 	hasCollaboratePermission := a.HasPermission(userID, models.ResourceChatCollaborate, models.ActionWrite, orgID)
@@ -411,8 +463,7 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 	isCollaborator := contact.IsCollaborator(userID.String())
 	canViewContent := hasContactsWritePermission || isAssigned || isCollaborator || hasCollaboratePermission
 
-	if !canViewContent && contact.EffectiveStatus() == models.ChatStatusPending &&
-		!a.hasActiveTransfer(userID, contactID, orgID) {
+	if !canViewContent && contact.EffectiveStatus() == models.ChatStatusPending {
 		var pendingCount int64
 		a.DB.Model(&models.Message{}).
 			Where("contact_id = ? AND direction = ? AND status != ?",
@@ -459,23 +510,7 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 		}
 	}
 
-	// Check if user without contacts:read should only see current conversation
-	if !hasContactsReadPermission {
-		settings, err := a.getChatbotSettingsCached(orgID, "")
-		if err == nil {
-			if settings.AgentAssignment.CurrentConversationOnly {
-				// Find the most recent session for this contact
-				var session models.ChatbotSession
-				if err := a.DB.Where("contact_id = ? AND organization_id = ?", contactID, orgID).
-					Order("started_at DESC").First(&session).Error; err == nil {
-					// Filter messages to only those from this session onwards
-					msgQuery = msgQuery.Where("created_at >= ?", session.StartedAt)
-				}
-			}
-		}
-	}
-
-	// Count total messages (with session filter if applied)
+	// Count total messages
 	var total int64
 	msgQuery.Model(&models.Message{}).Count(&total)
 
@@ -676,16 +711,14 @@ func (a *App) MarkContactRead(r *fastglue.Request) error {
 	// Mirror the GetMessages privacy guard: a caller who can't view the
 	// content of a pending unclaimed chat must not mark it read either —
 	// doing so would clear the unread badge and fire read receipts (blue
-	// ticks) for messages nobody has actually seen. An active agent transfer
-	// counts as ownership, same as in GetMessages.
+	// ticks) for messages nobody has actually seen.
 	hasContactsWritePermission := a.HasPermission(userID, models.ResourceContacts, models.ActionWrite, orgID)
 	hasCollaboratePermission := a.HasPermission(userID, models.ResourceChatCollaborate, models.ActionWrite, orgID)
 	isAssigned := contact.AssignedUserID != nil && *contact.AssignedUserID == userID
 	isCollaborator := contact.IsCollaborator(userID.String())
 	canViewContent := hasContactsWritePermission || isAssigned || isCollaborator || hasCollaboratePermission
 
-	if !canViewContent && contact.EffectiveStatus() == models.ChatStatusPending &&
-		!a.hasActiveTransfer(userID, contactID, orgID) {
+	if !canViewContent && contact.EffectiveStatus() == models.ChatStatusPending {
 		return r.SendErrorEnvelope(fasthttp.StatusForbidden,
 			"Claim this chat to view messages", nil, "chat_not_claimed")
 	}
@@ -1297,9 +1330,11 @@ func (a *App) refreshContactAvatar(client *gowa.Client, account *models.WhatsApp
 	if client == nil || contact == nil || account == nil {
 		return false
 	}
-	// Skip the round-trip when we already have a URL and the caller didn't ask
-	// for a forced refresh (e.g. user clicked "refresh avatar").
-	if !force && contact.AvatarURL != "" {
+	// Skip the round-trip when we already have a locally-cached picture and the
+	// caller didn't ask for a forced refresh (e.g. user clicked "refresh
+	// avatar"). We key the skip on AvatarLocalPath (not AvatarURL) so contacts
+	// carrying only a legacy/expired CDN URL still get their bytes cached.
+	if !force && contact.AvatarLocalPath != "" {
 		return false
 	}
 
@@ -1323,17 +1358,84 @@ func (a *App) refreshContactAvatar(client *gowa.Client, account *models.WhatsApp
 			"contact_id", contact.ID, "phone", phone, "error", err)
 		return false
 	}
-	if avatar == nil || avatar.URL == "" || avatar.URL == contact.AvatarURL {
+	if avatar == nil || avatar.URL == "" {
+		return false
+	}
+	// Nothing to do when the provider handed back the same URL we already
+	// downloaded and the bytes are still on disk.
+	if avatar.URL == contact.AvatarURL && contact.AvatarLocalPath != "" {
 		return false
 	}
 
-	if err := a.DB.Model(contact).Update("avatar_url", avatar.URL).Error; err != nil {
-		a.Log.Error("Failed to persist contact avatar_url",
+	// Download the picture bytes and cache them on disk. WhatsApp CDN URLs are
+	// signed and expire, so we serve our own stable copy instead of hot-linking
+	// the ephemeral URL. Download via the shared SSRF-safe HTTPClient (the GOWA
+	// client uses Basic Auth, which is wrong for the public pps.whatsapp.net CDN).
+	data, err := a.downloadAvatarImage(ctx, avatar.URL)
+	if err != nil {
+		a.Log.Debug("Could not download WhatsApp avatar bytes",
+			"contact_id", contact.ID, "url", avatar.URL, "error", err)
+		return false
+	}
+
+	relPath, err := a.saveMediaBytes(data, "image/jpeg")
+	if err != nil {
+		a.Log.Error("Failed to cache contact avatar",
 			"contact_id", contact.ID, "error", err)
 		return false
 	}
+
+	oldPath := contact.AvatarLocalPath
+	if err := a.DB.Model(contact).Updates(map[string]any{
+		"avatar_url":        avatar.URL,
+		"avatar_local_path": relPath,
+	}).Error; err != nil {
+		a.Log.Error("Failed to persist contact avatar",
+			"contact_id", contact.ID, "error", err)
+		a.removeLocalMedia(relPath) // don't leak the just-written file
+		return false
+	}
 	contact.AvatarURL = avatar.URL
+	contact.AvatarLocalPath = relPath
+	// Best-effort cleanup of the superseded cached copy.
+	if oldPath != "" && oldPath != relPath {
+		a.removeLocalMedia(oldPath)
+	}
 	return true
+}
+
+// maxAvatarBytes caps how many bytes we read from the profile-picture CDN so a
+// hostile/misbehaving URL can't exhaust memory. Profile pictures are small
+// (typically well under 200 KiB); 5 MiB is a generous ceiling.
+const maxAvatarBytes = 5 << 20
+
+// downloadAvatarImage fetches the (public) WhatsApp CDN profile-picture URL via
+// the shared SSRF-safe HTTPClient and returns the response body, capped at
+// maxAvatarBytes. Callers pass a ctx carrying the avatar fetch timeout.
+func (a *App) downloadAvatarImage(ctx context.Context, url string) ([]byte, error) {
+	if a.HTTPClient == nil {
+		return nil, fmt.Errorf("no HTTP client configured")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := a.HTTPClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status %d", resp.StatusCode)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxAvatarBytes))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) == 0 {
+		return nil, fmt.Errorf("empty avatar body")
+	}
+	return data, nil
 }
 
 // isGroupContact reports whether the contact represents a WhatsApp group or
@@ -1568,119 +1670,6 @@ func (a *App) AssignContact(r *fastglue.Request) error {
 		"message":          "Contact assigned successfully",
 		"assigned_user_id": req.UserID,
 	})
-}
-
-// ContactSessionDataResponse represents the session data for a contact's info panel
-type ContactSessionDataResponse struct {
-	SessionID   *uuid.UUID     `json:"session_id,omitempty"`
-	FlowID      *uuid.UUID     `json:"flow_id,omitempty"`
-	FlowName    string         `json:"flow_name,omitempty"`
-	SessionData map[string]any `json:"session_data"`
-	PanelConfig map[string]any `json:"panel_config"`
-}
-
-// GetContactSessionData returns session data and panel configuration for a contact
-// Used by the contact info panel in the chat view
-func (a *App) GetContactSessionData(r *fastglue.Request) error {
-	orgID, userID, err := a.requireOrgAndUserID(r)
-	if err != nil {
-		return nil
-	}
-	contactID, err := parsePathUUID(r, "id", "contact")
-	if err != nil {
-		return nil
-	}
-
-	// Verify contact belongs to org (users without full read permission can only access assigned contacts)
-	var contact models.Contact
-	query := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID)
-	query = a.scopeAssignedContact(query, userID, orgID)
-	if err := query.First(&contact).Error; err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
-	}
-
-	response := ContactSessionDataResponse{
-		SessionData: make(map[string]any),
-		PanelConfig: map[string]any{"sections": []any{}},
-	}
-
-	// Get the most recent completed or active session for this contact.
-	// A contact that never entered a chatbot flow (or whose sessions were all
-	// cancelled/expired) legitimately has no such row — use Limit(1).Find
-	// instead of First so the empty result is not treated as an error (First
-	// raises gorm.ErrRecordNotFound and logs a spurious "record not found"
-	// trace). The panel simply renders empty in that case.
-	var sessions []models.ChatbotSession
-	if err := a.DB.Where("contact_id = ? AND organization_id = ?", contactID, orgID).
-		Where("status IN ?", []models.SessionStatus{models.SessionStatusActive, models.SessionStatusCompleted}).
-		Order("created_at DESC").
-		Limit(1).
-		Find(&sessions).Error; err != nil {
-		// A genuine DB error (not an empty result) — log it instead of
-		// silently returning an empty panel that masks the failure.
-		a.Log.Error("Failed to load chatbot session for contact panel",
-			"error", err, "contact_id", contactID)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load session data", nil, "")
-	}
-
-	if len(sessions) > 0 {
-		session := sessions[0]
-		response.SessionID = &session.ID
-		response.FlowID = session.CurrentFlowID
-
-		// Get the flow to retrieve panel config
-		// First try current_flow_id, then fall back to _flow_id in session_data
-		var flowID *uuid.UUID
-		if session.CurrentFlowID != nil {
-			flowID = session.CurrentFlowID
-		} else if flowIDStr, ok := session.SessionData["_flow_id"].(string); ok {
-			if parsedID, err := uuid.Parse(flowIDStr); err == nil {
-				flowID = &parsedID
-			}
-		}
-
-		if flowID != nil {
-			// Use cached flow to avoid DB query
-			flow, err := a.getChatbotFlowByIDCached(orgID, *flowID)
-			if err == nil && flow != nil {
-				response.FlowName = flow.Name
-				response.FlowID = flowID
-
-				// Use panel config directly from flow (it's already JSONB/map)
-				if len(flow.PanelConfig) > 0 {
-					response.PanelConfig = flow.PanelConfig
-
-					// Only include session data for configured fields (reduce payload)
-					if session.SessionData != nil {
-						configuredKeys := make(map[string]bool)
-						if sections, ok := flow.PanelConfig["sections"].([]any); ok {
-							for _, sec := range sections {
-								if section, ok := sec.(map[string]any); ok {
-									if fields, ok := section["fields"].([]any); ok {
-										for _, f := range fields {
-											if field, ok := f.(map[string]any); ok {
-												if key, ok := field["key"].(string); ok {
-													configuredKeys[key] = true
-												}
-											}
-										}
-									}
-								}
-							}
-						}
-						// Copy only configured fields to response
-						for key := range configuredKeys {
-							if val, exists := session.SessionData[key]; exists {
-								response.SessionData[key] = val
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-
-	return r.SendEnvelope(response)
 }
 
 // UpdateContactTagsRequest represents the request body for updating contact tags
@@ -2055,7 +2044,7 @@ func (a *App) buildContactResponse(contact *models.Contact, orgID, viewerUserID 
 		PhoneNumber:        phoneNumber,
 		Name:               profileName,
 		ProfileName:        profileName,
-		AvatarURL:          contact.AvatarURL,
+		AvatarURL:          contactAvatarURL(contact),
 		Status:             "active",
 		Tags:               tags,
 		Metadata:           contact.Metadata,

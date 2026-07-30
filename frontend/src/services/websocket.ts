@@ -1,5 +1,4 @@
 import { useContactsStore } from '@/stores/contacts'
-import { useTransfersStore } from '@/stores/transfers'
 import { useAuthStore } from '@/stores/auth'
 import { useNotesStore } from '@/stores/notes'
 import { useScheduledMessagesStore } from '@/stores/scheduledMessages'
@@ -51,12 +50,6 @@ const WS_TYPE_PONG = 'pong'
 
 // Reaction types
 const WS_TYPE_REACTION_UPDATE = 'reaction_update'
-
-// Agent transfer types
-const WS_TYPE_AGENT_TRANSFER = 'agent_transfer'
-const WS_TYPE_AGENT_TRANSFER_RESUME = 'agent_transfer_resume'
-const WS_TYPE_AGENT_TRANSFER_ASSIGN = 'agent_transfer_assign'
-const WS_TYPE_TRANSFER_ESCALATION = 'transfer_escalation'
 
 // Campaign types
 const WS_TYPE_CAMPAIGN_STATS_UPDATE = 'campaign_stats_update'
@@ -173,18 +166,6 @@ class WebSocketService {
         case WS_TYPE_STATUS_UPDATE:
           this.handleStatusUpdate(store, message.payload)
           break
-        case WS_TYPE_AGENT_TRANSFER:
-          this.handleAgentTransfer(message.payload)
-          break
-        case WS_TYPE_AGENT_TRANSFER_RESUME:
-          this.handleAgentTransferResume(message.payload)
-          break
-        case WS_TYPE_AGENT_TRANSFER_ASSIGN:
-          this.handleAgentTransferAssign(message.payload)
-          break
-        case WS_TYPE_TRANSFER_ESCALATION:
-          this.handleTransferEscalation(message.payload)
-          break
         case WS_TYPE_REACTION_UPDATE:
           this.handleReactionUpdate(store, message.payload)
           break
@@ -274,7 +255,7 @@ class WebSocketService {
     }
 
     // Show toast notification for incoming messages if:
-    // 1. Message is incoming (from customer, not chatbot/agent)
+    // 1. Message is incoming (from customer, not agent)
     // 2. Current user is assigned to this contact
     // 3. User has new_message_alerts enabled
     // 4. User is not currently viewing this contact
@@ -311,7 +292,7 @@ class WebSocketService {
     // rather than the WS payload value to avoid pushing untrusted data into
     // a request URL.
     // Skip the call when the message already arrived as 'read' — the backend
-    // pre-marks chatbot-handled messages at save time, and re-marking just
+    // pre-marks messages read at save time when applicable, and re-marking just
     // touches DB rows that are already in the right state.
     // Also skip when the agent isn't actually looking — that includes both
     // tab-hidden (different browser tab) and window-unfocused (browser is
@@ -340,122 +321,6 @@ class WebSocketService {
     const currentContact = store.currentContact
     if (currentContact && payload.contact_id === currentContact.id) {
       store.updateMessageReactions(payload.message_id, payload.reactions)
-    }
-  }
-
-  private handleAgentTransfer(payload: any) {
-    const transfersStore = useTransfersStore()
-    const authStore = useAuthStore()
-
-    // Add transfer to store with default SLA values
-    transfersStore.addTransfer({
-      id: payload.id,
-      contact_id: payload.contact_id,
-      contact_name: payload.contact_name || payload.phone_number,
-      phone_number: payload.phone_number,
-      whatsapp_account: payload.whatsapp_account,
-      status: payload.status,
-      source: payload.source || 'manual',
-      agent_id: payload.agent_id,
-      team_id: payload.team_id,
-      notes: payload.notes,
-      transferred_at: payload.transferred_at,
-      // Default SLA values - will be updated on next fetch
-      sla_breached: false,
-      escalation_level: 0
-    })
-
-    // Refresh to get complete data including SLA fields
-    transfersStore.fetchTransfers({ status: 'active' })
-
-    // Toast only the assigned agent — managers/admins get notification noise
-    // for every transfer in the org otherwise. They can keep the Transfers
-    // page open if they want live updates.
-    const currentUserId = authStore.user?.id
-    const isAssignedToMe = payload.agent_id === currentUserId
-
-    if (isAssignedToMe) {
-      const contactName = payload.contact_name || payload.phone_number
-      toast.info('New Transfer', {
-        description: `${contactName} has been transferred to ${isAssignedToMe ? 'you' : 'agent queue'}`,
-        duration: 5000,
-        action: {
-          label: 'View',
-          onClick: () => router.push('/chatbot/transfers')
-        }
-      })
-    }
-  }
-
-  private handleAgentTransferResume(payload: any) {
-    const transfersStore = useTransfersStore()
-
-    const updated = transfersStore.updateTransfer(payload.id, {
-      status: payload.status,
-      resumed_at: payload.resumed_at,
-      resumed_by: payload.resumed_by
-    })
-
-    // If transfer wasn't found in store, refresh to get latest data
-    if (!updated) {
-      transfersStore.fetchTransfers()
-    }
-  }
-
-  private handleAgentTransferAssign(payload: any) {
-    const transfersStore = useTransfersStore()
-    const authStore = useAuthStore()
-
-    // Try to update existing transfer
-    transfersStore.updateTransfer(payload.id, {
-      agent_id: payload.agent_id,
-      team_id: payload.team_id
-    })
-
-    // Always refresh to ensure UI is in sync (queue counts, etc.)
-    transfersStore.fetchTransfers()
-
-    // Notify if assigned to current user
-    const currentUserId = authStore.user?.id
-    if (payload.agent_id === currentUserId) {
-      toast.info('Transfer Assigned', {
-        description: 'A transfer has been assigned to you',
-        duration: 5000,
-        action: {
-          label: 'View',
-          onClick: () => router.push('/chatbot/transfers')
-        }
-      })
-    }
-  }
-
-  private handleTransferEscalation(payload: any) {
-    const authStore = useAuthStore()
-    const currentUserId = authStore.user?.id
-
-    // Check if current user should be notified
-    const notifyIds: string[] = payload.escalation_notify_ids || []
-    const shouldNotify = notifyIds.includes(currentUserId || '')
-
-    // Trust the backend's escalation_notify_ids list — it already includes
-    // the right people per the escalation rules. Don't broadcast to every
-    // manager too; that's just noise and risks burying real alerts.
-    if (shouldNotify) {
-      const levelName = payload.level_name === 'critical' ? 'Critical' : 'Warning'
-      const contactName = payload.contact_name || payload.phone_number
-
-      // Play notification sound
-      playNotificationSound()
-
-      // Show urgent toast
-      toast.warning(`SLA Escalation: ${levelName}`, {
-        description: `${contactName} has been waiting since ${new Date(payload.waiting_since).toLocaleTimeString()}`,
-        duration: 10000,
-        action: {
-          label: 'View',
-          onClick: () => router.push('/chatbot/transfers')
-        }
-      })
     }
   }
 
@@ -669,10 +534,6 @@ class WebSocketService {
     // Refresh contacts list
     const contactsStore = useContactsStore()
     contactsStore.fetchContacts()
-
-    // Refresh transfers
-    const transfersStore = useTransfersStore()
-    transfersStore.fetchTransfers()
 
     // Show subtle notification
     toast.info('Connection restored', {

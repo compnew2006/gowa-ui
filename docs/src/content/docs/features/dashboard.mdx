@@ -24,9 +24,6 @@ The Dashboard provides a comprehensive view of your WhatsApp business operations
   <Card title="Campaign Performance">
     View the success rate and engagement metrics of your bulk messaging campaigns.
   </Card>
-  <Card title="Chatbot Analytics">
-    Analyze how your automated responses are performing.
-  </Card>
 </CardGrid>
 
 ## Features
@@ -36,7 +33,7 @@ Build your own analytics widgets to track the metrics that matter most. Click **
 
 Each widget is configured with:
 - **Name** — a label displayed on the dashboard
-- **Data Source** — choose from messages, contacts, campaigns, transfers, or sessions
+- **Data Source** — choose from messages, contacts, or campaigns
 - **Metric** — count, sum, or average
 - **Display Type** — number card or chart
 - **Chart Type** — line, bar, or pie (when display type is chart)
@@ -60,8 +57,6 @@ When creating a chart widget, select a **Group By** field to split the data by d
 - **Messages** — status, direction, message_type, whatsapp_account
 - **Contacts** — whatsapp_account, is_read
 - **Campaigns** — status, message_status (aggregates sent/delivered/read/failed counts)
-- **Transfers** — status, source
-- **Sessions** — status
 
 For example, a pie chart on the **campaigns** data source grouped by **message_status** shows slices for sent, delivered, read, and failed message totals across all campaigns in the selected period.
 
@@ -80,7 +75,7 @@ All widgets and dashboard metrics reflect the selected time period. Number widge
 <img src="/whatomate/images/agent-analytics-light.png" alt="Agent Analytics" class="light-only" />
 <img src="/whatomate/images/agent-analytics-dark.png" alt="Agent Analytics" class="dark-only" />
 
-The Agent Analytics page provides performance metrics for your support team, including transfers handled, active conversations, average resolution time, queue time, and break time. It also shows transfer trends over time, conversation source breakdowns, and agent-by-agent comparisons.
+The Agent Analytics page provides performance metrics for your support team, including messages sent, customer satisfaction (CSAT) ratings, and break time, alongside per-agent availability. It also shows rating trends over time and agent-by-agent comparisons.
 
 ### Quick Actions
 Access frequently used actions directly from the dashboard:

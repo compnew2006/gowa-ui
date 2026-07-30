@@ -343,6 +343,12 @@ type Contact struct {
 	// no picture, hasn't been synced yet, or the provider doesn't expose one —
 	// the UI falls back to colored initials in that case.
 	AvatarURL          string     `gorm:"size:2048" json:"avatar_url"`
+	// AvatarLocalPath is the on-disk relative path (under the media storage
+	// root) of the cached copy of the picture at AvatarURL. WhatsApp CDN URLs
+	// are signed and expire, so the bytes are downloaded once and served from a
+	// stable backend route instead of hot-linking the ephemeral CDN URL. Empty
+	// until the picture has been fetched+cached.
+	AvatarLocalPath    string     `gorm:"size:512" json:"-"`
 	WhatsAppAccount    string     `gorm:"size:100;index" json:"whatsapp_account"` // References WhatsAppAccount.Name
 	AssignedUserID     *uuid.UUID `gorm:"type:uuid;index" json:"assigned_user_id,omitempty"`
 	LastMessageAt      *time.Time `json:"last_message_at,omitempty"`
@@ -357,10 +363,6 @@ type Contact struct {
 
 	// Business-Scoped User ID (from Meta BSUID rollout)
 	BSUID string `gorm:"size:150;index" json:"bsuid,omitempty"`
-
-	// Chatbot SLA tracking
-	ChatbotLastMessageAt *time.Time `json:"chatbot_last_message_at,omitempty"` // When chatbot last sent a message
-	ChatbotReminderSent  bool       `gorm:"default:false" json:"chatbot_reminder_sent"`
 
 	// Relations
 	Organization *Organization `gorm:"foreignKey:OrganizationID" json:"organization,omitempty"`

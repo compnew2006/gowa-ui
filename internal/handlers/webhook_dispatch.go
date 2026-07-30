@@ -43,19 +43,6 @@ type ContactEventData struct {
 	WhatsAppAccount string `json:"whatsapp_account"`
 }
 
-// TransferEventData represents data for transfer events
-type TransferEventData struct {
-	TransferID      string                `json:"transfer_id"`
-	ContactID       string                `json:"contact_id"`
-	ContactPhone    string                `json:"contact_phone"`
-	ContactName     string                `json:"contact_name"`
-	Source          models.TransferSource `json:"source"`
-	Reason          string                `json:"reason,omitempty"`
-	AgentID         *string               `json:"agent_id,omitempty"`
-	AgentName       *string               `json:"agent_name,omitempty"`
-	WhatsAppAccount string                `json:"whatsapp_account"`
-}
-
 // maxConcurrentWebhooks limits the number of concurrent webhook deliveries per dispatch
 const maxConcurrentWebhooks = 10
 

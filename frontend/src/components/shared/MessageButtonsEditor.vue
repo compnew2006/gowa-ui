@@ -29,7 +29,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   'update:buttons': [buttons: ButtonConfig[]]
-  /** Per-button title edit — host views (e.g. chatbot select input) listen to keep state in sync. */
+  /** Per-button title edit — host views listen to keep state in sync. */
   'change': [buttons: ButtonConfig[]]
 }>()
 
@@ -204,7 +204,7 @@ function typeIcon(type?: string) {
           />
         </div>
 
-        <!-- Per-button extras (e.g. chatbot conditional-routing select) -->
+        <!-- Per-button extras (host-provided, e.g. a conditional-routing select) -->
         <slot name="button-extra" :button="btn" :index="idx" />
       </div>
     </div>

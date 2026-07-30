@@ -39,7 +39,6 @@ frontend/e2e/
 └── tests/                  Specs grouped by feature area.
     ├── auth/
     ├── settings/
-    ├── chatbot/
     ├── calling/
     ├── chat/
     └── …
@@ -59,8 +58,8 @@ the recent past that API-only would have missed entirely:
 - A date picker losing its calendar grid after Apply because of a
   serialize/restore mismatch.
 - A chat unread divider racing with a watcher and disappearing.
-- A flow's transfer step printing "Connecting you to an agent..." right
-  before its sibling printed "We're closed".
+- A campaign's scheduled send silently dropping recipients that failed a
+  server-side validation the UI never surfaced.
 
 If a behavior has any UI surface, test it through the UI. Layer API
 side-channel assertions inside that test for things the UI can't show
