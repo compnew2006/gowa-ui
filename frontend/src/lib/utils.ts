@@ -104,11 +104,43 @@ export function formatBytes(bytes: number | undefined | null, decimals = 1): str
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`
 }
 
-export function formatLabel(key: string): string {
+export function formatLabel(key?: string | null): string {
+  if (!key) return ''
   return key
     .replace(/_/g, ' ')
     .replace(/([a-z])([A-Z])/g, '$1 $2')
     .replace(/\b\w/g, c => c.toUpperCase())
+}
+
+export interface AuditChange {
+  field: string
+  old_value?: any
+  new_value?: any
+}
+
+// normalizeAuditChanges flattens audit-log change entries into
+// {field, old_value, new_value} records. Modern entries already have a flat
+// `field` key; legacy entries are nested maps ({key: {old, new}, ...}) written
+// by an older audit implementation and are expanded one record per key.
+export function normalizeAuditChanges(changes?: any[] | null): AuditChange[] {
+  if (!Array.isArray(changes)) return []
+  const out: AuditChange[] = []
+  for (const c of changes) {
+    if (c && typeof c === 'object' && typeof c.field === 'string') {
+      out.push({ field: c.field, old_value: c.old_value, new_value: c.new_value })
+      continue
+    }
+    if (c && typeof c === 'object') {
+      for (const [key, v] of Object.entries(c)) {
+        if (v && typeof v === 'object') {
+          out.push({ field: key, old_value: (v as any).old, new_value: (v as any).new })
+        } else {
+          out.push({ field: key, old_value: undefined, new_value: v })
+        }
+      }
+    }
+  }
+  return out
 }
 
 export interface LinkSegment {

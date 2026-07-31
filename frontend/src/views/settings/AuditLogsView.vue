@@ -16,7 +16,7 @@ import { auditLogsService, type AuditLogEntry } from '@/services/api'
 import { useUsersStore } from '@/stores/users'
 import { useDateRange } from '@/composables/useDateRange'
 import { ScrollText } from 'lucide-vue-next'
-import { formatDate, formatLabel } from '@/lib/utils'
+import { formatDate, formatLabel, normalizeAuditChanges } from '@/lib/utils'
 
 const { t } = useI18n()
 const usersStore = useUsersStore()
@@ -102,10 +102,11 @@ function actionVariant(action: string): string {
 }
 
 function changeSummary(log: AuditLogEntry): string {
-  if (!log.changes || log.changes.length === 0) return '—'
-  if (log.action === 'created') return `${log.changes.length} fields set`
-  if (log.action === 'deleted') return `${log.changes.length} fields`
-  return log.changes.map(c => formatLabel(c.field)).join(', ')
+  const changes = normalizeAuditChanges(log.changes)
+  if (changes.length === 0) return '—'
+  if (log.action === 'created') return `${changes.length} fields set`
+  if (log.action === 'deleted') return `${changes.length} fields`
+  return changes.map(c => formatLabel(c.field)).join(', ')
 }
 
 onMounted(async () => {

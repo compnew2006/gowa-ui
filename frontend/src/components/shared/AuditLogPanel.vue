@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { auditLogsService, type AuditLogEntry } from '@/services/api'
-import { formatDateTime, formatLabel } from '@/lib/utils'
+import { formatDateTime, formatLabel, normalizeAuditChanges } from '@/lib/utils'
 import { useAuditFormat } from '@/composables/useAuditFormat'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { History, Plus, Pencil, Trash2, Loader2, ChevronDown } from 'lucide-vue-next'
+
+function changesFor(log: AuditLogEntry) {
+  return normalizeAuditChanges(log.changes)
+}
 
 const props = defineProps<{
   // A single resource type ("account") or several ("account,settings.close_rating"
@@ -113,9 +117,9 @@ onMounted(() => loadLogs())
             </div>
 
             <!-- Changes -->
-            <div v-if="log.action === 'updated' && log.changes?.length > 0" class="mt-2 space-y-1">
+            <div v-if="log.action === 'updated' && changesFor(log).length > 0" class="mt-2 space-y-1">
               <div
-                v-for="(change, idx) in log.changes"
+                v-for="(change, idx) in changesFor(log)"
                 :key="idx"
                 class="text-xs rounded-md bg-muted/50 px-2.5 py-1.5 overflow-hidden min-w-0"
               >
@@ -129,9 +133,9 @@ onMounted(() => loadLogs())
             </div>
 
             <!-- Created fields summary -->
-            <div v-else-if="log.action === 'created' && log.changes?.length > 0" class="mt-1">
+            <div v-else-if="log.action === 'created' && changesFor(log).length > 0" class="mt-1">
               <span class="text-xs text-muted-foreground">
-                {{ log.changes.length }} field{{ log.changes.length !== 1 ? 's' : '' }} set
+                {{ changesFor(log).length }} field{{ changesFor(log).length !== 1 ? 's' : '' }} set
               </span>
             </div>
           </div>

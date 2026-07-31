@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import DetailPageLayout from '@/components/shared/DetailPageLayout.vue'
 import { auditLogsService, type AuditLogEntry } from '@/services/api'
-import { formatDateTime, formatLabel } from '@/lib/utils'
+import { formatDateTime, formatLabel, normalizeAuditChanges } from '@/lib/utils'
 import { useAuditFormat } from '@/composables/useAuditFormat'
 import { ScrollText, Info, ExternalLink, ArrowRight } from 'lucide-vue-next'
 
@@ -17,6 +17,8 @@ const { t } = useI18n()
 const logId = computed(() => route.params.id as string)
 const log = ref<AuditLogEntry | null>(null)
 const isLoading = ref(true)
+
+const changes = computed(() => normalizeAuditChanges(log.value?.changes))
 
 const resourceRouteMap: Record<string, (id: string) => string> = {
   account: (id) => `/settings/accounts/${id}`,
@@ -88,9 +90,9 @@ onMounted(async () => {
         <CardTitle class="text-sm font-medium">{{ t('auditLogs.changes') }}</CardTitle>
       </CardHeader>
       <CardContent>
-        <div v-if="log.changes && log.changes.length > 0" class="space-y-3">
+        <div v-if="changes.length > 0" class="space-y-3">
           <div
-            v-for="(change, idx) in log.changes"
+            v-for="(change, idx) in changes"
             :key="idx"
             class="rounded-md bg-muted/50 px-3 py-2.5"
           >
