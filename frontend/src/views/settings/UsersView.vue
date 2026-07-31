@@ -18,7 +18,7 @@ import { useRolesStore } from '@/stores/roles'
 import { useOrganizationsStore } from '@/stores/organizations'
 import { accountsService } from '@/services/api'
 import { toast } from 'vue-sonner'
-import { Plus, Pencil, Trash2, UserMinus, User as UserIcon, Shield, ShieldCheck, UserCog, Users, Link, UserPlus, Loader2 } from 'lucide-vue-next'
+import { Plus, Pencil, Trash2, UserMinus, User as UserIcon, Shield, ShieldCheck, UserCog, Users, Link, UserPlus, Loader2, Smartphone } from 'lucide-vue-next'
 import { useCrudState } from '@/composables/useCrudState'
 import { getErrorMessage } from '@/lib/api-utils'
 import { formatDate } from '@/lib/utils'
@@ -85,6 +85,7 @@ const sortDirection = ref<'asc' | 'desc'>('asc')
 
 const currentUserId = computed(() => authStore.user?.id)
 const isSuperAdmin = computed(() => authStore.user?.is_super_admin || false)
+const canWrite = computed(() => authStore.hasPermission('users', 'write'))
 const breadcrumbs = computed(() => [{ label: t('nav.settings'), href: '/settings' }, { label: t('nav.users') }])
 const getDefaultRoleId = () => rolesStore.roles.find(r => r.name === 'agent' && r.is_system)?.id || ''
 
@@ -107,6 +108,50 @@ function toggleAccount(accountId: string, checked: boolean) {
   if (checked) ids.add(accountId)
   else ids.delete(accountId)
   formData.value.whatsapp_account_ids = [...ids]
+}
+
+// Per-user account access dialog (replaces the assignment section in the
+// user detail page): an icon in the row opens this popup without navigating.
+const accessDialogOpen = ref(false)
+const accessUser = ref<User | null>(null)
+const accessIds = ref<string[]>([])
+const isLoadingAccess = ref(false)
+const isSavingAccess = ref(false)
+
+async function openAccessDialog(user: User) {
+  accessUser.value = user
+  accessIds.value = []
+  accessDialogOpen.value = true
+  isLoadingAccess.value = true
+  try {
+    const full = await usersStore.fetchUser(user.id)
+    accessIds.value = [...(full.whatsapp_account_ids || [])]
+  } catch {
+    toast.error(t('common.failedLoad', { resource: t('resources.user') }))
+  } finally {
+    isLoadingAccess.value = false
+  }
+}
+
+function toggleAccess(accountId: string, checked: boolean) {
+  const ids = new Set(accessIds.value)
+  if (checked) ids.add(accountId)
+  else ids.delete(accountId)
+  accessIds.value = [...ids]
+}
+
+async function saveAccess() {
+  if (!accessUser.value) return
+  isSavingAccess.value = true
+  try {
+    await usersStore.updateUser(accessUser.value.id, { whatsapp_account_ids: accessIds.value })
+    toast.success(t('common.updatedSuccess', { resource: t('resources.User') }))
+    accessDialogOpen.value = false
+  } catch (e) {
+    toast.error(getErrorMessage(e, t('common.failedSave', { resource: t('resources.user') })))
+  } finally {
+    isSavingAccess.value = false
+  }
 }
 
 watch(() => organizationsStore.selectedOrgId, () => { fetchUsers(); rolesStore.fetchRoles(); loadAccounts() })
@@ -308,6 +353,13 @@ async function copyInviteLink() {
                 </template>
                 <template #cell-actions="{ item: user }">
                   <div class="flex items-center justify-end gap-1">
+                    <IconButton
+                      v-if="canWrite && accounts.length > 0"
+                      :icon="Smartphone"
+                      :label="$t('users.accountAssignments')"
+                      class="h-8 w-8"
+                      @click="openAccessDialog(user)"
+                    />
                     <RouterLink :to="`/settings/users/${user.id}`">
                       <IconButton :icon="Pencil" :label="$t('users.editUserTooltip')" class="h-8 w-8" />
                     </RouterLink>
@@ -378,6 +430,46 @@ async function copyInviteLink() {
     </CrudFormDialog>
 
     <DeleteConfirmDialog v-model:open="deleteDialogOpen" :title="userToDelete?.is_member ? $t('users.removeMember') : $t('users.deleteUser')" :description="userToDelete?.is_member ? $t('users.removeMemberWarning') : undefined" :item-name="userToDelete?.full_name" :is-submitting="isDeleting" @confirm="confirmDelete" />
+
+    <!-- Account Access Dialog -->
+    <Dialog v-model:open="accessDialogOpen">
+      <DialogContent class="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{{ $t('users.accountAssignments') }}</DialogTitle>
+          <DialogDescription>
+            <span v-if="accessUser" class="font-medium text-foreground">{{ accessUser.full_name }}</span>
+            — {{ $t('users.accountAssignmentsDesc') }}
+          </DialogDescription>
+        </DialogHeader>
+        <div class="py-2">
+          <div v-if="isLoadingAccess" class="flex justify-center py-6">
+            <Loader2 class="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+          <p v-else-if="accounts.length === 0" class="text-sm text-muted-foreground py-4 text-center">
+            {{ $t('accounts.noAccounts', 'No WhatsApp accounts linked') }}
+          </p>
+          <ScrollArea v-else class="max-h-72">
+            <div class="space-y-2 pr-2">
+              <div v-for="account in accounts" :key="account.id" class="flex items-center gap-2">
+                <Checkbox
+                  :id="`access-${account.id}`"
+                  :checked="accessIds.includes(account.id)"
+                  @update:checked="(checked: boolean | 'indeterminate') => toggleAccess(account.id, checked === true)"
+                />
+                <label :for="`access-${account.id}`" class="text-sm cursor-pointer">{{ account.name }}</label>
+              </div>
+            </div>
+          </ScrollArea>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" @click="accessDialogOpen = false">{{ $t('common.cancel') }}</Button>
+          <Button @click="saveAccess" :disabled="isSavingAccess || isLoadingAccess">
+            <Loader2 v-if="isSavingAccess" class="h-4 w-4 mr-2 animate-spin" />
+            {{ $t('common.save') }}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
 
     <!-- Add Existing User Dialog -->
     <Dialog v-model:open="isAddExistingOpen">
