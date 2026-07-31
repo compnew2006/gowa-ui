@@ -5,75 +5,42 @@ description: Manage WhatsApp message templates
 
 import { Card, CardGrid, Aside } from '@astrojs/starlight/components';
 
-![Templates](/whatomate/images/11-templates.png)
-
 ## Overview
 
-WhatsApp Message Templates are pre-approved message formats that allow businesses to send notifications and updates to customers. Whatomate makes it easy to manage, sync, and use templates across your organization.
+Templates are reusable message blueprints that let your team send consistent notifications, updates, and OTP messages. They are stored per organization and managed through the [Templates API](/api-reference/templates) — there is no external approval workflow.
 
-## Template Management
+## Template Structure
 
-### Viewing Templates
+A template is composed of the following parts:
 
-The templates page displays all your synced templates from Meta's WhatsApp Business API, including:
-- Template name and status
-- Category (Marketing, Utility, Authentication)
-- Language
-- Last updated date
-
-### Syncing Templates
-
-Click the **Sync from Meta** button to fetch the latest templates from your WhatsApp Business Account. This ensures your local templates are always up to date with what's approved in Meta.
-
-### Template Editor
-
-![Template Editor](/whatomate/images/12-template-editor.png)
-
-View and manage template details:
-- **Header** - Optional header with text, image, video, or document
-- **Body** - Main message content with variable placeholders
+- **Header** - Optional header with type `TEXT`, `IMAGE`, `VIDEO`, or `DOCUMENT`
+- **Body** - Main message content with variable placeholders (`{{1}}` or `{{customer_name}}`)
 - **Footer** - Optional footer text
 - **Buttons** - Call-to-action or quick reply buttons
+- **Sample values** - Example values for the placeholders
 
-## Media Headers (Image, Video, Document)
+Authentication templates additionally support:
 
-Templates with an `IMAGE`, `VIDEO`, or `DOCUMENT` header require a **sample media file** that Meta will review along with the template text. Without this sample, Meta will reject the template — and Whatomate enforces the same check before submission, so a template with a media header can't be saved or published until you've uploaded one.
+- **Security recommendation** - Adds "For your security, do not share this code." to the message
+- **Code expiration** - An expiration countdown footer (1–90 minutes)
 
-### Uploading a sample
+### Template naming
 
-1. Pick the WhatsApp account in the Details card. The upload calls Meta's API and needs to know which account it belongs to.
-2. In the Header card, change **Header Type** to `Image`, `Video`, or `Document`.
-3. Pick a file using the file selector that appears.
-4. Click **Upload**. The button stays disabled until you've selected a file. On success a green "Media uploaded" pill appears with a truncated handle (`4::aW1hZ2Uv…`) — that's the reference Meta will use when reviewing.
-5. Click **Save**. **The handle is only persisted on save** — leaving the page after upload but before saving will lose the handle and you'll have to re-upload.
-6. Click **Publish** (or **Republish** if you're updating an approved template) to send the template + sample to Meta for approval.
+Template names are normalized automatically: lowercased, with spaces and hyphens converted to underscores (e.g. `Welcome Message` becomes `welcome_message`). The `name` + `language` combination must be unique per WhatsApp account.
 
-### File limits
+## Template Categories
 
-| Header type | Accepted formats | Max size |
-|---|---|---|
-| IMAGE | JPEG, PNG | 5 MB |
-| VIDEO | MP4 | 16 MB |
-| DOCUMENT | PDF | 100 MB |
-
-<Aside type="note">
-  The sample you upload here is **only used by Meta for template review**. When you actually send a message using the template, the recipient sees the media you supply at send time (via `header_params` in the API or by attaching media in the chat composer) — the sample is not the media that goes out to customers.
-</Aside>
-
-<Aside type="caution">
-  Don't upload customer data or anything sensitive as the sample. Meta's review team will see it. Use a generic placeholder image / document.
-</Aside>
-
-## Publishing Templates
-
-The lifecycle of a template is **Draft → Pending → Approved (or Rejected)**:
-
-1. **Create** — fill in the editor and click **Save**. The template lands in your local DB as `DRAFT`. It is not visible to Meta yet, and cannot be used to send messages.
-2. **Publish** — click **Publish**. Whatomate submits the template (including any media handle) to Meta and the status becomes `PENDING`.
-3. **Meta reviews** — typically minutes to 24 hours. The status updates to `APPROVED` or `REJECTED` on the next sync.
-4. **Republish** — only `DRAFT` and `REJECTED` templates can be edited and republished. Approved templates are locked except for the body of `MARKETING` and `UTILITY` categories (Meta limits which fields are editable post-approval).
-
-If publish fails with "Template has IMAGE header but no media file has been uploaded", the upload either wasn't completed or wasn't saved — go back to step 4 of [Uploading a sample](#uploading-a-sample).
+<CardGrid>
+  <Card title="Marketing" icon="megaphone">
+    Promotional content, offers, and announcements
+  </Card>
+  <Card title="Utility" icon="setting">
+    Order updates, confirmations, and notifications
+  </Card>
+  <Card title="Authentication" icon="approve-check">
+    One-time passwords and verification codes
+  </Card>
+</CardGrid>
 
 ## Template Variables
 
@@ -111,7 +78,7 @@ Named parameters make templates easier to understand and less error-prone when d
 
 ### Header Variables
 
-A TEXT header can contain **at most one** variable — this is a Meta restriction
+A TEXT header can contain **at most one** variable — a Meta restriction
 that Whatomate enforces at template creation time. Both positional (`{{1}}`)
 and named (`{{season}}`) work; mixing positional and named within the same
 template (header + body) is still not allowed.
@@ -126,42 +93,23 @@ When sending:
   with the right columns for you. See
   [Adding Recipients](/features/campaigns/#adding-recipients).
 
-## Template Categories
+### Media headers (Image, Video, Document)
 
-<CardGrid>
-  <Card title="Marketing" icon="megaphone">
-    Promotional content, offers, and announcements
-  </Card>
-  <Card title="Utility" icon="setting">
-    Order updates, confirmations, and notifications
-  </Card>
-  <Card title="Authentication" icon="approve-check">
-    One-time passwords and verification codes
-  </Card>
-</CardGrid>
+Templates with an `IMAGE`, `VIDEO`, or `DOCUMENT` header are sent with the
+media supplied **at send time** — not stored on the template. When sending
+from the chat composer, attach the media file; when sending via the API, use
+the `header_media_url` field or upload a `header_file` via multipart form on
+[Send Template Message](/api-reference/messages/#send-template-message).
 
-## Template Status
-
-| Status | Description |
-|--------|-------------|
-| **Approved** | Template is ready to use |
-| **Pending** | Awaiting Meta approval |
-| **Rejected** | Template was rejected by Meta |
-| **Disabled** | Template has been disabled |
-
-<Aside type="note">
-  Templates must be approved by Meta before they can be used for sending messages. The approval process typically takes a few minutes to 24 hours.
-</Aside>
-
-## URL Button Variables
+### URL Button Variables
 
 Templates can include URL buttons with dynamic variables. For example, a "Track Order" button with URL `https://example.com/track/{{1}}` will prompt you to enter the dynamic URL value when sending the template from the chat view.
 
-When sending via the API, provide button values using the `button_params` field. See the [API reference](/api-reference/messages/#send-template-message) for details.
+When sending via the API, provide button values using the `button_params` field (keyed by the zero-based button index). See the [API reference](/api-reference/messages/#send-template-message) for details.
 
 ## Using Templates
 
 Templates can be used in:
-- **Direct Messages** - Send template to individual contacts
-- **Campaigns** - Bulk send to multiple contacts
-- **API** - Programmatically via REST API
+- **Direct Messages** - Pick a template from the chat composer and fill in its parameters
+- **Campaigns** - Bulk send to multiple contacts, with parameters from a CSV or manual entry
+- **API** - Programmatically via the [Send Template Message](/api-reference/messages/#send-template-message) endpoint

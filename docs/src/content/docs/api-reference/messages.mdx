@@ -86,7 +86,7 @@ POST /api/contacts/{id}/messages
 
 ## Send Template Message
 
-Send a pre-approved template message.
+Send a template message to a contact or phone number.
 
 ```bash
 POST /api/messages/template
@@ -104,6 +104,12 @@ POST /api/messages/template
 | `header_params` | object | No | Value for a TEXT header with a `{{var}}` (max 1). Keyed by the variable's name for named templates, or `"1"` for positional. Falls back to `template_params` if omitted. |
 | `button_params` | object | No | Dynamic URL button parameters (button index → value) |
 | `account_name` | string | No | Specific WhatsApp account to use |
+| `header_media_url` | string | No | URL to download media from for IMAGE/VIDEO/DOCUMENT headers |
+| `header_media_filename` | string | No | Filename for DOCUMENT headers |
+
+### Multipart form
+
+For templates with an `IMAGE`, `VIDEO`, or `DOCUMENT` header, the request can also be sent as `multipart/form-data` with the media uploaded as a `header_file` part (plus `header_media_filename` for document headers). The remaining fields (`contact_id`, `phone_number`, `template_name`, `template_id`, `account_name`) are sent as form values, and `template_params`, `button_params`, `header_params` are sent as JSON strings.
 
 ### Examples
 
