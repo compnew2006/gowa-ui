@@ -6,6 +6,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Plus } from 'lucide-vue-next'
 import { PageHeader, DataTable, DeleteConfirmDialog, ErrorState, type Column } from '@/components/shared'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
@@ -21,7 +22,9 @@ import {
   Trash2,
   Check,
   CheckCircle2,
-  Globe
+  Globe,
+  Wifi,
+  WifiOff
 } from 'lucide-vue-next'
 
 import ConnectionCard from '@/components/settings/ConnectionCard.vue'
@@ -57,6 +60,11 @@ const breadcrumbs = computed(() => [{ label: t('nav.settings'), href: '/settings
 
 const sortKey = ref('name')
 const sortDirection = ref<'asc' | 'desc'>('asc')
+
+// Inline connection-status summary (header icon + popover, no modal)
+const connectedCount = computed(() => accounts.value.filter(a => a.gowa_connected === true).length)
+const disconnectedCount = computed(() => accounts.value.length - connectedCount.value)
+const allConnected = computed(() => accounts.value.length > 0 && disconnectedCount.value === 0)
 
 const columns = computed<Column<WhatsAppAccount>[]>(() => [
   { key: 'account', label: t('accounts.account', 'Account Name'), width: 'w-[250px]', sortable: true, sortKey: 'name' },
@@ -122,8 +130,60 @@ async function confirmDelete() {
       :breadcrumbs="breadcrumbs"
     >
       <template #actions>
-        <div v-if="canWrite" class="flex items-center gap-2">
-          <RouterLink to="/settings/accounts/new">
+        <div class="flex items-center gap-2">
+          <Popover>
+            <PopoverTrigger as-child>
+              <Button variant="outline" size="sm" class="gap-1.5">
+                <Wifi v-if="allConnected" class="h-4 w-4 text-emerald-500" />
+                <WifiOff v-else class="h-4 w-4 text-amber-500" />
+                <span class="text-xs tabular-nums">{{ connectedCount }}/{{ accounts.length }}</span>
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" class="w-72 p-0">
+              <div class="px-3 py-2 border-b border-border/40">
+                <p class="text-sm font-medium">{{ $t('accounts.connectionStatus', 'Connection Status') }}</p>
+                <p class="text-xs text-muted-foreground">
+                  {{ connectedCount }} {{ $t('accounts.connected', 'Connected') }} · {{ disconnectedCount }} {{ $t('accounts.disconnected', 'Disconnected') }}
+                </p>
+              </div>
+              <div class="max-h-64 overflow-y-auto py-1">
+                <p v-if="accounts.length === 0" class="px-3 py-2 text-xs text-muted-foreground">
+                  {{ $t('accounts.noAccounts', 'No WhatsApp accounts linked') }}
+                </p>
+                <div
+                  v-for="account in accounts"
+                  :key="account.id"
+                  class="flex items-center justify-between gap-2 px-3 py-1.5 hover:bg-muted/50"
+                >
+                  <div class="flex items-center gap-2 min-w-0">
+                    <span
+                      class="h-2 w-2 rounded-full shrink-0"
+                      :class="account.gowa_connected === true ? 'bg-emerald-500' : 'bg-amber-500'"
+                    />
+                    <span class="text-sm truncate">{{ account.name }}</span>
+                  </div>
+                  <Badge
+                    v-if="account.gowa_connected === true"
+                    variant="outline"
+                    class="text-[10px] border-emerald-600 text-emerald-600 bg-emerald-500/10 shrink-0"
+                  >
+                    {{ $t('accounts.connected', 'Connected') }}
+                  </Badge>
+                  <Badge
+                    v-else-if="account.gowa_connected === false"
+                    variant="outline"
+                    class="text-[10px] border-amber-600 text-amber-600 bg-amber-500/10 shrink-0"
+                  >
+                    {{ $t('accounts.disconnected', 'Disconnected') }}
+                  </Badge>
+                  <Badge v-else variant="outline" class="text-[10px] shrink-0">
+                    {{ account.status }}
+                  </Badge>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+          <RouterLink v-if="canWrite" to="/settings/accounts/new">
             <Button size="sm" class="bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-sm">
               <Plus class="h-4 w-4 mr-1.5" />
               {{ $t('accounts.addAccount', 'Add Account') }}

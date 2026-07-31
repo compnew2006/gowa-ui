@@ -27,8 +27,8 @@ Modern, open-source WhatsApp Business Platform. Single binary app.
 - **Bulk Campaigns**
   Send campaigns to multiple contacts with retry support for failed messages.
 
-- **Chatbot Automation**
-  Keyword-based auto-replies, conversation flows with branching logic, and AI-powered responses (OpenAI, Anthropic, Google).
+- **WhatsApp Account Management**
+  Connect and manage multiple WhatsApp accounts via GOWA (WhatsApp Web protocol) with user-specific visibility controls and granular device management.
 
 - **Canned Responses**
   Pre-defined quick replies with slash commands (`/shortcut`) and dynamic placeholders.
@@ -41,12 +41,8 @@ Modern, open-source WhatsApp Business Platform. Single binary app.
 
 ![Dashboard](docs/public/images/dashboard-light.png#gh-light-mode-only)
 ![Dashboard](docs/public/images/dashboard-dark.png#gh-dark-mode-only)
-![Chatbot](docs/public/images/chatbot-light.png#gh-light-mode-only)
-![Chatbot](docs/public/images/chatbot-dark.png#gh-dark-mode-only)
 ![Agent Analytics](docs/public/images/agent-analytics-light.png#gh-light-mode-only)
 ![Agent Analytics](docs/public/images/agent-analytics-dark.png#gh-dark-mode-only)
-![Conversation Flow Builder](docs/public/images/conversation-flow-light.png#gh-light-mode-only)
-![Conversation Flow Builder](docs/public/images/conversation-flow-dark.png#gh-dark-mode-only)
 ![Templates](docs/public/images/11-templates.png)
 ![Campaigns](docs/public/images/13-campaigns.png)
 

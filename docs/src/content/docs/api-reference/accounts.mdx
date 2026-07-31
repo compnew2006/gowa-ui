@@ -1,17 +1,17 @@
 ---
 title: Accounts
-description: Manage WhatsApp Business accounts
+description: Manage WhatsApp Business accounts connected via GOWA
 ---
 
 import { Aside } from '@astrojs/starlight/components';
 
 ## Overview
 
-Accounts represent your WhatsApp device connections managed through GOWA (WhatsApp Web protocol).
+Accounts represent WhatsApp device connections managed through GOWA (WhatsApp Web protocol). Each account is organization-scoped and can be assigned to specific users for visibility control.
 
 ## List Accounts
 
-Retrieve all connected WhatsApp accounts.
+Retrieve all WhatsApp accounts visible to the current user. The response is scoped by organization and user assignments.
 
 ```bash
 GET /api/accounts
@@ -23,22 +23,43 @@ GET /api/accounts
 {
   "status": "success",
   "data": {
-    "items": [
+    "accounts": [
       {
         "id": "uuid",
         "name": "Main Business",
-        "phone_number": "+1234567890",
+        "gowa_base_url": "http://gowa:8080",
+        "gowa_device_id": "device-01",
+        "has_gowa_webhook_secret": true,
+        "gowa_jid": "1234567890@s.whatsapp.net",
+        "gowa_connected": true,
+        "is_default_incoming": true,
+        "is_default_outgoing": false,
+        "auto_read_receipt": true,
         "status": "active",
-        "created_at": "2024-01-01T00:00:00Z"
+        "created_by_id": "uuid",
+        "created_by_name": "Admin User",
+        "updated_by_id": "uuid",
+        "updated_by_name": "Admin User",
+        "created_at": "2024-01-01T00:00:00Z",
+        "updated_at": "2024-01-01T00:00:00Z"
       }
     ]
   }
 }
 ```
 
+### Scoping
+
+The response includes only accounts the user is permitted to see:
+- Users with **no assignments** see all accounts in their organization
+- Users with **one or more assignments** see only those accounts
+- Super admins see all accounts in the organization (or a selected org via `X-Organization-ID` header)
+
+The `gowa_jid` and `gowa_connected` fields are populated best-effort from the live GOWA device status. If GOWA is unreachable, these fields are empty.
+
 ## Get Account
 
-Retrieve a single account.
+Retrieve a single account by ID.
 
 ```bash
 GET /api/accounts/{id}
@@ -52,18 +73,32 @@ GET /api/accounts/{id}
   "data": {
     "id": "uuid",
     "name": "Main Business",
-        "phone_number": "+1234567890",
+    "gowa_base_url": "http://gowa:8080",
+    "gowa_device_id": "device-01",
+    "has_gowa_webhook_secret": true,
+    "gowa_jid": "1234567890@s.whatsapp.net",
+    "gowa_connected": true,
+    "is_default_incoming": true,
+    "is_default_outgoing": false,
+    "auto_read_receipt": true,
     "status": "active",
-    "quality_rating": "GREEN",
-    "messaging_limit": "TIER_1K",
-    "created_at": "2024-01-01T00:00:00Z"
+    "created_by_id": "uuid",
+    "created_by_name": "Admin User",
+    "updated_by_id": "uuid",
+    "updated_by_name": "Admin User",
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:00Z"
   }
 }
 ```
 
+<Aside type="caution">
+  Restricted users who attempt to access an unassigned account receive HTTP **404** (not 403) to prevent leaking the account's existence.
+</Aside>
+
 ## Create Account
 
-Connect a new WhatsApp account via QR code pairing (GOWA).
+Create a new WhatsApp account with GOWA device configuration.
 
 ```bash
 POST /api/accounts
@@ -73,9 +108,32 @@ POST /api/accounts
 
 ```json
 {
-  "name": "Support Line"
+  "name": "Support Line",
+  "gowa_base_url": "http://gowa:8080",
+  "gowa_device_id": "device-01",
+  "gowa_webhook_secret": "optional-custom-secret",
+  "is_default_incoming": true,
+  "is_default_outgoing": false,
+  "auto_read_receipt": true
 }
 ```
+
+### Required Fields
+
+| Field | Description |
+|-------|-------------|
+| `name` | Account name (unique within the organization) |
+| `gowa_base_url` | GOWA server base URL |
+| `gowa_device_id` | GOWA device identifier |
+
+### Optional Fields
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `gowa_webhook_secret` | Auto-generated | HMAC secret for webhook verification. If omitted, the system generates one automatically |
+| `is_default_incoming` | `false` | Route incoming messages to this account by default. Unsets other incoming defaults in the org |
+| `is_default_outgoing` | `false` | Route outgoing messages from this account by default. Unsets other outgoing defaults in the org |
+| `auto_read_receipt` | `false` | Automatically mark incoming messages as read |
 
 ### Response
 
@@ -85,15 +143,32 @@ POST /api/accounts
   "data": {
     "id": "uuid",
     "name": "Support Line",
-    "status": "pending",
-    "created_at": "2024-01-01T00:00:00Z"
+    "gowa_base_url": "http://gowa:8080",
+    "gowa_device_id": "device-01",
+    "has_gowa_webhook_secret": true,
+    "is_default_incoming": true,
+    "is_default_outgoing": false,
+    "auto_read_receipt": true,
+    "status": "active",
+    "created_by_id": "uuid",
+    "created_by_name": "Admin User",
+    "updated_by_id": "uuid",
+    "updated_by_name": "Admin User",
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:00Z"
   }
 }
 ```
 
+<Aside type="note">
+  The webhook secret is never returned in the response. The `has_gowa_webhook_secret` boolean field indicates whether one is configured.
+</Aside>
+
+Requires `accounts:write` permission.
+
 ## Update Account
 
-Update account settings.
+Update an existing account's configuration.
 
 ```bash
 PUT /api/accounts/{id}
@@ -103,9 +178,23 @@ PUT /api/accounts/{id}
 
 ```json
 {
-  "name": "Customer Support"
+  "name": "Updated Support Line",
+  "gowa_base_url": "http://gowa:8080",
+  "gowa_device_id": "device-02",
+  "gowa_webhook_secret": "new-secret",
+  "is_default_incoming": false,
+  "is_default_outgoing": true,
+  "auto_read_receipt": false
 }
 ```
+
+All fields are optional for updates — only provided fields are changed.
+
+<Aside type="tip">
+  If you update the `gowa_device_id`, the GOWA device cache is automatically invalidated.
+</Aside>
+
+Requires `accounts:write` permission.
 
 ## Delete Account
 
@@ -115,34 +204,70 @@ Remove a WhatsApp account connection.
 DELETE /api/accounts/{id}
 ```
 
-<Aside type="caution">
-  Deleting an account will remove all associated contacts, messages, and settings.
-</Aside>
-
-## Test Connection
-
-Verify the account connection.
-
-```bash
-POST /api/accounts/{id}/test
-```
-
 ### Response
 
 ```json
 {
   "status": "success",
   "data": {
-    "connected": true,
-    "phone_number": "+1234567890"
+    "message": "Account deleted successfully"
   }
 }
 ```
+
+<Aside type="caution">
+  Deleting an account performs a **soft delete** — the record is preserved with a `deleted_at` timestamp. However:
+  - All `user_whatsapp_accounts` assignments for this account are **hard-deleted** (permanently removed)
+  - The GOWA device cache is invalidated
+  - An audit log entry is created with the pre-deletion state
+</Aside>
+
+Requires `accounts:delete` permission.
+
+## List Account Settings
+
+### Close Rating
+
+```bash
+GET /api/accounts/{id}/close-rating
+PUT /api/accounts/{id}/close-rating
+GET /api/accounts/{id}/close-rating/stats
+```
+
+Configure and view customer satisfaction (CSAT) rating prompts when chats are closed on this account.
+
+### Call Auto-Reject
+
+```bash
+GET /api/accounts/{id}/call-auto-reject
+PUT /api/accounts/{id}/call-auto-reject
+```
+
+Configure automatic call rejection behavior for incoming WhatsApp calls on this account.
+
+### Daily Chat Reset
+
+```bash
+GET /api/accounts/{id}/daily-reset
+PUT /api/accounts/{id}/daily-reset
+```
+
+Schedule automatic daily chat resets for conversations on this account.
+
+## GOWA Device Pairing
+
+Initiate QR code or pair code device pairing.
+
+```bash
+POST /api/accounts/{id}/gowa/pair-code
+```
+
+Returns the pairing code and QR data needed to connect the WhatsApp mobile app.
 
 ## Account Status
 
 | Status | Description |
 |--------|-------------|
-| `pending` | Account created, awaiting QR pairing |
 | `active` | Account is connected and working |
+| `pending` | Account created, awaiting QR pairing |
 | `disconnected` | Connection lost, needs reconnection |

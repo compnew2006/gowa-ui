@@ -1230,6 +1230,8 @@
     "connectionFailed": "Connection failed",
     "connectionTestFailed": "Connection test failed",
     "connected": "Connected",
+    "disconnected": "Disconnected",
+    "connectionStatus": "Connection Status",
     "configured": "Configured",
     "missing": "Missing",
     "notSet": "Not Set",

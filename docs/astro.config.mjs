@@ -24,6 +24,7 @@ export default defineConfig({
           label: 'Features',
           items: [
             { label: 'Dashboard', slug: 'features/dashboard' },
+            { label: 'WhatsApp Accounts', slug: 'features/accounts' },
             { label: 'Roles & Permissions', slug: 'features/roles-permissions' },
             { label: 'SSO (Single Sign-On)', slug: 'features/sso' },
             { label: 'Audit Logs', slug: 'features/audit-logs' },

@@ -1,0 +1,122 @@
+---
+title: WhatsApp Accounts
+description: Manage WhatsApp Business accounts with user-specific visibility and GOWA device connections
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+WhatsApp Accounts represent device connections managed through GOWA (WhatsApp Web protocol). Each account is scoped to an organization, with optional per-user visibility restrictions.
+
+## Overview
+
+Every organization connects one or more WhatsApp accounts. Accounts are the conduit for sending and receiving messages, creating templates, and running campaigns.
+
+- **Organization-scoped**: Every account belongs to exactly one organization
+- **GOWA-connected**: Accounts pair with a GOWA device for WhatsApp Web protocol
+- **Soft-deleted**: Account deletion is a soft delete — the row is preserved with a `deleted_at` timestamp
+- **User-assignable**: Control which users can see and operate each account
+
+## User-Specific Account Visibility
+
+By default, every user in an organization sees all WhatsApp accounts. You can restrict visibility by assigning specific accounts to specific users.
+
+### How It Works
+
+Account visibility uses a **two-tier scoping model**:
+
+1. **Organization scoping (mandatory)**: Every query filters by `organization_id`, set by JWT claims during authentication. Super admins can override this via the `X-Organization-ID` header.
+
+2. **User-level assignment (optional)**: Via the `user_whatsapp_accounts` join table:
+   - Users with **no assignments** see all accounts in their org (full visibility)
+   - Users with **one or more assignments** see only those accounts
+   - Super admins bypass assignment scoping entirely
+
+### Behavior Rules
+
+| Scenario | Behavior |
+|----------|----------|
+| User has no assignments | Sees all org accounts (fallback) |
+| User has 1+ assignments | Sees only assigned accounts |
+| Super admin | Never restricted, sees all org accounts |
+| Restricted user accesses unassigned account | Receives HTTP 404 (not 403) — prevents leaking account existence |
+
+### Implementation
+
+Backend scoping is implemented in `internal/handlers/accounts.go`:
+
+- `assignedAccountIDs(userID, orgID)` — Queries the join table for assigned account IDs
+- `scopeAccountsToUser(query, userID, orgID)` — Narrow an org-scoped query to assigned accounts; falls back to full org visibility when no assignments exist
+- `canAccessAccount(userID, orgID, accountID)` — Boolean check for individual account access; super admins always pass
+
+The `UserWhatsAppAccount` model (`internal/models/models.go`) is the join table with a composite unique index `(user_id, whats_app_account_id)` to prevent duplicates. Rows are hard-deleted on unassignment.
+
+## Managing Accounts
+
+### Adding an Account
+
+1. Go to **Settings → Accounts**
+2. Click **Add Account**
+3. Enter the account name, GOWA Base URL, and GOWA Device ID
+4. Configure default routing (incoming/outgoing) and auto-read receipt
+5. Click **Create**
+
+The webhook secret is auto-generated if not supplied. GOWA credentials are encrypted at rest using AES-256.
+
+### Connecting a GOWA Device
+
+After creating an account, connect a GOWA device:
+
+1. Open the account detail page
+2. Select a GOWA instance from the dropdown
+3. Click **Connect Device**
+4. Scan the QR code or enter the pair code in your WhatsApp mobile app
+
+### Deleting an Account
+
+1. Open **Settings → Accounts**
+2. Click the delete icon on the account row, or open the account and click **Delete**
+3. Confirm the deletion
+
+<Aside type="caution">
+  Deleting an account removes all associated user assignments and invalidates the GOWA device cache. The account record itself is soft-deleted (preserved with a `deleted_at` timestamp).
+</Aside>
+
+On delete:
+- The `user_whatsapp_accounts` assignments are hard-deleted (no history worth keeping)
+- The GOWA device cache is invalidated
+- An audit log entry is created
+- Requires the `accounts:delete` permission
+
+### Managing User Assignments
+
+To assign accounts to a specific user:
+
+1. Go to **Settings → Users**
+2. Open the user's detail page
+3. Scroll to the **Account Assignments** section
+4. Check the accounts the user should access
+5. Click **Save**
+
+The system validates that all assigned account IDs belong to the user's organization. Assignments in other organizations are left untouched.
+
+## Permissions
+
+| Permission | Description |
+|------------|-------------|
+| `accounts:read` | View WhatsApp accounts |
+| `accounts:write` | Create and edit WhatsApp accounts |
+| `accounts:delete` | Delete WhatsApp accounts |
+
+- **Admin**: Full CRUD
+- **Manager**: Full CRUD
+- **Agent**: Read-only (can view but not create/edit/delete)
+
+## Live Status
+
+The account list and detail pages show live connection state from GOWA (best-effort). If GOWA is unreachable, the status fields remain empty and the response is still returned. Status values:
+
+| Status | Description |
+|--------|-------------|
+| `active` | Account is connected and working |
+| `pending` | Account created, awaiting QR pairing |
+| `disconnected` | Connection lost, needs reconnection |

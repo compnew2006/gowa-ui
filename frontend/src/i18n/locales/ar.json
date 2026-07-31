@@ -1025,6 +1025,8 @@
     "connectionFailed": "فشل الاتصال",
     "connectionTestFailed": "فشل اختبار الاتصال",
     "connected": "متصل",
+    "disconnected": "غير متصل",
+    "connectionStatus": "حالة الاتصال",
     "configured": "مكون",
     "missing": "مفقود",
     "notSet": "لم يضبط",
