@@ -530,7 +530,8 @@
     "searchTags": "Search tags...",
     "noTagsFound": "No tags found",
     "whatsappAccount": "WhatsApp Account",
-    "selectAccount": "Select account..."
+    "selectAccount": "Select account...",
+    "allAccounts": "All Accounts"
   },
   "importExport": {
     "title": "Import/Export {resource}",

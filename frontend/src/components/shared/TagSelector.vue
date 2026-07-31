@@ -59,7 +59,7 @@ function tagColor(tagName: string): string | undefined {
         <ChevronsUpDown class="ml-2 h-4 w-4 shrink-0 opacity-50" />
       </Button>
     </PopoverTrigger>
-    <PopoverContent class="w-[300px] p-0" @interact-outside="(e: Event) => e.preventDefault()">
+    <PopoverContent class="w-[300px] p-0">
       <Command>
         <CommandInput :placeholder="$t('contacts.searchTags')" />
         <CommandList>

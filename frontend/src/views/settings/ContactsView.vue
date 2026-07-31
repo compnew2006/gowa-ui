@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { TagBadge } from '@/components/ui/tag-badge'
 import { PageHeader, SearchInput, DataTable, DeleteConfirmDialog, CreateContactDialog, ImportExportDialog, IconButton, ErrorState, type Column } from '@/components/shared'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { contactsService, accountsService, type ImportResult } from '@/services/api'
 import { toast } from 'vue-sonner'
 import { Plus, Users, Pencil, Trash2, MessageSquare, Download } from 'lucide-vue-next'
@@ -51,6 +52,9 @@ const isCreateDialogOpen = ref(false)
 const deleteDialogOpen = ref(false)
 const contactToDelete = ref<Contact | null>(null)
 
+// Account filter state ('all' = no filter)
+const filterAccount = ref('all')
+
 // Sorting state
 const sortKey = ref('last_message_at')
 const sortDirection = ref<'asc' | 'desc'>('desc')
@@ -58,11 +62,26 @@ const sortDirection = ref<'asc' | 'desc'>('desc')
 const columns = computed<Column<Contact>[]>(() => [
   { key: 'profile_name', label: t('contacts.name'), sortable: true },
   { key: 'phone_number', label: t('contacts.phoneNumber'), sortable: true },
+  { key: 'whatsapp_account', label: t('contacts.whatsappAccount'), sortable: true },
   { key: 'tags', label: t('contacts.tags') },
   { key: 'last_message_at', label: t('contacts.lastMessage'), sortable: true },
   { key: 'created_at', label: t('contacts.created'), sortable: true },
   { key: 'actions', label: t('common.actions'), align: 'right' },
 ])
+
+const accountPhoneByName = computed(() => {
+  const map = new Map<string, string>()
+  for (const acc of availableAccounts.value) {
+    map.set(acc.name, acc.phone_number)
+  }
+  return map
+})
+
+function getAccountLabel(contact: Contact): string {
+  if (!contact.whatsapp_account) return ''
+  const phone = accountPhoneByName.value.get(contact.whatsapp_account)
+  return phone ? `${contact.whatsapp_account} · ${phone}` : contact.whatsapp_account
+}
 
 function openCreateDialog() {
   isCreateDialogOpen.value = true
@@ -95,7 +114,10 @@ async function fetchContacts() {
     const response = await contactsService.list({
       search: searchQuery.value || undefined,
       page: currentPage.value,
-      limit: pageSize
+      limit: pageSize,
+      account: filterAccount.value === 'all' ? undefined : filterAccount.value,
+      sort: sortKey.value,
+      sort_dir: sortDirection.value
     })
     const data = response.data as any
     const responseData = data.data || data
@@ -123,6 +145,19 @@ async function fetchAccounts() {
 const { searchQuery, currentPage, totalItems, pageSize, handlePageChange } = useSearchPagination({
   fetchFn: () => fetchContacts(),
 })
+
+// Server-side sorting: refetch from page 1 whenever the sort key/direction
+// changes so the ordering applies across the whole result set, not just the
+// current page.
+watch([sortKey, sortDirection], () => {
+  currentPage.value = 1
+  fetchContacts()
+})
+
+function applyAccountFilter() {
+  currentPage.value = 1
+  fetchContacts()
+}
 
 onMounted(() => {
   fetchContacts()
@@ -184,7 +219,20 @@ function getDisplayName(contact: Contact): string {
                   <CardTitle>{{ $t('contacts.allContacts') }}</CardTitle>
                   <CardDescription>{{ $t('contacts.allContactsDesc') }}</CardDescription>
                 </div>
-                <SearchInput v-model="searchQuery" :placeholder="$t('contacts.searchContacts') + '...'" class="w-64" />
+                <div class="flex items-center gap-2 flex-wrap">
+                  <Select v-model="filterAccount" @update:model-value="applyAccountFilter">
+                    <SelectTrigger class="w-[200px]">
+                      <SelectValue :placeholder="$t('contacts.selectAccount')" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">{{ $t('contacts.allAccounts') }}</SelectItem>
+                      <SelectItem v-for="acc in availableAccounts" :key="acc.id" :value="acc.name">
+                        {{ acc.name }}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <SearchInput v-model="searchQuery" :placeholder="$t('contacts.searchContacts') + '...'" class="w-64" />
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -212,6 +260,10 @@ function getDisplayName(contact: Contact): string {
                 </template>
                 <template #cell-phone_number="{ item: contact }">
                   <code class="text-sm">{{ contact.phone_number }}</code>
+                </template>
+                <template #cell-whatsapp_account="{ item: contact }">
+                  <span v-if="getAccountLabel(contact)" class="text-sm text-muted-foreground">{{ getAccountLabel(contact) }}</span>
+                  <span v-else class="text-sm text-muted-foreground/50">—</span>
                 </template>
                 <template #cell-tags="{ item: contact }">
                   <div class="flex flex-wrap gap-1">

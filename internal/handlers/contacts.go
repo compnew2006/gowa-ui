@@ -117,6 +117,12 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 	// template broadcasts, so the recipient picker excludes them.
 	excludeGroups := string(r.RequestCtx.QueryArgs().Peek("exclude_groups"))
 
+	// Server-side sorting across the whole result set (not just the current
+	// page). Allowed column names map to physical columns; the whatsapp_account
+	// key maps to GORM's default column name whats_app_account.
+	sortParam := string(r.RequestCtx.QueryArgs().Peek("sort"))
+	sortDirParam := string(r.RequestCtx.QueryArgs().Peek("sort_dir"))
+
 	var contacts []models.Contact
 	query := a.ScopeToOrg(a.DB, userID, orgID)
 
@@ -178,8 +184,28 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 		}
 	}
 
-	// Order by last message time (most recent first)
-	query = query.Order("last_message_at DESC NULLS LAST, created_at DESC")
+	// Order by last message time (most recent first) by default. When a sort
+	// column is requested, order the full result set server-side so pagination
+	// stays consistent across pages.
+	sortColumns := map[string]string{
+		"profile_name": "profile_name",
+		"phone_number": "phone_number",
+		// Empty account strings (contacts never linked to an account) are
+		// folded to NULL so NULLS LAST always pushes them to the bottom of
+		// both directions, mirroring the "—" fallback shown in the UI.
+		"whatsapp_account": "(CASE WHEN whats_app_account = '' THEN NULL ELSE whats_app_account END)",
+		"last_message_at":  "last_message_at",
+		"created_at":       "created_at",
+	}
+	orderClause := "last_message_at DESC NULLS LAST, created_at DESC"
+	if col, ok := sortColumns[sortParam]; ok {
+		dir := "ASC"
+		if sortDirParam == "desc" {
+			dir = "DESC"
+		}
+		orderClause = fmt.Sprintf("%s %s NULLS LAST, created_at DESC", col, dir)
+	}
+	query = query.Order(orderClause)
 
 	var total int64
 	query.Model(&models.Contact{}).Count(&total)

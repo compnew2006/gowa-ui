@@ -612,29 +612,27 @@ async function openAddRecipientsDialog() {
 
   showAddRecipientsDialog.value = true
 
-  // Preload the selected account's contacts so the "From Contacts" tab is ready.
-  if (form.value.whatsapp_account) {
-    await loadAccountContacts()
-  }
+  // Preload contacts so the "From Contacts" tab is ready. All individual
+  // contacts are loaded regardless of which WhatsApp account they were synced
+  // under — campaign recipients are plain phone numbers sent through the
+  // campaign's account, so the contact's origin account is irrelevant. Many
+  // contacts also have no whats_app_account set at all, which previously made
+  // them unreachable when the picker was scoped to a single account.
+  await loadAccountContacts()
 }
 
-// Loads contacts belonging to the campaign's selected WhatsApp account. The
-// backend scopes /contacts by the `account` param (Contact.whats_app_account),
-// so an account must be chosen before recipients can be picked from contacts.
+// Loads all individual contacts (groups/newsletters excluded) for the
+// recipient picker.
 async function loadAccountContacts() {
-  if (!form.value.whatsapp_account) {
-    accountContacts.value = []
-    return
-  }
   isLoadingContacts.value = true
   try {
     // The backend caps limit at 100, so page through until all of the
-    // account's individual contacts are loaded (groups/newsletters excluded).
+    // organization's individual contacts are loaded (groups/newsletters
+    // excluded).
     const pageSize = 100
     const all: ContactOption[] = []
     for (let page = 1; page <= 50; page++) {
       const response = await contactsService.list({
-        account: form.value.whatsapp_account,
         exclude_groups: true,
         page,
         limit: pageSize,
@@ -1518,53 +1516,48 @@ onUnmounted(() => {
 
         <!-- From Contacts Tab -->
         <TabsContent value="contacts" class="space-y-3 mt-3">
-          <div v-if="!form.whatsapp_account" class="text-center py-8 text-sm text-muted-foreground">
-            {{ $t('campaigns.selectAccountFirst', 'Select a WhatsApp account first to load its contacts.') }}
+          <div class="relative">
+            <Search class="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              v-model="contactSearch"
+              class="pl-8"
+              :placeholder="$t('campaigns.searchContacts', 'Search contacts by name or number')"
+            />
+          </div>
+          <div v-if="isLoadingContacts" class="flex items-center justify-center py-8 text-sm text-muted-foreground">
+            <Loader2 class="h-4 w-4 mr-2 animate-spin" />
+            {{ $t('common.loading', 'Loading...') }}
+          </div>
+          <div v-else-if="filteredAccountContacts.length === 0" class="text-center py-8">
+            <Users class="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+            <p class="text-sm text-muted-foreground">{{ $t('campaigns.noContactsForAccount', 'No contacts found') }}</p>
           </div>
           <template v-else>
-            <div class="relative">
-              <Search class="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                v-model="contactSearch"
-                class="pl-8"
-                :placeholder="$t('campaigns.searchContacts', 'Search contacts by name or number')"
+            <div class="flex items-center gap-2 px-1">
+              <Checkbox
+                :checked="allFilteredSelected"
+                @update:checked="toggleSelectAllContacts"
               />
+              <span class="text-xs text-muted-foreground">
+                {{ $t('campaigns.selectAll', 'Select all') }} ({{ filteredAccountContacts.length }})
+              </span>
             </div>
-            <div v-if="isLoadingContacts" class="flex items-center justify-center py-8 text-sm text-muted-foreground">
-              <Loader2 class="h-4 w-4 mr-2 animate-spin" />
-              {{ $t('common.loading', 'Loading...') }}
-            </div>
-            <div v-else-if="filteredAccountContacts.length === 0" class="text-center py-8">
-              <Users class="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-              <p class="text-sm text-muted-foreground">{{ $t('campaigns.noContactsForAccount', 'No contacts found for this account') }}</p>
-            </div>
-            <template v-else>
-              <div class="flex items-center gap-2 px-1">
+            <div class="max-h-[280px] overflow-y-auto rounded-md border divide-y">
+              <label
+                v-for="contact in filteredAccountContacts"
+                :key="contact.id"
+                class="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-muted/50"
+              >
                 <Checkbox
-                  :checked="allFilteredSelected"
-                  @update:checked="toggleSelectAllContacts"
+                  :checked="selectedContactIds.has(contact.id)"
+                  @update:checked="(v: boolean | 'indeterminate') => toggleContact(contact.id, v)"
                 />
-                <span class="text-xs text-muted-foreground">
-                  {{ $t('campaigns.selectAll', 'Select all') }} ({{ filteredAccountContacts.length }})
-                </span>
-              </div>
-              <div class="max-h-[280px] overflow-y-auto rounded-md border divide-y">
-                <label
-                  v-for="contact in filteredAccountContacts"
-                  :key="contact.id"
-                  class="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-muted/50"
-                >
-                  <Checkbox
-                    :checked="selectedContactIds.has(contact.id)"
-                    @update:checked="(v: boolean | 'indeterminate') => toggleContact(contact.id, v)"
-                  />
-                  <div class="min-w-0">
-                    <p class="text-sm font-medium truncate">{{ contact.profile_name || contact.name || contact.phone_number }}</p>
-                    <p class="text-xs text-muted-foreground truncate">{{ contact.phone_number }}</p>
-                  </div>
-                </label>
-              </div>
-            </template>
+                <div class="min-w-0">
+                  <p class="text-sm font-medium truncate">{{ contact.profile_name || contact.name || contact.phone_number }}</p>
+                  <p class="text-xs text-muted-foreground truncate">{{ contact.phone_number }}</p>
+                </div>
+              </label>
+            </div>
           </template>
           <DialogFooter>
             <Button

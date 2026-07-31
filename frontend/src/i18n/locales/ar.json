@@ -530,7 +530,8 @@
     "searchTags": "بحث في الأوسمة...",
     "noTagsFound": "لم يتم العثور على أوسمة",
     "whatsappAccount": "حساب واتساب",
-    "selectAccount": "اختر الحساب..."
+    "selectAccount": "اختر الحساب...",
+    "allAccounts": "كل الحسابات"
   },
   "importExport": {
     "title": "استيراد/تصدير {resource}",

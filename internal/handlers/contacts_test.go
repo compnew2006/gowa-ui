@@ -1583,3 +1583,88 @@ func TestApp_AssignContact_AssignUserFromDifferentOrg(t *testing.T) {
 	// User from a different org should not be found
 	assert.Equal(t, fasthttp.StatusBadRequest, testutil.GetResponseStatusCode(req))
 }
+
+// --- ListContacts server-side sort tests ---
+
+func TestApp_ListContacts_SortByWhatsAppAccount(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+
+	// Contacts with distinct accounts plus one without any account.
+	testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount("Zeta"))
+	testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount("Alpha"))
+	testutil.CreateTestContactWith(t, app.DB, org.ID) // no account
+
+	listSorted := func(sort, sortDir string) []handlers.ContactResponse {
+		req := testutil.NewGETRequest(t)
+		testutil.SetAuthContext(req, org.ID, user.ID)
+		testutil.SetQueryParam(req, "sort", sort)
+		testutil.SetQueryParam(req, "sort_dir", sortDir)
+
+		err := app.ListContacts(req)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+		var resp struct {
+			Data struct {
+				Contacts []handlers.ContactResponse `json:"contacts"`
+				Total    int64                      `json:"total"`
+			} `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+		assert.Equal(t, int64(3), resp.Data.Total)
+		return resp.Data.Contacts
+	}
+
+	accounts := func(contacts []handlers.ContactResponse) []string {
+		got := make([]string, len(contacts))
+		for i, c := range contacts {
+			got[i] = c.WhatsAppAccount
+		}
+		return got
+	}
+
+	// Ascending: NULLS LAST puts the account-less contact at the end.
+	assert.Equal(t, []string{"Alpha", "Zeta", ""}, accounts(listSorted("whatsapp_account", "asc")),
+		"asc sort must order by account with NULLS LAST")
+
+	// Descending: NULLS LAST still puts the account-less contact at the end.
+	assert.Equal(t, []string{"Zeta", "Alpha", ""}, accounts(listSorted("whatsapp_account", "desc")),
+		"desc sort must order by account reversed with NULLS LAST")
+}
+
+func TestApp_ListContacts_UnknownSortKeyFallsBackToDefault(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+
+	for i := 0; i < 3; i++ {
+		testutil.CreateTestContact(t, app.DB, org.ID)
+	}
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetQueryParam(req, "sort", "bogus_column")
+	testutil.SetQueryParam(req, "sort_dir", "asc")
+
+	err := app.ListContacts(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp struct {
+		Data struct {
+			Contacts []handlers.ContactResponse `json:"contacts"`
+			Total    int64                      `json:"total"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+	assert.Equal(t, int64(3), resp.Data.Total)
+	assert.Len(t, resp.Data.Contacts, 3)
+}
