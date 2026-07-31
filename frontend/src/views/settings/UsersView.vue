@@ -85,7 +85,7 @@ const sortDirection = ref<'asc' | 'desc'>('asc')
 
 const currentUserId = computed(() => authStore.user?.id)
 const isSuperAdmin = computed(() => authStore.user?.is_super_admin || false)
-const canWrite = computed(() => authStore.hasPermission('users', 'write'))
+const canAssignAccounts = computed(() => authStore.hasPermission('accounts', 'assign'))
 const breadcrumbs = computed(() => [{ label: t('nav.settings'), href: '/settings' }, { label: t('nav.users') }])
 const getDefaultRoleId = () => rolesStore.roles.find(r => r.name === 'agent' && r.is_system)?.id || ''
 
@@ -354,7 +354,7 @@ async function copyInviteLink() {
                 <template #cell-actions="{ item: user }">
                   <div class="flex items-center justify-end gap-1">
                     <IconButton
-                      v-if="canWrite && accounts.length > 0"
+                      v-if="canAssignAccounts && accounts.length > 0"
                       :icon="Smartphone"
                       :label="$t('users.accountAssignments')"
                       class="h-8 w-8"
@@ -411,7 +411,7 @@ async function copyInviteLink() {
             </SelectContent>
           </Select>
         </div>
-        <div v-if="accounts.length > 0" class="space-y-2 border-t pt-4">
+        <div v-if="canAssignAccounts && accounts.length > 0" class="space-y-2 border-t pt-4">
           <Label>{{ $t('users.accountAssignments') }}</Label>
           <p class="text-xs text-muted-foreground">{{ $t('users.accountAssignmentsDesc') }}</p>
           <div class="space-y-2 pt-1">

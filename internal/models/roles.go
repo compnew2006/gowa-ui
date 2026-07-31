@@ -115,6 +115,7 @@ func DefaultPermissions() []Permission {
 		{Resource: ResourceAccounts, Action: ActionRead, Description: "View WhatsApp accounts"},
 		{Resource: ResourceAccounts, Action: ActionWrite, Description: "Create and edit WhatsApp accounts"},
 		{Resource: ResourceAccounts, Action: ActionDelete, Description: "Delete WhatsApp accounts"},
+		{Resource: ResourceAccounts, Action: ActionAssign, Description: "Assign WhatsApp account access to users"},
 
 		// Devices (GOWA device management — pairing, provisioning, status)
 		{Resource: ResourceDevices, Action: ActionRead, Description: "View GOWA device status and instances"},
@@ -211,7 +212,7 @@ func SystemRolePermissions() map[string][]string {
 		// Settings
 		"settings.general:read", "settings.general:write",
 		// Accounts
-		"accounts:read", "accounts:write", "accounts:delete",
+		"accounts:read", "accounts:write", "accounts:delete", "accounts:assign",
 		// Devices
 		"devices:read", "devices:write", "devices:delete",
 		// GOWA instances

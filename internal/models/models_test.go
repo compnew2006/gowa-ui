@@ -318,3 +318,23 @@ func TestJSONBArray_Scan(t *testing.T) {
 		})
 	}
 }
+
+// TestAccountsAssignPermission verifies the dedicated accounts:assign permission
+// that governs who can see and set WhatsApp account access for users.
+func TestAccountsAssignPermission(t *testing.T) {
+	t.Parallel()
+
+	hasAssign := false
+	for _, p := range models.DefaultPermissions() {
+		if p.Resource == models.ResourceAccounts && p.Action == models.ActionAssign {
+			hasAssign = true
+			break
+		}
+	}
+	assert.True(t, hasAssign, "accounts:assign should be in DefaultPermissions()")
+
+	rolePerms := models.SystemRolePermissions()
+	assert.Contains(t, rolePerms["admin"], "accounts:assign", "admin should have accounts:assign")
+	assert.Contains(t, rolePerms["manager"], "accounts:assign", "manager should have accounts:assign")
+	assert.NotContains(t, rolePerms["agent"], "accounts:assign", "agent should not have accounts:assign")
+}

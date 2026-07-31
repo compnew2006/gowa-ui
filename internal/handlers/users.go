@@ -348,6 +348,11 @@ func (a *App) CreateUser(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid email format", nil, "")
 	}
 
+	// Assigning account access requires the dedicated accounts:assign permission.
+	if req.WhatsAppAccountIDs != nil && !a.HasPermission(userID, models.ResourceAccounts, models.ActionAssign, orgID) {
+		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Insufficient permissions to change account assignments", nil, "")
+	}
+
 	// Determine role
 	var roleID *uuid.UUID
 	if req.RoleID != nil {
@@ -541,9 +546,10 @@ func (a *App) UpdateUser(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Insufficient permissions to change roles", nil, "")
 	}
 
-	// Account assignments are equally privileged — without this gate a user
-	// could lift their own visibility restrictions via self-update.
-	if req.WhatsAppAccountIDs != nil && !a.HasPermission(currentUserID, models.ResourceUsers, models.ActionWrite, orgID) {
+	// Account assignments are governed by the dedicated accounts:assign
+	// permission — without this gate a user could lift their own visibility
+	// restrictions via self-update.
+	if req.WhatsAppAccountIDs != nil && !a.HasPermission(currentUserID, models.ResourceAccounts, models.ActionAssign, orgID) {
 		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Insufficient permissions to change account assignments", nil, "")
 	}
 
