@@ -188,6 +188,7 @@ const canRetryFailed = computed(() => {
 
 // --- Recipients state ---
 const recipients = ref<Recipient[]>([])
+const recipientsOpen = ref(true)
 const isLoadingRecipients = ref(false)
 const deletingRecipientId = ref<string | null>(null)
 const showAddRecipientsDialog = ref(false)
@@ -1356,7 +1357,7 @@ onUnmounted(() => {
 
     <!-- Recipients Card (collapsible) -->
     <Card v-if="!isNew && campaign">
-      <Collapsible :default-open="recipients.length > 0 && recipients.length <= 20">
+      <Collapsible v-model:open="recipientsOpen">
         <CardHeader class="pb-3 flex flex-row items-center justify-between">
           <CollapsibleTrigger class="flex items-center gap-2 cursor-pointer hover:opacity-80">
             <ChevronDown class="h-4 w-4 text-muted-foreground transition-transform [[data-state=closed]_&]:rotate-[-90deg]" />

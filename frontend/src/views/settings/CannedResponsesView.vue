@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { PageHeader, SearchInput, DeleteConfirmDialog, DataTable, IconButton, ErrorState, type Column } from '@/components/shared'
 import { cannedResponsesService, type CannedResponse } from '@/services/api'
 import { useCrudState } from '@/composables/useCrudState'
+import { useAuthStore } from '@/stores/auth'
 import { toast } from 'vue-sonner'
 import { Plus, MessageSquareText, Pencil, Trash2, Copy } from 'lucide-vue-next'
 import { getErrorMessage } from '@/lib/api-utils'
@@ -18,6 +19,9 @@ import { useSearchPagination } from '@/composables/useSearchPagination'
 
 const { t } = useI18n()
 const router = useRouter()
+const authStore = useAuthStore()
+const canWrite = computed(() => authStore.hasPermission('canned_responses', 'write'))
+const canDelete = computed(() => authStore.hasPermission('canned_responses', 'delete'))
 
 const cannedResponses = ref<CannedResponse[]>([])
 const isLoading = ref(false)
@@ -100,7 +104,7 @@ function getCategoryLabel(category: string): string { return getLabelFromValue(C
 <template>
   <div class="flex flex-col h-full bg-[#0a0a0b] light:bg-gray-50">
     <PageHeader :title="$t('cannedResponses.title')" :icon="MessageSquareText" icon-gradient="bg-gradient-to-br from-teal-500 to-emerald-600 shadow-teal-500/20" back-link="/settings" :breadcrumbs="breadcrumbs">
-      <template #actions>
+      <template v-if="canWrite" #actions>
         <Button variant="outline" size="sm" @click="openCreate"><Plus class="h-4 w-4 mr-2" />{{ $t('cannedResponses.addResponse') }}</Button>
       </template>
     </PageHeader>
@@ -183,12 +187,14 @@ function getCategoryLabel(category: string): string { return getLabelFromValue(C
                       @click="copyToClipboard(response.content)"
                     />
                     <IconButton
+                      v-if="canWrite"
                       :icon="Pencil"
                       :label="$t('cannedResponses.editResponse')"
                       class="h-8 w-8"
                       @click="openEdit(response)"
                     />
                     <IconButton
+                      v-if="canDelete"
                       :icon="Trash2"
                       :label="$t('cannedResponses.deleteResponse')"
                       variant="ghost"
@@ -197,7 +203,7 @@ function getCategoryLabel(category: string): string { return getLabelFromValue(C
                     />
                   </div>
                 </template>
-                <template #empty-action>
+                <template v-if="canWrite" #empty-action>
                   <Button variant="outline" size="sm" @click="openCreate">
                     <Plus class="h-4 w-4 mr-2" />{{ $t('cannedResponses.addResponse') }}
                   </Button>

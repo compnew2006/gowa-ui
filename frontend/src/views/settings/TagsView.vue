@@ -11,6 +11,7 @@ import { TagBadge } from '@/components/ui/tag-badge'
 import { PageHeader, SearchInput, DataTable, CrudFormDialog, DeleteConfirmDialog, IconButton, ErrorState, type Column } from '@/components/shared'
 import type { Tag } from '@/services/api'
 import { useTagsStore } from '@/stores/tags'
+import { useAuthStore } from '@/stores/auth'
 import { useCrudState } from '@/composables/useCrudState'
 import { toast } from 'vue-sonner'
 import { Plus, Tags, Pencil, Trash2 } from 'lucide-vue-next'
@@ -21,6 +22,9 @@ import { useSearchPagination } from '@/composables/useSearchPagination'
 
 const { t } = useI18n()
 const tagsStore = useTagsStore()
+const authStore = useAuthStore()
+const canWriteTags = computed(() => authStore.hasPermission('tags', 'write'))
+const canDeleteTags = computed(() => authStore.hasPermission('tags', 'delete'))
 
 interface TagFormData {
   name: string
@@ -126,7 +130,7 @@ function getColorLabel(color: string): string {
 <template>
   <div class="flex flex-col h-full bg-[#0a0a0b] light:bg-gray-50">
     <PageHeader :title="$t('tags.title')" :subtitle="$t('tags.subtitle')" :icon="Tags" icon-gradient="bg-gradient-to-br from-indigo-500 to-purple-600 shadow-indigo-500/20" back-link="/settings">
-      <template #actions>
+      <template v-if="canWriteTags" #actions>
         <Button variant="outline" size="sm" @click="openCreateDialog"><Plus class="h-4 w-4 mr-2" />{{ $t('tags.addTag') }}</Button>
       </template>
     </PageHeader>
@@ -182,13 +186,13 @@ function getColorLabel(color: string): string {
                 </template>
                 <template #cell-actions="{ item: tag }">
                   <div class="flex items-center justify-end gap-1">
-                    <IconButton :icon="Pencil" :label="$t('tags.editTag')" class="h-8 w-8" @click="openEditDialog(tag)" />
-                    <IconButton :label="$t('tags.deleteTag')" class="h-8 w-8" @click="openDeleteDialog(tag)">
+                    <IconButton v-if="canWriteTags" :icon="Pencil" :label="$t('tags.editTag')" class="h-8 w-8" @click="openEditDialog(tag)" />
+                    <IconButton v-if="canDeleteTags" :label="$t('tags.deleteTag')" class="h-8 w-8" @click="openDeleteDialog(tag)">
                       <Trash2 class="h-4 w-4 text-destructive" />
                     </IconButton>
                   </div>
                 </template>
-                <template #empty-action>
+                <template v-if="canWriteTags" #empty-action>
                   <Button variant="outline" size="sm" @click="openCreateDialog">
                     <Plus class="h-4 w-4 mr-2" />
                     {{ $t('tags.addTag') }}

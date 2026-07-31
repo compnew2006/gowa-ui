@@ -54,6 +54,7 @@ export default defineConfig({
     drop: ['console', 'debugger']
   },
   server: {
+    host: '127.0.0.1',
     port: 3000,
     allowedHosts: [],
     proxy: {

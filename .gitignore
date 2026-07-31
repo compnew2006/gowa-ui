@@ -63,3 +63,5 @@ test-results/
 
 # Docker 
 docker/.env
+
+testsprite_tests/tmp/config.json

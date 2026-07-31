@@ -148,10 +148,10 @@ export const useContactsStore = defineStore('contacts', () => {
     if (stored && (VALID_TABS as readonly string[]).includes(stored)) {
       return stored
     }
-    // Role-aware default. Admins/managers have contacts:write and manage the
-    // unassigned queue; agents work their own assigned chats.
-    const isManager = authStore.hasPermission('contacts', 'write')
-    return isManager ? 'pending' : 'me'
+    // Role-aware default. Everyone starts on 'pending' — the unassigned queue —
+    // since it's the most useful entry point for both managers (who triage it)
+    // and agents (who claim chats from it).
+    return 'pending'
   }
   const activeListTab = ref<ListTab>(loadStoredTab())
   // Persist tab choice (M2). `watch` re-fires on every change, so the stored
@@ -189,11 +189,9 @@ export const useContactsStore = defineStore('contacts', () => {
       return
     }
     if (hasExplicitTabChoice) return
-    const isManager = authStore.hasPermission('contacts', 'write')
-    if (isManager && activeListTab.value === 'me') {
+    // No explicit choice — ensure user lands on a visible tab.
+    if (!canSeeSupervisorTabs.value && activeListTab.value !== 'pending' && activeListTab.value !== 'me') {
       activeListTab.value = 'pending'
-    } else if (!isManager && activeListTab.value === 'pending') {
-      activeListTab.value = 'me'
     }
   }, { immediate: true })
 

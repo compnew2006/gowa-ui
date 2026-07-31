@@ -83,6 +83,10 @@ const router = createRouter({
           meta: { permission: 'settings.general' }
         },
         {
+          path: 'settings/general',
+          redirect: '/settings'
+        },
+        {
           path: 'settings/accounts',
           name: 'accounts',
           component: () => import('@/views/settings/AccountsView.vue'),
