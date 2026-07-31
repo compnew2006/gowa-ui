@@ -166,6 +166,13 @@ func RunMigrationWithProgress(db *gorm.DB, adminCfg *config.DefaultAdminConfig) 
 		return err
 	}
 
+	// Purge stale permissions left over from removed features (chatbot, calling,
+	// flows, IVR, ...) so they no longer appear in the roles UI.
+	if err := PurgeStalePermissions(silentDB); err != nil {
+		fmt.Printf("\n  \033[31m✗ Failed to purge stale permissions\033[0m\n\n")
+		return err
+	}
+
 	// Fix existing organizations - link permissions to system roles if missing
 	if err := SeedSystemRolesForAllOrgs(silentDB); err != nil {
 		fmt.Printf("\n  \033[31m✗ Failed to fix existing role permissions\033[0m\n\n")
@@ -430,6 +437,40 @@ func SeedPermissionsAndRoles(db *gorm.DB) error {
 				return fmt.Errorf("failed to create permission %s:%s: %w", perm.Resource, perm.Action, err)
 			}
 		}
+	}
+
+	return nil
+}
+
+// PurgeStalePermissions removes permissions that are no longer part of the
+// current DefaultPermissions() set (e.g. leftovers from removed features such
+// as chatbot, calling, flows and IVR) together with their role junction rows.
+// It is idempotent and safe to run on every migration.
+func PurgeStalePermissions(db *gorm.DB) error {
+	valid := make(map[string]bool)
+	for _, perm := range models.DefaultPermissions() {
+		valid[perm.Resource+":"+perm.Action] = true
+	}
+
+	var stale []models.Permission
+	if err := db.Find(&stale).Error; err != nil {
+		return fmt.Errorf("failed to list permissions: %w", err)
+	}
+
+	for _, perm := range stale {
+		if valid[perm.Resource+":"+perm.Action] {
+			continue
+		}
+		tx := db.Begin()
+		if err := tx.Where("permission_id = ?", perm.ID).Delete(&models.RolePermission{}).Error; err != nil {
+			tx.Rollback()
+			return fmt.Errorf("failed to purge role_permissions for %s:%s: %w", perm.Resource, perm.Action, err)
+		}
+		if err := tx.Delete(&models.Permission{}, "id = ?", perm.ID).Error; err != nil {
+			tx.Rollback()
+			return fmt.Errorf("failed to purge permission %s:%s: %w", perm.Resource, perm.Action, err)
+		}
+		tx.Commit()
 	}
 
 	return nil

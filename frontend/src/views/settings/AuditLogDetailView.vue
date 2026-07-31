@@ -25,7 +25,6 @@ const resourceRouteMap: Record<string, (id: string) => string> = {
   role: (id) => `/settings/roles/${id}`,
   team: (id) => `/settings/teams/${id}`,
   webhook: () => `/settings/webhooks`,
-  ivr_flow: (id) => `/calling/ivr-flows/${id}`,
   campaign: (id) => `/campaigns/${id}`,
   custom_action: () => `/settings/custom-actions`,
   canned_response: () => `/settings/canned-responses`,

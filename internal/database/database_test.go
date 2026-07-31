@@ -66,6 +66,75 @@ func TestSeedPermissionsAndRoles_PermissionsHaveResourceAndAction(t *testing.T) 
 	}
 }
 
+// --- PurgeStalePermissions ---
+
+func TestPurgeStalePermissions_RemovesNonDefaultPermissions(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	cleanAll(t, db)
+
+	require.NoError(t, database.SeedPermissionsAndRoles(db))
+
+	// Insert a stale permission from a removed feature
+	stale := models.Permission{
+		BaseModel:   models.BaseModel{ID: uuid.New()},
+		Resource:    "chatbot",
+		Action:      "read",
+		Description: "Stale chatbot permission",
+	}
+	require.NoError(t, db.Create(&stale).Error)
+
+	// Link it to a role junction row to prove junction cleanup
+	org := models.Organization{
+		BaseModel: models.BaseModel{ID: uuid.New()},
+		Name:      "Purge Org",
+		Settings:  models.JSONB{},
+	}
+	require.NoError(t, db.Create(&org).Error)
+	role := models.CustomRole{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		Name:           "Custom",
+	}
+	require.NoError(t, db.Create(&role).Error)
+	require.NoError(t, db.Create(&models.RolePermission{CustomRoleID: role.ID, PermissionID: stale.ID}).Error)
+
+	require.NoError(t, database.PurgeStalePermissions(db))
+
+	var count int64
+	db.Model(&models.Permission{}).Count(&count)
+	assert.Equal(t, int64(len(models.DefaultPermissions())), count, "stale permission should be purged")
+
+	var junction int64
+	db.Model(&models.RolePermission{}).Where("permission_id = ?", stale.ID).Count(&junction)
+	assert.Equal(t, int64(0), junction, "role_permissions junction row should be purged")
+
+	// Default permissions must survive
+	var templates int64
+	db.Model(&models.Permission{}).Where("resource = ?", "templates").Count(&templates)
+	assert.Equal(t, int64(3), templates, "live template permissions must not be purged")
+}
+
+func TestPurgeStalePermissions_Idempotent(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	cleanAll(t, db)
+
+	require.NoError(t, database.SeedPermissionsAndRoles(db))
+
+	stale := models.Permission{
+		BaseModel: models.BaseModel{ID: uuid.New()},
+		Resource:  "ivr_flows",
+		Action:    "read",
+	}
+	require.NoError(t, db.Create(&stale).Error)
+
+	require.NoError(t, database.PurgeStalePermissions(db))
+	require.NoError(t, database.PurgeStalePermissions(db))
+
+	var count int64
+	db.Model(&models.Permission{}).Count(&count)
+	assert.Equal(t, int64(len(models.DefaultPermissions())), count, "idempotent: count stable after two purges")
+}
+
 // --- SeedSystemRolesForOrg ---
 
 func TestSeedSystemRolesForOrg_CreatesThreeSystemRoles(t *testing.T) {

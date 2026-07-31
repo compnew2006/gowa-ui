@@ -165,7 +165,6 @@ onMounted(async () => {
                       <SelectItem value="account">Account</SelectItem>
                       <SelectItem value="campaign">Campaign</SelectItem>
                       <SelectItem value="contact">Contact</SelectItem>
-                      <SelectItem value="ivr_flow">IVR Flow</SelectItem>
                       <SelectItem value="team">Team</SelectItem>
                       <SelectItem value="template">Template</SelectItem>
                     </SelectContent>
