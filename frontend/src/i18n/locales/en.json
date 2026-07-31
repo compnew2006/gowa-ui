@@ -1531,6 +1531,7 @@
     "replace": "Replace",
     "scheduledAt": "Scheduled At",
     "selectAccountFirst": "Please select a WhatsApp account first",
+    "selectAccountFirstContacts": "Select a WhatsApp account to load its contacts",
     "sent": "Sent",
     "startCampaign": "Start Campaign",
     "startConfirm": "Are you sure you want to start this campaign?",

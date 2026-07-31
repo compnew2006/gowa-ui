@@ -411,6 +411,13 @@ watch(() => form.value.whatsapp_account, (newVal, oldVal) => {
       form.value.template_id = ''
     }
     loadTemplates()
+    // Refresh the contact picker so it reflects the newly selected account.
+    // Selections are cleared because they referenced contacts from the
+    // previous account.
+    selectedContactIds.value = new Set()
+    if (showAddRecipientsDialog.value) {
+      loadAccountContacts()
+    }
   }
 })
 
@@ -612,27 +619,31 @@ async function openAddRecipientsDialog() {
 
   showAddRecipientsDialog.value = true
 
-  // Preload contacts so the "From Contacts" tab is ready. All individual
-  // contacts are loaded regardless of which WhatsApp account they were synced
-  // under — campaign recipients are plain phone numbers sent through the
-  // campaign's account, so the contact's origin account is irrelevant. Many
-  // contacts also have no whats_app_account set at all, which previously made
-  // them unreachable when the picker was scoped to a single account.
+  // Preload the selected account's individual contacts so the "From Contacts"
+  // tab is ready. The list is scoped to the campaign's WhatsApp account and
+  // reloads whenever that account changes while the dialog is open (see the
+  // whatsapp_account watcher below).
   await loadAccountContacts()
 }
 
-// Loads all individual contacts (groups/newsletters excluded) for the
-// recipient picker.
+// Loads all individual contacts (groups/newsletters excluded) synced under the
+// campaign's selected WhatsApp account. Returns an empty list when no account
+// is selected yet — the recipient picker requires an account to be chosen
+// first, mirroring the template selector.
 async function loadAccountContacts() {
+  if (!form.value.whatsapp_account) {
+    accountContacts.value = []
+    return
+  }
   isLoadingContacts.value = true
   try {
     // The backend caps limit at 100, so page through until all of the
-    // organization's individual contacts are loaded (groups/newsletters
-    // excluded).
+    // account's individual contacts are loaded (groups/newsletters excluded).
     const pageSize = 100
     const all: ContactOption[] = []
     for (let page = 1; page <= 50; page++) {
       const response = await contactsService.list({
+        account: form.value.whatsapp_account,
         exclude_groups: true,
         page,
         limit: pageSize,
@@ -1527,6 +1538,10 @@ onUnmounted(() => {
           <div v-if="isLoadingContacts" class="flex items-center justify-center py-8 text-sm text-muted-foreground">
             <Loader2 class="h-4 w-4 mr-2 animate-spin" />
             {{ $t('common.loading', 'Loading...') }}
+          </div>
+          <div v-else-if="!form.whatsapp_account" class="text-center py-8">
+            <Users class="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+            <p class="text-sm text-muted-foreground">{{ $t('campaigns.selectAccountFirstContacts', 'Select a WhatsApp account to load its contacts') }}</p>
           </div>
           <div v-else-if="filteredAccountContacts.length === 0" class="text-center py-8">
             <Users class="h-8 w-8 mx-auto text-muted-foreground mb-2" />
