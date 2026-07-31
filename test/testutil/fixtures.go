@@ -194,6 +194,17 @@ func CreateTestWhatsAppAccountWith(t *testing.T, db *gorm.DB, orgID uuid.UUID, o
 	return account
 }
 
+// AssignAccountToUser links a WhatsApp account to a user, restricting the
+// user's account visibility to their assigned set.
+func AssignAccountToUser(t *testing.T, db *gorm.DB, userID, accountID uuid.UUID) {
+	t.Helper()
+
+	require.NoError(t, db.Create(&models.UserWhatsAppAccount{
+		UserID:            userID,
+		WhatsAppAccountID: accountID,
+	}).Error)
+}
+
 // --- Contact ---
 
 // CreateTestContact creates a test contact in the database.
@@ -360,11 +371,13 @@ func CreateAgentRole(t *testing.T, db *gorm.DB, orgID uuid.UUID) *models.CustomR
 	t.Helper()
 
 	agentPerms := []string{
-		"chat:read", "chat:write",
+		"accounts:read",
+		"chat:read", "chat:write", "chat.assign:write",
 		"contacts:read",
+		"tags:read",
 		"analytics.agents:read",
-		"transfers:read", "transfers:pickup",
 		"canned_responses:read",
+		"custom_actions:execute",
 	}
 	return CreateTestRoleWithKeys(t, db, orgID, "agent", agentPerms)
 }

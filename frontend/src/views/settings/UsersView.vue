@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { PageHeader, SearchInput, DataTable, CrudFormDialog, DeleteConfirmDialog, IconButton, ErrorState, type Column } from '@/components/shared'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -15,6 +16,7 @@ import { useUsersStore, type User } from '@/stores/users'
 import { useAuthStore } from '@/stores/auth'
 import { useRolesStore } from '@/stores/roles'
 import { useOrganizationsStore } from '@/stores/organizations'
+import { accountsService } from '@/services/api'
 import { toast } from 'vue-sonner'
 import { Plus, Pencil, Trash2, UserMinus, User as UserIcon, Shield, ShieldCheck, UserCog, Users, Link, UserPlus, Loader2 } from 'lucide-vue-next'
 import { useCrudState } from '@/composables/useCrudState'
@@ -37,9 +39,10 @@ interface UserFormData {
   role_id: string
   is_active: boolean
   is_super_admin: boolean
+  whatsapp_account_ids: string[]
 }
 
-const defaultFormData: UserFormData = { email: '', password: '', full_name: '', role_id: '', is_active: true, is_super_admin: false }
+const defaultFormData: UserFormData = { email: '', password: '', full_name: '', role_id: '', is_active: true, is_super_admin: false, whatsapp_account_ids: [] }
 
 const {
   isLoading, isSubmitting, isDialogOpen, deleteDialogOpen, itemToDelete: userToDelete,
@@ -87,8 +90,27 @@ const getDefaultRoleId = () => rolesStore.roles.find(r => r.name === 'agent' && 
 
 function openCreateDialog() { formData.value.role_id = getDefaultRoleId(); baseOpenCreateDialog() }
 
-watch(() => organizationsStore.selectedOrgId, () => { fetchUsers(); rolesStore.fetchRoles() })
-onMounted(() => { fetchUsers(); rolesStore.fetchRoles() })
+// Org accounts for the assignment checklist (loaded best-effort)
+const accounts = ref<{ id: string; name: string }[]>([])
+
+async function loadAccounts() {
+  try {
+    const response = await accountsService.list()
+    accounts.value = response.data.data?.accounts || response.data.accounts || []
+  } catch {
+    accounts.value = []
+  }
+}
+
+function toggleAccount(accountId: string, checked: boolean) {
+  const ids = new Set(formData.value.whatsapp_account_ids)
+  if (checked) ids.add(accountId)
+  else ids.delete(accountId)
+  formData.value.whatsapp_account_ids = [...ids]
+}
+
+watch(() => organizationsStore.selectedOrgId, () => { fetchUsers(); rolesStore.fetchRoles(); loadAccounts() })
+onMounted(() => { fetchUsers(); rolesStore.fetchRoles(); loadAccounts() })
 
 async function fetchUsers() {
   isLoading.value = true
@@ -124,6 +146,7 @@ async function createUser() {
       full_name: formData.value.full_name,
       role_id: formData.value.role_id || undefined,
       is_super_admin: isSuperAdmin.value && formData.value.is_super_admin ? true : undefined,
+      whatsapp_account_ids: formData.value.whatsapp_account_ids.length > 0 ? formData.value.whatsapp_account_ids : undefined,
     })
     toast.success(t('common.createdSuccess', { resource: t('resources.User') }))
     closeDialog()
@@ -335,6 +358,20 @@ async function copyInviteLink() {
               </SelectItem>
             </SelectContent>
           </Select>
+        </div>
+        <div v-if="accounts.length > 0" class="space-y-2 border-t pt-4">
+          <Label>{{ $t('users.accountAssignments') }}</Label>
+          <p class="text-xs text-muted-foreground">{{ $t('users.accountAssignmentsDesc') }}</p>
+          <div class="space-y-2 pt-1">
+            <div v-for="account in accounts" :key="account.id" class="flex items-center gap-2">
+              <Checkbox
+                :id="`create-assign-${account.id}`"
+                :checked="formData.whatsapp_account_ids.includes(account.id)"
+                @update:checked="(checked: boolean | 'indeterminate') => toggleAccount(account.id, checked === true)"
+              />
+              <label :for="`create-assign-${account.id}`" class="text-sm cursor-pointer">{{ account.name }}</label>
+            </div>
+          </div>
         </div>
         <div v-if="isSuperAdmin" class="flex items-center justify-between border-t pt-4"><div><Label for="is_super_admin" class="font-normal cursor-pointer">{{ $t('users.superAdminLabel') }}</Label><p class="text-xs text-muted-foreground">{{ $t('users.superAdminDesc') }}</p></div><Switch id="is_super_admin" :checked="formData.is_super_admin" @update:checked="formData.is_super_admin = $event" /></div>
       </div>

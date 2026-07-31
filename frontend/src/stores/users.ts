@@ -19,6 +19,7 @@ export interface User {
   is_super_admin?: boolean
   is_member?: boolean
   organization_id: string
+  whatsapp_account_ids?: string[]
   created_at: string
   updated_at: string
 }
@@ -29,6 +30,7 @@ export interface CreateUserData {
   full_name: string
   role_id?: string
   is_super_admin?: boolean
+  whatsapp_account_ids?: string[]
 }
 
 export interface UpdateUserData {
@@ -38,6 +40,7 @@ export interface UpdateUserData {
   role_id?: string
   is_active?: boolean
   is_super_admin?: boolean
+  whatsapp_account_ids?: string[]
 }
 
 export interface FetchUsersParams {

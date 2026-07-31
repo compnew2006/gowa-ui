@@ -61,6 +61,7 @@ func GetMigrationModels() []MigrationModel {
 		{"CustomRole", &models.CustomRole{}},
 		{"User", &models.User{}},
 		{"UserOrganization", &models.UserOrganization{}},
+		{"UserWhatsAppAccount", &models.UserWhatsAppAccount{}},
 		{"Team", &models.Team{}},
 		{"TeamMember", &models.TeamMember{}},
 		{"APIKey", &models.APIKey{}},
@@ -453,6 +454,11 @@ func SeedSystemRolesForAllOrgs(db *gorm.DB) error {
 		return fmt.Errorf("failed to fix role permissions: %w", err)
 	}
 
+	// Additively grant newly-mapped permissions to existing system roles
+	if err := SyncSystemRolePermissions(db); err != nil {
+		return fmt.Errorf("failed to sync role permissions: %w", err)
+	}
+
 	// Migrate existing users from old role column to new role_id
 	if err := MigrateExistingUserRoles(db); err != nil {
 		return fmt.Errorf("failed to migrate user roles: %w", err)
@@ -519,6 +525,67 @@ func FixSystemRolePermissions(db *gorm.DB) error {
 		if len(permsToAdd) > 0 {
 			if err := db.Model(&role).Association("Permissions").Replace(permsToAdd); err != nil {
 				return fmt.Errorf("failed to link permissions to role %s: %w", role.Name, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// SyncSystemRolePermissions additively grants any permissions from
+// SystemRolePermissions that an existing system role is missing. It never
+// removes permissions, so super-admin customizations of system roles are
+// preserved while new default grants (e.g. permissions added in an upgrade)
+// still reach already-seeded organizations.
+func SyncSystemRolePermissions(db *gorm.DB) error {
+	var permissions []models.Permission
+	if err := db.Find(&permissions).Error; err != nil {
+		return fmt.Errorf("failed to fetch permissions: %w", err)
+	}
+	if len(permissions) == 0 {
+		return nil
+	}
+
+	permMap := make(map[string]models.Permission)
+	for _, p := range permissions {
+		permMap[p.Resource+":"+p.Action] = p
+	}
+
+	rolePermissions := models.SystemRolePermissions()
+
+	var systemRoles []models.CustomRole
+	if err := db.Where("is_system = ?", true).Find(&systemRoles).Error; err != nil {
+		return fmt.Errorf("failed to fetch system roles: %w", err)
+	}
+
+	for _, role := range systemRoles {
+		permKeys, ok := rolePermissions[role.Name]
+		if !ok {
+			continue // Unknown role name
+		}
+
+		// Collect the permission IDs the role already holds
+		var existingIDs []uuid.UUID
+		if err := db.Table("role_permissions").
+			Where("custom_role_id = ?", role.ID).
+			Pluck("permission_id", &existingIDs).Error; err != nil {
+			return fmt.Errorf("failed to fetch role permissions for %s: %w", role.Name, err)
+		}
+		existing := make(map[uuid.UUID]bool, len(existingIDs))
+		for _, id := range existingIDs {
+			existing[id] = true
+		}
+
+		var permsToAdd []models.Permission
+		for _, key := range permKeys {
+			if perm, ok := permMap[key]; ok && !existing[perm.ID] {
+				permsToAdd = append(permsToAdd, perm)
+			}
+		}
+
+		if len(permsToAdd) > 0 {
+			if err := db.Model(&role).Association("Permissions").Append(permsToAdd); err != nil {
+				return fmt.Errorf("failed to grant permissions to role %s: %w", role.Name, err)
 			}
 		}
 	}

@@ -718,6 +718,8 @@
     "accountActive": "Account Active",
     "superAdminLabel": "Super Admin",
     "superAdminDesc": "Super admins can access all organizations",
+    "accountAssignments": "WhatsApp Account Access",
+    "accountAssignmentsDesc": "Select the WhatsApp accounts this user can access. Leave all unchecked to allow access to every account.",
     "fillEmailName": "Please fill in email and name",
     "passwordRequired": "Password is required for new users",
     "selectRoleRequired": "Please select a role",

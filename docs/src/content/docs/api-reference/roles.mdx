@@ -6,7 +6,7 @@ description: Role and permission management API
 import { Aside } from '@astrojs/starlight/components';
 
 <Aside type="caution">
-  Role management endpoints require the `roles:read`, `roles:create`, `roles:update`, or `roles:delete` permissions respectively.
+  Role management endpoints require the `roles:read`, `roles:write`, or `roles:delete` permissions respectively.
 </Aside>
 
 ## Overview
@@ -143,7 +143,7 @@ POST /api/roles
 ```
 
 <Aside type="note">
-  Requires `roles:create` permission.
+  Requires `roles:write` permission.
 </Aside>
 
 ### Request Body
@@ -152,7 +152,7 @@ POST /api/roles
 {
   "name": "Support Agent",
   "description": "Can view and respond to chats",
-  "permissions": ["contacts:read", "messages:read", "messages:create"]
+  "permissions": ["contacts:read", "chat:read", "chat:write"]
 }
 ```
 
@@ -196,7 +196,7 @@ PUT /api/roles/{id}
 ```
 
 <Aside type="note">
-  Requires `roles:update` permission.
+  Requires `roles:write` permission.
 </Aside>
 
 <Aside type="caution">
@@ -209,7 +209,7 @@ PUT /api/roles/{id}
 {
   "name": "Senior Support Agent",
   "description": "Can view, respond to chats, and access analytics",
-  "permissions": ["contacts:read", "messages:read", "messages:create", "analytics:read"]
+  "permissions": ["contacts:read", "chat:read", "chat:write", "analytics:read"]
 }
 ```
 
@@ -271,67 +271,100 @@ Permissions use the format `resource:action`. Here are all available permissions
 
 ### User Management
 - `users:read` - View users
-- `users:create` - Create users
-- `users:update` - Update users
+- `users:write` - Create and edit users
 - `users:delete` - Delete users
-
-### Role Management
-- `roles:read` - View roles
-- `roles:create` - Create roles
-- `roles:update` - Update roles
-- `roles:delete` - Delete roles
 
 ### Team Management
 - `teams:read` - View teams
-- `teams:create` - Create teams
-- `teams:update` - Update teams
+- `teams:write` - Create and edit teams
 - `teams:delete` - Delete teams
 
-### Contacts
-- `contacts:read` - View contacts
-- `contacts:create` - Create contacts
-- `contacts:update` - Update contacts
-- `contacts:delete` - Delete contacts
+### Role Management
+- `roles:read` - View roles
+- `roles:write` - Create and edit roles
+- `roles:delete` - Delete roles
 
-### Messages
-- `messages:read` - View messages
-- `messages:create` - Send messages
+### Settings
+- `settings.general:read` - View general settings
+- `settings.general:write` - Edit general settings
+- `settings.sso:read` - View SSO settings
+- `settings.sso:write` - Edit SSO settings
+
+### WhatsApp Accounts & Devices
+- `accounts:read` - View WhatsApp accounts
+- `accounts:write` - Create and edit WhatsApp accounts
+- `accounts:delete` - Delete WhatsApp accounts
+- `devices:read` - View GOWA device status and instances
+- `devices:write` - Pair and provision GOWA devices
+- `devices:delete` - Delete GOWA devices
+- `gowa_instances:read` - View GOWA server instances
+- `gowa_instances:write` - Create and edit GOWA server instances
+- `gowa_instances:delete` - Delete GOWA server instances
 
 ### Templates
-- `templates:read` - View templates
-- `templates:create` - Create templates
-- `templates:update` - Update templates
+- `templates:read` - View message templates
+- `templates:write` - Create and edit templates
 - `templates:delete` - Delete templates
 
 ### Campaigns
 - `campaigns:read` - View campaigns
-- `campaigns:create` - Create campaigns
-- `campaigns:update` - Update campaigns
+- `campaigns:write` - Create and edit campaigns
 - `campaigns:delete` - Delete campaigns
+- `campaigns:execute` - Start, pause, cancel, and retry campaigns
 
-### Flows
-- `flows:read` - View flows
-- `flows:create` - Create flows
-- `flows:update` - Update flows
-- `flows:delete` - Delete flows
+### Chat
+- `chat:read` - View chat conversations
+- `chat:write` - Send messages
+- `chat.assign:write` - Assign conversations to agents
+- `chat.collaborate:write` - Join assigned chats as a collaborator
 
-### Settings
-- `settings:read` - View organization settings
-- `settings:update` - Update organization settings
-- `accounts:read` - View WhatsApp accounts
-- `accounts:create` - Create WhatsApp accounts
-- `accounts:update` - Update WhatsApp accounts
-- `accounts:delete` - Delete WhatsApp accounts
-- `webhooks:read` - View webhooks
-- `webhooks:create` - Create webhooks
-- `webhooks:update` - Update webhooks
-- `webhooks:delete` - Delete webhooks
-- `api_keys:read` - View API keys
-- `api_keys:create` - Create API keys
-- `api_keys:delete` - Delete API keys
+### Contacts
+- `contacts:read` - View contacts
+- `contacts:write` - Create and edit contacts
+- `contacts:delete` - Delete contacts
+- `contacts:import` - Import contacts
+- `contacts:export` - Export contacts
+
+### Tags
+- `tags:read` - View tags
+- `tags:write` - Create and edit tags
+- `tags:delete` - Delete tags
 
 ### Analytics
-- `analytics:read` - View analytics
+- `analytics:read` - View analytics dashboard
+- `analytics:write` - Create and edit dashboard widgets
+- `analytics:delete` - Delete dashboard widgets
+- `analytics.agents:read` - View agent analytics
+
+### Webhooks
+- `webhooks:read` - View webhooks
+- `webhooks:write` - Create and edit webhooks
+- `webhooks:delete` - Delete webhooks
+
+### API Keys
+- `api_keys:read` - View API keys
+- `api_keys:write` - Create API keys
+- `api_keys:delete` - Delete API keys
+
+### Canned Responses
+- `canned_responses:read` - View canned responses
+- `canned_responses:write` - Create and edit canned responses
+- `canned_responses:delete` - Delete canned responses
+
+### Custom Actions
+- `custom_actions:read` - View custom actions
+- `custom_actions:write` - Create and edit custom actions
+- `custom_actions:delete` - Delete custom actions
+- `custom_actions:execute` - Run custom actions from chat
+
+### Organizations
+- `organizations:read` - View organizations
+- `organizations:write` - Create organizations
+- `organizations:delete` - Delete organizations
+- `organizations:assign` - Manage organization members
+
+### Audit Logs
+- `audit_logs:read` - View audit logs
 
 ## See Also
 

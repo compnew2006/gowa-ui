@@ -34,7 +34,7 @@ type OrganizationSettings struct {
 
 // GetOrganizationSettings returns the organization settings
 func (a *App) GetOrganizationSettings(r *fastglue.Request) error {
-	orgID, err := a.requireOrgID(r)
+	orgID, _, err := a.requireAuth(r, models.ResourceSettingsGeneral, models.ActionRead)
 	if err != nil {
 		return nil
 	}
@@ -71,7 +71,7 @@ func (a *App) GetOrganizationSettings(r *fastglue.Request) error {
 
 // UpdateOrganizationSettings updates the organization settings
 func (a *App) UpdateOrganizationSettings(r *fastglue.Request) error {
-	orgID, userID, err := a.requireOrgAndUserID(r)
+	orgID, userID, err := a.requireAuth(r, models.ResourceSettingsGeneral, models.ActionWrite)
 	if err != nil {
 		return nil
 	}

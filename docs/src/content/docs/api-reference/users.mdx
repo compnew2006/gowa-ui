@@ -6,7 +6,7 @@ description: User management API
 import { Aside } from '@astrojs/starlight/components';
 
 <Aside type="caution">
-  User management endpoints require the `users:read`, `users:create`, `users:update`, or `users:delete` permissions respectively.
+  User management endpoints require the `users:read`, `users:write`, or `users:delete` permissions respectively.
 </Aside>
 
 ## Overview
@@ -39,7 +39,7 @@ GET /api/me
       "name": "admin",
       "description": "Full access to all features"
     },
-    "permissions": ["users:read", "users:create", "contacts:read", "..."],
+    "permissions": ["users:read", "users:write", "contacts:read", "..."],
     "is_super_admin": false,
     "created_at": "2024-01-01T00:00:00Z"
   }
@@ -167,7 +167,7 @@ POST /api/users
 ```
 
 <Aside type="note">
-  Requires `users:create` permission.
+  Requires `users:write` permission.
 </Aside>
 
 ### Request Body
@@ -218,7 +218,7 @@ PUT /api/users/{id}
 ```
 
 <Aside type="note">
-  Requires `users:update` permission.
+  Requires `users:write` permission.
 </Aside>
 
 ### Request Body

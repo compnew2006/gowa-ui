@@ -375,7 +375,7 @@ func (a *App) CallbackSSO(r *fastglue.Request) error {
 
 // GetSSOSettings returns all SSO provider configs for the organization (admin only)
 func (a *App) GetSSOSettings(r *fastglue.Request) error {
-	orgID, err := a.requireOrgID(r)
+	orgID, _, err := a.requireAuth(r, models.ResourceSettingsSSO, models.ActionRead)
 	if err != nil {
 		return nil
 	}
@@ -408,7 +408,7 @@ func (a *App) GetSSOSettings(r *fastglue.Request) error {
 
 // UpdateSSOProvider creates or updates an SSO provider config (admin only)
 func (a *App) UpdateSSOProvider(r *fastglue.Request) error {
-	orgID, err := a.requireOrgID(r)
+	orgID, _, err := a.requireAuth(r, models.ResourceSettingsSSO, models.ActionWrite)
 	if err != nil {
 		return nil
 	}
@@ -497,7 +497,7 @@ func (a *App) UpdateSSOProvider(r *fastglue.Request) error {
 // doesn't ignore deleted_at — a soft-deleted row would block re-creating the
 // same provider until the row is purged.
 func (a *App) DeleteSSOProvider(r *fastglue.Request) error {
-	orgID, err := a.requireOrgID(r)
+	orgID, _, err := a.requireAuth(r, models.ResourceSettingsSSO, models.ActionWrite)
 	if err != nil {
 		return nil
 	}

@@ -1689,3 +1689,232 @@ func TestApp_CreateUser_CreatedUserIsActive(t *testing.T) {
 	assert.NotEqual(t, "securePass123", dbUser.PasswordHash)
 	require.NoError(t, bcrypt.CompareHashAndPassword([]byte(dbUser.PasswordHash), []byte("securePass123")))
 }
+
+// --- Account Assignment Tests ---
+
+// loadAssignmentIDs reads the user's assignment rows straight from the DB.
+func loadAssignmentIDs(t *testing.T, app *handlers.App, userID uuid.UUID) []uuid.UUID {
+	t.Helper()
+	var ids []uuid.UUID
+	require.NoError(t, app.DB.Model(&models.UserWhatsAppAccount{}).
+		Where("user_id = ?", userID).
+		Pluck("whats_app_account_id", &ids).Error)
+	return ids
+}
+
+func TestApp_CreateUser_AccountAssignments(t *testing.T) {
+	t.Parallel()
+
+	t.Run("assigns accounts on create", func(t *testing.T) {
+		app := newTestApp(t)
+		org := testutil.CreateTestOrganization(t, app.DB)
+		adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+		admin := testutil.CreateTestUser(t, app.DB, org.ID,
+			testutil.WithEmail(testutil.UniqueEmail("assign-create-admin")),
+			testutil.WithRoleID(&adminRole.ID),
+		)
+		acc1 := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+		acc2 := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+
+		reqBody := map[string]any{
+			"email":                testutil.UniqueEmail("assign-create"),
+			"password":             "securePass123",
+			"full_name":            "Assigned User",
+			"whatsapp_account_ids": []string{acc1.ID.String(), acc2.ID.String()},
+		}
+
+		req := testutil.NewJSONRequest(t, reqBody)
+		testutil.SetAuthContext(req, org.ID, admin.ID)
+
+		err := app.CreateUser(req)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+		var resp struct {
+			Data handlers.UserResponse `json:"data"`
+		}
+		err = json.Unmarshal(testutil.GetResponseBody(req), &resp)
+		require.NoError(t, err)
+
+		assert.ElementsMatch(t, []uuid.UUID{acc1.ID, acc2.ID}, resp.Data.WhatsAppAccountIDs)
+		assert.ElementsMatch(t, []uuid.UUID{acc1.ID, acc2.ID}, loadAssignmentIDs(t, app, resp.Data.ID))
+	})
+
+	t.Run("rejects account from another org", func(t *testing.T) {
+		app := newTestApp(t)
+		org := testutil.CreateTestOrganization(t, app.DB)
+		otherOrg := testutil.CreateTestOrganization(t, app.DB)
+		adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+		admin := testutil.CreateTestUser(t, app.DB, org.ID,
+			testutil.WithEmail(testutil.UniqueEmail("assign-invalid-admin")),
+			testutil.WithRoleID(&adminRole.ID),
+		)
+		foreignAcc := testutil.CreateTestWhatsAppAccount(t, app.DB, otherOrg.ID)
+
+		reqBody := map[string]any{
+			"email":                testutil.UniqueEmail("assign-invalid"),
+			"password":             "securePass123",
+			"full_name":            "Invalid Assignment",
+			"whatsapp_account_ids": []string{foreignAcc.ID.String()},
+		}
+
+		req := testutil.NewJSONRequest(t, reqBody)
+		testutil.SetAuthContext(req, org.ID, admin.ID)
+
+		err := app.CreateUser(req)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusBadRequest, testutil.GetResponseStatusCode(req))
+	})
+}
+
+func TestApp_UpdateUser_AccountAssignments(t *testing.T) {
+	t.Parallel()
+
+	t.Run("set replace and clear assignments", func(t *testing.T) {
+		app := newTestApp(t)
+		org := testutil.CreateTestOrganization(t, app.DB)
+		adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+		admin := testutil.CreateTestUser(t, app.DB, org.ID,
+			testutil.WithEmail(testutil.UniqueEmail("assign-update-admin")),
+			testutil.WithRoleID(&adminRole.ID),
+		)
+		target := testutil.CreateTestUser(t, app.DB, org.ID,
+			testutil.WithEmail(testutil.UniqueEmail("assign-update-target")),
+		)
+		acc1 := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+		acc2 := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+
+		update := func(body map[string]any) handlers.UserResponse {
+			req := testutil.NewJSONRequest(t, body)
+			testutil.SetAuthContext(req, org.ID, admin.ID)
+			testutil.SetPathParam(req, "id", target.ID.String())
+
+			require.NoError(t, app.UpdateUser(req))
+			require.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+			var resp struct {
+				Data handlers.UserResponse `json:"data"`
+			}
+			require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+			return resp.Data
+		}
+
+		// Set two assignments
+		resp := update(map[string]any{
+			"whatsapp_account_ids": []string{acc1.ID.String(), acc2.ID.String()},
+		})
+		assert.ElementsMatch(t, []uuid.UUID{acc1.ID, acc2.ID}, resp.WhatsAppAccountIDs)
+
+		// Replace with a single assignment
+		resp = update(map[string]any{
+			"whatsapp_account_ids": []string{acc2.ID.String()},
+		})
+		assert.ElementsMatch(t, []uuid.UUID{acc2.ID}, resp.WhatsAppAccountIDs)
+		assert.ElementsMatch(t, []uuid.UUID{acc2.ID}, loadAssignmentIDs(t, app, target.ID))
+
+		// Clear with an empty array (restores full org visibility)
+		resp = update(map[string]any{
+			"whatsapp_account_ids": []string{},
+		})
+		assert.Empty(t, resp.WhatsAppAccountIDs)
+		assert.Empty(t, loadAssignmentIDs(t, app, target.ID))
+	})
+
+	t.Run("omitted field leaves assignments untouched", func(t *testing.T) {
+		app := newTestApp(t)
+		org := testutil.CreateTestOrganization(t, app.DB)
+		adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+		admin := testutil.CreateTestUser(t, app.DB, org.ID,
+			testutil.WithEmail(testutil.UniqueEmail("assign-omit-admin")),
+			testutil.WithRoleID(&adminRole.ID),
+		)
+		target := testutil.CreateTestUser(t, app.DB, org.ID,
+			testutil.WithEmail(testutil.UniqueEmail("assign-omit-target")),
+		)
+		acc := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+		testutil.AssignAccountToUser(t, app.DB, target.ID, acc.ID)
+
+		req := testutil.NewJSONRequest(t, map[string]any{
+			"full_name": "Name Only Update",
+		})
+		testutil.SetAuthContext(req, org.ID, admin.ID)
+		testutil.SetPathParam(req, "id", target.ID.String())
+
+		require.NoError(t, app.UpdateUser(req))
+		assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+		assert.ElementsMatch(t, []uuid.UUID{acc.ID}, loadAssignmentIDs(t, app, target.ID))
+	})
+
+	t.Run("rejects account from another org", func(t *testing.T) {
+		app := newTestApp(t)
+		org := testutil.CreateTestOrganization(t, app.DB)
+		otherOrg := testutil.CreateTestOrganization(t, app.DB)
+		adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+		admin := testutil.CreateTestUser(t, app.DB, org.ID,
+			testutil.WithEmail(testutil.UniqueEmail("assign-badid-admin")),
+			testutil.WithRoleID(&adminRole.ID),
+		)
+		target := testutil.CreateTestUser(t, app.DB, org.ID,
+			testutil.WithEmail(testutil.UniqueEmail("assign-badid-target")),
+		)
+		foreignAcc := testutil.CreateTestWhatsAppAccount(t, app.DB, otherOrg.ID)
+
+		req := testutil.NewJSONRequest(t, map[string]any{
+			"whatsapp_account_ids": []string{foreignAcc.ID.String()},
+		})
+		testutil.SetAuthContext(req, org.ID, admin.ID)
+		testutil.SetPathParam(req, "id", target.ID.String())
+
+		require.NoError(t, app.UpdateUser(req))
+		assert.Equal(t, fasthttp.StatusBadRequest, testutil.GetResponseStatusCode(req))
+		assert.Empty(t, loadAssignmentIDs(t, app, target.ID))
+	})
+
+	t.Run("forbidden without users:write permission", func(t *testing.T) {
+		app := newTestApp(t)
+		org := testutil.CreateTestOrganization(t, app.DB)
+		agentRole := testutil.CreateAgentRole(t, app.DB, org.ID)
+		agent := testutil.CreateTestUser(t, app.DB, org.ID,
+			testutil.WithEmail(testutil.UniqueEmail("assign-agent")),
+			testutil.WithRoleID(&agentRole.ID),
+		)
+		acc := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+
+		// Agent tries to lift their own restrictions via self-update
+		req := testutil.NewJSONRequest(t, map[string]any{
+			"whatsapp_account_ids": []string{acc.ID.String()},
+		})
+		testutil.SetAuthContext(req, org.ID, agent.ID)
+		testutil.SetPathParam(req, "id", agent.ID.String())
+
+		require.NoError(t, app.UpdateUser(req))
+		assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req))
+		assert.Empty(t, loadAssignmentIDs(t, app, agent.ID))
+	})
+}
+
+func TestApp_GetUser_IncludesAccountAssignments(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("get-assign")),
+	)
+	acc := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+	testutil.AssignAccountToUser(t, app.DB, user.ID, acc.ID)
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", user.ID.String())
+
+	require.NoError(t, app.GetUser(req))
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp struct {
+		Data handlers.UserResponse `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+	assert.ElementsMatch(t, []uuid.UUID{acc.ID}, resp.Data.WhatsAppAccountIDs)
+}

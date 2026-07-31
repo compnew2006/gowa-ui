@@ -61,7 +61,7 @@ type PermissionResponse struct {
 
 // ListRoles returns all roles for the organization
 func (a *App) ListRoles(r *fastglue.Request) error {
-	orgID, userID, err := a.requireOrgAndUserID(r)
+	orgID, userID, err := a.requireAuth(r, models.ResourceRoles, models.ActionRead)
 	if err != nil {
 		return nil
 	}
@@ -109,7 +109,7 @@ func (a *App) ListRoles(r *fastglue.Request) error {
 
 // GetRole returns a single role
 func (a *App) GetRole(r *fastglue.Request) error {
-	orgID, err := a.requireOrgID(r)
+	orgID, _, err := a.requireAuth(r, models.ResourceRoles, models.ActionRead)
 	if err != nil {
 		return nil
 	}
@@ -138,7 +138,7 @@ func (a *App) GetRole(r *fastglue.Request) error {
 
 // CreateRole creates a new custom role
 func (a *App) CreateRole(r *fastglue.Request) error {
-	orgID, userID, err := a.requireOrgAndUserID(r)
+	orgID, userID, err := a.requireAuth(r, models.ResourceRoles, models.ActionWrite)
 	if err != nil {
 		return nil
 	}
@@ -224,7 +224,7 @@ func (a *App) replaceRolePermissions(r *fastglue.Request, role *models.CustomRol
 
 // UpdateRole updates a custom role
 func (a *App) UpdateRole(r *fastglue.Request) error {
-	orgID, userID, err := a.requireOrgAndUserID(r)
+	orgID, userID, err := a.requireAuth(r, models.ResourceRoles, models.ActionWrite)
 	if err != nil {
 		return nil
 	}
@@ -340,7 +340,7 @@ func (a *App) UpdateRole(r *fastglue.Request) error {
 
 // DeleteRole deletes a custom role
 func (a *App) DeleteRole(r *fastglue.Request) error {
-	orgID, userID, err := a.requireOrgAndUserID(r)
+	orgID, userID, err := a.requireAuth(r, models.ResourceRoles, models.ActionDelete)
 	if err != nil {
 		return nil
 	}
@@ -385,6 +385,10 @@ func (a *App) DeleteRole(r *fastglue.Request) error {
 
 // ListPermissions returns all available permissions
 func (a *App) ListPermissions(r *fastglue.Request) error {
+	if _, _, err := a.requireAuth(r, models.ResourceRoles, models.ActionRead); err != nil {
+		return nil
+	}
+
 	var permissions []models.Permission
 	if err := a.DB.Order("resource ASC, action ASC").Find(&permissions).Error; err != nil {
 		a.Log.Error("Failed to list permissions", "error", err)

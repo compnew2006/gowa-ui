@@ -9,6 +9,7 @@ import (
 	"github.com/shridarpatil/whatomate/pkg/gowa"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
+	"gorm.io/gorm"
 )
 
 // AccountRequest represents the request body for creating/updating an account
@@ -48,15 +49,67 @@ type AccountResponse struct {
 	UpdatedAt         string     `json:"updated_at"`
 }
 
-// ListAccounts returns all WhatsApp accounts for the organization
+// assignedAccountIDs returns the IDs of accounts within the org explicitly
+// assigned to the user via user_whatsapp_accounts. An empty result means the
+// user has no assignments in this org, in which case callers fall back to
+// full organization visibility.
+func (a *App) assignedAccountIDs(userID, orgID uuid.UUID) ([]uuid.UUID, error) {
+	var ids []uuid.UUID
+	err := a.DB.Model(&models.UserWhatsAppAccount{}).
+		Joins("JOIN whatsapp_accounts ON whatsapp_accounts.id = user_whatsapp_accounts.whats_app_account_id AND whatsapp_accounts.deleted_at IS NULL").
+		Where("user_whatsapp_accounts.user_id = ? AND whatsapp_accounts.organization_id = ?", userID, orgID).
+		Pluck("user_whatsapp_accounts.whats_app_account_id", &ids).Error
+	return ids, err
+}
+
+// scopeAccountsToUser narrows an org-scoped whatsapp_accounts query to the
+// accounts assigned to the user. Users with no assignments keep full org
+// visibility (fallback), and super admins are never restricted.
+func (a *App) scopeAccountsToUser(query *gorm.DB, userID, orgID uuid.UUID) *gorm.DB {
+	if a.IsSuperAdmin(userID) {
+		return query
+	}
+	ids, err := a.assignedAccountIDs(userID, orgID)
+	if err != nil {
+		a.Log.Error("Failed to load account assignments", "error", err, "user_id", userID)
+		return query
+	}
+	if len(ids) == 0 {
+		return query // no assignments — fall back to all org accounts
+	}
+	return query.Where("whatsapp_accounts.id IN ?", ids)
+}
+
+// canAccessAccount reports whether the user may operate on the account:
+// true for super admins, users with no assignments (fallback), or when the
+// account is among the user's assignments.
+func (a *App) canAccessAccount(userID, orgID, accountID uuid.UUID) bool {
+	if a.IsSuperAdmin(userID) {
+		return true
+	}
+	ids, err := a.assignedAccountIDs(userID, orgID)
+	if err != nil || len(ids) == 0 {
+		return true
+	}
+	for _, id := range ids {
+		if id == accountID {
+			return true
+		}
+	}
+	return false
+}
+
+// ListAccounts returns the WhatsApp accounts visible to the user: only the
+// assigned accounts when assignments exist, otherwise all org accounts.
 func (a *App) ListAccounts(r *fastglue.Request) error {
-	orgID, _, err := a.requireAuth(r, models.ResourceAccounts, models.ActionRead)
+	orgID, userID, err := a.requireAuth(r, models.ResourceAccounts, models.ActionRead)
 	if err != nil {
 		return nil
 	}
 
 	var accounts []models.WhatsAppAccount
-	if err := a.DB.Where("organization_id = ?", orgID).Order("created_at DESC").Find(&accounts).Error; err != nil {
+	query := a.scopeAccountsToUser(a.DB.Where("organization_id = ?", orgID), userID, orgID)
+	if err := query.Order("created_at DESC").Find(&accounts).Error; err != nil {
 		a.Log.Error("Failed to list accounts", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to list accounts", nil, "")
 	}
@@ -147,7 +200,7 @@ func (a *App) CreateAccount(r *fastglue.Request) error {
 
 // GetAccount returns a single WhatsApp account
 func (a *App) GetAccount(r *fastglue.Request) error {
-	orgID, _, err := a.requireAuth(r, models.ResourceAccounts, models.ActionRead)
+	orgID, userID, err := a.requireAuth(r, models.ResourceAccounts, models.ActionRead)
 	if err != nil {
 		return nil
 	}
@@ -155,6 +208,11 @@ func (a *App) GetAccount(r *fastglue.Request) error {
 	id, err := parsePathUUID(r, "id", "account")
 	if err != nil {
 		return nil
+	}
+
+	// Assignment scoping: respond 404 (not 403) to avoid leaking existence.
+	if !a.canAccessAccount(userID, orgID, id) {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Account not found", nil, "")
 	}
 
 	account, err := findByIDAndOrg[models.WhatsAppAccount](
@@ -176,6 +234,11 @@ func (a *App) UpdateAccount(r *fastglue.Request) error {
 	id, err := parsePathUUID(r, "id", "account")
 	if err != nil {
 		return nil
+	}
+
+	// Assignment scoping: restricted users can only update assigned accounts.
+	if !a.canAccessAccount(userID, orgID, id) {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Account not found", nil, "")
 	}
 
 	account, err := a.resolveWhatsAppAccountByID(r, id, orgID)
@@ -265,6 +328,11 @@ func (a *App) DeleteAccount(r *fastglue.Request) error {
 		return nil
 	}
 
+	// Assignment scoping: restricted users can only delete assigned accounts.
+	if !a.canAccessAccount(userID, orgID, id) {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Account not found", nil, "")
+	}
+
 	// Get account first for cache invalidation and audit
 	account, err := findByIDAndOrg[models.WhatsAppAccount](a.DB, r, id, orgID, "Account")
 	if err != nil {
@@ -275,6 +343,10 @@ func (a *App) DeleteAccount(r *fastglue.Request) error {
 		a.Log.Error("Failed to delete account", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete account", nil, "")
 	}
+
+	// Remove now-dangling user assignments for this account (hard delete —
+	// assignments carry no history worth keeping).
+	a.DB.Where("whats_app_account_id = ?", id).Delete(&models.UserWhatsAppAccount{})
 
 	// Invalidate cache
 	a.InvalidateWhatsAppAccountCache(account.GowaDeviceID)

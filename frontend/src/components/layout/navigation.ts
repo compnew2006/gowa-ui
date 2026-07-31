@@ -57,7 +57,7 @@ export const navigationSections: NavSection[] = [
   },
   {
     label: 'nav.sectionMessaging',
-    permissions: ['campaigns', 'flows.whatsapp'],
+    permissions: ['campaigns'],
     items: [
       {
         name: 'nav.campaigns',

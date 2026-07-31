@@ -437,7 +437,7 @@ func contactAvatarURL(contact *models.Contact) string {
 // Agents can only access messages for their assigned contacts
 // Supports cursor-based pagination with before_id for loading older messages
 func (a *App) GetMessages(r *fastglue.Request) error {
-	orgID, userID, err := a.requireOrgAndUserID(r)
+	orgID, userID, err := a.requireAuth(r, models.ResourceChat, models.ActionRead)
 	if err != nil {
 		return nil
 	}
@@ -692,7 +692,7 @@ func (a *App) buildMessagesResponse(messages []models.Message) []MessageResponse
 // Called from the frontend when a new message arrives for the chat the
 // user is currently viewing, so the sidebar unread badge stays at zero.
 func (a *App) MarkContactRead(r *fastglue.Request) error {
-	orgID, userID, err := a.requireOrgAndUserID(r)
+	orgID, userID, err := a.requireAuth(r, models.ResourceChat, models.ActionRead)
 	if err != nil {
 		return nil
 	}
@@ -811,7 +811,7 @@ type ButtonContent struct {
 // SendMessage sends a message to a contact
 // Agents can only send messages to their assigned contacts
 func (a *App) SendMessage(r *fastglue.Request) error {
-	orgID, userID, err := a.requireOrgAndUserID(r)
+	orgID, userID, err := a.requireAuth(r, models.ResourceChat, models.ActionWrite)
 	if err != nil {
 		return nil
 	}
@@ -984,7 +984,7 @@ func truncateString(s string, maxLen int) string {
 
 // SendMediaMessage sends a media message (image, document, video, audio) to a contact
 func (a *App) SendMediaMessage(r *fastglue.Request) error {
-	orgID, userID, err := a.requireOrgAndUserID(r)
+	orgID, userID, err := a.requireAuth(r, models.ResourceChat, models.ActionWrite)
 	if err != nil {
 		return nil
 	}
@@ -1144,7 +1144,7 @@ type SendReactionRequest struct {
 
 // SendReaction sends a reaction to a message
 func (a *App) SendReaction(r *fastglue.Request) error {
-	orgID, userID, err := a.requireOrgAndUserID(r)
+	orgID, userID, err := a.requireAuth(r, models.ResourceChat, models.ActionWrite)
 	if err != nil {
 		return nil
 	}
@@ -1466,7 +1466,7 @@ type TypingRequest struct {
 // The indicator is outbound-only (it shows on the recipient's WhatsApp), so
 // no WebSocket event is broadcast back to the Whatomate UI.
 func (a *App) SendTypingIndicator(r *fastglue.Request) error {
-	orgID, userID, err := a.requireOrgAndUserID(r)
+	orgID, userID, err := a.requireAuth(r, models.ResourceChat, models.ActionWrite)
 	if err != nil {
 		return nil
 	}
@@ -1527,7 +1527,7 @@ type RevokeMessageRequest struct{}
 // here mirror the inbound message.revoked webhook handler so the two paths
 // stay consistent.
 func (a *App) RevokeMessage(r *fastglue.Request) error {
-	orgID, userID, err := a.requireOrgAndUserID(r)
+	orgID, userID, err := a.requireAuth(r, models.ResourceChat, models.ActionWrite)
 	if err != nil {
 		return nil
 	}

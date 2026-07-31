@@ -148,6 +148,25 @@ func (UserOrganization) TableName() string {
 	return "user_organizations"
 }
 
+// UserWhatsAppAccount assigns a WhatsApp account to a user. A user with one
+// or more assignments only sees those accounts; a user with none falls back
+// to full organization visibility. Rows are hard-deleted on unassignment so
+// the composite unique index never collides with stale soft-deleted pairs.
+type UserWhatsAppAccount struct {
+	ID                uuid.UUID `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	UserID            uuid.UUID `gorm:"type:uuid;uniqueIndex:idx_user_wa_account;not null" json:"user_id"`
+	WhatsAppAccountID uuid.UUID `gorm:"type:uuid;column:whats_app_account_id;uniqueIndex:idx_user_wa_account;not null" json:"whatsapp_account_id"`
+	CreatedAt         time.Time `gorm:"autoCreateTime" json:"created_at"`
+
+	// Relations
+	User            *User            `gorm:"foreignKey:UserID" json:"user,omitempty"`
+	WhatsAppAccount *WhatsAppAccount `gorm:"foreignKey:WhatsAppAccountID" json:"whatsapp_account,omitempty"`
+}
+
+func (UserWhatsAppAccount) TableName() string {
+	return "user_whatsapp_accounts"
+}
+
 // UserAvailabilityLog tracks user availability changes for break time calculation
 type UserAvailabilityLog struct {
 	ID             uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`

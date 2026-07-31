@@ -180,6 +180,7 @@ func DefaultPermissions() []Permission {
 		{Resource: ResourceCustomActions, Action: ActionRead, Description: "View custom actions"},
 		{Resource: ResourceCustomActions, Action: ActionWrite, Description: "Create and edit custom actions"},
 		{Resource: ResourceCustomActions, Action: ActionDelete, Description: "Delete custom actions"},
+		{Resource: ResourceCustomActions, Action: ActionExecute, Description: "Run custom actions from chat"},
 
 		// Organizations
 		{Resource: ResourceOrganizations, Action: ActionRead, Description: "View organizations"},
@@ -201,8 +202,12 @@ func SystemRolePermissions() map[string][]string {
 	}
 
 	managerPermissions := []string{
-		// Teams (read only)
-		"teams:read",
+		// Users (managers administer their team's members)
+		"users:read", "users:write",
+		// Teams
+		"teams:read", "teams:write",
+		// Roles (read only — needed to assign roles when editing users)
+		"roles:read",
 		// Settings
 		"settings.general:read", "settings.general:write",
 		// Accounts
@@ -222,13 +227,13 @@ func SystemRolePermissions() map[string][]string {
 		// Tags
 		"tags:read", "tags:write", "tags:delete",
 		// Analytics
-		"analytics:read", "analytics.agents:read",
+		"analytics:read", "analytics:write", "analytics:delete", "analytics.agents:read",
 		// Webhooks
 		"webhooks:read", "webhooks:write", "webhooks:delete",
 		// Canned Responses
 		"canned_responses:read", "canned_responses:write", "canned_responses:delete",
 		// Custom Actions
-		"custom_actions:read", "custom_actions:write", "custom_actions:delete",
+		"custom_actions:read", "custom_actions:write", "custom_actions:delete", "custom_actions:execute",
 		// Organizations (read only)
 		"organizations:read",
 	}
@@ -246,6 +251,8 @@ func SystemRolePermissions() map[string][]string {
 		"analytics.agents:read",
 		// Canned Responses (read only)
 		"canned_responses:read",
+		// Custom Actions (run from the chat sidebar)
+		"custom_actions:execute",
 	}
 
 	return map[string][]string{

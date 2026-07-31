@@ -25,22 +25,31 @@ export const ROLE_BADGE_VARIANTS: Record<string, 'default' | 'secondary' | 'outl
   agent: 'outline',
 } as const
 
-// Resource labels for permissions UI
+// Resource labels for permissions UI (keys match backend permission resources)
 export const RESOURCE_LABELS: Record<string, string> = {
   users: 'Users',
-  contacts: 'Contacts',
-  messages: 'Messages',
   teams: 'Teams',
-  campaigns: 'Campaigns',
-  templates: 'Templates',
-  analytics: 'Analytics',
-  settings: 'Settings',
-  webhooks: 'Webhooks',
-  apikeys: 'API Keys',
   roles: 'Roles',
-  tags: 'Tags',
-  gowa_instances: 'GOWA Servers',
+  'settings.general': 'General Settings',
+  'settings.sso': 'SSO Settings',
+  accounts: 'WhatsApp Accounts',
   devices: 'Devices',
+  gowa_instances: 'GOWA Servers',
+  templates: 'Templates',
+  campaigns: 'Campaigns',
+  chat: 'Chat',
+  'chat.assign': 'Chat Assignment',
+  'chat.collaborate': 'Chat Collaboration',
+  contacts: 'Contacts',
+  tags: 'Tags',
+  analytics: 'Analytics',
+  'analytics.agents': 'Agent Analytics',
+  webhooks: 'Webhooks',
+  api_keys: 'API Keys',
+  canned_responses: 'Canned Responses',
+  custom_actions: 'Custom Actions',
+  organizations: 'Organizations',
+  audit_logs: 'Audit Logs',
 } as const
 
 // Tag colors with their CSS classes

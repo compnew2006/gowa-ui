@@ -9,6 +9,10 @@ import { Aside } from '@astrojs/starlight/components';
 
 Custom Actions are configurable buttons that appear in the chat interface, enabling quick integrations with external systems. Actions can call webhooks, open URLs, or execute JavaScript code.
 
+<Aside type="caution">
+  Managing custom actions requires the `custom_actions:read`, `custom_actions:write`, or `custom_actions:delete` permissions respectively. Running an action requires `custom_actions:execute`. Listing actions requires either `custom_actions:read` or `custom_actions:execute`, so agents can see the action buttons in chat.
+</Aside>
+
 ## List Custom Actions
 
 Retrieve all custom actions for your organization.

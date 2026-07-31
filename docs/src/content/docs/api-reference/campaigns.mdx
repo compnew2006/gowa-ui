@@ -9,6 +9,10 @@ import { Aside } from '@astrojs/starlight/components';
 
 Campaigns allow you to send bulk WhatsApp messages to multiple contacts using approved templates. The API handles rate limiting and delivery tracking automatically.
 
+<Aside type="caution">
+  Campaign endpoints require the `campaigns:read`, `campaigns:write`, or `campaigns:delete` permissions respectively. Starting, pausing, cancelling, and retrying campaigns requires `campaigns:execute`.
+</Aside>
+
 ## List Campaigns
 
 Retrieve all campaigns.

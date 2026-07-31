@@ -11,7 +11,7 @@ Whatomate provides a flexible role-based access control (RBAC) system that allow
 
 The permission system is built around:
 
-- **Permissions**: Fine-grained access controls for specific actions on resources (e.g., `users:create`, `contacts:read`)
+- **Permissions**: Fine-grained access controls for specific actions on resources (e.g., `users:write`, `contacts:read`)
 - **Roles**: Collections of permissions that can be assigned to users
 - **System Roles**: Pre-defined roles (Admin, Manager, Agent) that cannot be deleted
 
@@ -21,9 +21,9 @@ Three system roles are created automatically for each organization:
 
 | Role | Description |
 |------|-------------|
-| **Admin** | Full access to all features including user and role management |
-| **Manager** | Full access except user/role management and organization settings |
-| **Agent** | Limited access - can only view/respond to assigned chats |
+| **Admin** | Full access to all features including user, role, and organization management |
+| **Manager** | Manages users, teams, campaigns, templates, contacts, analytics, webhooks, and custom actions. Cannot manage roles, API keys, SSO, or organizations |
+| **Agent** | Limited access — handles chats, views contacts and canned responses, and runs custom actions from the chat sidebar |
 
 <Aside type="note">
   System roles cannot be deleted, but their permissions can be viewed (read-only).
@@ -52,28 +52,40 @@ Permissions follow the format `resource:action`. Available actions are:
 | Action | Description |
 |--------|-------------|
 | `read` | View the resource |
-| `create` | Create new items |
-| `update` | Modify existing items |
+| `write` | Create and edit items |
 | `delete` | Remove items |
+| `execute` | Run the resource (campaigns, custom actions) |
+| `import` | Import data (contacts) |
+| `export` | Export data (contacts) |
+| `assign` | Assign to others (organization members) |
 
 ### Available Resources
 
 | Resource | Description |
 |----------|-------------|
 | `users` | User management |
-| `roles` | Role management |
 | `teams` | Team management |
-| `contacts` | Contact management |
-| `messages` | Message sending/viewing |
+| `roles` | Role management |
+| `settings.general` | General organization settings |
+| `settings.sso` | Single sign-on configuration |
+| `accounts` | WhatsApp account settings |
+| `devices` | GOWA device pairing and provisioning |
+| `gowa_instances` | GOWA server instance management |
 | `templates` | Message template management |
-| `campaigns` | Campaign management |
-| `flows` | WhatsApp Flow management |
+| `campaigns` | Campaign management and execution |
+| `chat` | Viewing conversations and sending messages |
+| `chat.assign` | Assigning conversations to agents |
+| `chat.collaborate` | Joining assigned chats as a collaborator |
+| `contacts` | Contact management, import, and export |
+| `tags` | Tag management |
+| `analytics` | Analytics dashboard and widgets |
+| `analytics.agents` | Agent performance analytics |
 | `webhooks` | Webhook configuration |
 | `api_keys` | API key management |
+| `canned_responses` | Canned response management |
+| `custom_actions` | Custom action management and execution |
 | `organizations` | Organization and member management |
-| `accounts` | WhatsApp account settings |
-| `settings` | Organization settings |
-| `analytics` | Analytics and reporting |
+| `audit_logs` | Audit log viewing |
 
 ### Permission Matrix
 
@@ -81,16 +93,16 @@ When creating or editing a role, you'll see a permission matrix organized by res
 
 ```
 Users
-  ☑ Read users
-  ☑ Create users
-  ☐ Update users
+  ☑ View users
+  ☑ Create and edit users
   ☐ Delete users
 
 Contacts
-  ☑ Read contacts
-  ☑ Create contacts
-  ☑ Update contacts
+  ☑ View contacts
+  ☑ Create and edit contacts
   ☐ Delete contacts
+  ☐ Import contacts
+  ☐ Export contacts
 ```
 
 ## Assigning Roles to Users
@@ -145,12 +157,11 @@ The frontend dynamically adapts based on user permissions:
 
 Menu items are shown/hidden based on permissions:
 
-- **Chat** - Requires `messages:read`
-- **Contacts** - Requires `contacts:read`
-- **Campaigns** - Requires `campaigns:read`
-- **Templates** - Requires `templates:read`
-- **Analytics** - Requires `analytics:read`
-- **Settings** - Requires any settings-related permission
+- **Dashboard** - Requires `analytics`
+- **Chat** - Requires `chat`
+- **Campaigns** - Requires `campaigns`
+- **Agent Analytics** - Requires `analytics.agents`
+- **Settings** - Requires any settings-related permission (`settings.general`, `accounts`, `contacts`, `teams`, `users`, `roles`, `api_keys`, `webhooks`, etc.)
 
 ### Page Access
 
@@ -158,7 +169,7 @@ If a user tries to access a page they don't have permission for, they are redire
 
 ### Action Buttons
 
-Create, edit, and delete buttons are shown only if the user has the corresponding permission. For example, the "Add User" button only appears if the user has `users:create` permission.
+Create, edit, and delete buttons are shown only if the user has the corresponding permission. For example, the "Add User" button only appears if the user has `users:write` permission.
 
 ## API Authorization
 
@@ -168,7 +179,7 @@ All API endpoints check permissions before processing requests:
 # Returns 403 if user lacks users:read permission
 GET /api/users
 
-# Returns 403 if user lacks campaigns:create permission
+# Returns 403 if user lacks campaigns:write permission
 POST /api/campaigns
 ```
 
@@ -177,7 +188,7 @@ POST /api/campaigns
 ```json
 {
   "status": "error",
-  "message": "Permission denied: users:create"
+  "message": "Insufficient permissions"
 }
 ```
 

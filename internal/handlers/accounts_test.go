@@ -563,3 +563,247 @@ func TestApp_DeleteAccount_CrossOrgIsolation(t *testing.T) {
 	app.DB.Model(&models.WhatsAppAccount{}).Where("id = ?", account.ID).Count(&count)
 	assert.Equal(t, int64(1), count)
 }
+
+// --- Account Assignment Scoping Tests ---
+
+func TestApp_ListAccounts_AssignedOnly(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := createAdminUser(t, app, org.ID)
+
+	acc1 := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+	acc2 := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+	testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID) // unassigned
+
+	testutil.AssignAccountToUser(t, app.DB, user.ID, acc1.ID)
+	testutil.AssignAccountToUser(t, app.DB, user.ID, acc2.ID)
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+
+	err := app.ListAccounts(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp struct {
+		Data struct {
+			Accounts []handlers.AccountResponse `json:"accounts"`
+		} `json:"data"`
+	}
+	err = json.Unmarshal(testutil.GetResponseBody(req), &resp)
+	require.NoError(t, err)
+	require.Len(t, resp.Data.Accounts, 2)
+
+	got := []uuid.UUID{resp.Data.Accounts[0].ID, resp.Data.Accounts[1].ID}
+	assert.ElementsMatch(t, []uuid.UUID{acc1.ID, acc2.ID}, got)
+}
+
+func TestApp_ListAccounts_NoAssignmentsFallback(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := createAdminUser(t, app, org.ID)
+
+	testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+	testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+
+	// No assignments for this user — full org visibility applies.
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+
+	err := app.ListAccounts(req)
+	require.NoError(t, err)
+
+	var resp struct {
+		Data struct {
+			Accounts []handlers.AccountResponse `json:"accounts"`
+		} `json:"data"`
+	}
+	err = json.Unmarshal(testutil.GetResponseBody(req), &resp)
+	require.NoError(t, err)
+	assert.Len(t, resp.Data.Accounts, 2)
+}
+
+func TestApp_ListAccounts_CrossOrgAssignmentIgnored(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org1 := testutil.CreateTestOrganization(t, app.DB)
+	org2 := testutil.CreateTestOrganization(t, app.DB)
+	user := createAdminUser(t, app, org1.ID)
+
+	testutil.CreateTestWhatsAppAccount(t, app.DB, org1.ID)
+	testutil.CreateTestWhatsAppAccount(t, app.DB, org1.ID)
+	otherOrgAcc := testutil.CreateTestWhatsAppAccount(t, app.DB, org2.ID)
+
+	// Assignment in another org must not restrict visibility in org1.
+	testutil.AssignAccountToUser(t, app.DB, user.ID, otherOrgAcc.ID)
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org1.ID, user.ID)
+
+	err := app.ListAccounts(req)
+	require.NoError(t, err)
+
+	var resp struct {
+		Data struct {
+			Accounts []handlers.AccountResponse `json:"accounts"`
+		} `json:"data"`
+	}
+	err = json.Unmarshal(testutil.GetResponseBody(req), &resp)
+	require.NoError(t, err)
+	assert.Len(t, resp.Data.Accounts, 2)
+}
+
+func TestApp_ListAccounts_SuperAdminUnrestricted(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	// A role is still required for permission resolution; the super admin
+	// flag is what bypasses assignment scoping.
+	agentRole := testutil.CreateAgentRole(t, app.DB, org.ID)
+	superAdmin := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("list-superadmin")),
+		testutil.WithRoleID(&agentRole.ID),
+		testutil.WithSuperAdmin(),
+	)
+
+	acc1 := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+	testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+
+	// Even with an explicit assignment, super admins see all org accounts.
+	testutil.AssignAccountToUser(t, app.DB, superAdmin.ID, acc1.ID)
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, superAdmin.ID)
+
+	err := app.ListAccounts(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp struct {
+		Data struct {
+			Accounts []handlers.AccountResponse `json:"accounts"`
+		} `json:"data"`
+	}
+	err = json.Unmarshal(testutil.GetResponseBody(req), &resp)
+	require.NoError(t, err)
+	assert.Len(t, resp.Data.Accounts, 2)
+}
+
+func TestApp_GetAccount_AssignmentScoping(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := createAdminUser(t, app, org.ID)
+
+	assigned := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+	unassigned := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+
+	testutil.AssignAccountToUser(t, app.DB, user.ID, assigned.ID)
+
+	// Assigned account is accessible
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", assigned.ID.String())
+
+	err := app.GetAccount(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	// Unassigned account returns 404 (existence is not leaked)
+	req2 := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req2, org.ID, user.ID)
+	testutil.SetPathParam(req2, "id", unassigned.ID.String())
+
+	err = app.GetAccount(req2)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusNotFound, testutil.GetResponseStatusCode(req2))
+}
+
+func TestApp_UpdateAccount_AssignmentScoping(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := createAdminUser(t, app, org.ID)
+
+	assigned := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+	unassigned := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+
+	testutil.AssignAccountToUser(t, app.DB, user.ID, assigned.ID)
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"name": "Should Not Update",
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", unassigned.ID.String())
+
+	err := app.UpdateAccount(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusNotFound, testutil.GetResponseStatusCode(req))
+
+	// Account name unchanged in DB
+	var current models.WhatsAppAccount
+	require.NoError(t, app.DB.Where("id = ?", unassigned.ID).First(&current).Error)
+	assert.Equal(t, unassigned.Name, current.Name)
+}
+
+func TestApp_DeleteAccount_AssignmentScoping(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := createAdminUser(t, app, org.ID)
+
+	assigned := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+	unassigned := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+
+	testutil.AssignAccountToUser(t, app.DB, user.ID, assigned.ID)
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", unassigned.ID.String())
+
+	err := app.DeleteAccount(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusNotFound, testutil.GetResponseStatusCode(req))
+
+	// Account still exists
+	var count int64
+	app.DB.Model(&models.WhatsAppAccount{}).Where("id = ?", unassigned.ID).Count(&count)
+	assert.Equal(t, int64(1), count)
+}
+
+func TestApp_DeleteAccount_RemovesAssignments(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	admin := createAdminUser(t, app, org.ID)
+	agent := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("del-assigned")),
+	)
+
+	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+	testutil.AssignAccountToUser(t, app.DB, agent.ID, account.ID)
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, admin.ID)
+	testutil.SetPathParam(req, "id", account.ID.String())
+
+	err := app.DeleteAccount(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	// Dangling assignment rows are cleaned up with the account
+	var count int64
+	app.DB.Model(&models.UserWhatsAppAccount{}).
+		Where("whats_app_account_id = ?", account.ID).Count(&count)
+	assert.Equal(t, int64(0), count)
+}

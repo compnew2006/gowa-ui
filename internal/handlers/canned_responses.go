@@ -46,7 +46,7 @@ type CannedResponseResponse struct {
 
 // ListCannedResponses returns all canned responses for the organization
 func (a *App) ListCannedResponses(r *fastglue.Request) error {
-	orgID, err := a.requireOrgID(r)
+	orgID, _, err := a.requireAuth(r, models.ResourceCannedResponses, models.ActionRead)
 	if err != nil {
 		return nil
 	}
@@ -95,7 +95,7 @@ func (a *App) ListCannedResponses(r *fastglue.Request) error {
 
 // CreateCannedResponse creates a new canned response
 func (a *App) CreateCannedResponse(r *fastglue.Request) error {
-	orgID, userID, err := a.requireOrgAndUserID(r)
+	orgID, userID, err := a.requireAuth(r, models.ResourceCannedResponses, models.ActionWrite)
 	if err != nil {
 		return nil
 	}
@@ -147,7 +147,7 @@ func (a *App) CreateCannedResponse(r *fastglue.Request) error {
 
 // GetCannedResponse returns a single canned response
 func (a *App) GetCannedResponse(r *fastglue.Request) error {
-	orgID, err := a.requireOrgID(r)
+	orgID, _, err := a.requireAuth(r, models.ResourceCannedResponses, models.ActionRead)
 	if err != nil {
 		return nil
 	}
@@ -168,7 +168,7 @@ func (a *App) GetCannedResponse(r *fastglue.Request) error {
 
 // UpdateCannedResponse updates an existing canned response
 func (a *App) UpdateCannedResponse(r *fastglue.Request) error {
-	orgID, userID, err := a.requireOrgAndUserID(r)
+	orgID, userID, err := a.requireAuth(r, models.ResourceCannedResponses, models.ActionWrite)
 	if err != nil {
 		return nil
 	}
@@ -221,7 +221,7 @@ func (a *App) UpdateCannedResponse(r *fastglue.Request) error {
 
 // DeleteCannedResponse deletes a canned response
 func (a *App) DeleteCannedResponse(r *fastglue.Request) error {
-	orgID, userID, err := a.requireOrgAndUserID(r)
+	orgID, userID, err := a.requireAuth(r, models.ResourceCannedResponses, models.ActionDelete)
 	if err != nil {
 		return nil
 	}
@@ -251,7 +251,7 @@ func (a *App) DeleteCannedResponse(r *fastglue.Request) error {
 
 // IncrementCannedResponseUsage increments the usage counter
 func (a *App) IncrementCannedResponseUsage(r *fastglue.Request) error {
-	orgID, err := a.requireOrgID(r)
+	orgID, _, err := a.requireAuth(r, models.ResourceCannedResponses, models.ActionRead)
 	if err != nil {
 		return nil
 	}

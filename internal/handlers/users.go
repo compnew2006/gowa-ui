@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"net/mail"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 // UserRequest represents the request body for creating/updating a user.
@@ -20,6 +22,10 @@ type UserRequest struct {
 	FullName string     `json:"full_name"`
 	RoleID   *uuid.UUID `json:"role_id"`
 	IsActive *bool      `json:"is_active"`
+	// WhatsAppAccountIDs replaces the user's account assignments when present.
+	// nil = leave assignments untouched; empty slice = clear all assignments
+	// (restoring full org visibility).
+	WhatsAppAccountIDs *[]uuid.UUID `json:"whatsapp_account_ids"`
 }
 
 // superAdminField is used to extract is_super_admin separately from the request body.
@@ -50,8 +56,84 @@ type UserResponse struct {
 	IsMember       bool         `json:"is_member"`
 	OrganizationID uuid.UUID    `json:"organization_id"`
 	Settings       models.JSONB `json:"settings,omitempty"`
-	CreatedAt      string       `json:"created_at"`
-	UpdatedAt      string       `json:"updated_at"`
+	// WhatsAppAccountIDs lists the accounts assigned to the user in the org
+	// (empty = no restriction, user sees all org accounts).
+	WhatsAppAccountIDs []uuid.UUID `json:"whatsapp_account_ids"`
+	CreatedAt          string      `json:"created_at"`
+	UpdatedAt          string      `json:"updated_at"`
+}
+
+// errInvalidAccountAssignment is returned when an assignment payload contains
+// account IDs that don't exist in the caller's organization.
+var errInvalidAccountAssignment = errors.New("invalid account assignment")
+
+// syncUserAccountAssignments replaces the user's account assignments within
+// the org with the given set. Every ID must reference an account of the org.
+// An empty set clears the org's assignments, restoring full org visibility.
+// Assignments in other organizations are left untouched.
+func (a *App) syncUserAccountAssignments(userID, orgID uuid.UUID, accountIDs []uuid.UUID) error {
+	ids := dedupeUUIDs(accountIDs)
+	if len(ids) > 0 {
+		var count int64
+		if err := a.DB.Model(&models.WhatsAppAccount{}).
+			Where("id IN ? AND organization_id = ?", ids, orgID).
+			Count(&count).Error; err != nil {
+			return err
+		}
+		if count != int64(len(ids)) {
+			return errInvalidAccountAssignment
+		}
+	}
+	return a.DB.Transaction(func(tx *gorm.DB) error {
+		// Replace only this org's assignments; the subquery keeps assignments
+		// pointing at other orgs' accounts intact.
+		if err := tx.
+			Where("user_id = ? AND whats_app_account_id IN (?)",
+				userID,
+				tx.Model(&models.WhatsAppAccount{}).Select("id").Where("organization_id = ?", orgID),
+			).
+			Delete(&models.UserWhatsAppAccount{}).Error; err != nil {
+			return err
+		}
+		for _, id := range ids {
+			if err := tx.Create(&models.UserWhatsAppAccount{UserID: userID, WhatsAppAccountID: id}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// sendAssignmentError maps assignment sync failures to the right envelope.
+func (a *App) sendAssignmentError(r *fastglue.Request, err error) error {
+	if errors.Is(err, errInvalidAccountAssignment) {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "One or more account IDs are invalid", nil, "")
+	}
+	a.Log.Error("Failed to sync account assignments", "error", err)
+	return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update account assignments", nil, "")
+}
+
+// loadUserAccountIDs fetches the user's assigned account IDs for responses.
+// Best-effort: lookup errors resolve to an empty list.
+func (a *App) loadUserAccountIDs(userID, orgID uuid.UUID) []uuid.UUID {
+	ids, err := a.assignedAccountIDs(userID, orgID)
+	if err != nil || ids == nil {
+		return []uuid.UUID{}
+	}
+	return ids
+}
+
+func dedupeUUIDs(ids []uuid.UUID) []uuid.UUID {
+	seen := make(map[uuid.UUID]struct{}, len(ids))
+	out := make([]uuid.UUID, 0, len(ids))
+	for _, id := range ids {
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
 }
 
 // PermissionInfo represents permission info in role response
@@ -240,6 +322,7 @@ func (a *App) GetUser(r *fastglue.Request) error {
 
 	resp := userToResponse(user)
 	resp.IsMember = user.OrganizationID != orgID
+	resp.WhatsAppAccountIDs = a.loadUserAccountIDs(user.ID, orgID)
 	return r.SendEnvelope(resp)
 }
 
@@ -337,6 +420,13 @@ func (a *App) CreateUser(r *fastglue.Request) error {
 			})
 		}
 
+		// Apply account assignments (replace-all semantics within this org)
+		if req.WhatsAppAccountIDs != nil {
+			if err := a.syncUserAccountAssignments(softDeleted.ID, orgID, *req.WhatsAppAccountIDs); err != nil {
+				return a.sendAssignmentError(r, err)
+			}
+		}
+
 		// Load role for response
 		if roleID != nil {
 			var role models.CustomRole
@@ -354,7 +444,9 @@ func (a *App) CreateUser(r *fastglue.Request) error {
 		a.logAudit(orgID, userID,
 			"user", softDeleted.ID, models.AuditActionCreated, nil, userAuditSnapshot(&softDeleted))
 
-		return r.SendEnvelope(userToResponse(softDeleted))
+		resp := userToResponse(softDeleted)
+		resp.WhatsAppAccountIDs = a.loadUserAccountIDs(softDeleted.ID, orgID)
+		return r.SendEnvelope(resp)
 	}
 
 	user := models.User{
@@ -384,13 +476,22 @@ func (a *App) CreateUser(r *fastglue.Request) error {
 		// Non-fatal: user was already created
 	}
 
+	// Apply account assignments (replace-all semantics within this org)
+	if req.WhatsAppAccountIDs != nil {
+		if err := a.syncUserAccountAssignments(user.ID, orgID, *req.WhatsAppAccountIDs); err != nil {
+			return a.sendAssignmentError(r, err)
+		}
+	}
+
 	// Load role for response
 	a.DB.Preload("Role").First(&user, user.ID)
 
 	a.logAudit(orgID, userID,
 		"user", user.ID, models.AuditActionCreated, nil, userAuditSnapshot(&user))
 
-	return r.SendEnvelope(userToResponse(user))
+	resp := userToResponse(user)
+	resp.WhatsAppAccountIDs = a.loadUserAccountIDs(user.ID, orgID)
+	return r.SendEnvelope(resp)
 }
 
 // UpdateUser updates a user
@@ -440,34 +541,48 @@ func (a *App) UpdateUser(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Insufficient permissions to change roles", nil, "")
 	}
 
-	// For cross-org members, only allow role updates
-	if isMember {
-		if req.RoleID == nil {
-			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Only role can be updated for organization members", nil, "")
-		}
-		// Validate role exists and belongs to org
-		var newRole models.CustomRole
-		if err := a.DB.Where("id = ? AND organization_id = ?", req.RoleID, orgID).First(&newRole).Error; err != nil {
-			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid role", nil, "")
-		}
-		// Update role in user_organizations only
-		if err := a.DB.Model(&models.UserOrganization{}).
-			Where("user_id = ? AND organization_id = ?", id, orgID).
-			Update("role_id", req.RoleID).Error; err != nil {
-			a.Log.Error("Failed to update member role", "error", err)
-			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update member role", nil, "")
-		}
-		a.InvalidateUserPermissionsCache(user.ID)
+	// Account assignments are equally privileged — without this gate a user
+	// could lift their own visibility restrictions via self-update.
+	if req.WhatsAppAccountIDs != nil && !a.HasPermission(currentUserID, models.ResourceUsers, models.ActionWrite, orgID) {
+		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Insufficient permissions to change account assignments", nil, "")
+	}
 
-		// Return updated response
-		user.RoleID = req.RoleID
-		user.Role = &newRole
+	// For cross-org members, only role and account assignments can be updated
+	if isMember {
+		if req.RoleID == nil && req.WhatsAppAccountIDs == nil {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Only role and account assignments can be updated for organization members", nil, "")
+		}
+		if req.WhatsAppAccountIDs != nil {
+			if err := a.syncUserAccountAssignments(user.ID, orgID, *req.WhatsAppAccountIDs); err != nil {
+				return a.sendAssignmentError(r, err)
+			}
+		}
+		if req.RoleID != nil {
+			// Validate role exists and belongs to org
+			var newRole models.CustomRole
+			if err := a.DB.Where("id = ? AND organization_id = ?", req.RoleID, orgID).First(&newRole).Error; err != nil {
+				return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid role", nil, "")
+			}
+			// Update role in user_organizations only
+			if err := a.DB.Model(&models.UserOrganization{}).
+				Where("user_id = ? AND organization_id = ?", id, orgID).
+				Update("role_id", req.RoleID).Error; err != nil {
+				a.Log.Error("Failed to update member role", "error", err)
+				return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update member role", nil, "")
+			}
+			a.InvalidateUserPermissionsCache(user.ID)
+
+			// Return updated response
+			user.RoleID = req.RoleID
+			user.Role = &newRole
+		}
 
 		a.logAudit(orgID, currentUserID,
 			"user", user.ID, models.AuditActionUpdated, oldSnap, userAuditSnapshot(&user))
 
 		resp := userToResponse(user)
 		resp.IsMember = true
+		resp.WhatsAppAccountIDs = a.loadUserAccountIDs(user.ID, orgID)
 		return r.SendEnvelope(resp)
 	}
 
@@ -538,6 +653,13 @@ func (a *App) UpdateUser(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update user", nil, "")
 	}
 
+	// Replace account assignments if provided (nil leaves them untouched)
+	if req.WhatsAppAccountIDs != nil {
+		if err := a.syncUserAccountAssignments(user.ID, orgID, *req.WhatsAppAccountIDs); err != nil {
+			return a.sendAssignmentError(r, err)
+		}
+	}
+
 	// Invalidate permissions cache if role changed
 	if roleChanged {
 		// Sync role change to UserOrganization for this org
@@ -553,7 +675,9 @@ func (a *App) UpdateUser(r *fastglue.Request) error {
 	a.logAudit(orgID, currentUserID,
 		"user", user.ID, models.AuditActionUpdated, oldSnap, userAuditSnapshot(&user))
 
-	return r.SendEnvelope(userToResponse(user))
+	resp := userToResponse(user)
+	resp.WhatsAppAccountIDs = a.loadUserAccountIDs(user.ID, orgID)
+	return r.SendEnvelope(resp)
 }
 
 // DeleteUser deletes a user or removes a member from the organization
@@ -592,6 +716,12 @@ func (a *App) DeleteUser(r *fastglue.Request) error {
 		}
 		a.InvalidateUserPermissionsCache(id)
 
+		// Drop this org's account assignments so a future re-add starts clean
+		a.DB.Where("user_id = ? AND whats_app_account_id IN (?)",
+			id,
+			a.DB.Model(&models.WhatsAppAccount{}).Select("id").Where("organization_id = ?", orgID),
+		).Delete(&models.UserWhatsAppAccount{})
+
 		a.logAudit(orgID, currentUserID,
 			"user", id, models.AuditActionDeleted, userAuditSnapshot(&user), nil)
 
@@ -626,6 +756,9 @@ func (a *App) DeleteUser(r *fastglue.Request) error {
 
 	// Delete all UserOrganization entries for this user
 	a.DB.Where("user_id = ?", id).Delete(&models.UserOrganization{})
+
+	// Delete all account assignments for this user
+	a.DB.Where("user_id = ?", id).Delete(&models.UserWhatsAppAccount{})
 
 	a.logAudit(orgID, currentUserID,
 		"user", id, models.AuditActionDeleted, userAuditSnapshot(&user), nil)

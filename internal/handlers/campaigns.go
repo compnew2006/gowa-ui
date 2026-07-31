@@ -67,7 +67,7 @@ type RecipientRequest struct {
 
 // ListCampaigns implements campaign listing
 func (a *App) ListCampaigns(r *fastglue.Request) error {
-	orgID, err := a.requireOrgID(r)
+	orgID, _, err := a.requireAuth(r, models.ResourceCampaigns, models.ActionRead)
 	if err != nil {
 		return nil
 	}
@@ -144,7 +144,7 @@ func (a *App) ListCampaigns(r *fastglue.Request) error {
 
 // CreateCampaign implements campaign creation
 func (a *App) CreateCampaign(r *fastglue.Request) error {
-	orgID, userID, err := a.requireOrgAndUserID(r)
+	orgID, userID, err := a.requireAuth(r, models.ResourceCampaigns, models.ActionWrite)
 	if err != nil {
 		return nil
 	}
@@ -215,7 +215,7 @@ func (a *App) CreateCampaign(r *fastglue.Request) error {
 
 // GetCampaign implements getting a single campaign
 func (a *App) GetCampaign(r *fastglue.Request) error {
-	orgID, err := a.requireOrgID(r)
+	orgID, _, err := a.requireAuth(r, models.ResourceCampaigns, models.ActionRead)
 	if err != nil {
 		return nil
 	}
@@ -269,7 +269,7 @@ func (a *App) GetCampaign(r *fastglue.Request) error {
 
 // UpdateCampaign implements campaign update
 func (a *App) UpdateCampaign(r *fastglue.Request) error {
-	orgID, userID, err := a.requireOrgAndUserID(r)
+	orgID, userID, err := a.requireAuth(r, models.ResourceCampaigns, models.ActionWrite)
 	if err != nil {
 		return nil
 	}
@@ -359,7 +359,7 @@ func (a *App) UpdateCampaign(r *fastglue.Request) error {
 
 // DeleteCampaign implements campaign deletion
 func (a *App) DeleteCampaign(r *fastglue.Request) error {
-	orgID, userID, err := a.requireOrgAndUserID(r)
+	orgID, userID, err := a.requireAuth(r, models.ResourceCampaigns, models.ActionDelete)
 	if err != nil {
 		return nil
 	}
@@ -401,11 +401,12 @@ func (a *App) DeleteCampaign(r *fastglue.Request) error {
 	})
 }
 
-// loadCampaignByPath resolves the caller's org, parses the {id} campaign path
-// param, and loads the campaign scoped to that org. On error it sends the HTTP
-// response and returns ok=false — callers should `return nil`.
+// loadCampaignByPath verifies the caller holds campaigns:execute, parses the
+// {id} campaign path param, and loads the campaign scoped to the caller's org.
+// On error it sends the HTTP response and returns ok=false — callers should
+// `return nil`.
 func (a *App) loadCampaignByPath(r *fastglue.Request) (orgID, id uuid.UUID, campaign *models.BulkMessageCampaign, ok bool) {
-	orgID, err := a.requireOrgID(r)
+	orgID, _, err := a.requireAuth(r, models.ResourceCampaigns, models.ActionExecute)
 	if err != nil {
 		return uuid.Nil, uuid.Nil, nil, false
 	}
@@ -654,7 +655,7 @@ func normalizeRecipientPhone(phone string) (string, bool) {
 
 // ImportRecipients implements adding recipients to a campaign
 func (a *App) ImportRecipients(r *fastglue.Request) error {
-	orgID, userID, err := a.requireOrgAndUserID(r)
+	orgID, userID, err := a.requireAuth(r, models.ResourceCampaigns, models.ActionWrite)
 	if err != nil {
 		return nil
 	}
@@ -738,7 +739,7 @@ func (a *App) ImportRecipients(r *fastglue.Request) error {
 
 // GetCampaignRecipients implements listing campaign recipients
 func (a *App) GetCampaignRecipients(r *fastglue.Request) error {
-	orgID, err := a.requireOrgID(r)
+	orgID, _, err := a.requireAuth(r, models.ResourceCampaigns, models.ActionRead)
 	if err != nil {
 		return nil
 	}
@@ -775,7 +776,7 @@ func (a *App) GetCampaignRecipients(r *fastglue.Request) error {
 
 // DeleteCampaignRecipient deletes a single recipient from a campaign
 func (a *App) DeleteCampaignRecipient(r *fastglue.Request) error {
-	orgID, userID, err := a.requireOrgAndUserID(r)
+	orgID, userID, err := a.requireAuth(r, models.ResourceCampaigns, models.ActionWrite)
 	if err != nil {
 		return nil
 	}
@@ -833,7 +834,7 @@ func (a *App) DeleteCampaignRecipient(r *fastglue.Request) error {
 
 // UploadCampaignMedia uploads media for a campaign's template header
 func (a *App) UploadCampaignMedia(r *fastglue.Request) error {
-	orgID, err := a.requireOrgID(r)
+	orgID, _, err := a.requireAuth(r, models.ResourceCampaigns, models.ActionWrite)
 	if err != nil {
 		return nil
 	}
@@ -987,7 +988,7 @@ func (a *App) saveCampaignMedia(campaignID string, data []byte, mimeType string)
 // ServeCampaignMedia serves campaign media files for preview
 func (a *App) ServeCampaignMedia(r *fastglue.Request) error {
 	// Get auth context
-	orgID, err := a.requireOrgID(r)
+	orgID, _, err := a.requireAuth(r, models.ResourceCampaigns, models.ActionRead)
 	if err != nil {
 		return nil
 	}

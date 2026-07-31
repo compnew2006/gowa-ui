@@ -128,7 +128,7 @@ var AvailableWebhookEvents = []map[string]string{
 
 // ListWebhooks returns all webhooks for the organization
 func (a *App) ListWebhooks(r *fastglue.Request) error {
-	orgID, err := a.requireOrgID(r)
+	orgID, _, err := a.requireAuth(r, models.ResourceWebhooks, models.ActionRead)
 	if err != nil {
 		return nil
 	}
@@ -170,6 +170,10 @@ func (a *App) ListWebhooks(r *fastglue.Request) error {
 
 // GetWebhook returns a single webhook by ID
 func (a *App) GetWebhook(r *fastglue.Request) error {
+	if _, _, err := a.requireAuth(r, models.ResourceWebhooks, models.ActionRead); err != nil {
+		return nil
+	}
+
 	_, webhook, err := resolveOrgEntity[models.Webhook](a, r, "id", "webhook")
 	if err != nil {
 		return nil
@@ -190,7 +194,7 @@ func headersToJSONB(headers map[string]string) models.JSONB {
 
 // CreateWebhook creates a new webhook
 func (a *App) CreateWebhook(r *fastglue.Request) error {
-	orgID, userID, err := a.requireOrgAndUserID(r)
+	orgID, userID, err := a.requireAuth(r, models.ResourceWebhooks, models.ActionWrite)
 	if err != nil {
 		return nil
 	}
@@ -247,7 +251,7 @@ func (a *App) CreateWebhook(r *fastglue.Request) error {
 
 // UpdateWebhook updates an existing webhook
 func (a *App) UpdateWebhook(r *fastglue.Request) error {
-	orgID, userID, err := a.requireOrgAndUserID(r)
+	orgID, userID, err := a.requireAuth(r, models.ResourceWebhooks, models.ActionWrite)
 	if err != nil {
 		return nil
 	}
@@ -310,7 +314,7 @@ func (a *App) UpdateWebhook(r *fastglue.Request) error {
 
 // DeleteWebhook deletes a webhook
 func (a *App) DeleteWebhook(r *fastglue.Request) error {
-	orgID, userID, err := a.requireOrgAndUserID(r)
+	orgID, userID, err := a.requireAuth(r, models.ResourceWebhooks, models.ActionDelete)
 	if err != nil {
 		return nil
 	}
@@ -341,6 +345,10 @@ func (a *App) DeleteWebhook(r *fastglue.Request) error {
 
 // TestWebhook sends a test event to a webhook
 func (a *App) TestWebhook(r *fastglue.Request) error {
+	if _, _, err := a.requireAuth(r, models.ResourceWebhooks, models.ActionWrite); err != nil {
+		return nil
+	}
+
 	_, webhook, err := resolveOrgEntity[models.Webhook](a, r, "id", "webhook")
 	if err != nil {
 		return nil

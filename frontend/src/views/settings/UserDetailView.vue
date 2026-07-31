@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { useUsersStore, type User } from '@/stores/users'
 import { useAuthStore } from '@/stores/auth'
 import { useRolesStore } from '@/stores/roles'
+import { accountsService } from '@/services/api'
 import { toast } from 'vue-sonner'
 import { getErrorMessage } from '@/lib/api-utils'
 import { useUnsavedChangesGuard } from '@/composables/useUnsavedChangesGuard'
@@ -18,6 +19,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Select,
   SelectContent,
@@ -75,7 +77,27 @@ const form = ref({
   role_id: '',
   is_active: true,
   is_super_admin: false,
+  whatsapp_account_ids: [] as string[],
 })
+
+// Org accounts available for assignment (loaded best-effort)
+const accounts = ref<{ id: string; name: string }[]>([])
+
+async function loadAccounts() {
+  try {
+    const response = await accountsService.list()
+    accounts.value = response.data.data?.accounts || response.data.accounts || []
+  } catch {
+    accounts.value = []
+  }
+}
+
+function toggleAccount(accountId: string, checked: boolean) {
+  const ids = new Set(form.value.whatsapp_account_ids)
+  if (checked) ids.add(accountId)
+  else ids.delete(accountId)
+  form.value.whatsapp_account_ids = [...ids]
+}
 
 const breadcrumbs = computed(() => [
   { label: t('nav.settings'), href: '/settings' },
@@ -111,6 +133,7 @@ function syncForm() {
     role_id: user.value.role_id || '',
     is_active: user.value.is_active,
     is_super_admin: user.value.is_super_admin || false,
+    whatsapp_account_ids: [...(user.value.whatsapp_account_ids || [])],
   }
 }
 
@@ -144,6 +167,8 @@ async function save() {
     }
     if (form.value.password) data.password = form.value.password
     if (isSuperAdmin.value) data.is_super_admin = form.value.is_super_admin
+    // Assignments require users:write on the backend; only send when allowed
+    if (canWrite.value) data.whatsapp_account_ids = form.value.whatsapp_account_ids
 
     await usersStore.updateUser(user.value.id, data)
     toast.success(t('common.updatedSuccess', { resource: t('resources.User') }))
@@ -170,7 +195,7 @@ async function deleteUser() {
 }
 
 onMounted(async () => {
-  await Promise.all([loadUser(), rolesStore.fetchRoles()])
+  await Promise.all([loadUser(), rolesStore.fetchRoles(), loadAccounts()])
 })
 </script>
 
@@ -263,6 +288,21 @@ onMounted(async () => {
                 </SelectItem>
               </SelectContent>
             </Select>
+          </div>
+          <div v-if="accounts.length > 0" class="space-y-1.5 border-t pt-4">
+            <Label class="text-xs">{{ $t('users.accountAssignments') }}</Label>
+            <p class="text-[11px] text-muted-foreground">{{ $t('users.accountAssignmentsDesc') }}</p>
+            <div class="space-y-2 pt-1">
+              <div v-for="account in accounts" :key="account.id" class="flex items-center gap-2">
+                <Checkbox
+                  :id="`assign-${account.id}`"
+                  :checked="form.whatsapp_account_ids.includes(account.id)"
+                  @update:checked="(checked: boolean | 'indeterminate') => toggleAccount(account.id, checked === true)"
+                  :disabled="!canWrite"
+                />
+                <label :for="`assign-${account.id}`" class="text-sm cursor-pointer">{{ account.name }}</label>
+              </div>
+            </div>
           </div>
           <div class="flex items-center justify-between">
             <Label class="text-xs font-normal cursor-pointer">{{ $t('users.accountActive') }}</Label>

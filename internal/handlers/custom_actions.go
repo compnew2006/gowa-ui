@@ -78,9 +78,16 @@ type redirectToken struct {
 
 // ListCustomActions returns all custom actions for the organization
 func (a *App) ListCustomActions(r *fastglue.Request) error {
-	orgID, err := a.requireOrgID(r)
+	orgID, userID, err := a.getOrgAndUserID(r)
 	if err != nil {
+		_ = r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Unauthorized", nil, "")
 		return nil
+	}
+	// Managers see the list to administer actions; agents see it to run
+	// actions from the chat sidebar.
+	if !a.HasPermission(userID, models.ResourceCustomActions, models.ActionRead, orgID) &&
+		!a.HasPermission(userID, models.ResourceCustomActions, models.ActionExecute, orgID) {
+		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Insufficient permissions", nil, "")
 	}
 
 	pg := parsePagination(r)
@@ -114,6 +121,10 @@ func (a *App) ListCustomActions(r *fastglue.Request) error {
 
 // GetCustomAction returns a single custom action by ID
 func (a *App) GetCustomAction(r *fastglue.Request) error {
+	if _, _, err := a.requireAuth(r, models.ResourceCustomActions, models.ActionRead); err != nil {
+		return nil
+	}
+
 	_, action, err := resolveOrgEntity[models.CustomAction](a, r, "id", "action")
 	if err != nil {
 		return nil
@@ -124,7 +135,7 @@ func (a *App) GetCustomAction(r *fastglue.Request) error {
 
 // CreateCustomAction creates a new custom action
 func (a *App) CreateCustomAction(r *fastglue.Request) error {
-	orgID, err := a.requireOrgID(r)
+	orgID, _, err := a.requireAuth(r, models.ResourceCustomActions, models.ActionWrite)
 	if err != nil {
 		return nil
 	}
@@ -171,7 +182,7 @@ func (a *App) CreateCustomAction(r *fastglue.Request) error {
 
 // UpdateCustomAction updates an existing custom action
 func (a *App) UpdateCustomAction(r *fastglue.Request) error {
-	orgID, err := a.requireOrgID(r)
+	orgID, _, err := a.requireAuth(r, models.ResourceCustomActions, models.ActionWrite)
 	if err != nil {
 		return nil
 	}
@@ -233,7 +244,7 @@ func (a *App) UpdateCustomAction(r *fastglue.Request) error {
 
 // DeleteCustomAction deletes a custom action
 func (a *App) DeleteCustomAction(r *fastglue.Request) error {
-	orgID, err := a.requireOrgID(r)
+	orgID, _, err := a.requireAuth(r, models.ResourceCustomActions, models.ActionDelete)
 	if err != nil {
 		return nil
 	}
@@ -258,7 +269,7 @@ func (a *App) DeleteCustomAction(r *fastglue.Request) error {
 
 // ExecuteCustomAction executes a custom action with the given context
 func (a *App) ExecuteCustomAction(r *fastglue.Request) error {
-	orgID, userID, err := a.requireOrgAndUserID(r)
+	orgID, userID, err := a.requireAuth(r, models.ResourceCustomActions, models.ActionExecute)
 	if err != nil {
 		return nil
 	}
