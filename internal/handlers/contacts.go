@@ -1490,7 +1490,7 @@ type TypingRequest struct {
 // recipient via the GOWA send/chat-presence endpoint. This is GOWA-only: Meta
 // Cloud API has no equivalent, so non-GOWA accounts get a clean 400.
 // The indicator is outbound-only (it shows on the recipient's WhatsApp), so
-// no WebSocket event is broadcast back to the Whatomate UI.
+// no WebSocket event is broadcast back to the GOWA UI.
 func (a *App) SendTypingIndicator(r *fastglue.Request) error {
 	orgID, userID, err := a.requireAuth(r, models.ResourceChat, models.ActionWrite)
 	if err != nil {

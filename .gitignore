@@ -37,6 +37,11 @@ frontend/.env.local
 frontend/.env.*.local
 .playwright-mcp/
 graphify-out/
+.openchrome/
+.serena/
+.zcode/
+specs/
+report/
 
 # Playwright
 frontend/playwright-report/

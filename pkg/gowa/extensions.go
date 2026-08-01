@@ -27,7 +27,7 @@ type MessageExtensions interface {
 
 	// SendChatPresence sends a typing ("composing") indicator to a chat.
 	// action is "start" or "stop". The indicator is outbound-only: it renders
-	// on the recipient's WhatsApp client, not in the Whatomate UI.
+	// on the recipient's WhatsApp client, not in the GOWA UI.
 	// GOWA endpoint: POST /send/chat-presence
 	// Body: { phone: chatJID, action: "start"|"stop" }
 	SendChatPresence(ctx context.Context, account *whatsapp.Account, chatJID, action string) error
