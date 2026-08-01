@@ -42,7 +42,8 @@ graphify-out/
 .zcode/
 specs/
 report/
-
+testsprite_tests/
+test/
 # Playwright
 frontend/playwright-report/
 frontend/test-results/
