@@ -74,13 +74,15 @@ func (m *statusMockGowa) lastRequest() (phone, path string) {
 func newStatusTestApp(t *testing.T, m *statusMockGowa) *handlers.App {
 	t.Helper()
 	app := newTestApp(t)
-	whatsapp.RegisterGowaFactory(
+	// RegisterGowaFactory is process-global — this wrapper passes its own
+	// mock closures + logger to NewRegistryWithFactory.
+	app.WARegistry = whatsapp.NewRegistryWithFactory(
+		testutil.NopLogger(),
 		func(baseURL string) (string, string) { return "", "" },
 		func(baseURL, username, password string) whatsapp.Provider {
 			return gowa.New(m.server.URL, username, password)
 		},
 	)
-	app.WARegistry = whatsapp.NewRegistry(testutil.NopLogger())
 	return app
 }
 

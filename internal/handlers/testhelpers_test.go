@@ -58,6 +58,9 @@ func newTestApp(t *testing.T, opts ...appOption) *handlers.App {
 		DB:     db,
 		Log:    log,
 		Redis:  redisClient,
+		// Tests use the stripped-down client (no SSRF-safe pooled Transport);
+		// the production client is defined once in handlers.NewSharedHTTPClient
+		// and is not forced onto tests (see cmd/gowa-ui/wiring.go).
 		HTTPClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},

@@ -121,3 +121,22 @@ func RegisterGowaFactory(
 		return newClient(baseURL, user, pass)
 	}
 }
+
+// NewRegistryWithFactory is a convenience over the two-call
+// RegisterGowaFactory + NewRegistry idiom that main.go and several test
+// wrappers open-code identically. It registers the supplied per-call-site
+// factory closures (so each caller controls its own credResolver and
+// newClient — RegisterGowaFactory is process-global, callers must NOT
+// share a hard-coded default) and returns a fresh Registry built with log.
+//
+// Each caller passes its OWN closures and its OWN logger so the
+// process-global factory mutation is owned by the caller, not by this
+// helper.
+func NewRegistryWithFactory(
+	log logger,
+	credentialResolver func(baseURL string) (username, password string),
+	newClient func(baseURL, username, password string) Provider,
+) *Registry {
+	RegisterGowaFactory(credentialResolver, newClient)
+	return NewRegistry(log)
+}

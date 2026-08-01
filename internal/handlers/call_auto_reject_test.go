@@ -178,17 +178,18 @@ func newCallRejectTestApp(t *testing.T, mock *callRejectMock) *App {
 	db := testutil.SetupTestDB(t)
 	log := testutil.NopLogger()
 
-	whatsapp.RegisterGowaFactory(
-		func(baseURL string) (string, string) { return "", "" },
-		func(baseURL, username, password string) whatsapp.Provider {
-			return gowa.New(mock.server.URL, username, password)
-		},
-	)
-
+	// RegisterGowaFactory is process-global — this wrapper passes its own
+	// mock closures + nop logger to NewRegistryWithFactory.
 	app := &App{
 		DB:         db,
 		Log:        log,
-		WARegistry: whatsapp.NewRegistry(log),
+		WARegistry: whatsapp.NewRegistryWithFactory(
+			log,
+			func(baseURL string) (string, string) { return "", "" },
+			func(baseURL, username, password string) whatsapp.Provider {
+				return gowa.New(mock.server.URL, username, password)
+			},
+		),
 		HTTPClient: &http.Client{Timeout: 5 * time.Second},
 	}
 	if rdb := testutil.SetupTestRedis(t); rdb != nil {

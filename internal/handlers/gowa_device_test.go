@@ -92,13 +92,16 @@ func (m *mockGowaDeviceAPI) url() string { return m.Server.URL }
 func newGowaDeviceApp(t *testing.T, mock *mockGowaDeviceAPI) *handlers.App {
 	t.Helper()
 	app := newTestApp(t)
-	whatsapp.RegisterGowaFactory(
+	// RegisterGowaFactory is process-global — this wrapper passes its own
+	// mock closures + the ErrorLevel logger (load-bearing: keeps device-test
+	// noise out of the test output) to NewRegistryWithFactory.
+	app.WARegistry = whatsapp.NewRegistryWithFactory(
+		logf.New(logf.Opts{Level: logf.ErrorLevel}),
 		func(baseURL string) (string, string) { return "user", "pass" },
 		func(baseURL, username, password string) whatsapp.Provider {
 			return gowa.New(baseURL, username, password)
 		},
 	)
-	app.WARegistry = whatsapp.NewRegistry(logf.New(logf.Opts{Level: logf.ErrorLevel}))
 	return app
 }
 

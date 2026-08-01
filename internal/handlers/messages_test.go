@@ -112,13 +112,16 @@ func newMsgTestApp(t *testing.T, mockServer *mockGowaServer) *handlers.App {
 	app := newTestApp(t)
 
 	// Route every account through the mock server, regardless of its base URL.
-	whatsapp.RegisterGowaFactory(
+	// RegisterGowaFactory is process-global, so each wrapper passes its own
+	// per-test closures + logger to NewRegistryWithFactory rather than sharing
+	// a hard-coded default.
+	app.WARegistry = whatsapp.NewRegistryWithFactory(
+		testutil.NopLogger(),
 		func(baseURL string) (string, string) { return "", "" },
 		func(baseURL, username, password string) whatsapp.Provider {
 			return gowa.New(mockServer.server.URL, username, password)
 		},
 	)
-	app.WARegistry = whatsapp.NewRegistry(testutil.NopLogger())
 
 	return app
 }

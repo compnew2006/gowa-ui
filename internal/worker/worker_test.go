@@ -42,15 +42,17 @@ func testWorker(t *testing.T) *Worker {
 
 // pointWorkerAtGowa registers a GOWA client factory and gives the worker a
 // fresh registry, so accounts whose gowa_base_url points at a mock server
-// resolve a client that talks to it.
+// resolve a client that talks to it. RegisterGowaFactory is process-global —
+// this wrapper passes its own per-test closures + w.Log to
+// NewRegistryWithFactory rather than sharing a hard-coded default.
 func pointWorkerAtGowa(w *Worker) {
-	whatsapp.RegisterGowaFactory(
+	w.WARegistry = whatsapp.NewRegistryWithFactory(
+		w.Log,
 		func(baseURL string) (string, string) { return "", "" },
 		func(baseURL, username, password string) whatsapp.Provider {
 			return gowa.New(baseURL, username, password)
 		},
 	)
-	w.WARegistry = whatsapp.NewRegistry(w.Log)
 }
 
 // newGowaSendServer returns a mock GOWA server that captures the last request

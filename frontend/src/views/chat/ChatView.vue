@@ -2,16 +2,13 @@
 import { ref, watch, onMounted, onUnmounted, nextTick, computed, defineAsyncComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { useContactsStore, type Contact, type Message } from '@/stores/contacts'
+import { useContactsStore, type Contact } from '@/stores/contacts'
 import { useAuthStore } from '@/stores/auth'
 import { useUsersStore } from '@/stores/users'
 import { wsService } from '@/services/websocket'
-import { contactsService, messagesService, statusService, customActionsService, accountsService, cannedResponsesService, getRequestHeaders, type CustomAction, type ActionResult, type CannedResponse } from '@/services/api'
 import { useTagsStore } from '@/stores/tags'
 import { TagBadge } from '@/components/ui/tag-badge'
 import { getTagColorClass } from '@/lib/constants'
-import { STATUS_CONTACT_ID, STATUS_VIRTUAL_CONTACT, isStatusContact } from '@/lib/status'
-import { getErrorMessage } from '@/lib/api-utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -55,7 +52,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { toast } from 'vue-sonner'
 import {
   Search,
   Send,
@@ -65,10 +61,8 @@ import {
   Video,
   Smile,
   MoreVertical,
-  Phone,
   Check,
   CheckCheck,
-  Clock,
   AlertCircle,
   Ban,
   User,
@@ -80,13 +74,6 @@ import {
   MapPin,
   ExternalLink,
   Loader2,
-  Zap,
-  Ticket,
-  BarChart,
-  Link,
-  Mail,
-  Globe,
-  Code,
   RotateCw,
   Trash2,
   Filter,
@@ -103,7 +90,6 @@ import {
 } from 'lucide-vue-next'
 import { getInitials, getAvatarGradient, avatarSrc, linkifySegments } from '@/lib/utils'
 import { useColorMode } from '@/composables/useColorMode'
-import { useInfiniteScroll } from '@/composables/useInfiniteScroll'
 import CannedResponsePicker from '@/components/chat/CannedResponsePicker.vue'
 import TemplatePicker from '@/components/chat/TemplatePicker.vue'
 import ContactInfoPanel from '@/components/chat/ContactInfoPanel.vue'
@@ -112,7 +98,6 @@ import { useNotesStore } from '@/stores/notes'
 import ScheduleMessageDialog from '@/components/chat/ScheduleMessageDialog.vue'
 import ScheduledMessagesPanel from '@/components/chat/ScheduledMessagesPanel.vue'
 import { useScheduledMessagesStore } from '@/stores/scheduledMessages'
-import { useHeaderMedia } from '@/composables/useHeaderMedia'
 import { CreateContactDialog } from '@/components/shared'
 import HeaderMediaUpload from '@/components/shared/HeaderMediaUpload.vue'
 import { Download } from 'lucide-vue-next'
@@ -120,6 +105,16 @@ import MediaBurstDialog from '@/components/chat/MediaBurstDialog.vue'
 import MediaRetryButton from '@/components/chat/MediaRetryButton.vue'
 import { useMediaBurst } from '@/composables/useMediaBurst'
 import { useMediaExport } from '@/composables/useMediaExport'
+import { isStatusContact } from '@/lib/status'
+// Extracted chat composables (keep ChatView a thin orchestration shell)
+import { useMessageFormat } from '@/composables/useMessageFormat'
+import { useChatScroll } from '@/composables/useChatScroll'
+import { useChatTyping } from '@/composables/useChatTyping'
+import { useChatMedia } from '@/composables/useChatMedia'
+import { useChatCannedTemplates } from '@/composables/useChatCannedTemplates'
+import { useChatMessaging } from '@/composables/useChatMessaging'
+import { useChatLifecycle } from '@/composables/useChatLifecycle'
+import { useChatContactsList } from '@/composables/useChatContactsList'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -128,8 +123,24 @@ const contactsStore = useContactsStore()
 const authStore = useAuthStore()
 const usersStore = useUsersStore()
 const tagsStore = useTagsStore()
+const notesStore = useNotesStore()
+const scheduledStore = useScheduledMessagesStore()
+const { isDark } = useColorMode()
 
-// Resizable contacts sidebar state
+const canWriteContacts = authStore.hasPermission('contacts', 'write')
+const canExportMedia = authStore.hasPermission('contacts', 'export')
+
+const contactId = computed(() => route.params.contactId as string | undefined)
+
+// ─── Template refs bound to DOM nodes (view-owned, passed into composables) ───
+// Declared in the view so vue-tsc reliably tracks their template usage; the
+// composables that need them receive them as params.
+const messagesEndRef = ref<HTMLElement | null>(null)
+const messageInputRef = ref<HTMLTextAreaElement | null>(null)
+const fileInputRef = ref<HTMLInputElement | null>(null)
+const tabStripRef = ref<HTMLElement | null>(null)
+
+// ─── Resizable contacts sidebar (pure view state) ───
 const SIDEBAR_MIN_WIDTH = 260
 const SIDEBAR_MAX_WIDTH = 520
 const SIDEBAR_DEFAULT_WIDTH = 320 // matches the previous fixed `w-80`
@@ -180,172 +191,38 @@ function startSidebarResize(e: MouseEvent) {
   document.addEventListener('mousemove', onMouseMove)
   document.addEventListener('mouseup', onMouseUp)
 }
-const notesStore = useNotesStore()
-const scheduledStore = useScheduledMessagesStore()
-const { isDark } = useColorMode()
 
-const canWriteContacts = authStore.hasPermission('contacts', 'write')
-const canExportMedia = authStore.hasPermission('contacts', 'export')
-
-const messageInput = ref('')
-const messagesEndRef = ref<HTMLElement | null>(null)
-const messageInputRef = ref<HTMLTextAreaElement | null>(null)
-const isSending = ref(false)
-const isAssignDialogOpen = ref(false)
-const isInviteDialogOpen = ref(false)
-// Tracks incoming messages that arrived while the chat is open.
-// Surfaced as a "N unread messages" pill at the top of the chat panel
-// (WhatsApp-style). Click the pill to jump up to the first message of
-// the unread batch; cleared on click or contact switch. See issue #280.
-const newMessagesCount = ref(0)
-const firstUnreadId = ref<string | null>(null)
-const isAtBottom = ref(true)
-const SCROLL_BOTTOM_THRESHOLD = 80
+// ─── Right-panel toggles (pure view state) ───
 const isInfoPanelOpen = ref(false)
 const isNotesPanelOpen = ref(false)
 const isScheduledPanelOpen = ref(false)
 const isScheduleDialogOpen = ref(false)
 
-
-// Multi-account state
-const selectedAccount = ref<string | null>(null)
-const contactAccounts = ref<string[]>([])
-const orgAccounts = ref<any[]>([])
-
-// File upload state
-const fileInputRef = ref<HTMLInputElement | null>(null)
-const selectedFile = ref<File | null>(null)
-const filePreviewUrl = ref<string | null>(null)
-const isMediaDialogOpen = ref(false)
-const mediaCaption = ref('')
-const isUploadingMedia = ref(false)
-
-// Media burst: detect a flurry of incoming files and offer to collect them
-// together (ZIP) or separately. The burst is a living computed over the
-// reactive messages array — no timers, no watchers.
+// ─── Media burst: detect a flurry of incoming files and offer to collect them ───
 const burstTimeMs = ref(1_800_000) // 30 minutes default, reactive — UI can adjust
 const {
   recentBurst,
   isCollectible,
   burstCount
 } = useMediaBurst(computed(() => contactsStore.messages), { maxGapMs: burstTimeMs })
+
+// Shared media-export instance: drives both the per-message "retry download"
+// (inside useChatMedia) and the burst "download as zip / separately" below.
+// One instance so a single in-flight download tracks progress in one place.
+const mediaExport = useMediaExport()
 const {
   isDownloading: isBurstDownloading,
   progress: burstProgress,
-  redownloading: redownloadingIds,
   downloadAsZip,
   downloadSeparately,
-  redownload
-} = useMediaExport()
+} = mediaExport
 const isBurstDialogOpen = ref(false)
 
-// Messages whose media failed to load in the DOM (video error, image error).
-// Keyed by message id so the "Retry download" affordance only shows on broken bubbles.
-const brokenMediaIds = ref(new Set<string>())
-
-/**
- * Re-fetch a message's media from the provider and, on success, patch the
- * updated media_url into the store so the bubble re-renders with live media.
- */
-async function retryMediaDownload(message: Message) {
-  const result = await redownload(message)
-  if (!result.ok) return
-  // Patch the message in the store so the bubble re-renders.
-  const idx = contactsStore.messages.findIndex((m) => m.id === message.id)
-  if (idx !== -1) {
-    const updated = {
-      ...contactsStore.messages[idx],
-      media_url: result.mediaUrl || contactsStore.messages[idx].media_url,
-      media_mime_type: result.mediaMimeType || contactsStore.messages[idx].media_mime_type
-    }
-    const fresh = [...contactsStore.messages]
-    fresh[idx] = updated
-    contactsStore.messages = fresh
-  }
-  // Clear the broken flag so any error placeholder hides.
-  const cleared = new Set(brokenMediaIds.value)
-  cleared.delete(message.id)
-  brokenMediaIds.value = cleared
-}
-
-function markMediaBroken(message: Message) {
-  if (brokenMediaIds.value.has(message.id)) return
-  const next = new Set(brokenMediaIds.value)
-  next.add(message.id)
-  brokenMediaIds.value = next
-}
-
-function isRedownloading(message: Message): boolean {
-  return !!redownloadingIds.value && redownloadingIds.value.has(message.id)
-}
-
-// Cache for media blob URLs (message_id -> blob URL)
-
-
-// Canned responses slash command state
-const cannedPickerOpen = ref(false)
-const cannedSearchQuery = ref('')
-
-// Canned response preview dialog state
-const cannedDialogOpen = ref(false)
-const selectedCannedResponse = ref<CannedResponse | null>(null)
-const cannedParamNames = ref<string[]>([])
-const cannedParamValues = ref<Record<string, string>>({})
-const isSendingCanned = ref(false)
-// Tokens that the chat already knows how to fill from the current contact /
-// signed-in agent. Shared by canned responses (resolved client-side into the
-// outgoing message) and templates (pre-filled into the param payload so the
-// backend forwards the resolved value to Meta).
-const AUTO_RESOLVED_CONTEXT_TOKENS = new Set(['contact_name', 'phone_number', 'user_name', 'agent_name'])
-
-// Sticky date header state
-const stickyDate = ref('')
-const showStickyDate = ref(false)
-let stickyDateTimeout: ReturnType<typeof setTimeout> | null = null
-
-// Emoji picker state
-const emojiPickerOpen = ref(false)
-
-// Template picker state
-const templateDialogOpen = ref(false)
-const selectedTemplate = ref<any>(null)
-const templateParamNames = ref<string[]>([])
-const templateParamValues = ref<Record<string, string>>({})
-// Name of the TEXT-header variable (max 1 per Meta) and its value. Kept in
-// its own ref so a positional {{1}} in the header doesn't collide with a
-// {{1}} body parameter — both can be filled independently.
-const templateHeaderParamName = ref<string | null>(null)
-const templateHeaderParamValue = ref('')
-const templateButtonUrlParams = ref<{ index: number; text: string; value: string; type: string }[]>([])
-const isSendingTemplate = ref(false)
-const templateHeaderType = computed(() => selectedTemplate.value?.header_type)
-const {
-  file: templateHeaderFile,
-  previewUrl: templateHeaderPreview,
-  needsMedia: templateNeedsHeaderMedia,
-  acceptTypes: templateHeaderAccept,
-  handleFileChange: handleTemplateHeaderFile,
-  clear: clearTemplateHeaderMedia,
-} = useHeaderMedia(templateHeaderType)
-
-// Custom actions state
-const customActions = ref<CustomAction[]>([])
-const executingActionId = ref<string | null>(null)
-
-// Tags filter state
-const isTagFilterOpen = ref(false)
-
-// All accounts are GOWA providers; Meta-only restrictions (24h service
-// window) no longer apply. Kept as a computed for template bindings.
-const isCurrentAccountGowa = computed(() => true)
-
-// Add contact dialog state
+// ─── Add-contact dialog (pure view state) ───
 const isAddContactOpen = ref(false)
-
 function openAddContactDialog() {
   isAddContactOpen.value = true
 }
-
 async function onContactCreated(contact: any) {
   // Refresh contacts and select the new one
   await contactsStore.fetchContacts()
@@ -354,452 +231,264 @@ async function onContactCreated(contact: any) {
   }
 }
 
-// Infinite scroll for contacts (load more at bottom)
-const contactsScroll = useInfiniteScroll({
-  direction: 'bottom',
-  onLoadMore: () => contactsStore.loadMoreContacts(),
-  hasMore: computed(() => contactsStore.hasMoreContacts),
-  isLoading: computed(() => contactsStore.isLoadingMoreContacts)
+// ─── selectedAccount: owned by the view, shared by every chat composable ───
+// Declared here (before the composables) so there is no temporal-dead-zone when
+// the composables below read it. useChatContactsList mutates it on contact switch.
+const selectedAccount = ref<string | null>(null)
+
+// ─── Composables: each owns one concern; template destructures from them ───
+
+// 1) Message formatting (stateless read helpers used in the message v-for)
+const {
+  getMessageContent,
+  getSystemMessageText,
+  getReplyPreviewContent,
+  getMessageStatusIcon,
+  getMessageStatusClass,
+  formatMessageTime,
+  formatContactTime,
+  getDateLabel,
+  shouldShowDateSeparator,
+  isMediaMessage,
+  hasRevokedMedia,
+  getMediaUrl,
+  shouldRenderMedia,
+  getInteractiveButtons,
+  getCTAUrlData,
+  getLocationData,
+  getContactsData,
+  getGoogleMapsUrl,
+} = useMessageFormat({
+  t,
+  messages: computed(() => contactsStore.messages),
+  getCurrentContact: () => contactsStore.currentContact,
 })
 
-// Infinite scroll for messages (load older at top)
-const messagesScroll = useInfiniteScroll({
-  direction: 'top',
-  onLoadMore: async () => {
-    if (!contactsStore.currentContact) return
-    await messagesScroll.preserveScrollPosition(async () => {
-      await contactsStore.fetchOlderMessages(contactsStore.currentContact!.id, selectedAccount.value || undefined)
-      await nextTick()
-      // Load media for any new messages
-      try {
-        // Media loading handled reactively
-      } catch (e) {
-        console.error('Error loading media:', e)
-      }
-    })
+// 2) Scrolling + sticky date + unread pill + load-older infinite scroll
+const {
+  newMessagesCount,
+  firstUnreadId,
+  stickyDate,
+  showStickyDate,
+  messagesScroll,
+  scrollToBottom,
+  scrollToMessage,
+  onUserActive,
+  handleMessagesLengthChange,
+  resetOnContactSwitch,
+} = useChatScroll({
+  contactsStore,
+  selectedAccount,
+  messagesEndRef,
+  getFirstUnreadId: () => firstUnreadId.value,
+  getCurrentContactId: () => contactsStore.currentContact?.id,
+  hasMoreMessages: computed(() => contactsStore.hasMoreMessages),
+  isLoadingOlderMessages: computed(() => contactsStore.isLoadingOlderMessages),
+})
+
+// 3) Typing indicator + reactions + emoji picker
+const {
+  isCurrentAccountGowa,
+  reactionPickerMessageId,
+  quickReactionEmojis,
+  emojiPickerOpen,
+  onTypingInput,
+  stopTypingIndicator,
+  sendReaction,
+} = useChatTyping({
+  contactsStore,
+  getCurrentUserId: () => authStore.user?.id,
+})
+
+// 4 + 5) Messaging ↔ Media. These two have a circular dependency (the Status
+// media send path crosses both: media upload → sendStatusMedia in messaging, and
+// messaging's status send needs media's getMediaType / dialog / upload flag).
+// Break it with a lazy holder so either composable may be created first; the
+// callbacks only fire at user-send time, well after both are wired.
+let _sendStatusMedia: (file: File, caption: string) => Promise<void> = async () => {}
+
+// 4) Media upload + preview + per-message recovery (shares mediaExport)
+const media = useChatMedia({
+  t,
+  contactsStore,
+  selectedAccount,
+  scrollToBottom,
+  sendStatusMedia: (file: File, caption: string) => _sendStatusMedia(file, caption),
+  isStatusContact,
+  mediaExport,
+  fileInputRef,
+})
+const {
+  selectedFile,
+  filePreviewUrl,
+  isMediaDialogOpen,
+  mediaCaption,
+  isUploadingMedia,
+  brokenMediaIds,
+  retryMediaDownload,
+  markMediaBroken,
+  isRedownloading,
+  openFilePicker,
+  handleFileSelect,
+  closeMediaDialog,
+  sendMediaMessage,
+  openMediaPreview,
+  handleImageError,
+  handleMediaError,
+} = media
+
+// 5) Messaging (send / retry / revoke / reply + status paths)
+const {
+  messageInput,
+  isSending,
+  retryingMessageId,
+  revokingMessageId,
+  sendMessage,
+  sendStatusMedia,
+  retryMessage,
+  revokeMessage,
+  replyToMessage,
+  autoResizeTextarea,
+  resetTextareaHeight,
+} = useChatMessaging({
+  t,
+  contactsStore,
+  selectedAccount,
+  isCurrentAccountGowa,
+  stopTypingIndicator,
+  scrollToBottom,
+  getMediaType: media.getMediaType,
+  closeMediaDialog,
+  getIsUploadingMedia: () => isUploadingMedia.value,
+  setIsUploadingMedia: (v: boolean) => { isUploadingMedia.value = v },
+  messageInputRef,
+})
+// Resolve the lazy holder now that messaging has produced the real sendStatusMedia.
+_sendStatusMedia = sendStatusMedia
+
+// 6) Canned responses + templates
+const {
+  cannedPickerOpen,
+  cannedSearchQuery,
+  cannedDialogOpen,
+  selectedCannedResponse,
+  cannedParamNames,
+  cannedParamValues,
+  isSendingCanned,
+  cannedPreview,
+  cannedPreviewButtons,
+  handleCannedSelect,
+  sendCannedResponse,
+  closeCannedPicker,
+  templateDialogOpen,
+  selectedTemplate,
+  templateParamNames,
+  templateParamValues,
+  templateHeaderParamName,
+  templateHeaderParamValue,
+  templateButtonUrlParams,
+  isSendingTemplate,
+  templatePreview,
+  templateHeaderFile,
+  templateHeaderPreview,
+  templateNeedsHeaderMedia,
+  templateHeaderAccept,
+  showHeaderParamInput,
+  handleTemplateWithParams,
+  handleTemplateHeaderFile,
+  clearTemplateHeaderMedia,
+  sendTemplateMessage,
+} = useChatCannedTemplates({
+  t,
+  contactsStore,
+  selectedAccount,
+  getCurrentContact: () => contactsStore.currentContact,
+  getCurrentUser: () => authStore.user,
+  messageInput,
+  resetTextareaHeight,
+  scrollToBottom,
+})
+
+// 7) Chat lifecycle (claim / join / release / close / assign)
+const {
+  isClaiming,
+  isJoining,
+  isAssignDialogOpen,
+  isInviteDialogOpen,
+  assignSearchQuery,
+  canAssignContacts,
+  filteredAssignableUsers,
+  handleClaim,
+  handleJoin,
+  handleLeave,
+  handleRelease,
+  handleClose,
+  handleReopen,
+  handleBulkRelease,
+  handleInvite,
+  handleRemoveCollaborator,
+  assignContactToUser,
+} = useChatLifecycle({
+  t,
+  contactsStore,
+  authStore,
+  usersStore,
+})
+
+// 8) Contacts list (tabs, tag filter, custom actions, multi-account, selectContact)
+const {
+  orgAccounts,
+  isTagFilterOpen,
+  toggleTagFilter,
+  clearTagFilter,
+  customActions,
+  executingActionId,
+  getActionIcon,
+  fetchCustomActions,
+  executeCustomAction,
+  visibleTabOrder,
+  onTabKeydown,
+  tabLabel,
+  tabCount,
+  contactsScroll,
+  switchAccount,
+  handleContactClick,
+  selectContact,
+  fetchOrgAccounts,
+} = useChatContactsList({
+  t,
+  contactsStore,
+  selectedAccount,
+  tabStripRef,
+  onContactClick: (contact: Contact) => router.push(`/chat/${contact.id}`),
+  onContactSelected: async (id: string) => {
+    // Notes + scheduled messages are view-owned; fetch them after the contact
+    // is selected, then scroll the room to the bottom.
+    await Promise.all([
+      notesStore.fetchNotes(id),
+      scheduledStore.fetchForContact(id),
+    ])
+    setTimeout(() => {
+      scrollToBottom(true)
+      messagesScroll.setup()
+    }, 50)
   },
-  hasMore: computed(() => contactsStore.hasMoreMessages),
-  isLoading: computed(() => contactsStore.isLoadingOlderMessages),
-  onScroll: (event) => {
-    const el = event.target as HTMLElement
-    updateStickyDate(el)
-    updateAtBottom(el)
-  }
+  messagesScroll,
+  resetUnreadOnSwitch: resetOnContactSwitch,
+  scrollToBottom,
 })
 
-function updateAtBottom(el: HTMLElement) {
-  const distanceFromBottom = el.scrollHeight - el.clientHeight - el.scrollTop
-  isAtBottom.value = distanceFromBottom < SCROLL_BOTTOM_THRESHOLD
+// Emoji insertion needs to mutate the messaging-owned messageInput ref.
+function insertEmoji(emoji: string) {
+  messageInput.value += emoji
+  emojiPickerOpen.value = false
 }
 
-const contactId = computed(() => route.params.contactId as string | undefined)
+// ─── View orchestration: route/contacts/messages watchers + lifecycle ───
+// This is the only place the chat view coordinates across composables. The
+// composables below are pure concerns; the glue lives here.
 
-// ─── Chat lifecycle: claim & collaboration ───
-const isClaiming = ref(false)
-const isJoining = ref(false)
-
-async function handleClaim() {
-  if (!contactsStore.currentContact) return
-  isClaiming.value = true
-  try {
-    await contactsStore.claimChat(contactsStore.currentContact.id)
-  } catch (error: any) {
-    if (error.response?.status === 409) {
-      console.error('Chat already assigned:', error.response.data?.message)
-    }
-  } finally {
-    isClaiming.value = false
-  }
-}
-
-async function handleJoin() {
-  if (!contactsStore.currentContact) return
-  isJoining.value = true
-  try {
-    await contactsStore.joinChat(contactsStore.currentContact.id)
-  } catch {
-    console.error('Failed to join chat')
-  } finally {
-    isJoining.value = false
-  }
-}
-
-async function handleLeave() {
-  if (!contactsStore.currentContact) return
-  try {
-    await contactsStore.leaveChat(contactsStore.currentContact.id)
-  } catch {
-    console.error('Failed to leave chat')
-  }
-}
-
-// Release returns the conversation to pending without closing it. Mirrors
-// handleLeave's shape (currentContact guard + try/catch).
-async function handleRelease() {
-  if (!contactsStore.currentContact) return
-  try {
-    await contactsStore.releaseChat(contactsStore.currentContact.id)
-  } catch {
-    console.error('Failed to release chat')
-  }
-}
-
-async function handleClose() {
-  if (!contactsStore.currentContact) return
-  try {
-    await contactsStore.closeChat(contactsStore.currentContact.id)
-  } catch {
-    console.error('Failed to close chat')
-  }
-}
-
-async function handleReopen() {
-  if (!contactsStore.currentContact) return
-  try {
-    await contactsStore.reopenChat(contactsStore.currentContact.id)
-  } catch {
-    console.error('Failed to reopen chat')
-  }
-}
-
-// ─── Tab keyboard navigation (M5 a11y) ───
-// Arrow Left/Right move focus between tabs and activate them, mirroring the
-// WAI-ARIA tabs pattern. Home/End jump to first/last. The roving tabindex on
-// the buttons themselves handles the rest.
-const tabStripRef = ref<HTMLElement | null>(null)
-type ListTab = 'me' | 'pending' | 'closed' | 'all'
-const TAB_ORDER = ['me', 'pending', 'closed', 'all'] as const
-// 'closed' and 'all' are supervisor tabs (contacts:write — the admin/manager
-// marker, matching canManageAllChats), so agents keep the two-tab strip.
-function visibleTabOrder(): ListTab[] {
-  return contactsStore.canSeeSupervisorTabs
-    ? [...TAB_ORDER]
-    : ['me', 'pending']
-}
-function onTabKeydown(e: KeyboardEvent) {
-  const order = visibleTabOrder()
-  const idx = order.indexOf(contactsStore.activeListTab as any)
-  if (idx === -1) return
-  let next = idx
-  if (e.key === 'ArrowRight') next = (idx + 1) % order.length
-  else if (e.key === 'ArrowLeft') next = (idx - 1 + order.length) % order.length
-  else if (e.key === 'Home') next = 0
-  else if (e.key === 'End') next = order.length - 1
-  else return
-  e.preventDefault()
-  contactsStore.activeListTab = order[next]
-  nextTick(() => {
-    const el = tabStripRef.value?.querySelector<HTMLButtonElement>(`#tab-${order[next]}`)
-    el?.focus()
-  })
-}
-function tabLabel(tab: ListTab): string {
-  switch (tab) {
-    case 'pending': return t('chat.tabPending')
-    case 'closed': return t('chat.tabClosed')
-    case 'all': return t('chat.tabAll')
-    default: return t('chat.tabMe')
-  }
-}
-function tabCount(tab: ListTab): number {
-  switch (tab) {
-    case 'pending': return contactsStore.pendingCount
-    case 'closed': return contactsStore.closedCount
-    case 'all': return contactsStore.allCount
-    default: return contactsStore.myCount
-  }
-}
-
-// Bulk release (M4). Wraps the store action with the standard try/catch +
-// error log used by the other lifecycle handlers.
-async function handleBulkRelease() {
-  const ids = Array.from(contactsStore.selectedContactIds)
-  if (!ids.length) return
-  try {
-    await contactsStore.bulkReleaseChats(ids)
-  } catch {
-    console.error('Failed to bulk release chats')
-  }
-}
-
-async function handleInvite(userId: string) {
-  if (!contactsStore.currentContact) return
-  try {
-    await contactsStore.inviteCollaborator(contactsStore.currentContact.id, userId)
-  } catch {
-    console.error('Failed to invite collaborator')
-  }
-}
-
-async function handleRemoveCollaborator(userId: string) {
-  if (!contactsStore.currentContact) return
-  try {
-    await contactsStore.removeCollaborator(contactsStore.currentContact.id, userId)
-  } catch {
-    console.error('Failed to remove collaborator')
-  }
-}
-
-
-// Check if current user can assign contacts (admin or manager only)
-const canAssignContacts = computed(() => {
-  // Try store first, then fallback to localStorage
-  let role = authStore.userRole
-  if (!role || role === 'agent') {
-    try {
-      const storedUser = localStorage.getItem('user')
-      if (storedUser) {
-        const user = JSON.parse(storedUser)
-        role = user.role?.name || user.role // Support both old and new format
-      }
-    } catch {
-      // ignore
-    }
-  }
-  return role === 'admin' || role === 'manager'
-})
-
-// Get list of users for assignment
-const assignableUsers = computed(() => {
-  return usersStore.users.filter(u => u.is_active)
-})
-
-// Icon mapping for custom actions
-const actionIconMap: Record<string, any> = {
-  'ticket': Ticket,
-  'user': User,
-  'bar-chart': BarChart,
-  'link': Link,
-  'phone': Phone,
-  'mail': Mail,
-  'file-text': FileText,
-  'external-link': ExternalLink,
-  'zap': Zap,
-  'globe': Globe,
-  'code': Code
-}
-
-function getActionIcon(iconName: string) {
-  return actionIconMap[iconName] || Zap
-}
-
-async function fetchCustomActions() {
-  try {
-    const response = await customActionsService.list()
-    const data = (response.data as any).data || response.data
-    customActions.value = (data.custom_actions || []).filter((a: CustomAction) => a.is_active)
-  } catch (error) {
-    // Silently fail - custom actions are optional
-    console.error('Failed to fetch custom actions:', error)
-  }
-}
-
-function toggleTagFilter(tagName: string) {
-  const index = contactsStore.selectedTags.indexOf(tagName)
-  if (index === -1) {
-    contactsStore.selectedTags.push(tagName)
-  } else {
-    contactsStore.selectedTags.splice(index, 1)
-  }
-  // Refetch contacts with new filter
-  contactsStore.fetchContacts()
-}
-
-function clearTagFilter() {
-  contactsStore.selectedTags = []
-  contactsStore.fetchContacts()
-}
-
-async function executeCustomAction(action: CustomAction) {
-  if (!contactsStore.currentContact || executingActionId.value) return
-
-  executingActionId.value = action.id
-  try {
-    const response = await customActionsService.execute(action.id, contactsStore.currentContact.id)
-    let result: ActionResult = (response.data as any).data || response.data
-
-    // JavaScript actions are now executed server-side via goja.
-    // The response already contains structured result fields (toast, clipboard, redirect_url, message).
-
-    // Handle different result types
-    if (result.redirect_url) {
-      // Open URL action result - prepend base path for relative URLs
-      let redirectUrl = result.redirect_url
-      if (redirectUrl.startsWith('/api/')) {
-        const basePath = ((window as any).__BASE_PATH__ ?? '').replace(/\/$/, '')
-        redirectUrl = basePath + redirectUrl
-      }
-      try {
-        const parsed = new URL(redirectUrl, window.location.origin)
-        if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
-          window.open(parsed.href, '_blank')
-        }
-      } catch {
-        // Invalid URL, ignore
-      }
-    }
-
-    if (result.clipboard) {
-      // Copy to clipboard
-      await navigator.clipboard.writeText(result.clipboard)
-      toast.success(t('common.copiedToClipboard'))
-    }
-
-    if (result.toast) {
-      // Show toast notification
-      if (result.toast.type === 'success') {
-        toast.success(result.toast.message)
-      } else if (result.toast.type === 'error') {
-        toast.error(result.toast.message)
-      } else {
-        toast.info(result.toast.message)
-      }
-    } else if (result.success && !result.redirect_url && !result.clipboard) {
-      // Default success message
-      toast.success(result.message || t('chat.actionExecuted'))
-    } else if (!result.success) {
-      toast.error(result.message || t('chat.actionFailed'))
-    }
-  } catch (error: any) {
-    const message = error.response?.data?.message || 'Failed to execute action'
-    toast.error(message)
-  } finally {
-    executingActionId.value = null
-  }
-}
-
-// Search state for assignment dialog
-const assignSearchQuery = ref('')
-
-// Filtered users for assignment dialog
-const filteredAssignableUsers = computed(() => {
-  const query = assignSearchQuery.value.toLowerCase().trim()
-  if (!query) return assignableUsers.value
-  return assignableUsers.value.filter(u =>
-    u.full_name.toLowerCase().includes(query) ||
-    u.email.toLowerCase().includes(query)
-  )
-})
-
-// Fetch contacts on mount (WebSocket is connected in AppLayout)
-onMounted(async () => {
-  // Ensure auth session is restored
-  if (!authStore.isAuthenticated) {
-    authStore.restoreSession()
-  }
-
-  // Keep the sidebar from overflowing on the current viewport (fixes header
-  // controls being pushed off-screen / unclickable on narrow windows).
-  clampSidebarToViewport()
-  window.addEventListener('resize', clampSidebarToViewport)
-
-  await contactsStore.fetchContacts()
-
-  // Setup infinite scroll for contacts list
-  await nextTick()
-  contactsScroll.setup()
-
-  // Fetch users if can assign contacts
-  if (canAssignContacts.value) {
-    usersStore.fetchUsers().catch(() => {
-      // Silently fail if user list can't be loaded
-    })
-  }
-
-  // Fetch custom actions for admins/managers
-  if (canAssignContacts.value) {
-    fetchCustomActions()
-  }
-
-  // Fetch org-level WhatsApp accounts for account tabs
-  try {
-    const res = await accountsService.list()
-    orgAccounts.value = res.data.data?.accounts || []
-  } catch {
-    orgAccounts.value = []
-  }
-
-  // Fetch available tags for filtering (if not already loaded)
-  if (tagsStore.tags.length === 0) {
-    tagsStore.fetchTags().catch(() => {})
-  }
-
-  if (contactId.value) {
-    await selectContact(contactId.value)
-  }
-
-  // Auto-scroll to the unread divider and mark messages read when the agent
-  // returns — covers both tab-switch (visibilitychange) and OS window focus
-  // (focus event), since "tab visible but window unfocused" is a real state
-  // and we don't want to send blue-tick receipts when no one is looking.
-  // See issue #280.
-  document.addEventListener('visibilitychange', onUserActive)
-  window.addEventListener('focus', onUserActive)
-})
-
-function onUserActive() {
-  if (document.visibilityState !== 'visible' || !document.hasFocus()) return
-  if (!firstUnreadId.value) return
-  if (contactsStore.currentContact) {
-    contactsService.markRead(contactsStore.currentContact.id)
-      .catch(() => { /* non-critical */ })
-  }
-  nextTick(() => {
-    const el = document.getElementById(`message-${firstUnreadId.value}`)
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }
-  })
-}
-
-onUnmounted(() => {
-  wsService.setCurrentContact(null)
-  // Clear current contact when leaving chat view so notifications work on other pages
-  contactsStore.setCurrentContact(null)
-  notesStore.clearNotes()
-  scheduledStore.clear()
-  // Clear sticky date timeout
-  if (stickyDateTimeout) clearTimeout(stickyDateTimeout)
-  document.removeEventListener('visibilitychange', onUserActive)
-  window.removeEventListener('focus', onUserActive)
-  window.removeEventListener('resize', clampSidebarToViewport)
-})
-
-function updateStickyDate(scrollContainer: HTMLElement) {
-  // Find all date separator elements
-  const dateSeparators = scrollContainer.querySelectorAll('[data-date-separator]')
-  if (dateSeparators.length === 0) return
-
-  const containerRect = scrollContainer.getBoundingClientRect()
-  const containerTop = containerRect.top + 60 // Offset for sticky header position
-
-  // Find the last date separator that's above the viewport top
-  let currentDate = ''
-  for (const separator of dateSeparators) {
-    const rect = separator.getBoundingClientRect()
-    if (rect.top < containerTop) {
-      currentDate = separator.getAttribute('data-date-separator') || ''
-    } else {
-      break
-    }
-  }
-
-  // Show sticky date if we have scrolled past at least one date separator
-  if (currentDate && scrollContainer.scrollTop > 50) {
-    stickyDate.value = currentDate
-    showStickyDate.value = true
-
-    // Hide after scrolling stops
-    if (stickyDateTimeout) clearTimeout(stickyDateTimeout)
-    stickyDateTimeout = setTimeout(() => {
-      showStickyDate.value = false
-    }, 1500)
-  } else {
-    showStickyDate.value = false
-  }
-}
-
-// Watch for route changes
+// Watch for route changes → select the contact (or clear on /chat root).
 watch(contactId, async (newId) => {
   if (newId) {
     notesStore.notes = []
@@ -814,775 +503,24 @@ watch(contactId, async (newId) => {
   }
 })
 
-async function selectContact(id: string) {
-  // The virtual Status conversation is send-only and has no backend row:
-  // short-circuit the normal fetch/contact-discovery/account-detection flow.
-  if (isStatusContact(id)) {
-    newMessagesCount.value = 0
-    firstUnreadId.value = null
-    isAtBottom.value = true
-    messagesScroll.cleanup()
-    selectedAccount.value = null
-    contactAccounts.value = []
-    contactsStore.setAccountFilter(null)
-    contactsStore.setCurrentContact({ ...STATUS_VIRTUAL_CONTACT } as Contact)
-    await contactsStore.fetchMessages(id)
-    // Status needs a sending account — default to the first org account.
-    if (orgAccounts.value.length > 0) {
-      selectedAccount.value = orgAccounts.value[0].name
-    }
-    wsService.setCurrentContact(id)
-    await nextTick()
-    setTimeout(() => {
-      scrollToBottom(true)
-      messagesScroll.setup()
-    }, 50)
-    return
-  }
-  // Direct deep links to /chat/:id may target a contact that isn't in the
-  // currently-loaded (paginated) list — fall back to fetching it directly.
-  let contact = contactsStore.contacts.find(c => c.id === id)
-  if (!contact) {
-    contact = await contactsStore.fetchContact(id)
-  }
-  if (contact) {
-    // Reset unread pill — fetchMessages will mark everything read on the server
-    newMessagesCount.value = 0
-    firstUnreadId.value = null
-    isAtBottom.value = true
-
-    // Remove old scroll listener before switching contacts
-    messagesScroll.cleanup()
-
-    // Reset account selection when switching contacts
-    selectedAccount.value = null
-    contactAccounts.value = []
-    contactsStore.setAccountFilter(null)
-
-    contactsStore.setCurrentContact(contact)
-    await contactsStore.fetchMessages(id)
-
-    // Discover distinct accounts from the unfiltered message set
-    const accounts = new Set<string>()
-    for (const msg of contactsStore.messages) {
-      if (msg.whatsapp_account) accounts.add(msg.whatsapp_account)
-    }
-    contactAccounts.value = Array.from(accounts).sort()
-
-    // Auto-select account and filter client-side (avoids a second fetch)
-    if (orgAccounts.value.length > 1) {
-      // Find account of the most recent incoming message
-      for (let i = contactsStore.messages.length - 1; i >= 0; i--) {
-        const msg = contactsStore.messages[i]
-        if (msg.direction === 'incoming' && msg.whatsapp_account) {
-          selectedAccount.value = msg.whatsapp_account
-          break
-        }
-      }
-      // Fallback to contact's default account, then first org account
-      if (!selectedAccount.value) {
-        selectedAccount.value = contact.whatsapp_account || contactAccounts.value[0] || orgAccounts.value[0]?.name
-      }
-      if (selectedAccount.value) {
-        contactsStore.setAccountFilter(selectedAccount.value)
-        // Filter messages client-side instead of re-fetching. System messages
-        // (claim/close/release/reopen) carry no whatsapp_account — keep them so
-        // lifecycle events don't disappear when an account is selected.
-        contactsStore.messages = contactsStore.messages.filter(
-          (m: any) => m.whatsapp_account === selectedAccount.value || m.metadata?.is_system_message
-        )
-      }
-    } else if (contactAccounts.value.length === 1) {
-      selectedAccount.value = contactAccounts.value[0]
-    } else if (contact.whatsapp_account) {
-      selectedAccount.value = contact.whatsapp_account
-    }
-
-    // Tell WebSocket server which contact we're viewing
-    wsService.setCurrentContact(id)
-    // Wait for DOM to render messages before scrolling
-    await nextTick()
-    // Load media for messages after messages are fetched
-    try {
-      // Media loading handled reactively
-    } catch (e) {
-      console.error('Error loading media:', e)
-    }
-    // Scroll after a brief delay to ensure content is rendered (instant on initial load)
-    setTimeout(() => {
-      scrollToBottom(true)
-      // Setup scroll listener for infinite scroll after initial scroll
-      messagesScroll.setup()
-    }, 50)
-
-    // Fetch notes and scheduled messages in parallel (independent requests)
-    await Promise.all([
-      notesStore.fetchNotes(id),
-      scheduledStore.fetchForContact(id)
-    ])
-  }
-}
-
-// Watch for new messages. WhatsApp Web style: while the browser tab is
-// focused on this chat the user is "watching", so auto-scroll if they're
-// at the bottom. When they're on another tab, pile up unread and surface
-// a divider above the first message that arrived while away (issue #280).
-// The two branches are mutually exclusive — auto-scrolling while the tab
-// is hidden races with the divider state.
+// Watch for new messages. WhatsApp Web style: while the browser tab is focused
+// the user is "watching", so auto-scroll if at the bottom. When away, pile up
+// unread and surface a divider above the first message that arrived (issue #280).
 watch(() => contactsStore.messages.length, (newLen, oldLen) => {
   if (newLen <= oldLen) return
   const latest = contactsStore.messages[newLen - 1]
   const isIncoming = latest?.direction === 'incoming'
-  // "Not actively looking" covers both other-tab (hidden) and other-window
-  // (visible but unfocused). The divider should pile in either case.
-  const userAway = typeof document !== 'undefined'
-    && (document.visibilityState === 'hidden' || !document.hasFocus())
-  if (isIncoming && userAway) {
-    if (newMessagesCount.value === 0) {
-      firstUnreadId.value = latest.id
-    }
-    newMessagesCount.value += 1
-    return
+  // First unread of the batch — record its id before piling up the count.
+  if (isIncoming && newMessagesCount.value === 0) {
+    firstUnreadId.value = latest.id
   }
-  // Outgoing (the agent replied) — they've seen the unread, drop the divider.
-  if (!isIncoming && newMessagesCount.value > 0) {
-    newMessagesCount.value = 0
-    firstUnreadId.value = null
-  }
-  if (isAtBottom.value || !isIncoming) {
-    scrollToBottom()
-  }
+  handleMessagesLengthChange(newLen, oldLen, isIncoming)
 })
 
-// Watch for messages changes to load media
-watch(() => contactsStore.messages, () => {
-  try {
-    // Media loading handled reactively
-  } catch (e) {
-    console.error('Error loading media:', e)
-  }
-}, { deep: true })
-
-async function switchAccount(accountName: string) {
-  if (!contactsStore.currentContact || accountName === selectedAccount.value) return
-  selectedAccount.value = accountName
-  contactsStore.setAccountFilter(accountName)
-  await contactsStore.fetchMessages(contactsStore.currentContact.id, { account: accountName })
-  await nextTick()
-  try {
-    // Media loading handled reactively
-  } catch (e) {
-    console.error('Error loading media:', e)
-  }
-  scrollToBottom(true)
-}
-
-function handleContactClick(contact: Contact) {
-  router.push(`/chat/${contact.id}`)
-}
-
-async function sendMessage() {
-  if (!messageInput.value.trim() || !contactsStore.currentContact) return
-
-  // Status conversation posts to status@broadcast via a dedicated path.
-  if (isStatusContact(contactsStore.currentContact.id)) {
-    await sendStatusText(messageInput.value)
-    return
-  }
-
-  isSending.value = true
-  try {
-    await contactsStore.sendMessage(
-      contactsStore.currentContact.id,
-      'text',
-      { body: messageInput.value },
-      contactsStore.replyingTo?.id,
-      selectedAccount.value || undefined
-    )
-    messageInput.value = ''
-    contactsStore.clearReplyingTo()
-    resetTextareaHeight()
-    // Sending ends any active typing session so the recipient's "typing…"
-    // indicator clears as soon as the message lands.
-    stopTypingIndicator()
-    await nextTick()
-    scrollToBottom()
-  } catch (error) {
-    toast.error(getErrorMessage(error, t('chat.sendMessageFailed')))
-  } finally {
-    isSending.value = false
-  }
-}
-
-// sendStatusText posts a text WhatsApp Status (story) from the selected account
-// and appends it to the session-local log shown in the Status conversation.
-async function sendStatusText(text: string) {
-  if (!text.trim() || !selectedAccount.value) return
-  isSending.value = true
-  try {
-    const res = await statusService.sendText({ message: text, whatsapp_account: selectedAccount.value })
-    const now = new Date().toISOString()
-    contactsStore.addStatusMessage({
-      id: res.data?.message_id || crypto.randomUUID(),
-      contact_id: STATUS_CONTACT_ID,
-      direction: 'outgoing',
-      message_type: 'text',
-      content: { body: text },
-      status: 'sent',
-      wamid: res.data?.message_id,
-      whatsapp_account: selectedAccount.value,
-      created_at: now,
-      updated_at: now,
-    } as Message)
-    messageInput.value = ''
-    await nextTick()
-    scrollToBottom()
-    toast.success(t('chat.statusSent'))
-  } catch (error) {
-    toast.error(getErrorMessage(error, t('chat.statusSendFailed')))
-  } finally {
-    isSending.value = false
-  }
-}
-
-// sendStatusMedia posts an image/video WhatsApp Status and appends it to the
-// session-local log. Only image/video are supported for status (per scope).
-async function sendStatusMedia(file: File, caption: string) {
-  if (!selectedAccount.value) return
-  const type = getMediaType(file.type) as 'image' | 'video'
-  if (type !== 'image' && type !== 'video') {
-    toast.error(t('chat.statusUnsupportedMedia'))
-    return
-  }
-  isUploadingMedia.value = true
-  try {
-    const res = await statusService.sendMedia({ file, type, caption, whatsapp_account: selectedAccount.value })
-    const now = new Date().toISOString()
-    const objectURL = URL.createObjectURL(file)
-    contactsStore.addStatusMessage({
-      id: res.data?.message_id || crypto.randomUUID(),
-      contact_id: STATUS_CONTACT_ID,
-      direction: 'outgoing',
-      message_type: type,
-      content: caption ? { body: caption } : {},
-      media_url: objectURL,
-      media_mime_type: file.type,
-      media_filename: file.name,
-      status: 'sent',
-      wamid: res.data?.message_id,
-      whatsapp_account: selectedAccount.value,
-      created_at: now,
-      updated_at: now,
-    } as Message)
-    closeMediaDialog()
-    await nextTick()
-    scrollToBottom()
-    toast.success(t('chat.statusSent'))
-  } catch (error) {
-    toast.error(getErrorMessage(error, t('chat.statusSendFailed')))
-  } finally {
-    isUploadingMedia.value = false
-  }
-}
-
-const retryingMessageId = ref<string | null>(null)
-
-async function retryMessage(message: Message) {
-  if (!contactsStore.currentContact || retryingMessageId.value) return
-
-  retryingMessageId.value = message.id
-  try {
-    // Get the message content based on type
-    const content = message.content || {}
-
-    await contactsStore.sendMessage(
-      contactsStore.currentContact.id,
-      message.message_type,
-      content,
-      undefined,
-      message.whatsapp_account || selectedAccount.value || undefined
-    )
-
-    // Remove the failed message from the list after successful retry
-    const messages = (contactsStore.messages as any).get?.(contactsStore.currentContact.id) as Message[] | undefined
-    if (messages) {
-      const index = messages.findIndex((m: Message) => m.id === message.id)
-      if (index !== -1) {
-        messages.splice(index, 1)
-      }
-    }
-
-    toast.success(t('chat.messageSent'))
-  } catch (error) {
-    toast.error(getErrorMessage(error, t('chat.sendMessageFailed')))
-  } finally {
-    retryingMessageId.value = null
-  }
-}
-
-function autoResizeTextarea() {
-  const textarea = messageInputRef.value
-  if (!textarea) return
-  textarea.style.height = 'auto'
-  textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px'
-}
-
-function resetTextareaHeight() {
-  const textarea = messageInputRef.value
-  if (!textarea) return
-  textarea.style.height = 'auto'
-}
-
-function getReplyPreviewContent(message: Message): string {
-  if (!message.reply_to_message) return ''
-  const reply = message.reply_to_message
-  if (reply.message_type === 'text') {
-    const body = reply.content?.body || ''
-    return body.length > 50 ? body.substring(0, 50) + '...' : body
-  }
-  if (reply.message_type === 'button_reply') {
-    const body = typeof reply.content === 'string' ? reply.content : (reply.content?.body || '')
-    return body.length > 50 ? body.substring(0, 50) + '...' : body
-  }
-  if (reply.message_type === 'interactive') {
-    const body = typeof reply.content === 'string' ? reply.content : ((reply as any).interactive_data?.body || reply.content?.body || '')
-    return body.length > 50 ? body.substring(0, 50) + '...' : body
-  }
-  if (reply.message_type === 'template') {
-    const body = reply.content?.body || ''
-    return body.length > 50 ? body.substring(0, 50) + '...' : body
-  }
-  if (reply.message_type === 'image') return '[Photo]'
-  if (reply.message_type === 'video') return '[Video]'
-  if (reply.message_type === 'audio') return '[Audio]'
-  if (reply.message_type === 'document') return '[Document]'
-  if (reply.message_type === 'location') return '[Location]'
-  if (reply.message_type === 'contacts') return '[Contact]'
-  if (reply.message_type === 'sticker') return '[Sticker]'
-  return '[Message]'
-}
-
-function scrollToMessage(messageId: string | undefined) {
-  if (!messageId) return
-  const messageEl = document.getElementById(`message-${messageId}`)
-  if (messageEl) {
-    messageEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    messageEl.classList.add('highlight-message')
-    setTimeout(() => messageEl.classList.remove('highlight-message'), 2000)
-  }
-}
-
-function extractCannedTokens(content: string): string[] {
-  const seen = new Set<string>()
-  const matches = content.matchAll(/\{\{\s*([\w.-]+)\s*\}\}/g)
-  for (const m of matches) seen.add(m[1])
-  return Array.from(seen)
-}
-
-// Collect tokens from the message body AND every button field, so the param
-// dialog prompts for custom tokens used anywhere on the response.
-function extractCannedTokensFromResponse(r: CannedResponse): string[] {
-  const seen = new Set<string>(extractCannedTokens(r.content))
-  for (const btn of r.buttons || []) {
-    for (const t of extractCannedTokens(btn.title || '')) seen.add(t)
-    for (const t of extractCannedTokens(btn.url || '')) seen.add(t)
-    for (const t of extractCannedTokens(btn.phone_number || '')) seen.add(t)
-  }
-  return Array.from(seen)
-}
-
-// Resolve a single context token (contact_name / phone_number / user_name /
-// agent_name) against the current chat. Returns null for any key that isn't
-// in AUTO_RESOLVED_CONTEXT_TOKENS so callers can fall back to their own param
-// dict.
-function resolveContextToken(key: string): string | null {
-  const contact = contactsStore.currentContact
-  if (key === 'contact_name') return contact?.profile_name || contact?.name || 'there'
-  if (key === 'phone_number') return contact?.phone_number || ''
-  if (key === 'user_name' || key === 'agent_name') return authStore.user?.full_name || ''
-  return null
-}
-
-// Shared {{...}} resolver used by the body preview and the button fields, so
-// `{{phone_number}}` works inside a button URL the same way it does in content.
-function resolveCannedTokens(text: string): string {
-  if (!text) return text
-  return text.replace(/\{\{\s*([\w.-]+)\s*\}\}/g, (_match, key: string) => {
-    const ctx = resolveContextToken(key)
-    if (ctx !== null) return ctx
-    const value = cannedParamValues.value[key]
-    return value ? value : `{{${key}}}`
-  })
-}
-
-const cannedPreview = computed(() =>
-  selectedCannedResponse.value ? resolveCannedTokens(selectedCannedResponse.value.content) : '',
-)
-
-// Resolved buttons (with {{...}} substitution applied) for the dialog preview.
-// Empty array when no response is selected or it has no buttons.
-const cannedPreviewButtons = computed(() => {
-  const raw = selectedCannedResponse.value?.buttons || []
-  return raw.map(b => ({
-    ...b,
-    title: resolveCannedTokens(b.title),
-    ...(b.url !== undefined ? { url: resolveCannedTokens(b.url) } : {}),
-    ...(b.phone_number !== undefined ? { phone_number: resolveCannedTokens(b.phone_number) } : {}),
-  }))
-})
-
-function handleCannedSelect(response: CannedResponse) {
-  selectedCannedResponse.value = response
-  const tokens = extractCannedTokensFromResponse(response).filter(
-    t => !AUTO_RESOLVED_CONTEXT_TOKENS.has(t)
-  )
-  cannedParamNames.value = tokens
-  cannedParamValues.value = Object.fromEntries(tokens.map(t => [t, '']))
-  // Drop the slash command (or any stray text) so the textarea starts clean.
-  messageInput.value = ''
-  resetTextareaHeight()
-  cannedPickerOpen.value = false
-  cannedSearchQuery.value = ''
-  cannedDialogOpen.value = true
-}
-
-async function sendCannedResponse() {
-  if (!contactsStore.currentContact || !selectedCannedResponse.value) return
-
-  const missing = cannedParamNames.value.some(n => !cannedParamValues.value[n]?.trim())
-  if (missing) {
-    toast.error(t('chat.parameterRequired'))
-    return
-  }
-
-  const body = cannedPreview.value
-  const responseId = selectedCannedResponse.value.id
-  // Substitute {{...}} tokens in every button field — same rules as the body —
-  // so URLs like https://x.com/u/{{phone_number}} resolve at send time.
-  const buttons = (selectedCannedResponse.value.buttons || []).map(b => ({
-    ...b,
-    title: resolveCannedTokens(b.title),
-    ...(b.url !== undefined ? { url: resolveCannedTokens(b.url) } : {}),
-    ...(b.phone_number !== undefined ? { phone_number: resolveCannedTokens(b.phone_number) } : {}),
-  }))
-  const replyButtons = buttons.filter(b => !b.type || b.type === 'reply')
-  const urlButtons = buttons.filter(b => b.type === 'url')
-
-  let sendType: 'text' | 'interactive' = 'text'
-  let interactive: {
-    type: 'button' | 'list' | 'cta_url'
-    body: string
-    buttons?: Array<{ id: string; title: string }>
-    button_text?: string
-    url?: string
-  } | undefined
-
-  if (buttons.length > 0 && replyButtons.length === buttons.length && replyButtons.length <= 10) {
-    sendType = 'interactive'
-    interactive = {
-      type: replyButtons.length <= 3 ? 'button' : 'list',
-      body,
-      buttons: replyButtons.map(b => ({ id: b.id, title: b.title })),
-    }
-  } else if (buttons.length === 1 && urlButtons.length === 1) {
-    sendType = 'interactive'
-    interactive = {
-      type: 'cta_url',
-      body,
-      button_text: urlButtons[0].title,
-      url: urlButtons[0].url || '',
-    }
-  }
-
-  isSendingCanned.value = true
-  try {
-    await contactsStore.sendMessage(
-      contactsStore.currentContact.id,
-      sendType,
-      sendType === 'interactive' ? { body } : { body },
-      contactsStore.replyingTo?.id,
-      selectedAccount.value || undefined,
-      interactive ? { interactive } : undefined,
-    )
-    cannedResponsesService.use(responseId).catch(() => {})
-    contactsStore.clearReplyingTo()
-    cannedDialogOpen.value = false
-    selectedCannedResponse.value = null
-    cannedParamNames.value = []
-    cannedParamValues.value = {}
-    await nextTick()
-    scrollToBottom()
-  } catch (error) {
-    toast.error(getErrorMessage(error, t('chat.sendMessageFailed')))
-  } finally {
-    isSendingCanned.value = false
-  }
-}
-
-function closeCannedPicker() {
-  cannedPickerOpen.value = false
-  cannedSearchQuery.value = ''
-}
-
-function insertEmoji(emoji: string) {
-  messageInput.value += emoji
-  emojiPickerOpen.value = false
-}
-
-// Template message handling
-function getTemplateBodyContent(tpl: any): string {
-  return tpl.body_content || ''
-}
-
-const templatePreview = computed(() => {
-  if (!selectedTemplate.value) return ''
-  const body = getTemplateBodyContent(selectedTemplate.value)
-  return body.replace(/\{\{\s*([\w.-]+)\s*\}\}/g, (_match, key: string) => {
-    const supplied = templateParamValues.value[key]
-    if (supplied) return supplied
-    const ctx = resolveContextToken(key)
-    if (ctx !== null) return ctx
-    return `{{${key}}}`
-  })
-})
-
-// Show the header input only when the user has to fill it. Context-token
-// names (contact_name, phone_number, …) auto-resolve and stay hidden — same
-// rule body params follow via templateParamNames filtering.
-const showHeaderParamInput = computed(() =>
-  !!templateHeaderParamName.value &&
-  !AUTO_RESOLVED_CONTEXT_TOKENS.has(templateHeaderParamName.value)
-)
-
-function extractButtonUrlParams(buttons: any[]): { index: number; text: string; value: string; type: string }[] {
-  if (!buttons?.length) return []
-  return buttons
-    .map((btn: any, index: number) => {
-      if (btn.type === 'COPY_CODE') {
-        return { index, text: btn.text || 'Copy Code', value: btn.example?.[0] || '', type: 'COPY_CODE' }
-      }
-      if (btn.type !== 'URL' || !btn.url) return null
-      const hasParams = /\{\{[^}]+\}\}/.test(btn.url)
-      if (!hasParams) return null
-      return { index, text: btn.text || 'URL Button', value: '', type: 'URL' }
-    })
-    .filter((b): b is { index: number; text: string; value: string; type: string } => b !== null)
-}
-
-function handleTemplateWithParams(template: any, paramNames: string[]) {
-  selectedTemplate.value = template
-  // Pre-fill body context tokens from the conversation; keep them in the
-  // payload dict so the backend forwards them to Meta, but hide them from
-  // the dialog so the agent doesn't have to type values we already know —
-  // same pattern as canned responses (see handleCannedSelect).
-  const initial: Record<string, string> = {}
-  for (const name of paramNames) {
-    const resolved = resolveContextToken(name)
-    initial[name] = resolved ?? ''
-  }
-  templateParamValues.value = initial
-  templateParamNames.value = paramNames.filter(n => !AUTO_RESOLVED_CONTEXT_TOKENS.has(n))
-
-  // Identify the TEXT-header variable (max 1) and pre-fill from context.
-  // Context-token names (contact_name / phone_number / agent_name / user_name)
-  // resolve automatically and stay hidden from the dialog — same convention
-  // as body params.
-  templateHeaderParamName.value = null
-  templateHeaderParamValue.value = ''
-  if (template.header_type === 'TEXT' && template.header_content) {
-    const m = template.header_content.match(/\{\{([^}]+)\}\}/)
-    if (m) {
-      const name = m[1].trim()
-      templateHeaderParamName.value = name
-      templateHeaderParamValue.value = resolveContextToken(name) ?? ''
-    }
-  }
-
-  clearTemplateHeaderMedia()
-  templateButtonUrlParams.value = extractButtonUrlParams(template.buttons)
-  templateDialogOpen.value = true
-}
-
-async function sendTemplateMessage() {
-  if (!contactsStore.currentContact || !selectedTemplate.value) return
-
-  // Validate header param (separate ref so it can hold its own value even
-  // when the body has a {{1}} that would otherwise collide). Auto-resolved
-  // context tokens are exempt — their value comes from the conversation.
-  if (showHeaderParamInput.value && !templateHeaderParamValue.value.trim()) {
-    toast.error(t('chat.parameterRequired'))
-    return
-  }
-
-  // Validate all body params are filled
-  const missingBody = templateParamNames.value.some(n => !templateParamValues.value[n]?.trim())
-  if (missingBody) {
-    toast.error(t('chat.parameterRequired'))
-    return
-  }
-
-  // Validate header media if required
-  if (templateNeedsHeaderMedia.value && !templateHeaderFile.value) {
-    toast.error(t('chat.headerMediaRequired'))
-    return
-  }
-
-  // Validate all button URL params are filled
-  const missingButton = templateButtonUrlParams.value.some(b => !b.value?.trim())
-  if (missingButton) {
-    toast.error(t('chat.parameterRequired'))
-    return
-  }
-
-  // Build button params map: button index -> value
-  const buttonParams: Record<string, string> | undefined =
-    templateButtonUrlParams.value.length > 0
-      ? Object.fromEntries(templateButtonUrlParams.value.map(b => [String(b.index), b.value]))
-      : undefined
-
-  // Header value goes in its own payload field so a positional {{1}} header
-  // doesn't overwrite a positional {{1}} body parameter in the flat map.
-  const headerParams: Record<string, string> | undefined =
-    templateHeaderParamName.value && templateHeaderParamValue.value
-      ? { [templateHeaderParamName.value]: templateHeaderParamValue.value }
-      : undefined
-
-  isSendingTemplate.value = true
-  try {
-    await contactsStore.sendTemplate(
-      contactsStore.currentContact.id,
-      selectedTemplate.value.name,
-      templateParamValues.value,
-      selectedAccount.value || undefined,
-      templateHeaderFile.value || undefined,
-      buttonParams,
-      headerParams
-    )
-    toast.success(t('chat.templateSent'))
-    templateDialogOpen.value = false
-    selectedTemplate.value = null
-    templateParamNames.value = []
-    templateParamValues.value = {}
-    templateHeaderParamName.value = null
-    templateHeaderParamValue.value = ''
-    clearTemplateHeaderMedia()
-    templateButtonUrlParams.value = []
-  } catch (error: any) {
-    const message = error.response?.data?.message || t('chat.templateSendFailed')
-    toast.error(message)
-  } finally {
-    isSendingTemplate.value = false
-  }
-}
-
-// Reaction handling
-const reactionPickerMessageId = ref<string | null>(null)
-const quickReactionEmojis = ['👍', '❤️', '😂', '😮', '😢', '🙏']
-
-// Typing debounce state. On the first keystroke after idle we send "start";
-// after TYPING_STOP_DELAY ms of no input (or on send/blur) we send "stop".
-const TYPING_STOP_DELAY = 2000
-let typingStopTimer: ReturnType<typeof setTimeout> | null = null
-let typingIsActive = false
-
-function stopTypingIndicator() {
-  if (typingStopTimer) {
-    clearTimeout(typingStopTimer)
-    typingStopTimer = null
-  }
-  if (!typingIsActive) return
-  typingIsActive = false
-  const contactId = contactsStore.currentContact?.id
-  if (!contactId) return
-  messagesService.sendTyping(contactId, 'stop').catch(() => {
-    // Typing is best-effort; never surface an error toast (it would spam
-    // the agent on every idle transition).
-  })
-}
-
-function onTypingInput() {
-  if (!isCurrentAccountGowa.value) return
-  const contactId = contactsStore.currentContact?.id
-  if (!contactId) return
-  if (!typingIsActive) {
-    typingIsActive = true
-    messagesService.sendTyping(contactId, 'start').catch(() => { /* best-effort */ })
-  }
-  if (typingStopTimer) clearTimeout(typingStopTimer)
-  typingStopTimer = setTimeout(stopTypingIndicator, TYPING_STOP_DELAY)
-}
-
-// Revoke (delete-for-everyone). GOWA-only; the backend re-validates and 400s
-// for non-GOWA. The optimistic local status is reconciled by the status_update
-// WS broadcast the handler emits on success.
-const revokingMessageId = ref<string | null>(null)
-
-async function revokeMessage(message: Message) {
-  if (!contactsStore.currentContact || revokingMessageId.value) return
-  // Destructive, irreversible action — confirm before hitting GOWA.
-  if (!window.confirm(t('chat.revokeConfirm'))) return
-
-  revokingMessageId.value = message.id
-  try {
-    await messagesService.revokeMessage(contactsStore.currentContact.id, message.id)
-    // Optimistically swap the bubble for the revoked placeholder. The backend
-    // also broadcasts a status_update with status "revoked", which the WS
-    // handler routes through updateMessageStatus — so this just stays ahead.
-    contactsStore.updateMessageStatus(message.id, 'revoked')
-    toast.success(t('chat.messageRevoked'))
-  } catch (error) {
-    toast.error(getErrorMessage(error, t('chat.revokeFailed')))
-  } finally {
-    revokingMessageId.value = null
-  }
-}
-
-async function sendReaction(messageId: string, emoji: string) {
-  if (!contactsStore.currentContact) return
-
-  // Toggle-off: if the current user already reacted with this same emoji,
-  // send an empty emoji to remove it (backend treats "" as "remove my reaction").
-  const userId = authStore.user?.id
-  const message = contactsStore.messages.find(m => m.id === messageId)
-  const myExisting = message?.reactions?.find(r => r.from_user === userId)
-  const emojiToSend = myExisting && myExisting.emoji === emoji ? '' : emoji
-
-  try {
-    const response = await messagesService.sendReaction(
-      contactsStore.currentContact.id,
-      messageId,
-      emojiToSend
-    )
-    // Update will come via WebSocket, but we can update locally for immediate feedback
-    const data = response.data.data || response.data
-    contactsStore.updateMessageReactions(messageId, data.reactions)
-  } catch (error) {
-    toast.error(t('chat.reactionFailed'))
-  }
-  reactionPickerMessageId.value = null
-}
-
-function _toggleReactionPicker(messageId: string) {
-  if (reactionPickerMessageId.value === messageId) {
-    reactionPickerMessageId.value = null
-  } else {
-    reactionPickerMessageId.value = messageId
-  }
-}
-void _toggleReactionPicker // Suppress unused warning
-
-function replyToMessage(message: Message) {
-  contactsStore.setReplyingTo(message)
-  nextTick(() => {
-    messageInputRef.value?.focus()
-  })
-}
-
-// Watch for slash commands in message input
+// Watch for slash commands in the composer → open the canned picker.
 watch(messageInput, (val) => {
   if (val.startsWith('/')) {
-    const query = val.slice(1) // Remove the leading /
-    cannedSearchQuery.value = query
+    cannedSearchQuery.value = val.slice(1) // Remove the leading /
     cannedPickerOpen.value = true
   } else if (cannedPickerOpen.value) {
     // Close picker if user removes the /
@@ -1591,482 +529,59 @@ watch(messageInput, (val) => {
   }
 })
 
-async function assignContactToUser(userId: string | null) {
-  if (!contactsStore.currentContact) return
-
-  try {
-    await contactsService.assign(contactsStore.currentContact.id, userId)
-    toast.success(userId ? t('chat.contactAssigned') : t('chat.contactUnassigned'))
-    // Update current contact with new assignment
-    contactsStore.currentContact = {
-      ...contactsStore.currentContact,
-      assigned_user_id: userId || undefined
-    }
-    // Refresh contacts list
-    await contactsStore.fetchContacts()
-  } catch (error: any) {
-    const message = error.response?.data?.message || t('chat.assignFailed')
-    toast.error(message)
-  }
-}
-
-function scrollToBottom(instant = false) {
-  nextTick(() => {
-    if (messagesEndRef.value) {
-      messagesEndRef.value.scrollIntoView({
-        behavior: instant ? 'instant' : 'smooth',
-        block: 'end'
-      })
-    }
-  })
-}
-
-
-function getMessageStatusIcon(status: string) {
-  switch (status) {
-    case 'sent':
-      return Check
-    case 'delivered':
-      return CheckCheck
-    case 'read':
-      return CheckCheck
-    case 'failed':
-      return AlertCircle
-    default:
-      return Clock
-  }
-}
-
-function getMessageStatusClass(status: string) {
-  switch (status) {
-    case 'read':
-      return 'text-blue-400' // Bright blue for read
-    case 'failed':
-      return 'text-destructive'
-    default:
-      return 'text-muted-foreground' // Gray for sent/delivered
-  }
-}
-
-function formatMessageTime(dateStr: string) {
-  const date = new Date(dateStr)
-  return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-}
-
-function formatContactTime(dateStr?: string) {
-  if (!dateStr) return ''
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diffDays = Math.floor((now.getTime() - date.getTime()) / 86400000)
-
-  if (diffDays === 0) {
-    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-  } else if (diffDays === 1) {
-    return 'Yesterday'
-  } else if (diffDays < 7) {
-    return date.toLocaleDateString('en-US', { weekday: 'short' })
-  }
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
-
-function getDateLabel(dateStr: string): string {
-  const date = new Date(dateStr)
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const messageDate = new Date(date.getFullYear(), date.getMonth(), date.getDate())
-  const diffDays = Math.floor((today.getTime() - messageDate.getTime()) / 86400000)
-
-  if (diffDays === 0) {
-    return 'Today'
-  } else if (diffDays === 1) {
-    return 'Yesterday'
-  }
-  return date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
-}
-
-function shouldShowDateSeparator(index: number): boolean {
-  const messages = contactsStore.messages
-  if (index === 0) return true
-
-  const currentDate = new Date(messages[index].created_at)
-  const prevDate = new Date(messages[index - 1].created_at)
-
-  return currentDate.toDateString() !== prevDate.toDateString()
-}
-
-function getMessageContent(message: Message): string {
-  if (message.message_type === 'text') {
-    return message.content?.body || ''
-  }
-  if (message.message_type === 'button_reply' || message.message_type === 'nfm_reply') {
-    // Button/flow reply stores the response text in content
-    if (typeof message.content === 'string') {
-      return message.content
-    }
-    return message.content?.body || ''
-  }
-  if (message.message_type === 'interactive' || message.message_type === 'flow') {
-    // Interactive/flow messages store body text in content (string) or content.body or interactive_data.body
-    if (typeof message.content === 'string') {
-      return message.content
-    }
-    if (message.interactive_data?.body) {
-      return message.interactive_data.body
-    }
-    return message.content?.body || '[Interactive Message]'
-  }
-  // For media messages, return caption if available (media is displayed inline)
-  if (message.message_type === 'image' || message.message_type === 'video' || message.message_type === 'sticker') {
-    return message.content?.body || ''
-  }
-  if (message.message_type === 'audio') {
-    return '' // Audio doesn't have captions
-  }
-  if (message.message_type === 'document') {
-    return message.content?.body || ''
-  }
-  if (message.message_type === 'template') {
-    // Show actual content if available (campaign messages), otherwise fallback
-    return message.content?.body || '[Template Message]'
-  }
-  if (message.message_type === 'location') {
-    return '' // Location is displayed as a map/card, not text
-  }
-  if (message.message_type === 'contacts') {
-    return '' // Contacts are displayed as a card, not text
-  }
-  if (message.message_type === 'unsupported') {
-    return '' // Displayed as a visual card, not text
-  }
-  return '[Message]'
-}
-
-// ─── System-message i18n (D3) ───
-// The six single-actor system types are localized via chat.system.* keys with
-// {agent} interpolation. collaborator_removed is deliberately excluded because
-// it carries two actors (the removed user as agent_id and the manager as
-// removed_by) — a single {agent} would silently drop the manager, so it falls
-// back to getMessageContent which preserves both names from the legacy content.
-const SYSTEM_MESSAGE_TYPES = new Set([
-  'chat_claimed',
-  'chat_released',
-  'chat_closed',
-  'chat_reopened',
-  'collaborator_joined',
-  'collaborator_left',
-])
-
-// extractAgentFromLegacy pulls the agent name out of the legacy "🔔 <name> ..."
-// system-message content strings written before metadata.agent_name existed.
-// Returns '' when no name can be parsed so the caller can fall back to the
-// raw content (acceptable degraded behavior, never a crash).
-function extractAgentFromLegacy(content: any): string {
-  let text = ''
-  if (typeof content === 'string') {
-    text = content
-  } else if (content && typeof content === 'object') {
-    text = content.body || ''
-  }
-  if (!text) return ''
-  // Matches "🔔 Jane Doe claimed/released/closed/...". Captures the name up to
-  // the verb that follows it. Tolerates the leading bell emoji + spaces.
-  const m = text.match(/^🔔\s+(.+?)\s+(?:claimed|released|closed|reopened|joined|left|was|leaves)/i)
-  return m ? m[1].trim() : ''
-}
-
-function getSystemMessageText(message: Message): string {
-  const systemType = message.metadata?.system_type
-  // rating_received carries {rating} instead of {agent}, so it is handled
-  // outside the SYSTEM_MESSAGE_TYPES set.
-  if (systemType === 'rating_received' && message.metadata?.rating != null) {
-    return t('chat.system.rating_received', { rating: message.metadata.rating })
-  }
-  if (systemType && SYSTEM_MESSAGE_TYPES.has(systemType)) {
-    const agent =
-      (message.metadata?.agent_name as string | undefined) ||
-      extractAgentFromLegacy(message.content) ||
-      ''
-    return t(`chat.system.${systemType}`, { agent })
-  }
-  return getMessageContent(message)
-}
-
-interface LocationData {
-  latitude: number
-  longitude: number
-  name?: string
-  address?: string
-}
-
-interface ContactData {
-  name: string
-  phones?: string[]
-}
-
-function getLocationData(message: Message): LocationData | null {
-  if (message.message_type !== 'location') return null
-  try {
-    // Content is stored as JSON string in body
-    const body = message.content?.body || message.content
-    if (typeof body === 'string') {
-      return JSON.parse(body)
-    }
-    return body as LocationData
-  } catch {
-    return null
-  }
-}
-
-function getContactsData(message: Message): ContactData[] {
-  if (message.message_type !== 'contacts') return []
-  try {
-    // Content is stored as JSON string in body
-    const body = message.content?.body || message.content
-    if (typeof body === 'string') {
-      return JSON.parse(body)
-    }
-    return body as ContactData[]
-  } catch {
-    return []
-  }
-}
-
-function getGoogleMapsUrl(location: LocationData): string {
-  return `https://www.google.com/maps?q=${location.latitude},${location.longitude}`
-}
-
-function getInteractiveButtons(message: Message): Array<{ id: string; title: string; type: string; url: string }> {
-  if (!message.interactive_data) {
-    return []
-  }
-  // Support both interactive and template messages with buttons
-  if (message.message_type !== 'interactive' && message.message_type !== 'template') {
-    return []
-  }
-  // Handle both "buttons" (<=3) and "rows" (>3 list format)
-  const items = message.interactive_data.buttons || message.interactive_data.rows
-  if (!items || !Array.isArray(items)) {
-    return []
-  }
-  return items.map((btn: any) => ({
-    id: btn.reply?.id || btn.id || '',
-    title: btn.reply?.title || btn.title || btn.text || '',
-    type: btn.type || 'QUICK_REPLY',
-    url: btn.url || ''
-  }))
-}
-
-interface CTAUrlData {
-  type: 'cta_url'
-  body: string
-  button_text: string
-  url: string
-}
-
-function getCTAUrlData(message: Message): CTAUrlData | null {
-  if (message.message_type !== 'interactive' || !message.interactive_data) {
-    return null
-  }
-  if (message.interactive_data.type !== 'cta_url') {
-    return null
-  }
-  return {
-    type: 'cta_url',
-    body: message.interactive_data.body || '',
-    button_text: (message.interactive_data as any).button_text || 'Open',
-    url: (message.interactive_data as any).url || ''
-  }
-}
-
-
-function isMediaMessage(message: Message): boolean {
-  return ['image', 'video', 'audio', 'document'].includes(message.message_type)
-}
-
-// Revoked messages keep their media_url (the backend only flips status and
-// content), so the file can stay visible under the red "deleted" overlay.
-// Broader than isMediaMessage because stickers are also overlaid.
-function hasRevokedMedia(message: Message): boolean {
-  return !!message.media_url &&
-    ['image', 'video', 'audio', 'document', 'sticker'].includes(message.message_type)
-}
-
-function getMediaUrl(message: Message): string {
-  // Always point at the per-message media endpoint. History-synced messages
-  // store media_url="" by design (no local file) — the backend lazily
-  // downloads the bytes from the provider on first view via WhatsAppMessageID,
-  // so the URL is valid even when media_url is empty. Gating on media_url
-  // here would suppress the request and starve the recovery path.
-  const basePath = ((window as any).__BASE_PATH__ ?? '').replace(/\/$/, '')
-  return `${basePath}/api/media/${message.id}`
-}
-
-/**
- * Whether this conversation's media can be lazily recovered from the provider.
- * WhatsApp Status posts and newsletters arrive as message rows during history
- * sync but their media is NOT retrievable via the chat `/message/{id}/download`
- * endpoint — GOWA rejects them with INVALID_JID. Requesting /api/media for them
- * only produces guaranteed 404s. For these contacts we skip the request and
- * render the filename directly instead.
- *
- * Also returns false for non-history-synced media with a real media_url — that
- * path is always recoverable (the file exists locally), so we never want to
- * short-circuit it.
- */
-function isMediaRecoverable(): boolean {
-  const contact = contactsStore.currentContact
-  if (!contact) return false
-  // Status feed and newsletters are not chats — media is not downloadable.
-  if (contact.is_newsletter) return false
-  const phone = (contact.phone_number || '').toLowerCase()
-  if (phone === 'status' || phone === 'broadcast' || phone.endsWith('@newsletter')) {
-    return false
-  }
-  return true
-}
-
-/**
- * Whether a message should attempt to render/download its media. True when the
- * media is already local (media_url set) OR the conversation allows provider
- * recovery. False for history-synced media in status/newsletter contacts,
- * where the bytes are unreachable.
- */
-function shouldRenderMedia(message: Message): boolean {
-  if (message.media_url) return true
-  return isMediaRecoverable()
-}
-
-function openMediaPreview(message: Message) {
-  const url = getMediaUrl(message)
-  if (url) {
-    window.open(url, '_blank')
-  }
-}
-
-function handleImageError(event: Event) {
-  const img = event.target as HTMLImageElement
-  img.style.display = 'none'
-}
-
-function handleMediaError(event: Event, mediaType: string) {
-  console.error(`Failed to load ${mediaType}:`, event)
-}
-
-// File upload functions
-function openFilePicker() {
-  fileInputRef.value?.click()
-}
-
-function handleFileSelect(event: Event) {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) return
-
-  // Validate file type
-  const allowedTypes = ['image/', 'video/', 'audio/', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument']
-  const isAllowed = allowedTypes.some(type => file.type.startsWith(type))
-  if (!isAllowed) {
-    toast.error(t('chat.unsupportedFileType'), {
-      description: t('chat.unsupportedFileTypeDesc')
-    })
-    return
+onMounted(async () => {
+  // Ensure auth session is restored
+  if (!authStore.isAuthenticated) {
+    authStore.restoreSession()
   }
 
-  // Validate file size (16MB limit for WhatsApp)
-  const maxSize = 16 * 1024 * 1024
-  if (file.size > maxSize) {
-    toast.error(t('chat.fileTooLarge'), {
-      description: t('chat.fileTooLargeDesc')
-    })
-    return
+  // Keep the sidebar from overflowing on the current viewport.
+  clampSidebarToViewport()
+  window.addEventListener('resize', clampSidebarToViewport)
+
+  await contactsStore.fetchContacts()
+
+  // Setup infinite scroll for contacts list
+  await nextTick()
+  contactsScroll.setup()
+
+  // Fetch users + custom actions if the agent can assign contacts.
+  if (canAssignContacts.value) {
+    usersStore.fetchUsers().catch(() => { /* Silently fail */ })
+    fetchCustomActions()
   }
 
-  selectedFile.value = file
-  mediaCaption.value = ''
+  // Fetch org-level WhatsApp accounts for the account tabs.
+  await fetchOrgAccounts()
 
-  // Create preview URL for images and videos
-  if (file.type.startsWith('image/') || file.type.startsWith('video/')) {
-    filePreviewUrl.value = URL.createObjectURL(file)
-  } else {
-    filePreviewUrl.value = null
+  // Fetch available tags for filtering (if not already loaded).
+  if (tagsStore.tags.length === 0) {
+    tagsStore.fetchTags().catch(() => {})
   }
 
-  isMediaDialogOpen.value = true
-
-  // Reset input so same file can be selected again
-  input.value = ''
-}
-
-function closeMediaDialog() {
-  isMediaDialogOpen.value = false
-  if (filePreviewUrl.value) {
-    URL.revokeObjectURL(filePreviewUrl.value)
-    filePreviewUrl.value = null
+  if (contactId.value) {
+    await selectContact(contactId.value)
   }
-  selectedFile.value = null
-  mediaCaption.value = ''
-}
 
-function getMediaType(mimeType: string): string {
-  if (mimeType.startsWith('image/')) return 'image'
-  if (mimeType.startsWith('video/')) return 'video'
-  if (mimeType.startsWith('audio/')) return 'audio'
-  return 'document'
-}
+  // Auto-scroll to unread divider + mark read when the agent returns. Covers
+  // tab-switch (visibilitychange) and OS window focus (focus), since "tab
+  // visible but window unfocused" is a real state and we don't want to send
+  // blue-tick receipts when no one is looking. See issue #280.
+  document.addEventListener('visibilitychange', onUserActive)
+  window.addEventListener('focus', onUserActive)
+})
 
-	async function sendMediaMessage() {
-	  if (!selectedFile.value || !contactsStore.currentContact) return
+onUnmounted(() => {
+  wsService.setCurrentContact(null)
+  // Clear current contact when leaving chat view so notifications work elsewhere
+  contactsStore.setCurrentContact(null)
+  notesStore.clearNotes()
+  scheduledStore.clear()
+  document.removeEventListener('visibilitychange', onUserActive)
+  window.removeEventListener('focus', onUserActive)
+  window.removeEventListener('resize', clampSidebarToViewport)
+})
 
-	  // Status conversation posts media to status@broadcast via a dedicated path.
-	  if (isStatusContact(contactsStore.currentContact.id)) {
-	    await sendStatusMedia(selectedFile.value, mediaCaption.value.trim())
-	    return
-	  }
-
-	  isUploadingMedia.value = true
-  try {
-    const formData = new FormData()
-    formData.append('file', selectedFile.value)
-    formData.append('contact_id', contactsStore.currentContact.id)
-    formData.append('type', getMediaType(selectedFile.value.type))
-    if (mediaCaption.value.trim()) {
-      formData.append('caption', mediaCaption.value.trim())
-    }
-    if (selectedAccount.value) {
-      formData.append('whatsapp_account', selectedAccount.value)
-    }
-
-    const basePath = ((window as any).__BASE_PATH__ ?? '').replace(/\/$/, '')
-    const response = await fetch(`${basePath}/api/messages/media`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: getRequestHeaders({ csrf: true }),
-      body: formData
-    })
-
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.message || 'Failed to send media')
-    }
-
-    const result = await response.json()
-
-    // Add the message to the store (addMessage has duplicate checking for WebSocket)
-    if (result.data) {
-      contactsStore.addMessage(result.data)
-      scrollToBottom()
-    }
-
-    toast.success(t('chat.mediaSent'))
-    closeMediaDialog()
-  } catch (error: any) {
-    toast.error(t('chat.mediaFailed'), {
-      description: error.message || t('chat.mediaFailedDesc')
-    })
-  } finally {
-    isUploadingMedia.value = false
-  }
-}
 </script>
 
 <template>
