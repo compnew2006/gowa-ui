@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { contactsService, messagesService, api } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
+import { STATUS_VIRTUAL_CONTACT, STATUS_CONTACT_ID, isStatusContact } from '@/lib/status'
 
 // Phones are stored without leading + or whitespace (see CreateContact in
 // internal/handlers/contacts.go). Strip them from a digit-only query so a user
@@ -103,6 +104,8 @@ export const useContactsStore = defineStore('contacts', () => {
   const contacts = ref<Contact[]>([])
   const currentContact = ref<Contact | null>(null)
   const messages = ref<Message[]>([])
+  // Session-local log of status posts (the Status conversation is send-only).
+  const statusMessages = ref<Message[]>([])
   const isLoading = ref(false)
   const isLoadingMessages = ref(false)
   const isLoadingOlderMessages = ref(false)
@@ -213,7 +216,10 @@ export const useContactsStore = defineStore('contacts', () => {
   // their media cannot be downloaded via any GOWA endpoint (the chat
   // /message/{id}/download rejects the JID), so showing them only produces
   // broken-image placeholders. Real conversations are unaffected.
+  // The virtual Status conversation (id === STATUS_CONTACT_ID) is exempt: it is
+  // a send-only entry surfaced by the Status feature and is never a sync row.
   function isNonChatContact(c: Contact): boolean {
+    if (c.id === STATUS_CONTACT_ID) return false
     const phone = (c.phone_number || '').toLowerCase()
     return phone === 'status' || phone === 'broadcast' || phone.endsWith('@newsletter')
   }
@@ -231,11 +237,14 @@ export const useContactsStore = defineStore('contacts', () => {
     if (hideNewsletterChats.value) {
       list = list.filter(c => !c.is_newsletter)
     }
-    return list.sort((a, b) => {
+    list = list.sort((a, b) => {
       const dateA = a.last_message_at ? new Date(a.last_message_at).getTime() : 0
       const dateB = b.last_message_at ? new Date(b.last_message_at).getTime() : 0
       return dateB - dateA
     })
+    // Pin the virtual Status conversation to the very top, above every real
+    // chat, on every tab and regardless of sort/date.
+    return [STATUS_VIRTUAL_CONTACT, ...list.filter(c => c.id !== STATUS_CONTACT_ID)]
   })
 
   // ─── Pending / Me / Closed / All tab membership (client-side filtering per D4) ───
@@ -266,14 +275,23 @@ export const useContactsStore = defineStore('contacts', () => {
   const allCount = computed(() => allContacts.value.length)
 
   // The list to render in the sidebar for the active tab.
+  // The virtual Status conversation is pinned to the top on every tab — it is
+  // not a claimable/assignable chat, so tab membership rules don't apply to it.
   const displayedContacts = computed(() => {
+    let tabList: Contact[]
     switch (activeListTab.value) {
-      case 'me': return myContacts.value
-      case 'closed': return closedContacts.value
-      case 'all': return allContacts.value
+      case 'me': tabList = myContacts.value; break
+      case 'closed': tabList = closedContacts.value; break
+      case 'all': tabList = allContacts.value; break
       case 'pending':
-      default: return pendingContacts.value
+      default: tabList = pendingContacts.value
     }
+    // Prepend Status if it isn't already first (sortedContacts already pins it,
+    // but the tab filters above may have dropped it on me/closed tabs).
+    if (tabList.length === 0 || tabList[0].id !== STATUS_CONTACT_ID) {
+      return [STATUS_VIRTUAL_CONTACT, ...tabList.filter(c => c.id !== STATUS_CONTACT_ID)]
+    }
+    return tabList
   })
 
   // ─── Cross-tab search fallback (M3) ───
@@ -467,6 +485,15 @@ export const useContactsStore = defineStore('contacts', () => {
     messages.value = []
     pendingMessageCount.value = 0
 
+    // The virtual Status conversation has no backend message history (inbound
+    // status media is unsupported by GOWA). It only shows a session-local log
+    // of what the user posted via addStatusMessage, which we restore here.
+    if (isStatusContact(contactId)) {
+      messages.value = statusMessages.value
+      isLoadingMessages.value = false
+      return
+    }
+
     // Skip the API call entirely for pending unclaimed chats — the privacy guard
     // would return 403, and the browser logs that as a console error. Instead,
     // read the unread count from the contact list item (already fetched).
@@ -644,11 +671,29 @@ export const useContactsStore = defineStore('contacts', () => {
       const claimGated =
         !canManageAllChats.value && contact.chat_status === 'pending' && !contact.assigned_user_id
       if (!claimGated) contact.unread_count = 0
-      // Lazily fetch the contact's WhatsApp profile picture when it isn't
-      // cached yet (e.g. the chat was created by an inbound message before a
-      // GOWA contact sync). Best-effort: failures are swallowed so the chat
-      // still opens — the initials fallback covers the no-avatar case.
-      refreshAvatar(contact.id).catch(() => {})
+      // The virtual Status conversation has no backend avatar endpoint — skip
+      // the refresh call (it would 404 on the sentinel id).
+      if (!isStatusContact(contact.id)) {
+        // Lazily fetch the contact's WhatsApp profile picture when it isn't
+        // cached yet (e.g. the chat was created by an inbound message before a
+        // GOWA contact sync). Best-effort: failures are swallowed so the chat
+        // still opens — the initials fallback covers the no-avatar case.
+        refreshAvatar(contact.id).catch(() => {})
+      }
+    }
+  }
+
+  // addStatusMessage appends a status post to the session-local log and, if the
+  // Status conversation is open, to the live messages array. Status posts are
+  // never persisted by the backend, so this log lives only for the session.
+  function addStatusMessage(message: Message) {
+    if (!statusMessages.value.some(m => m.id === message.id)) {
+      statusMessages.value.push(message)
+    }
+    if (currentContact.value?.id === STATUS_CONTACT_ID) {
+      if (!messages.value.some(m => m.id === message.id)) {
+        messages.value.push(message)
+      }
     }
   }
 
@@ -946,6 +991,8 @@ export const useContactsStore = defineStore('contacts', () => {
     sendMessage,
     sendTemplate,
     addMessage,
+    addStatusMessage,
+    statusMessages,
     updateMessageStatus,
     setCurrentContact,
     refreshAvatar,

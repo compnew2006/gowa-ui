@@ -36,6 +36,9 @@ Modern, open-source WhatsApp Business Platform. Single binary app.
 - **Analytics Dashboard**
   Track messages, engagement, and campaign performance.
 
+- **WhatsApp Status (Story)**
+  Post text, image, and video WhatsApp Status updates from any connected account directly in the chat sidebar.
+
 <details>
 <summary>View more screenshots</summary>
 

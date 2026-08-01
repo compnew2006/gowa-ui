@@ -343,6 +343,35 @@ export const messagesService = {
     api.post(`/contacts/${contactId}/messages/${messageId}/revoke`)
 }
 
+/**
+ * Status (WhatsApp story) posting.
+ *
+ * Status posts are NOT conversations — they are addressed to the well-known
+ * status@broadcast JID via a dedicated backend path (POST /status/send) that
+ * forwards to GOWA without creating a Contact or persisting a Message. The
+ * frontend keeps a session-only log of what the user posted.
+ */
+export const statusService = {
+  // Post a text status. Returns { message_id, status }.
+  sendText: (data: { message: string; whatsapp_account?: string }) =>
+    api.post<{ message_id: string; status: string }>('/status/send', { type: 'text', ...data }),
+  // Post an image or video status via multipart upload.
+  sendMedia: (data: { file: File; type: 'image' | 'video'; caption?: string; whatsapp_account?: string }) => {
+    const formData = new FormData()
+    formData.append('type', data.type)
+    formData.append('file', data.file)
+    if (data.caption) {
+      formData.append('caption', data.caption)
+    }
+    if (data.whatsapp_account) {
+      formData.append('whatsapp_account', data.whatsapp_account)
+    }
+    return api.post<{ message_id: string; status: string }>('/status/send', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  }
+}
+
 export interface Template {
   id: string
   name: string

@@ -6,10 +6,11 @@ import { useContactsStore, type Contact, type Message } from '@/stores/contacts'
 import { useAuthStore } from '@/stores/auth'
 import { useUsersStore } from '@/stores/users'
 import { wsService } from '@/services/websocket'
-import { contactsService, messagesService, customActionsService, accountsService, cannedResponsesService, getRequestHeaders, type CustomAction, type ActionResult, type CannedResponse } from '@/services/api'
+import { contactsService, messagesService, statusService, customActionsService, accountsService, cannedResponsesService, getRequestHeaders, type CustomAction, type ActionResult, type CannedResponse } from '@/services/api'
 import { useTagsStore } from '@/stores/tags'
 import { TagBadge } from '@/components/ui/tag-badge'
 import { getTagColorClass } from '@/lib/constants'
+import { STATUS_CONTACT_ID, STATUS_VIRTUAL_CONTACT, isStatusContact } from '@/lib/status'
 import { getErrorMessage } from '@/lib/api-utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -814,6 +815,30 @@ watch(contactId, async (newId) => {
 })
 
 async function selectContact(id: string) {
+  // The virtual Status conversation is send-only and has no backend row:
+  // short-circuit the normal fetch/contact-discovery/account-detection flow.
+  if (isStatusContact(id)) {
+    newMessagesCount.value = 0
+    firstUnreadId.value = null
+    isAtBottom.value = true
+    messagesScroll.cleanup()
+    selectedAccount.value = null
+    contactAccounts.value = []
+    contactsStore.setAccountFilter(null)
+    contactsStore.setCurrentContact({ ...STATUS_VIRTUAL_CONTACT } as Contact)
+    await contactsStore.fetchMessages(id)
+    // Status needs a sending account — default to the first org account.
+    if (orgAccounts.value.length > 0) {
+      selectedAccount.value = orgAccounts.value[0].name
+    }
+    wsService.setCurrentContact(id)
+    await nextTick()
+    setTimeout(() => {
+      scrollToBottom(true)
+      messagesScroll.setup()
+    }, 50)
+    return
+  }
   // Direct deep links to /chat/:id may target a contact that isn't in the
   // currently-loaded (paginated) list — fall back to fetching it directly.
   let contact = contactsStore.contacts.find(c => c.id === id)
@@ -959,6 +984,12 @@ function handleContactClick(contact: Contact) {
 async function sendMessage() {
   if (!messageInput.value.trim() || !contactsStore.currentContact) return
 
+  // Status conversation posts to status@broadcast via a dedicated path.
+  if (isStatusContact(contactsStore.currentContact.id)) {
+    await sendStatusText(messageInput.value)
+    return
+  }
+
   isSending.value = true
   try {
     await contactsStore.sendMessage(
@@ -980,6 +1011,77 @@ async function sendMessage() {
     toast.error(getErrorMessage(error, t('chat.sendMessageFailed')))
   } finally {
     isSending.value = false
+  }
+}
+
+// sendStatusText posts a text WhatsApp Status (story) from the selected account
+// and appends it to the session-local log shown in the Status conversation.
+async function sendStatusText(text: string) {
+  if (!text.trim() || !selectedAccount.value) return
+  isSending.value = true
+  try {
+    const res = await statusService.sendText({ message: text, whatsapp_account: selectedAccount.value })
+    const now = new Date().toISOString()
+    contactsStore.addStatusMessage({
+      id: res.data?.message_id || crypto.randomUUID(),
+      contact_id: STATUS_CONTACT_ID,
+      direction: 'outgoing',
+      message_type: 'text',
+      content: { body: text },
+      status: 'sent',
+      wamid: res.data?.message_id,
+      whatsapp_account: selectedAccount.value,
+      created_at: now,
+      updated_at: now,
+    } as Message)
+    messageInput.value = ''
+    await nextTick()
+    scrollToBottom()
+    toast.success(t('chat.statusSent'))
+  } catch (error) {
+    toast.error(getErrorMessage(error, t('chat.statusSendFailed')))
+  } finally {
+    isSending.value = false
+  }
+}
+
+// sendStatusMedia posts an image/video WhatsApp Status and appends it to the
+// session-local log. Only image/video are supported for status (per scope).
+async function sendStatusMedia(file: File, caption: string) {
+  if (!selectedAccount.value) return
+  const type = getMediaType(file.type) as 'image' | 'video'
+  if (type !== 'image' && type !== 'video') {
+    toast.error(t('chat.statusUnsupportedMedia'))
+    return
+  }
+  isUploadingMedia.value = true
+  try {
+    const res = await statusService.sendMedia({ file, type, caption, whatsapp_account: selectedAccount.value })
+    const now = new Date().toISOString()
+    const objectURL = URL.createObjectURL(file)
+    contactsStore.addStatusMessage({
+      id: res.data?.message_id || crypto.randomUUID(),
+      contact_id: STATUS_CONTACT_ID,
+      direction: 'outgoing',
+      message_type: type,
+      content: caption ? { body: caption } : {},
+      media_url: objectURL,
+      media_mime_type: file.type,
+      media_filename: file.name,
+      status: 'sent',
+      wamid: res.data?.message_id,
+      whatsapp_account: selectedAccount.value,
+      created_at: now,
+      updated_at: now,
+    } as Message)
+    closeMediaDialog()
+    await nextTick()
+    scrollToBottom()
+    toast.success(t('chat.statusSent'))
+  } catch (error) {
+    toast.error(getErrorMessage(error, t('chat.statusSendFailed')))
+  } finally {
+    isUploadingMedia.value = false
   }
 }
 
@@ -1912,10 +2014,16 @@ function getMediaType(mimeType: string): string {
   return 'document'
 }
 
-async function sendMediaMessage() {
-  if (!selectedFile.value || !contactsStore.currentContact) return
+	async function sendMediaMessage() {
+	  if (!selectedFile.value || !contactsStore.currentContact) return
 
-  isUploadingMedia.value = true
+	  // Status conversation posts media to status@broadcast via a dedicated path.
+	  if (isStatusContact(contactsStore.currentContact.id)) {
+	    await sendStatusMedia(selectedFile.value, mediaCaption.value.trim())
+	    return
+	  }
+
+	  isUploadingMedia.value = true
   try {
     const formData = new FormData()
     formData.append('file', selectedFile.value)
@@ -2226,7 +2334,7 @@ async function sendMediaMessage() {
               </div>
               <div class="flex items-center justify-between gap-2">
                 <p class="flex-1 min-w-0 text-xs text-white/50 light:text-gray-500 truncate flex items-center gap-1">
-                  {{ contact.phone_number }}
+                  {{ isStatusContact(contact.id) ? $t('chat.statusHint') : contact.phone_number }}
                   <!-- M1: assigned-agent tag. Shows whenever a chat is assigned
                        to someone other than the viewer, so an admin can see who
                        owns each conversation at a glance and a fellow agent can

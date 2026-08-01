@@ -1,0 +1,131 @@
+---
+title: Status
+description: Post WhatsApp Status (story) updates
+---
+
+import { Card, CardGrid, Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+The Status API posts WhatsApp Status (story) updates from a connected WhatsApp
+account. Unlike normal messages, a status is addressed to the well-known
+`status@broadcast` JID — it is **not** a conversation tied to a contact, so
+posting a status does **not** create a contact, persist a message record,
+dispatch a `message.sent` webhook, or broadcast over the organization WebSocket.
+The endpoint only forwards the post to GOWA and returns the resulting message
+id.
+
+In the dashboard, the Status conversation appears pinned at the top of the chat
+sidebar and keeps a **session-only** log of what the current user posted
+(inbound status media is not surfaced, since its download is unsupported by
+GOWA).
+
+<CardGrid>
+  <Card title="Text" icon="pencil">
+    Plain text status updates
+  </Card>
+  <Card title="Image" icon="sun">
+    JPEG, PNG images with an optional caption
+  </Card>
+  <Card title="Video" icon="youtube">
+    MP4 videos with an optional caption
+  </Card>
+</CardGrid>
+
+## Post Status
+
+Post a WhatsApp Status update. Two content types are accepted:
+
+- `application/json` → a **text** status
+- `multipart/form-data` → an **image** or **video** status
+
+```bash
+POST /api/status/send
+```
+
+### Authentication
+
+Requires `chat:write` permission (the same scope as normal messaging). See
+[Authentication](/Gowa-UI/api-reference/authentication).
+
+### Post a text status
+
+Send a JSON body with the message text and (optionally) the account to post
+from.
+
+#### Request Body
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `message` | string | Yes | The status text |
+| `type` | string | No | Defaults to `text` (only `text` is valid for JSON) |
+| `whatsapp_account` | string | No | Account to post from. Falls back to the org's default outgoing account. |
+
+```bash
+curl -X POST "http://your-server:8080/api/status/send" \
+  -H "X-API-Key: whm_your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "We are live! 🎉",
+    "whatsapp_account": "marketing"
+  }'
+```
+
+### Post an image or video status
+
+Send `multipart/form-data` with the media uploaded as a `file` part.
+
+#### Form Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `file` | binary | Yes | The image or video file |
+| `type` | string | Yes | `image` or `video` |
+| `caption` | string | No | Optional caption |
+| `whatsapp_account` | string | No | Account to post from. Falls back to the org's default outgoing account. |
+
+```bash
+curl -X POST "http://your-server:8080/api/status/send" \
+  -H "X-API-Key: whm_your_api_key" \
+  -F "type=image" \
+  -F "caption=New collection dropping soon" \
+  -F "whatsapp_account=marketing" \
+  -F "file=@/path/to/banner.jpg"
+```
+
+### Response
+
+Both content types return the same envelope:
+
+```json
+{
+  "status": "success",
+  "data": {
+    "message_id": "wamid.xxx",
+    "status": "sent"
+  }
+}
+```
+
+### Errors
+
+| HTTP Status | Cause |
+|-------------|-------|
+| `400` | Missing `message` (text), missing `file` (media), or unsupported `type` |
+| `400` | Requested `whatsapp_account` not found in the organization |
+| `502` | GOWA rejected the post (e.g. device disconnected) |
+| `503` | The configured provider does not support status posting |
+
+<Aside type="note" title="Why is the status not persisted as a message?">
+  A status is addressed to `status@broadcast`, not to a person — it is a story
+  your contacts see, not a 1:1 conversation. Treating it as a normal message
+  would create a synthetic "Status" contact and pollute the contact list and
+  message history. The dedicated path keeps the chat graph clean.
+</Aside>
+
+<Aside type="caution" title="GOWA support">
+  Posting a status relies on GOWA forwarding `status@broadcast` to the WhatsApp
+  network. This is supported by the `/send/{message,image,video}` routes (which
+  preserve any `@`-bearing JID), but the behavior depends on the connected
+  account being logged in. A disconnected account returns `502`.
+</Aside>

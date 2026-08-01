@@ -32,6 +32,7 @@ export default defineConfig({
             { label: 'Custom Actions', slug: 'features/custom-actions' },
             { label: 'Templates', slug: 'features/templates' },
             { label: 'Campaigns', slug: 'features/campaigns' },
+            { label: 'WhatsApp Status', slug: 'features/status' },
           ],
         },
         {
@@ -46,6 +47,7 @@ export default defineConfig({
             { label: 'Accounts', slug: 'api-reference/accounts' },
             { label: 'Contacts', slug: 'api-reference/contacts' },
             { label: 'Messages', slug: 'api-reference/messages' },
+            { label: 'Status', slug: 'api-reference/status' },
             { label: 'Templates', slug: 'api-reference/templates' },
             { label: 'Campaigns', slug: 'api-reference/campaigns' },
             { label: 'Canned Responses', slug: 'api-reference/canned-responses' },

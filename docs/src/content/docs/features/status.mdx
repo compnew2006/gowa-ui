@@ -1,0 +1,76 @@
+---
+title: WhatsApp Status
+description: Post WhatsApp Status (story) updates from the chat sidebar
+---
+
+import { Card, CardGrid, Steps, Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+WhatsApp Status lets you post a text, image, or video story that your contacts
+see for 24 hours. In Gowa-UI, posting a status does not leave the chat view —
+it lives in a dedicated **Status** conversation pinned at the top of the
+sidebar, so you can publish a story as easily as sending a message.
+
+## Key Features
+
+<CardGrid>
+  <Card title="In the Sidebar" icon="rocket">
+    The Status conversation is always pinned at the top of the chat list, on
+    every tab. No separate page to navigate to.
+  </Card>
+  <Card title="Text, Image & Video" icon="set-logo">
+    Post a plain text story, or attach an image or video with an optional
+    caption — the same composer you already use for messaging.
+  </Card>
+  <Card title="Any Account" icon="setting">
+    When your organization has more than one connected WhatsApp account, pick
+    which one the story posts from.
+  </Card>
+  <Card title="Send-Only" icon="approve-check">
+    The conversation shows a session log of what you posted. Inbound status
+    views/replies are not surfaced here.
+  </Card>
+</CardGrid>
+
+## Posting a Status
+
+<Steps>
+
+1. **Open the Status conversation**
+
+   Open the **Status** conversation at the top of the sidebar.
+
+2. **Pick the account (if you have several)**
+
+   When your organization has more than one connected WhatsApp account, select
+   the one to post from in the account tab strip.
+
+3. **Compose your story**
+
+   Type your text, or attach an image/video using the paperclip button. Add an
+   optional caption for media.
+
+4. **Send**
+
+   Press **Send**. The story is published and appears in the conversation log.
+
+</Steps>
+
+<Aside type="note" title="Where does the status go?">
+  A status is addressed to WhatsApp's well-known `status@broadcast` JID. It is
+  **not** a 1:1 conversation: posting one does not create a contact or a
+  message in your history. The dashboard keeps only a session-local log of
+  what you posted, so it clears on refresh.
+</Aside>
+
+<Aside type="caution" title="Account must be connected">
+  The story is published through the selected account's GOWA connection. If
+  that account is disconnected, the post fails — reconnect it under
+  **WhatsApp Accounts** first.
+</Aside>
+
+## API
+
+Status posting is also available over the REST API. See the
+[Status API reference](/Gowa-UI/api-reference/status).

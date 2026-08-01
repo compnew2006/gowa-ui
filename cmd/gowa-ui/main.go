@@ -749,6 +749,7 @@ func setupRoutes(g *fastglue.Fastglue, app *handlers.App, lo logf.Logger, basePa
 	g.POST("/api/messages", app.SendMessage) // Legacy route
 	g.POST("/api/messages/template", app.SendTemplateMessage)
 	g.POST("/api/messages/media", app.SendMediaMessage)
+	g.POST("/api/status/send", app.SendStatus)
 	g.PUT("/api/messages/{id}/read", app.MarkMessageRead)
 
 	// Conversation Notes

@@ -118,6 +118,34 @@ func (c *Client) SendCTAURLButton(ctx context.Context, account *whatsapp.Account
 	return c.doJSON(ctx, "POST", "/send/link", deviceID(account), body)
 }
 
+// StatusBroadcastJID is WhatsApp's well-known JID for the Status (story)
+// service. Unlike a phone-based JID it is constant — every status post is
+// addressed to this single recipient, and the account's contacts see it as a
+// story. GOWA's /send/{message,image,video} accept this value verbatim as the
+// `phone` field because its pipeline (SanitizePhone → ParseJID →
+// ValidateJidWithLogin) preserves any "@"-bearing JID and skips the
+// "is not on whatsapp" check (which only applies to @s.whatsapp.net).
+const StatusBroadcastJID = "status@broadcast"
+
+// PostStatusText posts a text WhatsApp Status (story) from the connected
+// account. It reuses the plain-message send path with the well-known
+// status@broadcast JID — GOWA treats it as any other recipient.
+func (c *Client) PostStatusText(ctx context.Context, account *whatsapp.Account, text string) (string, error) {
+	return c.SendTextMessage(ctx, account, whatsapp.Recipient{Phone: StatusBroadcastJID}, text)
+}
+
+// PostStatusImage posts an image WhatsApp Status. mediaID follows the same
+// rules as SendImageMessage (UploadMedia key or URL).
+func (c *Client) PostStatusImage(ctx context.Context, account *whatsapp.Account, mediaID, caption string) (string, error) {
+	return c.sendMedia(ctx, account, whatsapp.Recipient{Phone: StatusBroadcastJID}, mediaID, caption, "image", "/send/image", "")
+}
+
+// PostStatusVideo posts a video WhatsApp Status. mediaID follows the same
+// rules as SendVideoMessage (UploadMedia key or URL).
+func (c *Client) PostStatusVideo(ctx context.Context, account *whatsapp.Account, mediaID, caption string) (string, error) {
+	return c.sendMedia(ctx, account, whatsapp.Recipient{Phone: StatusBroadcastJID}, mediaID, caption, "video", "/send/video", "")
+}
+
 // MarkMessageRead marks a message as read via /message/{id}/read.
 func (c *Client) MarkMessageRead(ctx context.Context, account *whatsapp.Account, messageID string) error {
 	path := fmt.Sprintf("/message/%s/read", messageID)
