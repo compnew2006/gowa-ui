@@ -60,6 +60,8 @@ import {
   Send,
   Paperclip,
   FileText,
+  ImageIcon,
+  Video,
   Smile,
   MoreVertical,
   Phone,
@@ -1788,9 +1790,48 @@ function hasRevokedMedia(message: Message): boolean {
 }
 
 function getMediaUrl(message: Message): string {
-  if (!message.media_url) return ''
+  // Always point at the per-message media endpoint. History-synced messages
+  // store media_url="" by design (no local file) — the backend lazily
+  // downloads the bytes from the provider on first view via WhatsAppMessageID,
+  // so the URL is valid even when media_url is empty. Gating on media_url
+  // here would suppress the request and starve the recovery path.
   const basePath = ((window as any).__BASE_PATH__ ?? '').replace(/\/$/, '')
   return `${basePath}/api/media/${message.id}`
+}
+
+/**
+ * Whether this conversation's media can be lazily recovered from the provider.
+ * WhatsApp Status posts and newsletters arrive as message rows during history
+ * sync but their media is NOT retrievable via the chat `/message/{id}/download`
+ * endpoint — GOWA rejects them with INVALID_JID. Requesting /api/media for them
+ * only produces guaranteed 404s. For these contacts we skip the request and
+ * render the filename directly instead.
+ *
+ * Also returns false for non-history-synced media with a real media_url — that
+ * path is always recoverable (the file exists locally), so we never want to
+ * short-circuit it.
+ */
+function isMediaRecoverable(): boolean {
+  const contact = contactsStore.currentContact
+  if (!contact) return false
+  // Status feed and newsletters are not chats — media is not downloadable.
+  if (contact.is_newsletter) return false
+  const phone = (contact.phone_number || '').toLowerCase()
+  if (phone === 'status' || phone === 'broadcast' || phone.endsWith('@newsletter')) {
+    return false
+  }
+  return true
+}
+
+/**
+ * Whether a message should attempt to render/download its media. True when the
+ * media is already local (media_url set) OR the conversation allows provider
+ * recovery. False for history-synced media in status/newsletter contacts,
+ * where the bytes are unreachable.
+ */
+function shouldRenderMedia(message: Message): boolean {
+  if (message.media_url) return true
+  return isMediaRecoverable()
 }
 
 function openMediaPreview(message: Message) {
@@ -2770,8 +2811,12 @@ async function sendMediaMessage() {
                     <span class="text-sm truncate max-w-[200px]">{{ message.media_filename || 'Document' }}</span>
                   </a>
                 </div>
-                <!-- Image message -->
-                <div v-else-if="message.message_type === 'image' && message.media_url" class="mb-2">
+                <!-- Image message. Rendered even when media_url is empty so the
+                     <img> request hits /api/media/{id} and the backend can lazily
+                     download history-synced bytes on first view. Skipped for
+                     status/newsletter contacts where media is never recoverable
+                     (would only produce a guaranteed 404). -->
+                <div v-else-if="message.message_type === 'image' && shouldRenderMedia(message)" class="mb-2">
                   <img
                     v-if="!brokenMediaIds.has(message.id)"
                     :src="getMediaUrl(message)"
@@ -2788,7 +2833,7 @@ async function sendMediaMessage() {
                   />
                 </div>
                 <!-- Sticker message -->
-                <div v-else-if="message.message_type === 'sticker' && message.media_url" class="mb-2">
+                <div v-else-if="message.message_type === 'sticker' && shouldRenderMedia(message)" class="mb-2">
                   <img
                     v-if="!brokenMediaIds.has(message.id)"
                     :src="getMediaUrl(message)"
@@ -2804,8 +2849,10 @@ async function sendMediaMessage() {
                     @retry="retryMediaDownload(message)"
                   />
                 </div>
-                <!-- Video message -->
-                <div v-else-if="message.message_type === 'video' && message.media_url" class="mb-2">
+                <!-- Video message. Rendered even when media_url is empty so the
+                     <video> request triggers the backend lazy-recovery download.
+                     Skipped for status/newsletter contacts. -->
+                <div v-else-if="message.message_type === 'video' && shouldRenderMedia(message)" class="mb-2">
                   <video
                     v-if="!brokenMediaIds.has(message.id)"
                     :src="getMediaUrl(message)"
@@ -2820,8 +2867,10 @@ async function sendMediaMessage() {
                     @retry="retryMediaDownload(message)"
                   />
                 </div>
-                <!-- Audio message -->
-                <div v-else-if="message.message_type === 'audio' && message.media_url" class="mb-2">
+                <!-- Audio message. Rendered even when media_url is empty so the
+                     <audio> request triggers the backend lazy-recovery download.
+                     Skipped for status/newsletter contacts. -->
+                <div v-else-if="message.message_type === 'audio' && shouldRenderMedia(message)" class="mb-2">
                   <audio
                     :src="getMediaUrl(message)"
                     controls
@@ -2829,8 +2878,9 @@ async function sendMediaMessage() {
                     @error="handleMediaError($event, 'audio')"
                   />
                 </div>
-                <!-- Document message -->
-                <div v-else-if="message.message_type === 'document' && message.media_url" class="mb-2">
+                <!-- Document message. Link is always rendered so the download
+                     request triggers backend lazy-recovery when needed. -->
+                <div v-else-if="message.message_type === 'document'" class="mb-2">
                   <a
                     :href="getMediaUrl(message)"
                     :download="message.media_filename || 'document'"
@@ -2901,8 +2951,20 @@ async function sendMediaMessage() {
                 </div>
                 <!-- Text content (for text messages or captions) -->
                 <span v-else-if="getMessageContent(message)" class="whitespace-pre-wrap break-words"><template v-for="(seg, idx) in linkifySegments(getMessageContent(message))" :key="idx"><a v-if="seg.href" :href="seg.href" target="_blank" rel="noopener noreferrer" class="chat-bubble-link" @click.stop>{{ seg.text }}</a><template v-else>{{ seg.text }}</template></template><span class="chat-bubble-time"><span>{{ formatMessageTime(message.created_at) }}</span><component v-if="message.direction === 'outgoing'" :is="getMessageStatusIcon(message.status)" :class="['h-4 w-4 status-icon', getMessageStatusClass(message.status)]" /></span></span>
-                <!-- Fallback for media without URL -->
-                <span v-else-if="isMediaMessage(message) && !message.media_url" class="text-muted-foreground italic">[{{ message.message_type.charAt(0).toUpperCase() + message.message_type.slice(1) }}]<span class="chat-bubble-time"><span>{{ formatMessageTime(message.created_at) }}</span><component v-if="message.direction === 'outgoing'" :is="getMessageStatusIcon(message.status)" :class="['h-4 w-4 status-icon', getMessageStatusClass(message.status)]" /></span></span>
+                <!-- Fallback for media without URL. Reached when recovery is
+                     impossible — e.g. history-synced media in WhatsApp Status or
+                     newsletter contacts, where the bytes were never downloaded
+                     and the provider's /message/{id}/download endpoint rejects
+                     the JID. Show a neutral card with the filename instead of a
+                     broken image or a guaranteed-404 request. -->
+                <div v-else-if="isMediaMessage(message) && !message.media_url" class="mb-2 flex items-center gap-2 px-3 py-2 bg-background/50 rounded-lg max-w-[280px]">
+                  <ImageIcon v-if="message.message_type === 'image' || message.message_type === 'sticker'" class="h-5 w-5 text-muted-foreground shrink-0" />
+                  <Video v-else-if="message.message_type === 'video'" class="h-5 w-5 text-muted-foreground shrink-0" />
+                  <FileText v-else class="h-5 w-5 text-muted-foreground shrink-0" />
+                  <span class="text-sm text-muted-foreground truncate">
+                    {{ message.media_filename || $t('chat.mediaMissing') }}
+                  </span>
+                </div>
                 <!-- Interactive buttons - WhatsApp style -->
                 <div
                   v-if="getInteractiveButtons(message).length > 0"

@@ -206,8 +206,23 @@ export const useContactsStore = defineStore('contacts', () => {
   // visible list is whatever the server returned — no extra local filtering.
   const filteredContacts = computed(() => contacts.value)
 
+  // isNonChatContact identifies contacts that are NOT real conversations and
+  // have no recoverable media: WhatsApp Status posts (phone_number='status'),
+  // broadcast lists, and (when the newsletter toggle is on) newsletters. These
+  // are always hidden from the sidebar — they arrive during history sync but
+  // their media cannot be downloaded via any GOWA endpoint (the chat
+  // /message/{id}/download rejects the JID), so showing them only produces
+  // broken-image placeholders. Real conversations are unaffected.
+  function isNonChatContact(c: Contact): boolean {
+    const phone = (c.phone_number || '').toLowerCase()
+    return phone === 'status' || phone === 'broadcast' || phone.endsWith('@newsletter')
+  }
+
   const sortedContacts = computed(() => {
     let list = [...filteredContacts.value]
+    // Always hide non-chat "contacts" (status/broadcast/newsletter feeds) —
+    // they're not real conversations and their media is unreachable.
+    list = list.filter(c => !isNonChatContact(c))
     // Apply sidebar visibility filters. is_newsletter may be undefined for
     // older data — treat that as "not a newsletter" (falsy).
     if (hideGroupChats.value) {

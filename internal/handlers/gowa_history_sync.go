@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -169,16 +170,14 @@ func (a *App) syncGowaHistory(ctx context.Context, client *gowa.Client, account 
 				Direction:         direction,
 				MessageType:       msgType,
 				Content:           content,
-				// NOTE: MediaURL is intentionally left empty here. History sync
-				// gives us GOWA's server-side URL (m.URL), NOT a local file path —
-				// the bytes were never downloaded to disk. Writing m.URL into
-				// media_url would create a lying row: ServeMedia would try to serve
-				// a non-existent local file and 404. Instead, leave media_url empty
-				// so the row is honest ("no local media yet"), and let ServeMedia's
-				// auto-recovery lazily download the bytes via WhatsAppMessageID on
-				// first view. See internal/handlers/media.go ServeMedia for the
-				// recovery path. Stash the original GOWA URL in metadata as a
-				// fallback in case the message-ID-based recovery is unavailable.
+				// MediaURL is populated below for media messages by downloading
+				// the bytes via the GOWA message-ID endpoint (which proxies the
+				// WhatsApp CDN fetch through the connected device). This must
+				// happen at sync time, BEFORE the WhatsApp CDN link expires —
+				// once expired, the bytes are gone and lazy recovery on view
+				// (ServeMedia in media.go) cannot fetch them either. A download
+				// failure is non-fatal: media_url stays empty and the row falls
+				// back to ServeMedia's recovery path as a safety net.
 				MediaURL:      "",
 				MediaFilename: m.Filename,
 				Status:        status,
@@ -191,9 +190,43 @@ func (a *App) syncGowaHistory(ctx context.Context, client *gowa.Client, account 
 			msg.Metadata["synced_from_history"] = true
 			msg.Metadata["gowa_timestamp"] = m.Timestamp
 			if m.URL != "" {
-				// Keep GOWA's original URL for potential lazy recovery. Not used
-				// as a local path — only as a hint for future download attempts.
+				// Keep GOWA's original WhatsApp CDN URL as a hint for diagnostics
+				// and potential future recovery. Not used as a local path.
 				msg.Metadata["gowa_media_url"] = m.URL
+			}
+
+			// Eagerly download media bytes at sync time, before the WhatsApp CDN
+			// link expires. Reuses the same DownloadMessageMedia + saveMediaBytes
+			// helpers as ServeMedia's recovery path (media.go) — no logic fork.
+			// Only attempt for real media types with a WA message ID; skip for
+			// status/newsletter JIDs where GOWA rejects the download anyway.
+			if msgType != models.MessageTypeText && m.ID != "" {
+				chatJID := gowaChatJID(contact)
+				if chatJID != "" {
+					dlCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+					if data, mediaType, derr := client.DownloadMessageMedia(dlCtx, account.ToWAAccount(), m.ID, chatJID); derr == nil && len(data) > 0 {
+						if relPath, serr := a.saveMediaBytes(data, mediaType); serr == nil {
+							msg.MediaURL = relPath
+							// Sniff the real MIME type from the bytes (GOWA's
+							// mediaType is generic like "image", not a valid MIME).
+							sniffLen := 512
+							if len(data) < sniffLen {
+								sniffLen = len(data)
+							}
+							msg.MediaMimeType = http.DetectContentType(data[:sniffLen])
+						} else {
+							a.Log.Warn("history-sync media save failed",
+								"wamid", m.ID, "error", serr)
+						}
+					} else if derr != nil {
+						// Non-fatal: leave media_url empty. ServeMedia's lazy
+						// recovery will retry on first view (and the frontend
+						// shows a filename fallback if that also fails).
+						a.Log.Warn("history-sync media download failed",
+							"wamid", m.ID, "jid", chatJID, "error", derr)
+					}
+					cancel()
+				}
 			}
 
 			if err := a.DB.Create(&msg).Error; err != nil {

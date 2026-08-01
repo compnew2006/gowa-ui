@@ -242,6 +242,24 @@ func (a *App) removeLocalMedia(relPath string) {
 	_ = os.Remove(fullPath)
 }
 
+// isRecoverableMediaType reports whether a message type can have its media
+// lazily fetched from the provider on first view. Non-media types (text,
+// location, contacts) and rendering-only types (template, interactive) have no
+// downloadable bytes, so ServeMedia should not attempt recovery for them when
+// MediaURL is empty. Sticker is included because WhatsApp delivers stickers as
+// image-like media even though the app overlays them.
+func isRecoverableMediaType(t models.MessageType) bool {
+	switch t {
+	case models.MessageTypeImage, models.MessageTypeVideo,
+		models.MessageTypeAudio, models.MessageTypeDocument:
+		return true
+	case "sticker":
+		return true
+	default:
+		return false
+	}
+}
+
 // ServeMedia serves media files from local storage
 // Only authorized users who have access to the message can view the media
 func (a *App) ServeMedia(r *fastglue.Request) error {
@@ -275,27 +293,44 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 		}
 	}
 
-	// Check if message has media
-	if message.MediaURL == "" {
-		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "No media found", nil, "")
-	}
-
-	// Security: prevent directory traversal and symlink attacks
-	filePath := filepath.Clean(message.MediaURL)
+	// Resolve the media storage root once — used both for path-traversal guards
+	// and as the parent for any lazily recovered file.
 	baseDir, err := filepath.Abs(a.getMediaStoragePath())
 	if err != nil {
 		a.Log.Error("Storage configuration error", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Storage configuration error", nil, "")
 	}
-	fullPath, err := filepath.Abs(filepath.Join(baseDir, filePath))
-	if err != nil || !strings.HasPrefix(fullPath, baseDir+string(os.PathSeparator)) {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid file path", nil, "")
+
+	var filePath, fullPath string
+	var info os.FileInfo
+
+	if message.MediaURL == "" {
+		// No local media path. History-synced messages intentionally store
+		// MediaURL="" (see gowa_history_sync.go) because the bytes were never
+		// downloaded to disk; recovery is expected to fetch them on first view
+		// via WhatsAppMessageID. Only attempt recovery for genuine media types
+		// that carry a WhatsApp message ID — otherwise there is nothing to fetch.
+		if message.WhatsAppMessageID == "" || !isRecoverableMediaType(message.MessageType) {
+			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "No media found", nil, "")
+		}
+		// Fall through to the recovery block below. Mark info as missing by
+		// leaving err non-nil so the Lstat error branch runs the recovery.
+		err = os.ErrNotExist
+	} else {
+		// Security: prevent directory traversal and symlink attacks
+		filePath = filepath.Clean(message.MediaURL)
+		fullPath, err = filepath.Abs(filepath.Join(baseDir, filePath))
+		if err != nil || !strings.HasPrefix(fullPath, baseDir+string(os.PathSeparator)) {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid file path", nil, "")
+		}
+
+		// Reject symlinks
+		info, err = os.Lstat(fullPath)
 	}
 
-	// Reject symlinks
-	info, err := os.Lstat(fullPath)
 	if err != nil {
-		// File is missing from disk! If it's a GOWA message, try to auto-recover/download it.
+		// File is missing from disk (or never downloaded). If it's a GOWA
+		// message, try to auto-recover/download it.
 		// The contact row is loaded first because it's needed for both the chat
 		// JID and as an account-name fallback: a message may reference an account
 		// that was renamed/deleted (e.g. legacy GOWA history-sync rows), while the

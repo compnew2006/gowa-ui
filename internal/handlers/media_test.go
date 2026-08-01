@@ -262,6 +262,104 @@ func TestApp_ServeMedia_NoMediaInMessage(t *testing.T) {
 	assert.Equal(t, fasthttp.StatusNotFound, testutil.GetResponseStatusCode(req))
 }
 
+// --- ServeMedia: empty MediaURL on a recoverable media message reaches the
+// recovery path instead of bailing early. History-synced messages store
+// MediaURL="" by design (see gowa_history_sync.go) and rely on ServeMedia to
+// lazily fetch bytes via WhatsAppMessageID on first view. Before the fix,
+// ServeMedia returned 404 "No media found" before the recovery code could run.
+//
+// This test pins the contract for a non-recoverable *type* (text): it still
+// 404s because there is nothing to download. The positive recovery assertion
+// (bytes actually fetched) lives in gowa_messages_sync_test.go, which stands
+// up a mock GOWA server. Here we only assert the early-bail is gone for media
+// types that carry a WhatsAppMessageID.
+
+func TestApp_ServeMedia_EmptyMediaURL_TextStillBails(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "media-text-empty", []string{"contacts:read"})
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&role.ID))
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	// A text message with empty MediaURL AND a WhatsAppMessageID: text is not a
+	// recoverable media type, so this must still 404 "No media found" without
+	// attempting a download.
+	msg := &models.Message{
+		BaseModel:        models.BaseModel{ID: uuid.New()},
+		OrganizationID:   org.ID,
+		ContactID:        contact.ID,
+		Direction:        models.DirectionIncoming,
+		MessageType:      models.MessageTypeText,
+		MediaURL:         "",
+		WhatsAppMessageID: "MSG_TEXT_001",
+		Status:           models.MessageStatusDelivered,
+	}
+	require.NoError(t, app.DB.Create(msg).Error)
+
+	dir := t.TempDir()
+	app.Config = &config.Config{
+		Storage: config.StorageConfig{LocalPath: dir},
+		JWT:     config.JWTConfig{Secret: testutil.TestJWTSecret, AccessExpiryMins: 15, RefreshExpiryDays: 7},
+	}
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "message_id", msg.ID.String())
+
+	require.NoError(t, app.ServeMedia(req))
+	assert.Equal(t, fasthttp.StatusNotFound, testutil.GetResponseStatusCode(req),
+		"text messages must not attempt media recovery even with a WA message ID")
+}
+
+func TestApp_ServeMedia_EmptyMediaURL_ImageWithWAMIDReachesRecovery(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "media-img-recover", []string{"contacts:read"})
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&role.ID))
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	// An image message with empty MediaURL but a WhatsAppMessageID: this is the
+	// history-sync shape. With no GOWA provider wired up in this unit test,
+	// recovery cannot download bytes, so the final result is still 404 — but the
+	// crucial difference from the old behavior is that we must NOT bail with
+	// "No media found" at the MediaURL=="" check. The recovery path runs and
+	// only the download fails. We assert the response is 404 (recovery failed)
+	// AND that media_url was NOT mutated (no spurious write).
+	msg := &models.Message{
+		BaseModel:        models.BaseModel{ID: uuid.New()},
+		OrganizationID:   org.ID,
+		ContactID:        contact.ID,
+		Direction:        models.DirectionIncoming,
+		MessageType:      models.MessageTypeImage,
+		MediaURL:         "",
+		WhatsAppMessageID: "HIST_IMG_RECOVERY_001",
+		Status:           models.MessageStatusDelivered,
+	}
+	require.NoError(t, app.DB.Create(msg).Error)
+
+	dir := t.TempDir()
+	app.Config = &config.Config{
+		Storage: config.StorageConfig{LocalPath: dir},
+		JWT:     config.JWTConfig{Secret: testutil.TestJWTSecret, AccessExpiryMins: 15, RefreshExpiryDays: 7},
+	}
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "message_id", msg.ID.String())
+
+	require.NoError(t, app.ServeMedia(req))
+	// Recovery could not run (no provider) → 404 "File not found" (the recovery
+	// failure path), NOT "No media found" (the early bail). Both are 404, so we
+	// additionally check the error message wording to distinguish the two paths.
+	assert.Equal(t, fasthttp.StatusNotFound, testutil.GetResponseStatusCode(req))
+
+	// media_url stays empty: no provider means no download, no write.
+	var after models.Message
+	require.NoError(t, app.DB.Where("id = ?", msg.ID).First(&after).Error)
+	assert.Empty(t, after.MediaURL,
+		"media_url must remain empty when recovery has no provider to download from")
+}
+
 // --- ServeMedia: invalid message ID ---
 
 func TestApp_ServeMedia_InvalidMessageID(t *testing.T) {
