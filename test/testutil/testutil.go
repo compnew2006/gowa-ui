@@ -1,4 +1,4 @@
-// Package testutil provides shared test utilities for the whatomate project.
+// Package testutil provides shared test utilities for the gowa-ui project.
 package testutil
 
 import (
