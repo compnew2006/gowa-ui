@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/shridarpatil/whatomate/pkg/gowa"
-	"github.com/shridarpatil/whatomate/pkg/whatsapp"
+	"github.com/shridarpatil/gowa-ui/pkg/gowa"
+	"github.com/shridarpatil/gowa-ui/pkg/whatsapp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

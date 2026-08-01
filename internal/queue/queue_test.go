@@ -9,9 +9,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
-	"github.com/shridarpatil/whatomate/internal/models"
-	"github.com/shridarpatil/whatomate/internal/queue"
-	"github.com/shridarpatil/whatomate/test/testutil"
+	"github.com/shridarpatil/gowa-ui/internal/models"
+	"github.com/shridarpatil/gowa-ui/internal/queue"
+	"github.com/shridarpatil/gowa-ui/test/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

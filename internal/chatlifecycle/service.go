@@ -21,9 +21,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/shridarpatil/whatomate/internal/audit"
-	"github.com/shridarpatil/whatomate/internal/models"
-	"github.com/shridarpatil/whatomate/internal/websocket"
+	"github.com/shridarpatil/gowa-ui/internal/audit"
+	"github.com/shridarpatil/gowa-ui/internal/models"
+	"github.com/shridarpatil/gowa-ui/internal/websocket"
 	"github.com/zerodha/logf"
 	"gorm.io/gorm"
 )

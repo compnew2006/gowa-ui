@@ -280,7 +280,7 @@ async function createGowaDevice() {
   if (!selectedGowaInstance.value) return
   creatingDevice.value = true
   try {
-    const resp = await api.post('/gowa/create-device', { base_url: selectedGowaInstance.value, device_name: form.value.name || 'whatomate' })
+    const resp = await api.post('/gowa/create-device', { base_url: selectedGowaInstance.value, device_name: form.value.name || 'gowa-ui' })
     const data = resp.data.data || resp.data
     form.value.gowa_base_url = data.base_url
     form.value.gowa_device_id = data.device_id

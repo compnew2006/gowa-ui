@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/shridarpatil/whatomate/internal/contactutil"
-	"github.com/shridarpatil/whatomate/internal/models"
-	"github.com/shridarpatil/whatomate/internal/websocket"
-	"github.com/shridarpatil/whatomate/pkg/gowa"
+	"github.com/shridarpatil/gowa-ui/internal/contactutil"
+	"github.com/shridarpatil/gowa-ui/internal/models"
+	"github.com/shridarpatil/gowa-ui/internal/websocket"
+	"github.com/shridarpatil/gowa-ui/pkg/gowa"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 )
@@ -147,7 +147,7 @@ func (a *App) handleGowaWebhook(r *fastglue.Request, pathDeviceID string) error 
 func (a *App) getGowaAccountByDeviceID(deviceID string) (*models.WhatsAppAccount, error) {
 	var account models.WhatsAppAccount
 	// GOWA v8 webhooks send the connected JID (e.g. "201007181781@s.whatsapp.net")
-	// as device_id, but whatomate stores the custom device ID assigned during
+	// as device_id, but gowa-ui stores the custom device ID assigned during
 	// device creation (e.g. "test-account-d9768a03"). We try multiple match
 	// strategies: exact device_id, phone portion of JID, gowa_jid field.
 	//
@@ -194,7 +194,7 @@ func (a *App) processGowaMessage(account *models.WhatsAppAccount, envelope *gowa
 		return
 	}
 
-	// Build the whatomate IncomingTextMessage from the GOWA payload.
+	// Build the gowa-ui IncomingTextMessage from the GOWA payload.
 	// For group/newsletter messages, route to the GROUP/CHANNEL contact (keyed
 	// by the @g.us / @newsletter JID), not the individual sender — mirroring
 	// processGowaOutgoingMessage which prefers ChatID first. The actual sender
@@ -382,7 +382,7 @@ func (a *App) processGowaOutgoingMessage(account *models.WhatsAppAccount, msg *g
 	// Media messages carry the file URL in the polymorphic fields; we download
 	// it via the GOWA client and store locally (same as incoming media).
 
-	// Dedup: if this message was already recorded (e.g. sent from the whatomate
+	// Dedup: if this message was already recorded (e.g. sent from the gowa-ui
 	// UI, which created a local row with the GOWA-returned wamid), update its
 	// reply context in place and skip creating a duplicate. The GOWA echo and
 	// the local row share the same WhatsAppMessageID. Scoped to this account:
@@ -563,7 +563,7 @@ func (a *App) processGowaAck(envelope *gowa.WebhookPayload) {
 		return
 	}
 
-	// Map GOWA receipt types to whatomate status values.
+	// Map GOWA receipt types to gowa-ui status values.
 	var status string
 	switch ack.ReceiptType {
 	case "read":

@@ -15,7 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/shridarpatil/whatomate/pkg/whatsapp"
+	"github.com/shridarpatil/gowa-ui/pkg/whatsapp"
 )
 
 // DefaultTimeout for GOWA REST API requests.
@@ -60,7 +60,7 @@ func deviceID(account *whatsapp.Account) string {
 }
 
 // toJID converts a plain phone number to a WhatsApp JID.
-// whatomate stores phone numbers as digits (e.g. "16505551234"); GOWA
+// gowa-ui stores phone numbers as digits (e.g. "16505551234"); GOWA
 // expects a full JID (e.g. "16505551234@s.whatsapp.net"). If the input
 // already contains "@" it is assumed to be a JID and returned as-is.
 //

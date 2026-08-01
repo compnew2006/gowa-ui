@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/shridarpatil/whatomate/internal/audit"
-	"github.com/shridarpatil/whatomate/internal/contactutil"
-	"github.com/shridarpatil/whatomate/internal/models"
-	"github.com/shridarpatil/whatomate/pkg/gowa"
+	"github.com/shridarpatil/gowa-ui/internal/audit"
+	"github.com/shridarpatil/gowa-ui/internal/contactutil"
+	"github.com/shridarpatil/gowa-ui/internal/models"
+	"github.com/shridarpatil/gowa-ui/pkg/gowa"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 )

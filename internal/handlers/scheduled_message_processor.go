@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/shridarpatil/whatomate/internal/models"
-	"github.com/shridarpatil/whatomate/internal/websocket"
+	"github.com/shridarpatil/gowa-ui/internal/models"
+	"github.com/shridarpatil/gowa-ui/internal/websocket"
 	"gorm.io/gorm/clause"
 )
 

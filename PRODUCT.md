@@ -1,7 +1,7 @@
-# Whatomate — Product
+# Gowa-UI — Product
 
 ## Register
-**Product.** Whatomate is an authenticated WhatsApp multi-device messaging console. Users (agents, managers, admins) live in a task: triaging pending conversations, claiming and releasing them, sending media, reviewing audit logs. Design SERVES the product. The tool must disappear into the task. Earned familiarity over novelty.
+**Product.** Gowa-UI is an authenticated WhatsApp multi-device messaging console. Users (agents, managers, admins) live in a task: triaging pending conversations, claiming and releasing them, sending media, reviewing audit logs. Design SERVES the product. The tool must disappear into the task. Earned familiarity over novelty.
 
 ## Users & purpose
 - **Agents** — claim pending chats, reply, release back to pending. Primary surface: `/chat/:contactId`.

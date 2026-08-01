@@ -8,16 +8,16 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/shridarpatil/whatomate/internal/config"
-	"github.com/shridarpatil/whatomate/internal/contactutil"
-	"github.com/shridarpatil/whatomate/internal/models"
-	"github.com/shridarpatil/whatomate/pkg/gowa"
+	"github.com/shridarpatil/gowa-ui/internal/config"
+	"github.com/shridarpatil/gowa-ui/internal/contactutil"
+	"github.com/shridarpatil/gowa-ui/internal/models"
+	"github.com/shridarpatil/gowa-ui/pkg/gowa"
 	"gorm.io/gorm"
 )
 
 // GOWA performs its own history synchronization when a device (re)connects,
 // but it only delivers NEW messages via webhook — the synced history is never
-// replayed. This file makes whatomate pull that history automatically:
+// replayed. This file makes gowa-ui pull that history automatically:
 //
 //   - syncGowaHistory is the reusable backfill core (also behind the manual
 //     POST .../sync-messages endpoint).
@@ -149,7 +149,7 @@ func (a *App) syncGowaHistory(ctx context.Context, client *gowa.Client, account 
 				direction = models.DirectionOutgoing
 				status = models.MessageStatusSent
 			}
-			msgType := gowaMsgTypeToWhatomate(m.MediaType)
+			msgType := gowaMsgTypeToGowaUI(m.MediaType)
 			// For media messages, prefer the stored content as caption only if
 			// it's a text body; otherwise leave content empty (media lives in
 			// MediaURL/Filename).
@@ -379,7 +379,7 @@ func (a *App) AutoSyncGowaHistory(account *models.WhatsAppAccount) {
 
 // GowaHistorySyncProcessor periodically backfills GOWA message history for
 // every GOWA-backed account. It runs an initial pass at startup (covering
-// history GOWA synced while whatomate was down) and then re-syncs on the
+// history GOWA synced while gowa-ui was down) and then re-syncs on the
 // ticker; AutoSyncGowaHistory's cooldown keeps overlapping triggers cheap.
 type GowaHistorySyncProcessor struct {
 	app      *App
@@ -401,7 +401,7 @@ func (p *GowaHistorySyncProcessor) Start(ctx context.Context) {
 	p.app.Log.Info("GOWA history sync processor started", "interval", p.interval)
 
 	// Initial pass: pick up history GOWA already holds (e.g. after a GOWA or
-	// whatomate restart) without waiting a full interval.
+	// gowa-ui restart) without waiting a full interval.
 	p.syncAll()
 
 	ticker := time.NewTicker(p.interval)

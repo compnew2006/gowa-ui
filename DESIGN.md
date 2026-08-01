@@ -1,4 +1,4 @@
-# Whatomate — Design System
+# Gowa-UI — Design System
 
 Dark-first product console (Linear/Vercel discipline) with a single WhatsApp-emerald accent. Captured from `frontend/src/assets/index.css`, `fonts.css`, and `tailwind.config.cjs`.
 

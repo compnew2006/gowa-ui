@@ -1,7 +1,7 @@
 # Meta Removal — Remaining Cleanup (updated)
 
 ## ✅ Already Fixed (no action needed)
-- `cmd/whatomate/main.go` — GOWA-only, no Calling/TTS/Meta imports or routes
+- `cmd/gowa-ui/main.go` — GOWA-only, no Calling/TTS/Meta imports or routes
 - `internal/handlers/organization.go` — calling + Meta settings removed
 - `internal/handlers/messages.go` — voice_call/flow/MessageTypeFlow removed
 - `internal/worker/worker.go` — local template rendering, no Meta API calls

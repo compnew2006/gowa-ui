@@ -3,7 +3,7 @@ package handlers
 import (
 	"testing"
 
-	"github.com/shridarpatil/whatomate/internal/models"
+	"github.com/shridarpatil/gowa-ui/internal/models"
 	"github.com/stretchr/testify/assert"
 )
 

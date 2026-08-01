@@ -123,7 +123,7 @@ const handleLogout = async () => {
         <div class="h-7 w-7 rounded-lg bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
           <MessageSquare class="h-4 w-4 text-white" />
         </div>
-        <span class="font-semibold text-sm text-white light:text-gray-900">Whatomate</span>
+        <span class="font-semibold text-sm text-white light:text-gray-900">Gowa-UI</span>
       </RouterLink>
       <Button
         variant="ghost"
@@ -167,7 +167,7 @@ const handleLogout = async () => {
             v-if="!isCollapsed"
             class="font-semibold text-sm text-white light:text-gray-900"
           >
-            Whatomate
+            Gowa-UI
           </span>
         </RouterLink>
         <Button

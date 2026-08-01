@@ -134,16 +134,16 @@ export const useContactsStore = defineStore('contacts', () => {
   // flag clears the stale 'me' preference so the role-aware default below takes
   // over for everyone once. Users can still re-pick a tab afterwards.
   const TAB_PREF_VERSION = '2'
-  const TAB_PREF_VERSION_KEY = 'whatomate.chat.activeListTab.v'
+  const TAB_PREF_VERSION_KEY = 'gowa-ui.chat.activeListTab.v'
   if (typeof localStorage !== 'undefined'
     && localStorage.getItem(TAB_PREF_VERSION_KEY) !== TAB_PREF_VERSION) {
-    localStorage.removeItem('whatomate.chat.activeListTab')
+    localStorage.removeItem('gowa-ui.chat.activeListTab')
     localStorage.setItem(TAB_PREF_VERSION_KEY, TAB_PREF_VERSION)
   }
 
   function loadStoredTab(): ListTab {
     const stored = typeof localStorage !== 'undefined'
-      ? localStorage.getItem('whatomate.chat.activeListTab') as ListTab | null
+      ? localStorage.getItem('gowa-ui.chat.activeListTab') as ListTab | null
       : null
     if (stored && (VALID_TABS as readonly string[]).includes(stored)) {
       return stored
@@ -157,7 +157,7 @@ export const useContactsStore = defineStore('contacts', () => {
   // Persist tab choice (M2). `watch` re-fires on every change, so the stored
   // value always mirrors the live one.
   watch(activeListTab, (tab) => {
-    try { localStorage.setItem('whatomate.chat.activeListTab', tab) } catch { /* quota / private mode */ }
+    try { localStorage.setItem('gowa-ui.chat.activeListTab', tab) } catch { /* quota / private mode */ }
   })
 
   // Supervisor visibility gate for the 'closed' and 'all' tabs. Gated on
@@ -177,7 +177,7 @@ export const useContactsStore = defineStore('contacts', () => {
   // available, if the user never made an explicit choice (no stored tab), flip
   // managers to 'pending' (the queue they manage) and leave agents on 'me'.
   const hasExplicitTabChoice = typeof localStorage !== 'undefined'
-    && !!localStorage.getItem('whatomate.chat.activeListTab')
+    && !!localStorage.getItem('gowa-ui.chat.activeListTab')
   watch(() => authStore.user, (user) => {
     if (!user) return
     // A stored 'closed'/'all' preference is only honored for users who can

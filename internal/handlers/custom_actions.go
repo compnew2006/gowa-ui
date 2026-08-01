@@ -16,7 +16,7 @@ import (
 
 	"github.com/dop251/goja"
 	"github.com/google/uuid"
-	"github.com/shridarpatil/whatomate/internal/models"
+	"github.com/shridarpatil/gowa-ui/internal/models"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 )

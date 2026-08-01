@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/shridarpatil/whatomate/internal/websocket"
+	"github.com/shridarpatil/gowa-ui/internal/websocket"
 	"github.com/stretchr/testify/assert"
 )
 

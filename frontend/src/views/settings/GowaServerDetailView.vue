@@ -185,7 +185,7 @@ async function submitCreate() {
   creating.value = true;
   try {
     await gowaServersService.createDevice(serverId.value, {
-      device_name: newDeviceName.value || "whatomate",
+      device_name: newDeviceName.value || "gowa-ui",
     });
     toast.success(t("gowaServers.deviceCreated", "Device created"));
     createOpen.value = false;
@@ -340,7 +340,7 @@ async function syncDevice(d: GowaDevice) {
   }
 }
 
-// Pulls the device's chat list from GOWA into the whatomate contacts table so
+// Pulls the device's chat list from GOWA into the gowa-ui contacts table so
 // the Contacts page is populated for a connected device without waiting for an
 // inbound message. Requires the device account to be provisioned first (the
 // "Sync" button above), otherwise the backend returns 409.
@@ -781,7 +781,7 @@ async function confirmDelete() {
             }}</Label>
             <Input
               v-model="webhookForm.webhook_url"
-              placeholder="https://whatomate.example.com/api/gowa/webhook"
+              placeholder="https://gowa-ui.example.com/api/gowa/webhook"
             />
           </div>
           <div class="space-y-2">

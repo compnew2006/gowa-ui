@@ -178,7 +178,7 @@ func TestValidateNoMixedParams_Empty(t *testing.T) {
 }
 
 func TestValidateHeaderParamCount_None(t *testing.T) {
-	assert.NoError(t, ValidateHeaderParamCount("Welcome to Whatomate"))
+	assert.NoError(t, ValidateHeaderParamCount("Welcome to gowa-ui"))
 }
 
 func TestValidateHeaderParamCount_OnePositional(t *testing.T) {

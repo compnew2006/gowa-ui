@@ -119,7 +119,7 @@ Named parameters make templates easier to understand and less error-prone when d
 
 - Use descriptive names like `{{customer_name}}`, `{{order_id}}`, `{{delivery_date}}`
 - Parameter names can contain letters, numbers, and underscores
-- Whatomate automatically detects whether your template uses positional or named parameters
+- Gowa-UI automatically detects whether your template uses positional or named parameters
 
 <Aside type="tip">
   Named parameters are recommended for templates with 3 or more variables, as they make the template easier to understand and maintain.
@@ -128,7 +128,7 @@ Named parameters make templates easier to understand and less error-prone when d
 ### Header Variables
 
 A TEXT header can contain **at most one** variable — a Meta restriction
-that Whatomate enforces at template creation time. Both positional (`{{1}}`)
+that Gowa-UI enforces at template creation time. Both positional (`{{1}}`)
 and named (`{{season}}`) work; mixing positional and named within the same
 template (header + body) is still not allowed.
 

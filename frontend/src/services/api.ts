@@ -1007,11 +1007,11 @@ export const gowaServersService = {
   deviceReconnect: (serverId: string, deviceId: string) =>
     api.post(`/gowa/servers/${serverId}/devices/${encodeURIComponent(deviceId)}/reconnect`),
   // Backfills the WhatsAppAccount row for a device that exists on the GOWA
-  // server but has no account row in whatomate. Required for devices created
+  // server but has no account row in gowa-ui. Required for devices created
   // before the provisioning fix, otherwise their chats never reach the inbox.
   deviceSync: (serverId: string, deviceId: string) =>
     api.post<{ device_id: string; account_id: string; account_name: string }>(`/gowa/servers/${serverId}/devices/${encodeURIComponent(deviceId)}/sync`),
-  // Imports the device's chat list from GOWA into the whatomate contacts table,
+  // Imports the device's chat list from GOWA into the gowa-ui contacts table,
   // so the Contacts page is populated for a connected device without waiting
   // for an inbound message. Idempotent; safe to run repeatedly.
   deviceSyncContacts: (serverId: string, deviceId: string) =>

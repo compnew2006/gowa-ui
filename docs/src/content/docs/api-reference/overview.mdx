@@ -1,6 +1,6 @@
 ---
 title: API Overview
-description: Introduction to the Whatomate REST API
+description: Introduction to the Gowa-UI REST API
 ---
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
@@ -15,13 +15,13 @@ http://your-server:8080/api
 
 ## Authentication
 
-The Whatomate API uses JWT (JSON Web Tokens) for authentication. Include the access token in the Authorization header:
+The Gowa-UI API uses JWT (JSON Web Tokens) for authentication. Include the access token in the Authorization header:
 
 ```bash
 Authorization: Bearer <access_token>
 ```
 
-See [Authentication](/whatomate/api-reference/authentication) for details on obtaining tokens.
+See [Authentication](/Gowa-UI/api-reference/authentication) for details on obtaining tokens.
 
 ## Response Format
 
@@ -102,27 +102,27 @@ Paginated responses include:
 
 <CardGrid>
   <Card title="Authentication" icon="approve-check">
-    Register, login, and manage tokens. [View →](/whatomate/api-reference/authentication)
+    Register, login, and manage tokens. [View →](/Gowa-UI/api-reference/authentication)
   </Card>
   <Card title="Users" icon="setting">
-    User management (Admin only). [View →](/whatomate/api-reference/users)
+    User management (Admin only). [View →](/Gowa-UI/api-reference/users)
   </Card>
   <Card title="Organizations" icon="star">
-    Organization and member management. [View →](/whatomate/api-reference/organizations)
+    Organization and member management. [View →](/Gowa-UI/api-reference/organizations)
   </Card>
   <Card title="Contacts" icon="open-book">
-    Manage contacts and assignments. [View →](/whatomate/api-reference/contacts)
+    Manage contacts and assignments. [View →](/Gowa-UI/api-reference/contacts)
   </Card>
   <Card title="Messages" icon="comment">
-    Send and receive messages. [View →](/whatomate/api-reference/messages)
+    Send and receive messages. [View →](/Gowa-UI/api-reference/messages)
   </Card>
   <Card title="Templates" icon="document">
-    Manage message templates. [View →](/whatomate/api-reference/templates)
+    Manage message templates. [View →](/Gowa-UI/api-reference/templates)
   </Card>
   <Card title="Webhooks" icon="rocket">
-    Receive real-time updates. [View →](/whatomate/api-reference/webhooks)
+    Receive real-time updates. [View →](/Gowa-UI/api-reference/webhooks)
   </Card>
   <Card title="Analytics" icon="graph">
-    Dashboard and message analytics. [View →](/whatomate/api-reference/analytics)
+    Dashboard and message analytics. [View →](/Gowa-UI/api-reference/analytics)
   </Card>
 </CardGrid>

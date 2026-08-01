@@ -5,7 +5,7 @@ description: Configure OAuth-based single sign-on with Google, Microsoft, GitHub
 
 import { Aside, Steps, Card, CardGrid } from '@astrojs/starlight/components';
 
-Whatomate supports SSO via OAuth 2.0 / OIDC, configured **per organization**. Each organization can enable any combination of providers, and SSO can either be restricted to existing users or set to auto-create accounts on first login.
+Gowa-UI supports SSO via OAuth 2.0 / OIDC, configured **per organization**. Each organization can enable any combination of providers, and SSO can either be restricted to existing users or set to auto-create accounts on first login.
 
 ## Supported Providers
 
@@ -75,7 +75,7 @@ When you create the OAuth app at the provider, set the **redirect URI** (a.k.a. 
 https://<your-host>/api/auth/sso/{provider}/callback
 ```
 
-Replace `{provider}` with `google`, `microsoft`, `github`, `facebook`, or `custom`. If you serve Whatomate at a sub-path (`server.base_path = "/whatomate"`), include it: `https://example.com/whatomate/api/auth/sso/google/callback`.
+Replace `{provider}` with `google`, `microsoft`, `github`, `facebook`, or `custom`. If you serve Gowa-UI at a sub-path (`server.base_path = "/Gowa-UI"`), include it: `https://example.com/Gowa-UI/api/auth/sso/google/callback`.
 
 <Aside type="caution">
   The provider must use HTTPS for redirect URIs in production. HTTP is only allowed when `app.environment = "development"`.
@@ -127,13 +127,13 @@ For Okta, Auth0, Keycloak, Authentik, etc., choose **Custom** and supply:
 | `token_url` | `https://kc.example.com/realms/main/protocol/openid-connect/token` |
 | `user_info_url` | `https://kc.example.com/realms/main/protocol/openid-connect/userinfo` |
 
-Whatomate requests the `openid email profile` scopes and expects the userinfo response to contain at least one of: `sub` or `id`, plus `email`, plus `name` or `preferred_username`. Most OIDC providers return this out of the box.
+Gowa-UI requests the `openid email profile` scopes and expects the userinfo response to contain at least one of: `sub` or `id`, plus `email`, plus `name` or `preferred_username`. Most OIDC providers return this out of the box.
 
 ## Provider-specific notes
 
 ### Google
 
-Configure the OAuth 2.0 client at [console.cloud.google.com/apis/credentials](https://console.cloud.google.com/apis/credentials). Set the **Authorized redirect URI** to your Whatomate callback. Standard Google sign-in flow — no extra setup.
+Configure the OAuth 2.0 client at [console.cloud.google.com/apis/credentials](https://console.cloud.google.com/apis/credentials). Set the **Authorized redirect URI** to your Gowa-UI callback. Standard Google sign-in flow — no extra setup.
 
 ### Microsoft
 
@@ -141,7 +141,7 @@ Uses Azure AD's `common` endpoint, so both work and personal Microsoft accounts 
 
 ### GitHub
 
-Register an OAuth App at [github.com/settings/developers](https://github.com/settings/developers). Whatomate requests the `user:email` scope and will fetch the user's primary verified email via `/user/emails` if the public profile email is empty.
+Register an OAuth App at [github.com/settings/developers](https://github.com/settings/developers). Gowa-UI requests the `user:email` scope and will fetch the user's primary verified email via `/user/emails` if the public profile email is empty.
 
 ### Facebook
 

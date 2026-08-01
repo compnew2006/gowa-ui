@@ -37,7 +37,7 @@ type ServerConfig struct {
 	Port           int    `koanf:"port"`
 	ReadTimeout    int    `koanf:"read_timeout"`
 	WriteTimeout   int    `koanf:"write_timeout"`
-	BasePath       string `koanf:"base_path"`       // Base path for frontend (e.g., "/whatomate" for proxy pass)
+	BasePath       string `koanf:"base_path"`       // Base path for frontend (e.g., "/gowa-ui" for proxy pass)
 	AllowedOrigins string `koanf:"allowed_origins"` // Comma-separated list of allowed CORS origins
 }
 
@@ -85,7 +85,7 @@ type GOWAInstance struct {
 	BaseURL       string   `koanf:"base_url"`      // GOWA REST API base URL
 	Username      string   `koanf:"username"`      // Basic Auth username
 	Password      string   `koanf:"password"`      // Basic Auth password
-	WebhookURL    string   `koanf:"webhook_url"`   // Externally-reachable whatomate webhook URL (e.g. http://host.docker.internal:18080/api/gowa/webhook). If empty, derived from request.
+	WebhookURL    string   `koanf:"webhook_url"`   // Externally-reachable gowa-ui webhook URL (e.g. http://host.docker.internal:18080/api/gowa/webhook). If empty, derived from request.
 	Organizations []string `koanf:"organizations"` // Org IDs allowed to use this instance. ["*"] or empty = all orgs (backward compat).
 }
 
@@ -181,16 +181,16 @@ func Load(configPath string) (*Config, error) {
 		}
 	}
 
-	// Load from environment variables (WHATOMATE_ prefix). A DOUBLE underscore
+	// Load from environment variables (gowa-ui_ prefix). A DOUBLE underscore
 	// separates config levels; single underscores are preserved as part of the
 	// key. This is required because both section and field names contain
 	// underscores (e.g. default_admin, rate_limit) — collapsing every "_" to "."
 	// would mangle them (default_admin.email -> default.admin.email), so those
 	// keys could never be set via env.
-	// e.g. WHATOMATE_DATABASE__HOST -> database.host
-	//      WHATOMATE_DEFAULT_ADMIN__EMAIL -> default_admin.email
-	if err := k.Load(env.Provider("WHATOMATE_", ".", func(s string) string {
-		return strings.ReplaceAll(strings.ToLower(strings.TrimPrefix(s, "WHATOMATE_")), "__", ".")
+	// e.g. gowa-ui_DATABASE__HOST -> database.host
+	//      gowa-ui_DEFAULT_ADMIN__EMAIL -> default_admin.email
+	if err := k.Load(env.Provider("gowa-ui_", ".", func(s string) string {
+		return strings.ReplaceAll(strings.ToLower(strings.TrimPrefix(s, "gowa-ui_")), "__", ".")
 	}), nil); err != nil {
 		return nil, err
 	}
@@ -208,7 +208,7 @@ func Load(configPath string) (*Config, error) {
 
 func setDefaults(cfg *Config) {
 	if cfg.App.Name == "" {
-		cfg.App.Name = "Whatomate"
+		cfg.App.Name = "gowa-ui"
 	}
 	if cfg.App.Environment == "" {
 		cfg.App.Environment = "development"

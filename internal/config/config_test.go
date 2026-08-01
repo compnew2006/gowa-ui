@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/shridarpatil/whatomate/internal/config"
+	"github.com/shridarpatil/gowa-ui/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -22,7 +22,7 @@ func TestLoad_AppliesDefaultsForMissingFields(t *testing.T) {
 	cfg, err := config.Load(writeConfig(t, ""))
 	require.NoError(t, err)
 
-	assert.Equal(t, "Whatomate", cfg.App.Name)
+	assert.Equal(t, "gowa-ui", cfg.App.Name)
 	assert.Equal(t, "development", cfg.App.Environment)
 	assert.Equal(t, "0.0.0.0", cfg.Server.Host)
 	assert.Equal(t, 8080, cfg.Server.Port)
@@ -96,8 +96,8 @@ secure = false
 }
 
 func TestLoad_EnvVarsOverrideFile(t *testing.T) {
-	t.Setenv("WHATOMATE_DATABASE__HOST", "from-env")
-	t.Setenv("WHATOMATE_SERVER__PORT", "1234")
+	t.Setenv("gowa-ui_DATABASE__HOST", "from-env")
+	t.Setenv("gowa-ui_SERVER__PORT", "1234")
 
 	cfg, err := config.Load(writeConfig(t, `
 [database]
@@ -107,14 +107,14 @@ host = "from-file"
 port = 8080
 `))
 	require.NoError(t, err)
-	assert.Equal(t, "from-env", cfg.Database.Host, "WHATOMATE_DATABASE__HOST must override file")
-	assert.Equal(t, 1234, cfg.Server.Port, "WHATOMATE_SERVER__PORT must override file")
+	assert.Equal(t, "from-env", cfg.Database.Host, "gowa-ui_DATABASE__HOST must override file")
+	assert.Equal(t, 1234, cfg.Server.Port, "gowa-ui_SERVER__PORT must override file")
 }
 
 func TestLoad_EmptyConfigPathStillLoadsDefaults(t *testing.T) {
 	cfg, err := config.Load("")
 	require.NoError(t, err)
-	assert.Equal(t, "Whatomate", cfg.App.Name)
+	assert.Equal(t, "gowa-ui", cfg.App.Name)
 	assert.Equal(t, 8080, cfg.Server.Port)
 }
 
@@ -133,14 +133,14 @@ func TestLoad_RateLimitDefaults(t *testing.T) {
 }
 
 // TestLoad_EnvMapsMultiWordKeys is the regression for the embedded-signup bug
-// (whatomate#476): env vars for keys whose section OR field name contains an
+// (gowa-ui#476): env vars for keys whose section OR field name contains an
 // underscore must map correctly. Levels are separated by "__"; single
 // underscores stay part of the key. This exercises config.Load()'s env path,
 // which the handler-level tests bypass by setting the struct directly.
 func TestLoad_EnvMapsMultiWordKeys(t *testing.T) {
-	t.Setenv("WHATOMATE_DEFAULT_ADMIN__EMAIL", "admin@example.com")
-	t.Setenv("WHATOMATE_DATABASE__HOST", "db.internal")
-	t.Setenv("WHATOMATE_STORAGE__LOCAL_PATH", "/env/media")
+	t.Setenv("gowa-ui_DEFAULT_ADMIN__EMAIL", "admin@example.com")
+	t.Setenv("gowa-ui_DATABASE__HOST", "db.internal")
+	t.Setenv("gowa-ui_STORAGE__LOCAL_PATH", "/env/media")
 
 	cfg, err := config.Load("") // no file; env-only
 	require.NoError(t, err)
@@ -152,7 +152,7 @@ func TestLoad_EnvMapsMultiWordKeys(t *testing.T) {
 
 // TestLoad_GOWABasicAuthFields verifies the GOWA REST API Basic Auth
 // credentials (added so main.go can seed the GOWA factory from config)
-// load from both the TOML [gowa] section and the WHATOMATE_GOWA__ env vars.
+// load from both the TOML [gowa] section and the gowa-ui_GOWA__ env vars.
 func TestLoad_GOWABasicAuthFields(t *testing.T) {
 	t.Run("toml", func(t *testing.T) {
 		cfg, err := config.Load(writeConfig(t, `
@@ -166,8 +166,8 @@ password = "gowa-pass"
 	})
 
 	t.Run("env", func(t *testing.T) {
-		t.Setenv("WHATOMATE_GOWA__USERNAME", "env-gowa-user")
-		t.Setenv("WHATOMATE_GOWA__PASSWORD", "env-gowa-pass")
+		t.Setenv("gowa-ui_GOWA__USERNAME", "env-gowa-user")
+		t.Setenv("gowa-ui_GOWA__PASSWORD", "env-gowa-pass")
 
 		cfg, err := config.Load("")
 		require.NoError(t, err)

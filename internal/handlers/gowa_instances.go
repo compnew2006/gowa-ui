@@ -10,16 +10,16 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/shridarpatil/whatomate/internal/contactutil"
-	"github.com/shridarpatil/whatomate/internal/models"
-	"github.com/shridarpatil/whatomate/pkg/gowa"
+	"github.com/shridarpatil/gowa-ui/internal/contactutil"
+	"github.com/shridarpatil/gowa-ui/internal/models"
+	"github.com/shridarpatil/gowa-ui/pkg/gowa"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 	"gorm.io/gorm"
 )
 
 // rebaseGowaQRLink fixes GOWA returning a qr_link with an internal host
-// (e.g. "http://localhost:3000/statics/...") that whatomate cannot reach.
+// (e.g. "http://localhost:3000/statics/...") that gowa-ui cannot reach.
 // It keeps the path+query but swaps the scheme/host onto the instance's
 // configured BaseURL, so DownloadMedia hits the server the user actually
 // configured. If qrLink is relative or already on the right host, it is
@@ -340,7 +340,7 @@ func (a *App) ListGowaInstanceDevices(r *fastglue.Request) error {
 // paired (no JID assigned).
 //
 // This is required because GOWA webhooks send the connected JID as the
-// top-level device_id, while whatomate stores the device's custom id as
+// top-level device_id, while gowa-ui stores the device's custom id as
 // GowaDeviceID. The JID must be persisted as WhatsAppAccount.GowaJID for the
 // webhook resolver (getGowaAccountByDeviceID) to match incoming messages.
 func lookupGowaDeviceJID(ctx context.Context, client *gowa.Client, deviceID string) string {
@@ -459,7 +459,7 @@ func (a *App) ensureGowaAccountForDevice(orgID, userID uuid.UUID, opts ensureGow
 }
 
 // SyncGowaInstanceDevice backfills the WhatsAppAccount row for a device that
-// already exists on the GOWA server but has no account row in whatomate
+// already exists on the GOWA server but has no account row in gowa-ui
 // (e.g. devices created via the GOWA Servers UI before this fix). It reads the
 // device's current webhook config from GOWA so the stored secret matches what
 // GOWA is actually signing webhooks with.
@@ -539,7 +539,7 @@ func (a *App) SyncGowaInstanceDevice(r *fastglue.Request) error {
 // upserts the corresponding contact rows, so the Contacts page populates
 // immediately for a connected device instead of waiting for the next inbound
 // webhook. It is read-only with respect to GOWA (GET /chats) and idempotent
-// with respect to whatomate (reuses contactutil.GetOrCreateContact).
+// with respect to gowa-ui (reuses contactutil.GetOrCreateContact).
 //
 // POST /api/gowa/servers/{id}/devices/{deviceId}/sync-contacts
 func (a *App) SyncGowaInstanceDeviceContacts(r *fastglue.Request) error {
@@ -648,9 +648,9 @@ func (a *App) SyncGowaInstanceDeviceContacts(r *fastglue.Request) error {
 	})
 }
 
-// gowaMsgTypeToWhatomate maps a GOWA chat-message media_type to whatomate's
+// gowaMsgTypeToGowaUI maps a GOWA chat-message media_type to gowa-ui's
 // MessageType. Empty media_type means a plain-text message.
-func gowaMsgTypeToWhatomate(mediaType string) models.MessageType {
+func gowaMsgTypeToGowaUI(mediaType string) models.MessageType {
 	switch strings.ToLower(strings.TrimSpace(mediaType)) {
 	case "image":
 		return models.MessageTypeImage
@@ -771,7 +771,7 @@ func (a *App) CreateGowaInstanceDevice(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid request body", nil, "")
 	}
 	if req.DeviceName == "" {
-		req.DeviceName = "whatomate-device"
+		req.DeviceName = "gowa-ui-device"
 	}
 
 	ctx := context.Background()
@@ -880,7 +880,7 @@ func (a *App) GowaInstanceDeviceQR(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadGateway, "Failed to get QR code from GOWA", nil, "")
 	}
 	// GOWA returns a qr_link with its own internal host (often localhost:3000);
-	// rebase it onto the instance's configured BaseURL so whatomate can reach it.
+	// rebase it onto the instance's configured BaseURL so gowa-ui can reach it.
 	qrLink := rebaseGowaQRLink(qr.QRLink, bundle.instance.BaseURL)
 	qrData, err := bundle.client.DownloadMedia(ctx, qrLink, "")
 	if err != nil {

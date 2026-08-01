@@ -10,7 +10,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/shridarpatil/whatomate/pkg/whatsapp"
+	"github.com/shridarpatil/gowa-ui/pkg/whatsapp"
 )
 
 // UploadMedia caches raw bytes for inline sending.
@@ -49,7 +49,7 @@ func (c *Client) GetMediaURL(ctx context.Context, mediaID string, account *whats
 
 // DownloadMedia downloads media content from a URL (typically the file_url
 // returned by GOWA's download endpoint).
-// In the whatomate Meta flow, the handler calls GetMediaURL then DownloadMedia.
+// In the gowa-ui Meta flow, the handler calls GetMediaURL then DownloadMedia.
 // For GOWA, GetMediaURL returns the file_url and DownloadMedia fetches it.
 func (c *Client) DownloadMedia(ctx context.Context, mediaURL string, accessToken string) ([]byte, error) {
 	_ = accessToken // GOWA uses Basic Auth, not bearer tokens

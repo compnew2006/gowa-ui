@@ -1,4 +1,4 @@
-# Whatomate — Project Notes
+# Gowa-UI — Project Notes
 
 > The global feature workflow (Analyze → Explore → Plan → Verify → Execute)
 > lives in `~/.zcode/AGENTS.md` and applies here. This file adds

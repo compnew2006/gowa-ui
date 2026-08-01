@@ -34,7 +34,7 @@ COPY . .
 COPY --from=frontend-builder /app/frontend/dist/ ./internal/frontend/dist/
 
 # Build the binary
-RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -a -installsuffix cgo -o whatomate ./cmd/whatomate
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -a -installsuffix cgo -o gowa-ui ./cmd/gowa-ui
 
 # Piper TTS download stage — runs on BUILDPLATFORM (just wget+tar, no native exec),
 # selects the tarball matching TARGETARCH so the final image gets a binary that runs.
@@ -67,7 +67,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy binary from builder
-COPY --from=builder /app/whatomate .
+COPY --from=builder /app/gowa-ui .
 
 # Copy config example (will be overridden by env vars in production)
 COPY --from=builder /app/config.example.toml ./config.toml
@@ -93,5 +93,5 @@ EXPOSE 8080
 # only the default subcommand/flags. A Nomad job that sets
 # `args = ["server", "-migrate", ...]` (no `command`) then appends to the
 # entrypoint instead of replacing the binary with "server".
-ENTRYPOINT ["./whatomate"]
+ENTRYPOINT ["./gowa-ui"]
 CMD ["server", "-config", "config.toml", "-migrate"]

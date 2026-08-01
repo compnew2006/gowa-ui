@@ -7,8 +7,8 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"github.com/shridarpatil/whatomate/internal/middleware"
-	"github.com/shridarpatil/whatomate/internal/models"
+	"github.com/shridarpatil/gowa-ui/internal/middleware"
+	"github.com/shridarpatil/gowa-ui/internal/models"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 	"golang.org/x/crypto/bcrypt"
@@ -298,7 +298,7 @@ func (a *App) generateAccessToken(user *models.User) (string, error) {
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(a.Config.JWT.AccessExpiryMins) * time.Minute)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			Issuer:    "whatomate",
+			Issuer:    "gowa-ui",
 		},
 	}
 
@@ -320,7 +320,7 @@ func (a *App) generateRefreshToken(user *models.User) (string, error) {
 			ID:        jti,
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiry)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			Issuer:    "whatomate",
+			Issuer:    "gowa-ui",
 		},
 	}
 
@@ -504,7 +504,7 @@ func (a *App) GetWSToken(r *fastglue.Request) error {
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(30 * time.Second)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			Issuer:    "whatomate",
+			Issuer:    "gowa-ui",
 			Subject:   "ws",
 		},
 	}

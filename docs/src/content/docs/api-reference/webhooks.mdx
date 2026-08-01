@@ -7,11 +7,11 @@ import { Aside } from '@astrojs/starlight/components';
 
 ## Overview
 
-Whatomate receives inbound webhook events from a connected GOWA MultiDevice instance and processes them automatically. Each event is a single JSON `POST` to the GOWA webhook endpoint, signed with an HMAC over the raw request body. There is no GET challenge flow — verification is HMAC-only.
+Gowa-UI receives inbound webhook events from a connected GOWA MultiDevice instance and processes them automatically. Each event is a single JSON `POST` to the GOWA webhook endpoint, signed with an HMAC over the raw request body. There is no GET challenge flow — verification is HMAC-only.
 
 ## GOWA Webhook Configuration
 
-Whatomate exposes two webhook paths. Point your GOWA instance (or a per-device `webhook_url`) at one of them:
+Gowa-UI exposes two webhook paths. Point your GOWA instance (or a per-device `webhook_url`) at one of them:
 
 ```bash
 POST /api/gowa/webhook
@@ -35,7 +35,7 @@ The envelope is the same for every event. The top-level `event` field selects th
 }
 ```
 
-For non-message events the RFC3339/Unix timestamp lives at the top level (`timestamp`). For `message` events it lives inside `payload.timestamp`. Whatomate reads the right one based on `event`.
+For non-message events the RFC3339/Unix timestamp lives at the top level (`timestamp`). For `message` events it lives inside `payload.timestamp`. Gowa-UI reads the right one based on `event`.
 
 ### Incoming Message
 
@@ -228,7 +228,7 @@ Every inbound GOWA webhook is verified by an HMAC signature over the raw request
 2. Compute HMAC-SHA256 over the exact raw request body (the bytes on the wire — not re-serialized JSON) using the account's `webhook_secret`.
 3. Compare the computed digest against the header value using a constant-time comparison.
 
-Whatomate performs this verification automatically and fail-closed: a missing or mismatched signature returns `403 Webhook verification failed`. To prevent device enumeration, the same generic error is returned whether the failure is a bad signature or an unknown device.
+Gowa-UI performs this verification automatically and fail-closed: a missing or mismatched signature returns `403 Webhook verification failed`. To prevent device enumeration, the same generic error is returned whether the failure is a bad signature or an unknown device.
 
 <Aside type="caution">
   The HMAC is computed over the original raw body bytes. If a proxy or framework re-serializes the JSON before forwarding, the signature will no longer match. Preserve the body verbatim.
@@ -236,11 +236,11 @@ Whatomate performs this verification automatically and fail-closed: a missing or
 
 ### Replay Protection
 
-Whatomate rejects webhooks whose timestamp is older than 5 minutes (or more than 5 minutes in the future, to tolerate clock skew in either direction). For non-message events the timestamp is read from the top-level envelope; for `message` events it is read from `payload.timestamp`. A stale or unparseable timestamp is rejected fail-closed, but Whatomate still responds `200` so GOWA does not retry.
+Gowa-UI rejects webhooks whose timestamp is older than 5 minutes (or more than 5 minutes in the future, to tolerate clock skew in either direction). For non-message events the timestamp is read from the top-level envelope; for `message` events it is read from `payload.timestamp`. A stale or unparseable timestamp is rejected fail-closed, but Gowa-UI still responds `200` so GOWA does not retry.
 
 ### Rate Limiting
 
-GOWA may send webhooks at high volumes during campaigns. Whatomate:
+GOWA may send webhooks at high volumes during campaigns. Gowa-UI:
 
 - Processes webhooks asynchronously and responds `200` within GOWA's 10-second timeout
 - Queues events for processing

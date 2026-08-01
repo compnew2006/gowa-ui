@@ -5,11 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/shridarpatil/whatomate/internal/chatlifecycle"
-	"github.com/shridarpatil/whatomate/internal/config"
-	"github.com/shridarpatil/whatomate/internal/handlers"
-	"github.com/shridarpatil/whatomate/internal/queue"
-	"github.com/shridarpatil/whatomate/test/testutil"
+	"github.com/shridarpatil/gowa-ui/internal/chatlifecycle"
+	"github.com/shridarpatil/gowa-ui/internal/config"
+	"github.com/shridarpatil/gowa-ui/internal/handlers"
+	"github.com/shridarpatil/gowa-ui/internal/queue"
+	"github.com/shridarpatil/gowa-ui/test/testutil"
 )
 
 // appOption configures an App for testing.
@@ -62,7 +62,7 @@ func newTestApp(t *testing.T, opts ...appOption) *handlers.App {
 			Timeout: 30 * time.Second,
 		},
 	}
-	// Chat-lifecycle service — mirrors cmd/whatomate/main.go wiring so the
+	// Chat-lifecycle service — mirrors cmd/gowa-ui/main.go wiring so the
 	// ReleaseChat/ClaimChat/etc handlers have a real service to delegate to.
 	// wsHub is nil here (WS is verified at integration level, not in unit tests).
 	app.ChatLifecycle = chatlifecycle.New(db, nil, log)

@@ -1,6 +1,6 @@
-# دليل التثبيت الشامل — Whatomate + GOWA
+# دليل التثبيت الشامل — Gowa-UI + GOWA
 
-> دليل كامل (خطوة بخطوة) لتثبيت **Whatomate** على أي نظام تشغيل، وتنزيل وتشغيل خادم **GOWA** (خادم واتساب متعدد الأجهزة)، وربطهما معًا لعرض رسائل واتساب داخل Whatomate.
+> دليل كامل (خطوة بخطوة) لتثبيت **Gowa-UI** على أي نظام تشغيل، وتنزيل وتشغيل خادم **GOWA** (خادم واتساب متعدد الأجهزة)، وربطهما معًا لعرض رسائل واتساب داخل Gowa-UI.
 >
 > جميع الأوامر والقيم مأخوذة من الكود المصدري (Go 1.25، Node 22، PostgreSQL 17، Redis 7) وليست تخمينًا.
 
@@ -13,7 +13,7 @@
 3. [الطريقة السريعة: Docker (كل شيء بأمر واحد)](#3-الطريقة-السريعة-docker-كل-شيء-بأمر-واحد)
 4. [التثبيت اليدوي الكامل (Windows / macOS / Linux)](#4-التثبيت-اليدوي-الكامل-windows--macos--linux)
 5. [تنزيل وتشغيل GOWA (خادم واتساب)](#5-تنزيل-وتشغيل-gowa-خادم-واتساب)
-6. [ربط GOWA مع Whatomate وعرض الرسائل](#6-ربط-gowa-مع-whatomate-وعرض-الرسائل)
+6. [ربط GOWA مع Gowa-UI وعرض الرسائل](#6-ربط-gowa-مع-Gowa-UI-وعرض-الرسائل)
 7. [ملف الإعدادات الكامل `config.toml`](#7-ملف-الإعدادات-الكامل-configtoml)
 8. [حل المشكلات الشائعة](#8-حل-المشكلات-الشائعة)
 
@@ -23,7 +23,7 @@
 
 ```
 ┌─────────────┐        REST API + Basic Auth + X-Device-Id        ┌──────────────┐
-│  Whatomate  │ ◄──────────────────────────────────────────────► │     GOWA     │
+│  Gowa-UI  │ ◄──────────────────────────────────────────────► │     GOWA     │
 │  (Go + Vue) │                                                    │  (خادم واتساب)│
 │  :8080/:3000│  ◄── Webhook (POST /api/gowa/webhook/{device}) ── │   :3000      │
 └─────────────┘        HMAC-SHA256 signature + replay guard        └──────┬───────┘
@@ -35,11 +35,11 @@
 
 **النقاط الأساسية:**
 
-- **Whatomate** هو تطبيق الويب (Go backend + Vue frontend) الذي تتعامل معه — لإدارة جهات الاتصال، الحملات، الدردشة، التقارير.
-- **GOWA** هو **خادم منفصل** (مشروع خارجي باسم *WhatsApp API MultiDevice* v9.0.0) يعمل كجسر بين Whatomate وخادم واتساب الرسمي (واتساب متعدد الأجهزة). **لا يُشحن داخل Whatomate** — يجب تنزيله وتشغيله بشكل مستقل.
+- **Gowa-UI** هو تطبيق الويب (Go backend + Vue frontend) الذي تتعامل معه — لإدارة جهات الاتصال، الحملات، الدردشة، التقارير.
+- **GOWA** هو **خادم منفصل** (مشروع خارجي باسم *WhatsApp API MultiDevice* v9.0.0) يعمل كجسر بين Gowa-UI وخادم واتساب الرسمي (واتساب متعدد الأجهزة). **لا يُشحن داخل Gowa-UI** — يجب تنزيله وتشغيله بشكل مستقل.
 - **الاتصال** ثنائي الاتجاه:
-  - Whatomate → GOWA: عبر **REST API** (إرسال رسالة، طلب QR، مزامنة السجل) باستخدام Basic Auth ورأس `X-Device-Id`.
-  - GOWA → Whatomate: عبر **Webhook** — عندما تصل رسالة إلى واتساب، يرسلها GOWA إلى `POST /api/gowa/webhook/{device_id}` مع توقيع HMAC للتحقق.
+  - Gowa-UI → GOWA: عبر **REST API** (إرسال رسالة، طلب QR، مزامنة السجل) باستخدام Basic Auth ورأس `X-Device-Id`.
+  - GOWA → Gowa-UI: عبر **Webhook** — عندما تصل رسالة إلى واتساب، يرسلها GOWA إلى `POST /api/gowa/webhook/{device_id}` مع توقيع HMAC للتحقق.
 
 ---
 
@@ -130,12 +130,12 @@ choco install golang nodejs-lts postgresql17 redis-64 git make
 
 ## 3. الطريقة السريعة: Docker (كل شيء بأمر واحد)
 
-الأنسب للبدء السريع — تشغّل PostgreSQL + Redis + Whatomate معًا.
+الأنسب للبدء السريع — تشغّل PostgreSQL + Redis + Gowa-UI معًا.
 
 ```bash
 # 1. استنساخ المستودع
-git clone https://github.com/shridarpatil/whatomate.git
-cd whatomate
+git clone https://github.com/shridarpatil/Gowa-UI.git
+cd Gowa-UI
 
 # 2. نسخ ملفات الإعدادات وتعديلها
 cp config.example.toml docker/config.toml
@@ -155,7 +155,7 @@ open http://localhost:8080   # macOS
 
 > ⚠️ **غيّر كلمة مرور المدير فورًا** بعد أول تسجيل دخول من صفحة *Profile*.
 
-> 📝 **ملاحظة:** Docker يشغّل Whatomate + قاعدة البيانات + Redis فقط. **GOWA خادم منفصل** يجب تثبيته يدويًا (القسم 5) ثم ربطه (القسم 6).
+> 📝 **ملاحظة:** Docker يشغّل Gowa-UI + قاعدة البيانات + Redis فقط. **GOWA خادم منفصل** يجب تثبيته يدويًا (القسم 5) ثم ربطه (القسم 6).
 
 ---
 
@@ -165,8 +165,8 @@ open http://localhost:8080   # macOS
 
 ### الخطوة 1: استنساخ المستودع وإعداد الإعدادات
 ```bash
-git clone https://github.com/shridarpatil/whatomate.git
-cd whatomate
+git clone https://github.com/shridarpatil/Gowa-UI.git
+cd Gowa-UI
 cp config.example.toml config.toml
 # عدّل config.toml (القسم 7 يشرح كل الحقول)
 ```
@@ -174,20 +174,20 @@ cp config.example.toml config.toml
 ### الخطوة 2: إعداد PostgreSQL
 ```bash
 # إنشاء قاعدة البيانات
-createdb whatomate
+createdb Gowa-UI
 
 # أو يدويًا عبر psql (مع مستخدم مخصص):
-psql -c "CREATE USER whatomate WITH PASSWORD 'whatomate123';"
-psql -c "CREATE DATABASE whatomate OWNER whatomate;"
+psql -c "CREATE USER Gowa-UI WITH PASSWORD 'Gowa-UI123';"
+psql -c "CREATE DATABASE Gowa-UI OWNER Gowa-UI;"
 ```
 ثم حدّث `config.toml`:
 ```toml
 [database]
 host = "localhost"   # استخدم "db" مع Docker
 port = 5432
-user = "whatomate"
-password = "whatomate123"
-name = "whatomate"
+user = "Gowa-UI"
+password = "Gowa-UI123"
+name = "Gowa-UI"
 ssl_mode = "disable"  # "require" في الإنتاج إذا كان PostgreSQL يفرض TLS
 ```
 
@@ -236,7 +236,7 @@ npm run dev      # خادم التطوير على :3000
 ### بناء نسخة الإنتاج (Binary واحد)
 ```bash
 make build-prod
-./whatomate server -migrate
+./Gowa-UI server -migrate
 ```
 هذا يُنتج binary واحدًا (الـ frontend مضمّن بداخله) — لا حاجة لخادم frontend منفصل. الوصول على `http://localhost:8080`.
 
@@ -244,7 +244,7 @@ make build-prod
 
 ## 5. تنزيل وتشغيل GOWA (خادم واتساب)
 
-GOWA هو **خادم منفصل** (ليس جزءًا من binary الـ Whatomate). يتصل بخادم واتساب الرسمي عبر بروتوكول الأجهزة المتعددة، ويوفّر REST API + Webhook.
+GOWA هو **خادم منفصل** (ليس جزءًا من binary الـ Gowa-UI). يتصل بخادم واتساب الرسمي عبر بروتوكول الأجهزة المتعددة، ويوفّر REST API + Webhook.
 
 ### 5.1 الخيارات المتاحة لتشغيل GOWA
 
@@ -277,27 +277,27 @@ docker run -d \
 
 | المتغيّر | الواجب |
 |---|---|
-| `APP_BASIC_AUTH_USER` / `APP_BASIC_AUTH_PASSWORD` | بيانات Basic Auth — ستستخدمها لربط Whatomate (القسم 6). **نفس** القيم التي ستدخلها في واجهة Whatomate. |
-| `APP_WEBHOOK_URL` | عنوان webhook الخاص بـ Whatomate. على نفس الجهاز: `http://host.docker.internal:8080/api/gowa/webhook` (macOS/Windows). على Linux استخدم IP الـ host أو الشبكة المشتركة. |
-| `APP_WEBHOOK_SECRET` | سرّ HMAC المشترك — **يجب أن يطابق** ما ستضبطه في Whatomate لكل جهاز. يُستخدم لتوقيع الـ webhook (`X-Hub-Signature-256`). |
+| `APP_BASIC_AUTH_USER` / `APP_BASIC_AUTH_PASSWORD` | بيانات Basic Auth — ستستخدمها لربط Gowa-UI (القسم 6). **نفس** القيم التي ستدخلها في واجهة Gowa-UI. |
+| `APP_WEBHOOK_URL` | عنوان webhook الخاص بـ Gowa-UI. على نفس الجهاز: `http://host.docker.internal:8080/api/gowa/webhook` (macOS/Windows). على Linux استخدم IP الـ host أو الشبكة المشتركة. |
+| `APP_WEBHOOK_SECRET` | سرّ HMAC المشترك — **يجب أن يطابق** ما ستضبطه في Gowa-UI لكل جهاز. يُستخدم لتوقيع الـ webhook (`X-Hub-Signature-256`). |
 | `APP_UI_ENABLED` | `true` لعرض لوحة تحكم GOWA على المتصفّح. |
 | `-v gowa_data:/app/data` | حجم دائم لحفظ جلسات الأجهزة (حتى لا تحتاج لمسح QR عند كل إعادة تشغيل). |
 
-### 5.3 إذا كان Whatomate يعمل بـ Docker أيضًا
+### 5.3 إذا كان Gowa-UI يعمل بـ Docker أيضًا
 
 ضع GOWA على **نفس الشبكة** حتى يتواصلوا بأسماء الخدمات:
 ```bash
 # أنشئ شبكة مشتركة
-docker network create whatomate-net
+docker network create Gowa-UI-net
 
 # وصِل GOWA بها
-docker network connect whatomate-net gowa
+docker network connect Gowa-UI-net gowa
 
-# وصِل حاوية Whatomate بها أيضًا
-docker network connect whatomate-net whatomate-app
+# وصِل حاوية Gowa-UI بها أيضًا
+docker network connect Gowa-UI-net Gowa-UI-app
 
 # ثم APP_WEBHOOK_URL تصبح:
-#   http://whatomate-app:8080/api/gowa/webhook
+#   http://Gowa-UI-app:8080/api/gowa/webhook
 # وماومات سيتصل بـ GOWA عبر:  http://gowa:3000
 ```
 
@@ -309,11 +309,11 @@ curl -u gowa_admin:gowa_strong_password http://localhost:3000/health
 
 ---
 
-## 6. ربط GOWA مع Whatomate وعرض الرسائل
+## 6. ربط GOWA مع Gowa-UI وعرض الرسائل
 
-بعد أن يعمل Whatomate (القسم 3 أو 4) و GOWA (القسم 5)، اربطهما عبر واجهة Whatomate.
+بعد أن يعمل Gowa-UI (القسم 3 أو 4) و GOWA (القسم 5)، اربطهما عبر واجهة Gowa-UI.
 
-### الخطوة 1: تسجيل دخول المدير إلى Whatomate
+### الخطوة 1: تسجيل دخول المدير إلى Gowa-UI
 افتح `http://localhost:3000` (أو `:8080` في الإنتاج) وسجّل الدخول بـ `admin@admin.com` / `admin`.
 
 ### الخطوة 2: إضافة خادم GOWA
@@ -327,9 +327,9 @@ curl -u gowa_admin:gowa_strong_password http://localhost:3000/health
 | **Base URL** | عنوان REST API الخاص بـ GOWA | `http://localhost:3000` (أو `http://gowa:3000` على شبكة Docker مشتركة) |
 | **Username** | نفس `APP_BASIC_AUTH_USER` | `gowa_admin` |
 | **Password** | نفس `APP_BASIC_AUTH_PASSWORD` | `gowa_strong_password` |
-| **Webhook URL** (اختياري) | عنوان webhook Whatomate | `http://your-host:8080/api/gowa/webhook` |
+| **Webhook URL** (اختياري) | عنوان webhook Gowa-UI | `http://your-host:8080/api/gowa/webhook` |
 
-4. اضغط **Save**. سيحاول Whatomate **اختبار الاتصال** (probe) بالخادم قبل الحفظ — إن فشل، سيرفض ويعرض الخطأ.
+4. اضغط **Save**. سيحاول Gowa-UI **اختبار الاتصال** (probe) بالخادم قبل الحفظ — إن فشل، سيرفض ويعرض الخطأ.
 
 > 🔒 بيانات الاعتماد (Username/Password) تُخزّن **مشفّرة** في قاعدة البيانات (AES-256 باستخدام `app.encryption_key` من `config.toml`).
 
@@ -342,12 +342,12 @@ curl -u gowa_admin:gowa_strong_password http://localhost:3000/health
 > 💡 **بديل:** إن لم تتمكن من مسح QR، اضغط **Pair Code** للحصول على رمز رقمي تُدخله في هاتفك.
 
 ### الخطوة 4: ضبط Webhook Secret لكل جهاز
-لكل جهاز، هناك **سرّ webhook** منفصل يحقّق Whatomate منه التوقيع:
-1. في Whatomate: **Settings → Accounts** → اختر الحساب المرتبط بالجهاز.
+لكل جهاز، هناك **سرّ webhook** منفصل يحقّق Gowa-UI منه التوقيع:
+1. في Gowa-UI: **Settings → Accounts** → اختر الحساب المرتبط بالجهاز.
 2. اضبط **Webhook Secret** بنفس قيمة `APP_WEBHOOK_SECRET` التي ضبطتها في GOWA (القسم 5.2).
 3. احفظ. الآن كل webhook وارد من GOWA لهذا الجهاز سيتم التحقق منه عبر HMAC-SHA256 (ورفضه إن فشل التحقق أو كان أقدم من 5 دقائق — حماية من إعادة التشغيل).
 
-### الخطوة 5: عرض الرسائل في Whatomate
+### الخطوة 5: عرض الرسائل في Gowa-UI
 1. اذهب إلى **Chat** في الشريط الجانبي (`/chat`).
 2. ستظهر جهات الاتصال ومحادثاتها في القائمة.
 3. اضغط على أي محادثة — ستظهر **سجل الرسائل** (الواردة والصادرة، مع المُرسِل، المحتوى، والطابع الزمني).
@@ -363,7 +363,7 @@ GOWA (يستقبل الرسالة)
     ↓ POST /api/gowa/webhook/{device_id}
     ↓ الهيدر: X-Hub-Signature-256: sha256=<hmac>
     ↓ الجسم: {event, device_id, message, ...}
-Whatomate (يتحقق HMAC + الـ replay guard)
+Gowa-UI (يتحقق HMAC + الـ replay guard)
     ↓ يخزّن في PostgreSQL + ينشر حدث WebSocket
 المتصفح (يستقبل عبر WebSocket ويعرض الرسالة) ✅
 ```
@@ -376,7 +376,7 @@ Whatomate (يتحقق HMAC + الـ replay guard)
 
 ```toml
 [app]
-name = "Whatomate"
+name = "Gowa-UI"
 environment = "development"   # development | staging | production
 debug = true
 encryption_key = ""           # مفتاح AES-256 (32+ حرف) — مطلوب في الإنتاج لتشفير أسرار GOWA
@@ -392,9 +392,9 @@ allowed_origins = ""          # قائمة CORS مفصولة بفواصل (فا�
 [database]
 host = "localhost"            # "db" مع Docker
 port = 5432
-user = "whatomate"
-password = "whatomate"
-name = "whatomate"
+user = "Gowa-UI"
+password = "Gowa-UI"
+name = "Gowa-UI"
 ssl_mode = "disable"          # "require" في الإنتاج
 max_open_conns = 25
 max_idle_conns = 5
@@ -437,7 +437,7 @@ email = "admin@admin.com"
 password = "admin"
 full_name = "Admin"
 
-# === إعدادات GOWA (اختيارية — يمكن ضبطها بالكامل من واجهة Whatomate بدلًا من هنا) ===
+# === إعدادات GOWA (اختيارية — يمكن ضبطها بالكامل من واجهة Gowa-UI بدلًا من هنا) ===
 [gowa]
 base_url = ""                 # عنوان GOWA الافتراضي، مثال: "http://gowa:3000"
 webhook_path = "/api/gowa/webhook"
@@ -450,10 +450,10 @@ password = ""                 # Basic Auth password
 # base_url = "http://gowa:3000"
 # username = "gowa_admin"
 # password = "gowa_strong_password"
-# webhook_url = "http://whatomate:8080/api/gowa/webhook"
+# webhook_url = "http://Gowa-UI:8080/api/gowa/webhook"
 ```
 
-> 💡 **الخلاصة:** إعدادات `[gowa]` في الملف **اختيارية** — الطريقة الموصى بها هي إضافة الخوادم من واجهة Whatomate (القسم 6) لأنها تتيح إدارة عدة خوادم وتشفّر البيانات. استخدم الملف فقط للإعداد التلقائي (bootstrap) في الإنتاج.
+> 💡 **الخلاصة:** إعدادات `[gowa]` في الملف **اختيارية** — الطريقة الموصى بها هي إضافة الخوادم من واجهة Gowa-UI (القسم 6) لأنها تتيح إدارة عدة خوادم وتشفّر البيانات. استخدم الملف فقط للإعداد التلقائي (bootstrap) في الإنتاج.
 
 ---
 
@@ -463,15 +463,15 @@ password = ""                 # Basic Auth password
 |---|---|
 | `connection refused` (قاعدة البيانات) | تأكد أن PostgreSQL يعمل: `pg_isready`. مع Docker تأكد أن `host = "db"`. |
 | `connection refused` (Redis) | تأكد أن Redis يعمل: `redis-cli ping` يجب أن يردّ `PONG`. مع Docker استخدم `host = "redis"`. |
-| `database does not exist` | أنشئها: `createdb whatomate`. |
+| `database does not exist` | أنشئها: `createdb Gowa-UI`. |
 | `permission denied` (قاعدة البيانات) | تحقّق من `user`/`password` في `config.toml`. |
 | `port already in use` | غيّر `port` في `[server]` أو أوقف الخدمة المتضاربة. |
 | الواجهة لا تصل إلى الـ API | تأكد أن الـ backend يعمل على `:8080`. خادم Vite يوجّه `/api` تلقائيًا. |
-| **فشل إنشاء خادم GOWA في Whatomate** | الـ probe فشل — تحقّق أن GOWA يعمل (`curl -u user:pass http://localhost:3000/health`)، وأن `Base URL` و`Username`/`Password` صحيحة ومطابقة لبيانات GOWA. |
+| **فشل إنشاء خادم GOWA في Gowa-UI** | الـ probe فشل — تحقّق أن GOWA يعمل (`curl -u user:pass http://localhost:3000/health`)، وأن `Base URL` و`Username`/`Password` صحيحة ومطابقة لبيانات GOWA. |
 | **الـ QR لا يظهر / انتهت صلاحيته** | امسح الـ QR سريعًا (ينتهي خلال ~60 ثانية). أعِد توليده. تأكد أن هاتفك متصل بالإنترنت. |
-| **الرسائل لا تصل إلى Whatomate** | (1) تحقّق أن الجهاز **متصل** في صفحة GOWA Devices. (2) تحقّق أن `APP_WEBHOOK_URL` في GOWA يشير لعنوان Whatomate الصحيح القابل للوصول. (3) تحقّق أن **Webhook Secret** في Whatomate يطابق `APP_WEBHOOK_SECRET` في GOWA (توقيع HMAC). (4) راجع سجلات Whatomate بحثًا عن `GOWA webhook verification failed`. |
+| **الرسائل لا تصل إلى Gowa-UI** | (1) تحقّق أن الجهاز **متصل** في صفحة GOWA Devices. (2) تحقّق أن `APP_WEBHOOK_URL` في GOWA يشير لعنوان Gowa-UI الصحيح القابل للوصول. (3) تحقّق أن **Webhook Secret** في Gowa-UI يطابق `APP_WEBHOOK_SECRET` في GOWA (توقيع HMAC). (4) راجع سجلات Gowa-UI بحثًا عن `GOWA webhook verification failed`. |
 | **`Webhook verification failed` في السجلات** | السرّ غير متطابق، أو الـ signature مفقود. تأكد من تطابق السرّ بالضبط. كل مسارات الرفض ترجع نفس الرسالة (لأمان: لا يمكن للمهاجم تمييز جهاز غير مُعد عن سرّ خاطئ). |
-| **GOWA لا يصل إلى Whatomate (Docker)** | على شبكة Docker مشتركة، استخدم أسماء الحاويات (`http://whatomate-app:8080`) لا `localhost`. `host.docker.internal` يعمل على macOS/Windows فقط. |
+| **GOWA لا يصل إلى Gowa-UI (Docker)** | على شبكة Docker مشتركة، استخدم أسماء الحاويات (`http://Gowa-UI-app:8080`) لا `localhost`. `host.docker.internal` يعمل على macOS/Windows فقط. |
 | **فقدان الجلسة بعد إعادة تشغيل GOWA** | تأكد من استخدام حجم دائم (`-v gowa_data:/app/data`) كي تُحفظ جلسات الأجهزة ولا تحتاج لمسح QR مجددًا. |
 
 ---
@@ -479,8 +479,8 @@ password = ""                 # Basic Auth password
 ## ملخص سريع (للبدء فورًا)
 
 ```bash
-# 1. Whatomate عبر Docker
-git clone https://github.com/shridarpatil/whatomate.git && cd whatomate
+# 1. Gowa-UI عبر Docker
+git clone https://github.com/shridarpatil/Gowa-UI.git && cd Gowa-UI
 cp config.example.toml docker/config.toml && cp docker/.env.example docker/.env
 make docker-up
 
@@ -499,4 +499,4 @@ docker run -d --name gowa -p 3000:3000 -v gowa_data:/app/data \
 
 ---
 
-*هذا الدليل مبني على الكود المصدري لـ Whatomate (`go.mod`, `Dockerfile`, `config.example.toml`, `internal/config/config.go`, `internal/handlers/gowa_*.go`, `pkg/gowa/client.go`) ومواصفات GOWA OpenAPI (`docs/GOWA openapi.yaml`).*
+*هذا الدليل مبني على الكود المصدري لـ Gowa-UI (`go.mod`, `Dockerfile`, `config.example.toml`, `internal/config/config.go`, `internal/handlers/gowa_*.go`, `pkg/gowa/client.go`) ومواصفات GOWA OpenAPI (`docs/GOWA openapi.yaml`).*

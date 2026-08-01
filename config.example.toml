@@ -1,11 +1,11 @@
-# Whatomate Configuration
+# Gowa-UI Configuration
 # Copy this to config.toml and update values
 #
 # For Docker: use "db" and "redis" as hostnames
 # For local dev: use "localhost"
 
 [app]
-name = "Whatomate"
+name = "Gowa-UI"
 environment = "development"  # development, staging, production
 debug = true
 encryption_key = ""  # AES-256 key for encrypting secrets at rest (32+ chars, required in production)
@@ -21,9 +21,9 @@ allowed_origins = ""  # Comma-separated CORS origins (e.g., "https://app.example
 [database]
 host = "db"  # Use "localhost" for local development
 port = 5432
-user = "whatomate"
-password = "whatomate"
-name = "whatomate"
+user = "gowa-ui"
+password = "gowa-ui"
+name = "gowa-ui"
 ssl_mode = "disable"
 max_open_conns = 25
 max_idle_conns = 5

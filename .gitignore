@@ -1,6 +1,6 @@
 # Binaries
 /server
-/whatomate
+/gowa-ui
 bin/
 *.exe
 *.exe~

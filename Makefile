@@ -6,8 +6,8 @@ GOBUILD=$(GOCMD) build
 GOTEST=$(GOCMD) test
 GOGET=$(GOCMD) get
 GOMOD=$(GOCMD) mod
-BINARY_NAME=whatomate
-BINARY_PATH=./cmd/whatomate
+BINARY_NAME=gowa-ui
+BINARY_PATH=./cmd/gowa-ui
 VERSION?=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 BUILD_TIME=$(shell date -u '+%Y-%m-%d_%H:%M:%S')
 LDFLAGS=-ldflags "-s -w -X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME)"
@@ -137,7 +137,7 @@ fmt:
 
 # Generate swagger docs (if using)
 swagger:
-	swag init -g cmd/whatomate/main.go -o api/docs
+	swag init -g cmd/gowa-ui/main.go -o api/docs
 
 # Help
 help:

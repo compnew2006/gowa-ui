@@ -202,7 +202,7 @@ func ParseTimestamp(ts string) time.Time {
 // freshness window. It returns true if the timestamp is fresh (within ±maxAge
 // of the current time), and false if it is stale, missing (zero), or
 // unparseable. The window is symmetric to tolerate clock drift between the
-// GOWA server and whatomate in either direction.
+// GOWA server and gowa-ui in either direction.
 //
 // timestampStr is the raw string from the webhook payload (RFC3339 or Unix
 // epoch seconds as a string). If parsing fails, the webhook is rejected

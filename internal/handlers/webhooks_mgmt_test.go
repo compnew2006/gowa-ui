@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/shridarpatil/whatomate/internal/handlers"
-	"github.com/shridarpatil/whatomate/internal/models"
-	"github.com/shridarpatil/whatomate/test/testutil"
+	"github.com/shridarpatil/gowa-ui/internal/handlers"
+	"github.com/shridarpatil/gowa-ui/internal/models"
+	"github.com/shridarpatil/gowa-ui/test/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
@@ -614,7 +614,7 @@ func TestApp_TestWebhook_Success(t *testing.T) {
 	// Verify the mock server received the request
 	require.NotNil(t, receivedHeaders)
 	assert.Equal(t, "application/json", receivedHeaders.Get("Content-Type"))
-	assert.Equal(t, "Whatomate-Webhook/1.0", receivedHeaders.Get("User-Agent"))
+	assert.Equal(t, "Gowa-UI-Webhook/1.0", receivedHeaders.Get("User-Agent"))
 	// Custom header from webhook config
 	assert.Equal(t, "value", receivedHeaders.Get("X-Custom"))
 	// HMAC signature should be set since webhook has a secret

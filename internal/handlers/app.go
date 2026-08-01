@@ -9,11 +9,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
-	"github.com/shridarpatil/whatomate/internal/chatlifecycle"
-	"github.com/shridarpatil/whatomate/internal/config"
-	"github.com/shridarpatil/whatomate/internal/queue"
-	"github.com/shridarpatil/whatomate/internal/websocket"
-	"github.com/shridarpatil/whatomate/pkg/whatsapp"
+	"github.com/shridarpatil/gowa-ui/internal/chatlifecycle"
+	"github.com/shridarpatil/gowa-ui/internal/config"
+	"github.com/shridarpatil/gowa-ui/internal/queue"
+	"github.com/shridarpatil/gowa-ui/internal/websocket"
+	"github.com/shridarpatil/gowa-ui/pkg/whatsapp"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 	"github.com/zerodha/logf"
@@ -107,7 +107,7 @@ func (a *App) getOrgID(r *fastglue.Request) (uuid.UUID, error) {
 func (a *App) HealthCheck(r *fastglue.Request) error {
 	return r.SendEnvelope(map[string]string{
 		"status":  "ok",
-		"service": "whatomate",
+		"service": "gowa-ui",
 	})
 }
 

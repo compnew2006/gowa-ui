@@ -1,6 +1,6 @@
 <a href="https://zerodha.tech"><img src="https://zerodha.tech/static/images/github-badge.svg" align="right" alt="Zerodha Tech Badge" /></a>
 
-# Whatomate
+# Gowa-UI
 
 Modern, open-source WhatsApp Business Platform. Single binary app.
 
@@ -52,13 +52,13 @@ Modern, open-source WhatsApp Business Platform. Single binary app.
 
 ### Docker
 
-The latest image is available on Docker Hub at [`shridh0r/whatomate:latest`](https://hub.docker.com/r/shridh0r/whatomate)
+The latest image is available on Docker Hub at [`shridh0r/gowa-ui:latest`](https://hub.docker.com/r/shridh0r/gowa-ui)
 
 ```bash
 # Download compose file, sample config, and env file
-curl -LO https://raw.githubusercontent.com/shridarpatil/whatomate/main/docker/docker-compose.yml
-curl -LO https://raw.githubusercontent.com/shridarpatil/whatomate/main/config.example.toml
-curl -L https://raw.githubusercontent.com/shridarpatil/whatomate/main/docker/.env.example -o .env
+curl -LO https://raw.githubusercontent.com/shridarpatil/gowa-ui/main/docker/docker-compose.yml
+curl -LO https://raw.githubusercontent.com/shridarpatil/gowa-ui/main/config.example.toml
+curl -L https://raw.githubusercontent.com/shridarpatil/gowa-ui/main/docker/.env.example -o .env
 
 # Copy and edit config
 cp config.example.toml config.toml
@@ -74,14 +74,14 @@ __________________
 
 ### Binary
 
-Download the [latest release](https://github.com/shridarpatil/whatomate/releases) and extract the binary.
+Download the [latest release](https://github.com/shridarpatil/gowa-ui/releases) and extract the binary.
 
 ```bash
 # Copy and edit config
 cp config.example.toml config.toml
 
 # Run with migrations
-./whatomate server -migrate
+./gowa-ui server -migrate
 ```
 
 Go to `http://localhost:8080` and login with `admin@admin.com` / `admin`
@@ -91,23 +91,23 @@ __________________
 ### Build from Source
 
 ```bash
-git clone https://github.com/shridarpatil/whatomate.git
-cd whatomate
+git clone https://github.com/shridarpatil/gowa-ui.git
+cd gowa-ui
 
 # Production build (single binary with embedded frontend)
 make build-prod
-./whatomate server -migrate
+./gowa-ui server -migrate
 ```
 
-See [configuration docs](https://shridarpatil.github.io/whatomate/getting-started/configuration/) for detailed setup options.
+See [configuration docs](https://shridarpatil.github.io/gowa-ui/getting-started/configuration/) for detailed setup options.
 
 ## CLI Usage
 
 ```bash
-./whatomate server              # API + 1 worker (default)
-./whatomate server -workers=0   # API only
-./whatomate worker -workers=4   # Workers only (for scaling)
-./whatomate version             # Show version
+./gowa-ui server              # API + 1 worker (default)
+./gowa-ui server -workers=0   # API only
+./gowa-ui worker -workers=4   # Workers only (for scaling)
+./gowa-ui version             # Show version
 ```
 
 ## Developers

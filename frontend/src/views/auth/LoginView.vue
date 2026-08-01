@@ -29,7 +29,7 @@ const rememberMe = ref(false)
 const isLoading = ref(false)
 const ssoProviders = ref<SSOProvider[]>([])
 
-const REMEMBERED_CREDENTIALS_KEY = 'whatomate_remembered_credentials'
+const REMEMBERED_CREDENTIALS_KEY = 'gowa-ui_remembered_credentials'
 
 const loadRememberedCredentials = () => {
   try {

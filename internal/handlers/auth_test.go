@@ -7,9 +7,9 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"github.com/shridarpatil/whatomate/internal/middleware"
-	"github.com/shridarpatil/whatomate/internal/models"
-	"github.com/shridarpatil/whatomate/test/testutil"
+	"github.com/shridarpatil/gowa-ui/internal/middleware"
+	"github.com/shridarpatil/gowa-ui/internal/models"
+	"github.com/shridarpatil/gowa-ui/test/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
@@ -413,7 +413,7 @@ func TestApp_GeneratedTokensAreValid(t *testing.T) {
 	assert.Equal(t, org.ID, accessClaims.OrganizationID)
 	assert.Equal(t, user.Email, accessClaims.Email)
 	assert.Equal(t, user.RoleID, accessClaims.RoleID)
-	assert.Equal(t, "whatomate", accessClaims.Issuer)
+	assert.Equal(t, "gowa-ui", accessClaims.Issuer)
 
 	// Verify refresh token can be parsed
 	refreshToken, err := jwt.ParseWithClaims(refreshTokenStr, &middleware.JWTClaims{}, func(token *jwt.Token) (any, error) {

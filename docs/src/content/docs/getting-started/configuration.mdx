@@ -1,17 +1,17 @@
 ---
 title: Configuration
-description: Complete configuration reference for Whatomate
+description: Complete configuration reference for Gowa-UI
 ---
 
-Whatomate uses a TOML configuration file for all settings. By default, it looks for `config.toml` in the current directory; pass `-config /path/to/config.toml` to override.
+Gowa-UI uses a TOML configuration file for all settings. By default, it looks for `config.toml` in the current directory; pass `-config /path/to/config.toml` to override.
 
-A complete commented example lives in [`config.example.toml`](https://github.com/shridarpatil/whatomate/blob/main/config.example.toml) at the repository root — copy it to `config.toml` and edit. The reference below documents every section.
+A complete commented example lives in [`config.example.toml`](https://github.com/shridarpatil/Gowa-UI/blob/main/config.example.toml) at the repository root — copy it to `config.toml` and edit. The reference below documents every section.
 
 ## Configuration File
 
 ```toml
 [app]
-name = "Whatomate"
+name = "Gowa-UI"
 environment = "development"   # development, staging, production
 debug = true
 encryption_key = ""           # AES-256 key (32+ chars) for encrypting secrets at rest. Required in production.
@@ -27,9 +27,9 @@ allowed_origins = ""          # Comma-separated CORS origins. Empty = allow all 
 [database]
 host = "localhost"            # Use "db" inside Docker compose
 port = 5432
-user = "whatomate"
+user = "Gowa-UI"
 password = "your-password"
-name = "whatomate"
+name = "Gowa-UI"
 ssl_mode = "disable"          # disable, require, verify-ca, verify-full
 max_open_conns = 25
 max_idle_conns = 5
@@ -83,7 +83,7 @@ full_name = "Admin"
 
 | Field | Required | Notes |
 |---|---|---|
-| `name` | no | Display name. Defaults to `"Whatomate"`. |
+| `name` | no | Display name. Defaults to `"Gowa-UI"`. |
 | `environment` | yes | `development` \| `staging` \| `production`. Sets debug behavior, forces `cookie.secure=true` in production. |
 | `debug` | no | Verbose logging. |
 | `encryption_key` | **production** | AES-256 key used to encrypt access tokens, SSO client secrets, and other secrets at rest in the DB. Must be 32+ chars. Lose it and you lose stored credentials. |
@@ -94,7 +94,7 @@ full_name = "Admin"
 |---|---|
 | `host`, `port` | Default `0.0.0.0:8080`. |
 | `read_timeout`, `write_timeout` | Seconds. |
-| `base_path` | Leave empty unless serving at a sub-path (`https://app.example.com/whatomate`) behind a proxy. |
+| `base_path` | Leave empty unless serving at a sub-path (`https://app.example.com/Gowa-UI`) behind a proxy. |
 | `allowed_origins` | Comma-separated list, e.g. `"https://app.example.com,https://admin.example.com"`. **Empty allows all origins** — only safe in development. |
 
 ### `[database]`
@@ -154,31 +154,31 @@ Implemented as Redis fixed-window counters; failures hit Redis, so leaving rate 
 
 ### `[default_admin]`
 
-The credentials seeded the first time `whatomate server -migrate` runs against an empty user table. Subsequent runs are no-ops. Always change these on first login.
+The credentials seeded the first time `Gowa-UI server -migrate` runs against an empty user table. Subsequent runs are no-ops. Always change these on first login.
 
 ## Environment variables
 
 Any key in `config.toml` can be overridden by an environment variable. The mapping is:
 
 ```
-WHATOMATE_<SECTION>_<KEY>
+Gowa-UI_<SECTION>_<KEY>
 ```
 
 with underscores in `<KEY>` preserved. Examples:
 
 | Variable | TOML field |
 |---|---|
-| `WHATOMATE_APP_ENVIRONMENT` | `app.environment` |
-| `WHATOMATE_APP_ENCRYPTION_KEY` | `app.encryption_key` |
-| `WHATOMATE_DATABASE_HOST` | `database.host` |
-| `WHATOMATE_DATABASE_SSL_MODE` | `database.ssl_mode` |
-| `WHATOMATE_REDIS_HOST` | `redis.host` |
-| `WHATOMATE_REDIS_TLS` | `redis.tls` |
-| `WHATOMATE_JWT_SECRET` | `jwt.secret` |
-| `WHATOMATE_STORAGE_S3_BUCKET` | `storage.s3_bucket` |
-| `WHATOMATE_RATE_LIMIT_ENABLED` | `rate_limit.enabled` |
+| `Gowa-UI_APP_ENVIRONMENT` | `app.environment` |
+| `Gowa-UI_APP_ENCRYPTION_KEY` | `app.encryption_key` |
+| `Gowa-UI_DATABASE_HOST` | `database.host` |
+| `Gowa-UI_DATABASE_SSL_MODE` | `database.ssl_mode` |
+| `Gowa-UI_REDIS_HOST` | `redis.host` |
+| `Gowa-UI_REDIS_TLS` | `redis.tls` |
+| `Gowa-UI_JWT_SECRET` | `jwt.secret` |
+| `Gowa-UI_STORAGE_S3_BUCKET` | `storage.s3_bucket` |
+| `Gowa-UI_RATE_LIMIT_ENABLED` | `rate_limit.enabled` |
 
-| `WHATOMATE_DEFAULT_ADMIN_PASSWORD` | `default_admin.password` |
+| `Gowa-UI_DEFAULT_ADMIN_PASSWORD` | `default_admin.password` |
 
 Env vars take precedence over the config file, so the typical pattern is to commit a non-secret `config.toml` and inject secrets (`*_PASSWORD`, `*_KEY`, `*_SECRET`, `JWT_SECRET`) via the deployment environment.
 
@@ -190,16 +190,16 @@ Env vars take precedence over the config file, so the typical pattern is to comm
 
 ```bash
 # Create database
-createdb whatomate
+createdb Gowa-UI
 
 # Or using psql
-psql -c "CREATE DATABASE whatomate;"
+psql -c "CREATE DATABASE Gowa-UI;"
 ```
 
 ### Run Migrations
 
 ```bash
-./whatomate server -migrate
+./Gowa-UI server -migrate
 ```
 
 Schema is generated from GORM struct tags in `internal/models/`; there are no SQL migration files. Re-running with `-migrate` is safe — it adds new tables/columns and is a no-op for existing ones.
@@ -223,7 +223,7 @@ make build    # Backend only (no frontend embedded)
 
 For development, run the backend and frontend separately:
 
-- Backend: `make run-migrate` (or `./whatomate server -migrate`)
+- Backend: `make run-migrate` (or `./Gowa-UI server -migrate`)
 - Frontend: `cd frontend && npm run dev`
 
 The Vite dev server proxies `/api`, `/health`, `/ready`, and `/ws` to `:8080`. The `/health` and `/ready` routes live at the backend root (not under `/api`) and return JSON — without the proxy, a browser `GET /health` would hit the SPA fallback and serve `index.html` with a misleading 200 status.
@@ -242,7 +242,7 @@ make build-prod    # Single binary with embedded frontend
 ## CLI Reference
 
 ```bash
-./whatomate <command> [options]
+./Gowa-UI <command> [options]
 ```
 
 | Command | Description |
@@ -255,7 +255,7 @@ make build-prod    # Single binary with embedded frontend
 ### `server` options
 
 ```bash
-./whatomate server [options]
+./Gowa-UI server [options]
 
   -config string    Path to config file (default "config.toml")
   -migrate          Run database migrations on startup
@@ -265,7 +265,7 @@ make build-prod    # Single binary with embedded frontend
 ### `worker` options
 
 ```bash
-./whatomate worker [options]
+./Gowa-UI worker [options]
 
   -config string    Path to config file (default "config.toml")
   -workers int      Number of workers to run (default 1)
@@ -278,7 +278,7 @@ make build-prod    # Single binary with embedded frontend
 API and workers in a single process — simplest, fine up to moderate campaign volume:
 
 ```bash
-./whatomate server
+./Gowa-UI server
 ```
 
 ### Separate API and Workers
@@ -286,13 +286,13 @@ API and workers in a single process — simplest, fine up to moderate campaign v
 Disable embedded workers on the API host:
 
 ```bash
-./whatomate server -workers=0
+./Gowa-UI server -workers=0
 ```
 
 Run workers on separate machines:
 
 ```bash
-./whatomate worker -workers=4
+./Gowa-UI worker -workers=4
 ```
 
 Both API and worker processes need access to the same Postgres and Redis.

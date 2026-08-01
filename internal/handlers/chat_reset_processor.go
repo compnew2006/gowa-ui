@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/shridarpatil/whatomate/internal/models"
+	"github.com/shridarpatil/gowa-ui/internal/models"
 )
 
 // ChatResetProcessor runs the daily assigned-chat reset. It ticks every minute

@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"github.com/shridarpatil/whatomate/internal/models"
-	"github.com/shridarpatil/whatomate/pkg/gowa"
+	"github.com/shridarpatil/gowa-ui/internal/models"
+	"github.com/shridarpatil/gowa-ui/pkg/gowa"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 )
@@ -137,7 +137,7 @@ func (a *App) GowaCreateDevice(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "base_url is required", nil, "")
 	}
 	if req.DeviceName == "" {
-		req.DeviceName = "whatomate-device"
+		req.DeviceName = "gowa-ui-device"
 	}
 
 	// Find credentials for this instance, scoped to the caller's org.
@@ -151,9 +151,9 @@ func (a *App) GowaCreateDevice(r *fastglue.Request) error {
 
 	ctx := context.Background()
 
-	// Create the device on GOWA with webhook pointing back to whatomate.
+	// Create the device on GOWA with webhook pointing back to gowa-ui.
 	// Prefer the instance-configured webhook URL; fall back to deriving from
-	// the request host (works when GOWA and whatomate are on the same host).
+	// the request host (works when GOWA and gowa-ui are on the same host).
 	webhookURL := inst.WebhookURL
 	if webhookURL == "" {
 		webhookURL = fmt.Sprintf("%s://%s%s", "http", r.RequestCtx.Host(), a.Config.GOWA.WebhookPath)

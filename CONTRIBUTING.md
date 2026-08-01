@@ -1,4 +1,4 @@
-# Contributing to Whatomate
+# Contributing to Gowa-UI
 
 Thanks for your interest in contributing.
 
@@ -12,11 +12,11 @@ Thanks for your interest in contributing.
 ## Process
 
 - **Propose first (for large changes)**  
-  Open an issue describing what you want to build, why it fits Whatomate,
+  Open an issue describing what you want to build, why it fits Gowa-UI,
   and the high-level implementation approach.
 
 - **Keep PRs small**  
   Smaller, well-scoped PRs are easier to review and test.
   Bundling multiple features into a single PR is discouraged.
 
-Thanks for helping keep Whatomate focused and maintainable.
+Thanks for helping keep Gowa-UI focused and maintainable.

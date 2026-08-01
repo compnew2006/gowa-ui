@@ -235,7 +235,7 @@ async function confirmDelete() {
           </div>
           <div class="space-y-2">
             <Label>{{ $t('gowaServers.webhookUrl', 'Webhook URL (optional)') }}</Label>
-            <Input v-model="form.webhook_url" placeholder="https://whatomate.example.com/api/gowa/webhook" />
+            <Input v-model="form.webhook_url" placeholder="https://gowa-ui.example.com/api/gowa/webhook" />
           </div>
           <div class="flex items-center justify-between">
             <Label>{{ $t('gowaServers.isActive', 'Active') }}</Label>
