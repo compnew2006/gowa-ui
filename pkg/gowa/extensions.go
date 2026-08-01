@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/shridarpatil/gowa-ui/pkg/whatsapp"
+	"github.com/compnew2006/gowa-ui/pkg/whatsapp"
 )
 
 // MessageExtensions defines GOWA-native message operations that Meta Cloud API

@@ -3,7 +3,7 @@ package audit_test
 import (
 	"testing"
 
-	"github.com/shridarpatil/gowa-ui/internal/audit"
+	"github.com/compnew2006/gowa-ui/internal/audit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

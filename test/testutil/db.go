@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/shridarpatil/gowa-ui/internal/models"
+	"github.com/compnew2006/gowa-ui/internal/models"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"

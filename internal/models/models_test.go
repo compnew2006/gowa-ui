@@ -3,7 +3,7 @@ package models_test
 import (
 	"testing"
 
-	"github.com/shridarpatil/gowa-ui/internal/models"
+	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

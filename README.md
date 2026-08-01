@@ -52,13 +52,13 @@ Modern, open-source WhatsApp Business Platform. Single binary app.
 
 ### Docker
 
-The latest image is available on Docker Hub at [`shridh0r/gowa-ui:latest`](https://hub.docker.com/r/shridh0r/gowa-ui)
+The latest image is available on Docker Hub at [`compnew2006/gowa-ui:latest`](https://hub.docker.com/r/compnew2006/gowa-ui)
 
 ```bash
 # Download compose file, sample config, and env file
-curl -LO https://raw.githubusercontent.com/shridarpatil/gowa-ui/main/docker/docker-compose.yml
-curl -LO https://raw.githubusercontent.com/shridarpatil/gowa-ui/main/config.example.toml
-curl -L https://raw.githubusercontent.com/shridarpatil/gowa-ui/main/docker/.env.example -o .env
+curl -LO https://raw.githubusercontent.com/compnew2006/gowa-ui/main/docker/docker-compose.yml
+curl -LO https://raw.githubusercontent.com/compnew2006/gowa-ui/main/config.example.toml
+curl -L https://raw.githubusercontent.com/compnew2006/gowa-ui/main/docker/.env.example -o .env
 
 # Copy and edit config
 cp config.example.toml config.toml
@@ -74,7 +74,7 @@ __________________
 
 ### Binary
 
-Download the [latest release](https://github.com/shridarpatil/gowa-ui/releases) and extract the binary.
+Download the [latest release](https://github.com/compnew2006/gowa-ui/releases) and extract the binary.
 
 ```bash
 # Copy and edit config
@@ -91,7 +91,7 @@ __________________
 ### Build from Source
 
 ```bash
-git clone https://github.com/shridarpatil/gowa-ui.git
+git clone https://github.com/compnew2006/gowa-ui.git
 cd gowa-ui
 
 # Production build (single binary with embedded frontend)
@@ -99,7 +99,7 @@ make build-prod
 ./gowa-ui server -migrate
 ```
 
-See [configuration docs](https://shridarpatil.github.io/gowa-ui/getting-started/configuration/) for detailed setup options.
+See [configuration docs](https://compnew2006.github.io/gowa-ui/getting-started/configuration/) for detailed setup options.
 
 ## CLI Usage
 

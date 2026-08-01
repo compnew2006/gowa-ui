@@ -7,8 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/shridarpatil/gowa-ui/pkg/gowa"
-	"github.com/shridarpatil/gowa-ui/pkg/whatsapp"
+	"github.com/compnew2006/gowa-ui/pkg/gowa"
+	"github.com/compnew2006/gowa-ui/pkg/whatsapp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

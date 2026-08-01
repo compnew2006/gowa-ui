@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/shridarpatil/gowa-ui/internal/queue"
-	"github.com/shridarpatil/gowa-ui/test/testutil"
+	"github.com/compnew2006/gowa-ui/internal/queue"
+	"github.com/compnew2006/gowa-ui/test/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

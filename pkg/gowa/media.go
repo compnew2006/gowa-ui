@@ -10,7 +10,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/shridarpatil/gowa-ui/pkg/whatsapp"
+	"github.com/compnew2006/gowa-ui/pkg/whatsapp"
 )
 
 // UploadMedia caches raw bytes for inline sending.

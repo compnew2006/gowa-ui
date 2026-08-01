@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	appcrypto "github.com/shridarpatil/gowa-ui/internal/crypto"
-	"github.com/shridarpatil/gowa-ui/internal/models"
+	appcrypto "github.com/compnew2006/gowa-ui/internal/crypto"
+	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 	"golang.org/x/oauth2"

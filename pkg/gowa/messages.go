@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/shridarpatil/gowa-ui/pkg/whatsapp"
+	"github.com/compnew2006/gowa-ui/pkg/whatsapp"
 )
 
 // SendTextMessage sends a plain-text message via GOWA.

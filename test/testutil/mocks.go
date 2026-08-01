@@ -5,8 +5,8 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
-	"github.com/shridarpatil/gowa-ui/internal/queue"
-	"github.com/shridarpatil/gowa-ui/pkg/whatsapp"
+	"github.com/compnew2006/gowa-ui/internal/queue"
+	"github.com/compnew2006/gowa-ui/pkg/whatsapp"
 )
 
 // MockSentMessage records a message sent through the mock WhatsApp client.

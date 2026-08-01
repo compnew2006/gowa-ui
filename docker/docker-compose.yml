@@ -1,7 +1,7 @@
 services:
   # gowa-ui app
   app:
-    image: shridh0r/gowa-ui:latest
+    image: compnew2006/gowa-ui:latest
     container_name: gowa-ui_app
     restart: unless-stopped
     ports:

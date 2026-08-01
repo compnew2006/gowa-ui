@@ -134,8 +134,8 @@ choco install golang nodejs-lts postgresql17 redis-64 git make
 
 ```bash
 # 1. استنساخ المستودع
-git clone https://github.com/shridarpatil/Gowa-UI.git
-cd Gowa-UI
+git clone https://github.com/compnew2006/gowa-ui.git
+cd gowa-ui
 
 # 2. نسخ ملفات الإعدادات وتعديلها
 cp config.example.toml docker/config.toml
@@ -165,8 +165,8 @@ open http://localhost:8080   # macOS
 
 ### الخطوة 1: استنساخ المستودع وإعداد الإعدادات
 ```bash
-git clone https://github.com/shridarpatil/Gowa-UI.git
-cd Gowa-UI
+git clone https://github.com/compnew2006/gowa-ui.git
+cd gowa-ui
 cp config.example.toml config.toml
 # عدّل config.toml (القسم 7 يشرح كل الحقول)
 ```
@@ -480,7 +480,7 @@ password = ""                 # Basic Auth password
 
 ```bash
 # 1. Gowa-UI عبر Docker
-git clone https://github.com/shridarpatil/Gowa-UI.git && cd Gowa-UI
+git clone https://github.com/compnew2006/gowa-ui.git && cd gowa-ui
 cp config.example.toml docker/config.toml && cp docker/.env.example docker/.env
 make docker-up
 

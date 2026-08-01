@@ -104,7 +104,7 @@ docker_manifests:
 
 release:
   github:
-    owner: shridarpatil
+    owner: compnew2006
     name: gowa-ui
   draft: false
   prerelease: auto

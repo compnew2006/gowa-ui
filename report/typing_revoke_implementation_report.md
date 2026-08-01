@@ -112,7 +112,7 @@ method). Consequences observed during this run:
 EXIT: 0
 
 ########## 2. go vet ./internal/... ./pkg/gowa/... ./pkg/whatsapp/... ##########
-# github.com/shridarpatil/whatomate/internal/handlers_test
+# github.com/compnew2006/gowa-ui/internal/handlers_test
 vet: internal/handlers/gowa_webhook_test.go:46:35: provider.Name undefined
      (type whatsapp.Provider has no field or method Name)
    — PRE-EXISTING (committed test, not modified by this work; Provider
@@ -121,9 +121,9 @@ vet: internal/handlers/gowa_webhook_test.go:46:35: provider.Name undefined
 
 ########## 3. go test ./internal/handlers/... ./pkg/gowa/... ./pkg/whatsapp/... ##########
 internal/handlers/gowa_webhook_test.go:46/71/96: provider.Name undefined  (PRE-EXISTING, see above)
-FAIL  github.com/shridarpatil/whatomate/internal/handlers  [build failed]
-ok    github.com/shridarpatil/whatomate/pkg/gowa
-ok    github.com/shridarpatil/whatomate/pkg/whatsapp
+FAIL  github.com/compnew2006/gowa-ui/internal/handlers  [build failed]
+ok    github.com/compnew2006/gowa-ui/pkg/gowa
+ok    github.com/compnew2006/gowa-ui/pkg/whatsapp
 
 ########## 4. cd frontend && npm run typecheck ##########
 > vue-tsc --noEmit
@@ -136,7 +136,7 @@ files I did NOT touch (ChatView.vue / api.ts / contacts.ts / i18n are clean).
 ########## 6. My two GOWA target tests (fresh, -count=1) ##########
 --- PASS: TestRevokeMessage_PostsToRevokeEndpoint (0.00s)
 --- PASS: TestSendChatPresence_PostsToChatPresenceEndpoint (0.00s)
-ok  github.com/shridarpatil/whatomate/pkg/gowa
+ok  github.com/compnew2006/gowa-ui/pkg/gowa
 ```
 
 ## What the Auditor should scrutinize

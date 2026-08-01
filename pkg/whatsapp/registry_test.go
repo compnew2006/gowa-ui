@@ -3,9 +3,9 @@ package whatsapp_test
 import (
 	"testing"
 
-	"github.com/shridarpatil/gowa-ui/pkg/gowa"
-	"github.com/shridarpatil/gowa-ui/pkg/whatsapp"
-	"github.com/shridarpatil/gowa-ui/test/testutil"
+	"github.com/compnew2006/gowa-ui/pkg/gowa"
+	"github.com/compnew2006/gowa-ui/pkg/whatsapp"
+	"github.com/compnew2006/gowa-ui/test/testutil"
 	"github.com/stretchr/testify/assert"
 )
 

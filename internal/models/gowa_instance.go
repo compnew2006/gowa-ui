@@ -2,7 +2,7 @@ package models
 
 import (
 	"github.com/google/uuid"
-	"github.com/shridarpatil/gowa-ui/internal/crypto"
+	"github.com/compnew2006/gowa-ui/internal/crypto"
 )
 
 // GowaInstance is a DB-managed GOWA server (base_url + Basic Auth credentials)

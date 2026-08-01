@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/shridarpatil/gowa-ui/internal/models"
-	"github.com/shridarpatil/gowa-ui/internal/websocket"
+	"github.com/compnew2006/gowa-ui/internal/models"
+	"github.com/compnew2006/gowa-ui/internal/websocket"
 	"gorm.io/gorm/clause"
 )
 

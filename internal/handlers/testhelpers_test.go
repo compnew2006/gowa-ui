@@ -5,11 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/shridarpatil/gowa-ui/internal/chatlifecycle"
-	"github.com/shridarpatil/gowa-ui/internal/config"
-	"github.com/shridarpatil/gowa-ui/internal/handlers"
-	"github.com/shridarpatil/gowa-ui/internal/queue"
-	"github.com/shridarpatil/gowa-ui/test/testutil"
+	"github.com/compnew2006/gowa-ui/internal/chatlifecycle"
+	"github.com/compnew2006/gowa-ui/internal/config"
+	"github.com/compnew2006/gowa-ui/internal/handlers"
+	"github.com/compnew2006/gowa-ui/internal/queue"
+	"github.com/compnew2006/gowa-ui/test/testutil"
 )
 
 // appOption configures an App for testing.

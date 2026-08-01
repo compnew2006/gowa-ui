@@ -11,12 +11,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
-	"github.com/shridarpatil/gowa-ui/internal/config"
-	"github.com/shridarpatil/gowa-ui/internal/contactutil"
-	"github.com/shridarpatil/gowa-ui/internal/models"
-	"github.com/shridarpatil/gowa-ui/internal/queue"
-	"github.com/shridarpatil/gowa-ui/internal/templateutil"
-	"github.com/shridarpatil/gowa-ui/pkg/whatsapp"
+	"github.com/compnew2006/gowa-ui/internal/config"
+	"github.com/compnew2006/gowa-ui/internal/contactutil"
+	"github.com/compnew2006/gowa-ui/internal/models"
+	"github.com/compnew2006/gowa-ui/internal/queue"
+	"github.com/compnew2006/gowa-ui/internal/templateutil"
+	"github.com/compnew2006/gowa-ui/pkg/whatsapp"
 	"github.com/zerodha/logf"
 	"gorm.io/gorm"
 )

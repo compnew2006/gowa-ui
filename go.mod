@@ -1,4 +1,4 @@
-module github.com/shridarpatil/gowa-ui
+module github.com/compnew2006/gowa-ui
 
 go 1.25.0
 

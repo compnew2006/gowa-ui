@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/shridarpatil/gowa-ui/internal/models"
-	"github.com/shridarpatil/gowa-ui/pkg/gowa"
-	"github.com/shridarpatil/gowa-ui/pkg/whatsapp"
-	"github.com/shridarpatil/gowa-ui/test/testutil"
+	"github.com/compnew2006/gowa-ui/internal/models"
+	"github.com/compnew2006/gowa-ui/pkg/gowa"
+	"github.com/compnew2006/gowa-ui/pkg/whatsapp"
+	"github.com/compnew2006/gowa-ui/test/testutil"
 )
 
 // newProcessorTestApp creates a minimal App suitable for incoming-message

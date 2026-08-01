@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/shridarpatil/gowa-ui/internal/config"
-	"github.com/shridarpatil/gowa-ui/internal/models"
+	"github.com/compnew2006/gowa-ui/internal/config"
+	"github.com/compnew2006/gowa-ui/internal/models"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"

@@ -2,14 +2,14 @@ import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 
 export default defineConfig({
-  site: 'https://shridarpatil.github.io',
+  site: 'https://compnew2006.github.io',
   base: '/Gowa-UI',
   integrations: [
     starlight({
       title: 'Gowa-UI',
       description: 'A modern WhatsApp Business Platform',
       social: [
-        { icon: 'github', label: 'GitHub', href: 'https://github.com/shridarpatil/Gowa-UI' },
+        { icon: 'github', label: 'GitHub', href: 'https://github.com/compnew2006/gowa-ui' },
       ],
       sidebar: [
         {

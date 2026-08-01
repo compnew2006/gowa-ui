@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/shridarpatil/gowa-ui/internal/contactutil"
-	"github.com/shridarpatil/gowa-ui/internal/models"
+	"github.com/compnew2006/gowa-ui/internal/contactutil"
+	"github.com/compnew2006/gowa-ui/internal/models"
 )
 
 // IncomingTextMessage represents a text, interactive, or media message from the webhook

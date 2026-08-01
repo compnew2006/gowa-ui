@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/shridarpatil/gowa-ui/internal/config"
+	"github.com/compnew2006/gowa-ui/internal/config"
 )
 
 // NewRedis creates a new Redis client

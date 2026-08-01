@@ -1,10 +1,10 @@
 package handlers
 
 import (
-	"github.com/shridarpatil/gowa-ui/internal/config"
-	"github.com/shridarpatil/gowa-ui/internal/crypto"
-	"github.com/shridarpatil/gowa-ui/internal/models"
-	"github.com/shridarpatil/gowa-ui/pkg/gowa"
+	"github.com/compnew2006/gowa-ui/internal/config"
+	"github.com/compnew2006/gowa-ui/internal/crypto"
+	"github.com/compnew2006/gowa-ui/internal/models"
+	"github.com/compnew2006/gowa-ui/pkg/gowa"
 	"github.com/zerodha/logf"
 	"gorm.io/gorm"
 )

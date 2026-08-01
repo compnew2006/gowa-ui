@@ -2,7 +2,7 @@ package contactutil
 
 import (
 	"github.com/google/uuid"
-	"github.com/shridarpatil/gowa-ui/internal/models"
+	"github.com/compnew2006/gowa-ui/internal/models"
 	"gorm.io/gorm"
 )
 
