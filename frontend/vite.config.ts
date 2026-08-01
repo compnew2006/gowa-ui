@@ -62,6 +62,17 @@ export default defineConfig({
         target: 'http://localhost:8080',
         changeOrigin: true
       },
+      // Health/readiness live on the backend root (NOT under /api) and must
+      // return JSON, not the SPA fallback HTML. Without this, `GET /health`
+      // from the frontend serves index.html with a misleading 200.
+      '/health': {
+        target: 'http://localhost:8080',
+        changeOrigin: true
+      },
+      '/ready': {
+        target: 'http://localhost:8080',
+        changeOrigin: true
+      },
       '/ws': {
         target: 'ws://localhost:8080',
         ws: true

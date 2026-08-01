@@ -14,7 +14,8 @@ import {
   Shield,
   Tags,
   ScrollText,
-  Server
+  Server,
+  LayoutTemplate
 } from 'lucide-vue-next'
 import type { Component } from 'vue'
 
@@ -81,7 +82,7 @@ export const navigationSections: NavSection[] = [
   },
   {
     label: '',
-    permissions: ['settings.general', 'accounts', 'contacts', 'canned_responses', 'tags', 'teams', 'users', 'roles', 'api_keys', 'webhooks', 'custom_actions', 'settings.sso', 'audit_logs', 'gowa_instances'],
+    permissions: ['settings.general', 'accounts', 'contacts', 'canned_responses', 'tags', 'templates', 'teams', 'users', 'roles', 'api_keys', 'webhooks', 'custom_actions', 'settings.sso', 'audit_logs', 'gowa_instances'],
     pinBottom: true,
     items: [
       {
@@ -89,13 +90,14 @@ export const navigationSections: NavSection[] = [
         path: '/settings',
         icon: Settings,
         permission: 'settings.general',
-        childPermissions: ['settings.general', 'accounts', 'contacts', 'canned_responses', 'tags', 'teams', 'users', 'roles', 'api_keys', 'webhooks', 'custom_actions', 'settings.sso', 'audit_logs', 'gowa_instances'],
+        childPermissions: ['settings.general', 'accounts', 'contacts', 'canned_responses', 'tags', 'templates', 'teams', 'users', 'roles', 'api_keys', 'webhooks', 'custom_actions', 'settings.sso', 'audit_logs', 'gowa_instances'],
         children: [
           { name: 'nav.general', path: '/settings', icon: Settings, permission: 'settings.general' },
           { name: 'nav.accounts', path: '/settings/accounts', icon: Users, permission: 'accounts' },
           { name: 'nav.contacts', path: '/settings/contacts', icon: Contact, permission: 'contacts' },
           { name: 'nav.cannedResponses', path: '/settings/canned-responses', icon: MessageSquareText, permission: 'canned_responses' },
           { name: 'nav.tags', path: '/settings/tags', icon: Tags, permission: 'tags' },
+          { name: 'nav.templates', path: '/settings/templates', icon: LayoutTemplate, permission: 'templates' },
           { name: 'nav.teams', path: '/settings/teams', icon: Users, permission: 'teams' },
           { name: 'nav.users', path: '/settings/users', icon: Users, permission: 'users' },
           { name: 'nav.roles', path: '/settings/roles', icon: Shield, permission: 'roles' },

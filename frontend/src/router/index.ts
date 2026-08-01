@@ -144,6 +144,12 @@ const router = createRouter({
           meta: { permission: 'tags' }
         },
         {
+          path: 'settings/templates',
+          name: 'templates',
+          component: () => import('@/views/settings/TemplatesView.vue'),
+          meta: { permission: 'templates' }
+        },
+        {
           path: 'settings/users',
           name: 'users',
           component: () => import('@/views/settings/UsersView.vue'),
@@ -250,6 +256,7 @@ const navigationOrder = [
     { path: '/settings/canned-responses', permission: 'canned_responses' },
     { path: '/settings/contacts', permission: 'contacts' },
     { path: '/settings/tags', permission: 'tags' },
+    { path: '/settings/templates', permission: 'templates' },
     { path: '/settings/teams', permission: 'teams' },
     { path: '/settings/users', permission: 'users' },
     { path: '/settings/roles', permission: 'roles' },

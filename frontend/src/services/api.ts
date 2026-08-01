@@ -343,10 +343,34 @@ export const messagesService = {
     api.post(`/contacts/${contactId}/messages/${messageId}/revoke`)
 }
 
+export interface Template {
+  id: string
+  name: string
+  display_name?: string
+  language: string
+  category: string
+  whatsapp_account: string
+  header_type?: string
+  header_content?: string
+  body_content: string
+  footer_content?: string
+  buttons?: any[]
+  sample_values?: any[]
+  add_security_recommendation?: boolean
+  code_expiration_minutes?: number
+  created_by_name?: string
+  updated_by_name?: string
+  created_at: string
+  updated_at: string
+}
+
 export const templatesService = {
-  list: (params?: { status?: string; category?: string; account?: string; search?: string; page?: number; limit?: number }) =>
-    api.get<{ templates: any[]; total?: number }>('/templates', { params }),
-  get: (id: string) => api.get(`/templates/${id}`)
+  list: (params?: { category?: string; account?: string; search?: string; page?: number; limit?: number }) =>
+    api.get<{ templates: Template[]; total?: number; page?: number; limit?: number }>('/templates', { params }),
+  get: (id: string) => api.get(`/templates/${id}`),
+  create: (data: Partial<Template>) => api.post('/templates', data),
+  update: (id: string, data: Partial<Template>) => api.put(`/templates/${id}`, data),
+  delete: (id: string) => api.delete(`/templates/${id}`)
 }
 
 export const campaignsService = {
