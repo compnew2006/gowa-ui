@@ -226,7 +226,7 @@ For development, run the backend and frontend separately:
 - Backend: `make run-migrate` (or `./whatomate server -migrate`)
 - Frontend: `cd frontend && npm run dev`
 
-The Vite dev server proxies `/api` to `:8080`.
+The Vite dev server proxies `/api`, `/health`, `/ready`, and `/ws` to `:8080`. The `/health` and `/ready` routes live at the backend root (not under `/api`) and return JSON — without the proxy, a browser `GET /health` would hit the SPA fallback and serve `index.html` with a misleading 200 status.
 
 ### Production
 

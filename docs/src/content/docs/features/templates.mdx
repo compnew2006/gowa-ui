@@ -7,7 +7,56 @@ import { Card, CardGrid, Aside } from '@astrojs/starlight/components';
 
 ## Overview
 
-Templates are reusable message blueprints that let your team send consistent notifications, updates, and OTP messages. They are stored per organization and managed through the [Templates API](/api-reference/templates) — there is no external approval workflow.
+Templates are reusable message blueprints that let your team send consistent notifications, updates, and OTP messages. They are stored per organization and managed either through the **Settings → Templates** page in the UI or through the [Templates API](/api-reference/templates) — there is no external approval workflow.
+
+## Managing Templates (UI)
+
+<Aside type="note">
+  The Templates management page ships with the **`templates`** permission
+  (`read` / `write` / `delete`), which is seeded automatically and granted to
+  the **manager** and **admin** system roles. Agents don't see the page or the
+  sidebar link. See [Roles & Permissions](/features/roles-permissions).
+</Aside>
+
+Templates are managed at **Settings → Templates** (`/settings/templates`),
+reachable from the sidebar (between *Tags* and *Teams*). The page is a standard
+list view with search, server-side pagination, and sortable columns:
+
+| Column | Shows |
+|---|---|
+| **Template** | Display name (falls back to the normalized `name`) |
+| **Category** | `MARKETING` / `UTILITY` / `AUTHENTICATION` badge |
+| **Language** | ISO code (e.g. `EN`, `AR`) |
+| **WhatsApp Account** | The account the template belongs to |
+| **Updated** | Last-modified timestamp |
+| **Actions** | Edit / Delete (gated by `templates.write` / `templates.delete`) |
+
+### Create / edit a template
+
+The **Add Template** / **Edit Template** dialog collects:
+
+- **Name** `*` — normalized to `lowercase_with_underscores`; unique per
+  account + language.
+- **Display Name** — human-friendly label shown in the list and pickers.
+- **Category** `*` — `MARKETING`, `UTILITY`, or `AUTHENTICATION`.
+- **Language** `*` — e.g. `en`, `ar`.
+- **WhatsApp Account** `*` — which account the template belongs to.
+- **Header Type** — `NONE`, `TEXT`, `IMAGE`, `DOCUMENT`, `VIDEO`. The
+  **Header Content** text field appears only when `TEXT` is selected.
+- **Body Content** `*` — the message body with `{{1}}` / `{{name}}` placeholders
+  (see [Template Variables](#template-variables)).
+- **Footer Content** — optional footer text.
+
+Validation matches the API: `name`, `body_content`, `whatsapp_account`,
+`language`, and `category` are required; a duplicate (same account + name +
+language) is rejected with a 409.
+
+<Aside type="tip">
+  Editing a template does **not** retroactively change messages already sent
+  from it, and campaigns that reference it by `template_id` will pick up the
+  new content on their next send.
+</Aside>
+
 
 ## Template Structure
 
