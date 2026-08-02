@@ -1,0 +1,482 @@
+diff --git a/.agents/cc-skills-golang b/.agents/cc-skills-golang
+new file mode 160000
+index 00000000..3a823627
+--- /dev/null
++++ b/.agents/cc-skills-golang
+@@ -0,0 +1 @@
++Subproject commit 3a823627c6fac359a74b82bd9b5fc8f126a0e950
+diff --git a/.agents/vue-skills b/.agents/vue-skills
+new file mode 160000
+index 00000000..c9d355ff
+--- /dev/null
++++ b/.agents/vue-skills
+@@ -0,0 +1 @@
++Subproject commit c9d355ff23f654309dd02006be671859df0a134c
+diff --git a/.gitignore b/.gitignore
+index 5b8dbb6f..d88cf10b 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -66,7 +66,10 @@ audio/
+ # Test results
+ test-results/
+ 
+-# Docker 
++# Docker
+ docker/.env
+ 
++# GOWA sidecar local env (contains Basic Auth secret — see gowa/.env.example)
++gowa/.env
++
+ testsprite_tests/tmp/config.json
+diff --git a/cmd/gowa-ui/wiring.go b/cmd/gowa-ui/wiring.go
+index 0bbfdfa3..5743aca3 100644
+--- a/cmd/gowa-ui/wiring.go
++++ b/cmd/gowa-ui/wiring.go
+@@ -58,6 +58,13 @@ func loadAndValidateConfig(path string, lo logf.Logger) *config.Config {
+ 		lo.Warn("JWT secret is empty, using a random secret (tokens will not persist across restarts)")
+ 	}
+ 
++	// Validate encryption key (AES-256-GCM at rest — internal/crypto/crypto.go).
++	// Mirrors the JWT-secret guard above and enforces the contract already
++	// documented at config.example.toml: encryption_key (32+ chars, required in production).
++	if cfg.App.Environment == "production" && len(cfg.App.EncryptionKey) < 32 {
++		lo.Fatal("app.encryption_key must be at least 32 characters in production (used for AES-256-GCM at rest)")
++	}
++
+ 	// Warn if debug mode is on in production
+ 	if cfg.App.Environment == "production" && cfg.App.Debug {
+ 		lo.Warn("Debug mode is enabled in production! This may expose sensitive information.")
+@@ -68,6 +75,13 @@ func loadAndValidateConfig(path string, lo logf.Logger) *config.Config {
+ 		lo.Fatal("server.allowed_origins must be set in production (e.g. \"https://app.example.com\")")
+ 	}
+ 
++	// Require rate limiting in production (H5). Auth/SSO/API routes are otherwise
++	// unthrottled, exposing login brute-force and API abuse. Mirrors the JWT/CORS/
++	// encryption-key guards above; dev/staging are unaffected (gated on Environment).
++	if cfg.App.Environment == "production" && !cfg.RateLimit.Enabled {
++		lo.Fatal("rate_limit.enabled must be true in production (set [rate_limit] enabled = true in config.toml)")
++	}
++
+ 	return cfg
+ }
+ 
+diff --git a/config.example.toml b/config.example.toml
+index 9c39a2da..9904ab8b 100644
+--- a/config.example.toml
++++ b/config.example.toml
+@@ -53,7 +53,7 @@ secure = false # Set Secure flag on cookies. Auto-set true when environment=prod
+ 
+ # Rate limiting for auth endpoints (uses Redis fixed-window counters)
+ [rate_limit]
+-enabled = false                # Set to true to enable rate limiting
++enabled = false                # Set to true to enable rate limiting (REQUIRED true in production — see wiring.go)
+ login_max_attempts = 10        # Max login attempts per IP per window
+ register_max_attempts = 10     # Max register attempts per IP per window
+ refresh_max_attempts = 30      # Max token refresh attempts per IP per window
+diff --git a/gowa/.env b/gowa/.env.example
+similarity index 87%
+rename from gowa/.env
+rename to gowa/.env.example
+index d3ca16cd..39d7dbb5 100644
+--- a/gowa/.env
++++ b/gowa/.env.example
+@@ -1,6 +1,9 @@
+ # =============================================================================
+-# GOWA Server Configuration — Local Development
++# GOWA Server Configuration — Example Template (no real secrets)
+ # =============================================================================
++# Copy this file to `gowa/.env` and replace the placeholder values before use.
++# `gowa/.env` is gitignored and MUST NOT be committed — it contains the
++# GOWA sidecar's Basic Auth credential.
+ # Source: https://github.com/aldinokemal/go-whatsapp-web-multidevice
+ # Binary: whatsapp_9.0.0_darwin_arm64/darwin-arm64
+ # =============================================================================
+@@ -16,7 +19,8 @@ APP_OS=GOWA
+ # -----------------------------------------------------------------------------
+ # Authentication (Basic Auth)
+ # -----------------------------------------------------------------------------
+-APP_BASIC_AUTH=admin:admin123
++# Set a strong, unique credential. Never commit the real value.
++APP_BASIC_AUTH=user:change-me
+ 
+ # -----------------------------------------------------------------------------
+ # Database (SQLite — file-based, no external setup needed)
+@@ -56,7 +60,7 @@ CHATWOOT_ENABLED=false
+ # Webhook (optional — uncomment to forward events)
+ # -----------------------------------------------------------------------------
+ # WHATSAPP_WEBHOOK=https://your-callback.example.com/hook
+-# WHATSAPP_WEBHOOK_SECRET=super-secret-key
++# WHATSAPP_WEBHOOK_SECRET=change-me
+ # WHATSAPP_WEBHOOK_EVENTS=message,message.ack
+ 
+ # -----------------------------------------------------------------------------
+diff --git a/internal/handlers/auth.go b/internal/handlers/auth.go
+index 5220235e..b3ef0e51 100644
+--- a/internal/handlers/auth.go
++++ b/internal/handlers/auth.go
+@@ -229,9 +229,7 @@ func (a *App) RefreshToken(r *fastglue.Request) error {
+ 	}
+ 
+ 	// Parse and validate refresh token
+-	token, err := jwt.ParseWithClaims(refreshTokenStr, &middleware.JWTClaims{}, func(token *jwt.Token) (any, error) {
+-		return []byte(a.Config.JWT.Secret), nil
+-	})
++	token, err := jwt.ParseWithClaims(refreshTokenStr, &middleware.JWTClaims{}, middleware.HMACKeyFunc(a.Config.JWT.Secret))
+ 
+ 	if err != nil || !token.Valid {
+ 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid refresh token", nil, "")
+@@ -452,10 +450,10 @@ func (a *App) Logout(r *fastglue.Request) error {
+ 	}
+ 
+ 	if refreshTokenStr != "" {
+-		// Parse the token to extract JTI (don't need to fully validate — just extract claims)
+-		token, _ := jwt.ParseWithClaims(refreshTokenStr, &middleware.JWTClaims{}, func(token *jwt.Token) (any, error) {
+-			return []byte(a.Config.JWT.Secret), nil
+-		})
++		// Parse the token to extract JTI (don't need to fully validate — just extract claims).
++		// Alg is still pinned (H4) so a forged "alg:none" token cannot yield a parsed
++		// claims object used to delete a victim's JTI.
++		token, _ := jwt.ParseWithClaims(refreshTokenStr, &middleware.JWTClaims{}, middleware.HMACKeyFunc(a.Config.JWT.Secret))
+ 		if token != nil {
+ 			if claims, ok := token.Claims.(*middleware.JWTClaims); ok && claims.ID != "" {
+ 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+diff --git a/internal/handlers/conversation_notes.go b/internal/handlers/conversation_notes.go
+index a2af7553..a40b9e76 100644
+--- a/internal/handlers/conversation_notes.go
++++ b/internal/handlers/conversation_notes.go
+@@ -94,10 +94,13 @@ func (a *App) CreateConversationNote(r *fastglue.Request) error {
+ 		return nil
+ 	}
+ 
+-	contactID, err := parsePathUUID(r, "id", "contact")
+-	if err != nil {
++	// Verify the contact belongs to the caller's org before writing (M1).
++	// loadContactByPath parses {id}, scopes by org, and sends 404 on miss.
++	contact, ok := a.loadContactByPath(r, orgID)
++	if !ok {
+ 		return nil
+ 	}
++	contactID := contact.ID
+ 
+ 	var req ConversationNoteRequest
+ 	if err := a.decodeRequest(r, &req); err != nil {
+diff --git a/internal/handlers/conversation_notes_test.go b/internal/handlers/conversation_notes_test.go
+index fe5e4bbe..4f103b27 100644
+--- a/internal/handlers/conversation_notes_test.go
++++ b/internal/handlers/conversation_notes_test.go
+@@ -167,6 +167,65 @@ func TestApp_CreateConversationNote_PermissionDenied(t *testing.T) {
+ 	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req))
+ }
+ 
++// TestApp_CreateConversationNote_CrossOrgIsolation is the M1 regression: a
++// caller authed in org A must NOT be able to attach a note to a contact owned
++// by org B by guessing its {id}. Before the fix the path UUID was parsed
++// without an org scope, producing a mis-scoped (org-A-owned) row on org B's
++// contact. Now loadContactByPath scopes by org and returns 404, and no row is
++// created for org B's contact.
++func TestApp_CreateConversationNote_CrossOrgIsolation(t *testing.T) {
++	app := newTestApp(t)
++	orgA := testutil.CreateTestOrganization(t, app.DB)
++	orgB := testutil.CreateTestOrganization(t, app.DB)
++	roleA := chatRWRole(t, app.DB, orgA.ID)
++	userA := testutil.CreateTestUser(t, app.DB, orgA.ID, testutil.WithRoleID(&roleA.ID))
++	// Contact owned by org B — the cross-org target.
++	contactB := testutil.CreateTestContact(t, app.DB, orgB.ID)
++
++	// Caller in org A targets org B's contact.
++	req := testutil.NewJSONRequest(t, map[string]any{"content": "leaked note"})
++	testutil.SetAuthContext(req, orgA.ID, userA.ID)
++	testutil.SetPathParam(req, "id", contactB.ID.String())
++
++	require.NoError(t, app.CreateConversationNote(req))
++	testutil.AssertErrorResponse(t, req, fasthttp.StatusNotFound, "Contact not found")
++
++	// No ConversationNote row may exist for org B's contact (the pre-fix bug).
++	var noteCount int64
++	app.DB.Model(&models.ConversationNote{}).Where("contact_id = ?", contactB.ID).Count(&noteCount)
++	assert.Equal(t, int64(0), noteCount, "no note row must be created for the foreign-org contact")
++}
++
++// TestApp_CreateConversationNote_SameOrgRegression confirms the M1 fix did not
++// break the legitimate same-org create path: contact in org A, caller in org A
++// → 200, note created with the caller's org.
++func TestApp_CreateConversationNote_SameOrgRegression(t *testing.T) {
++	app := newTestApp(t)
++	orgA := testutil.CreateTestOrganization(t, app.DB)
++	roleA := chatRWRole(t, app.DB, orgA.ID)
++	userA := testutil.CreateTestUser(t, app.DB, orgA.ID, testutil.WithRoleID(&roleA.ID))
++	contactA := testutil.CreateTestContact(t, app.DB, orgA.ID)
++
++	req := testutil.NewJSONRequest(t, map[string]any{"content": "legit same-org note"})
++	testutil.SetAuthContext(req, orgA.ID, userA.ID)
++	testutil.SetPathParam(req, "id", contactA.ID.String())
++
++	require.NoError(t, app.CreateConversationNote(req))
++	require.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
++
++	var resp struct {
++		Data handlers.ConversationNoteResponse `json:"data"`
++	}
++	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
++	assert.Equal(t, contactA.ID, resp.Data.ContactID)
++	assert.Equal(t, userA.ID, resp.Data.CreatedByID)
++
++	// The persisted row must carry the caller's org (orgA), not be mis-scoped.
++	var got models.ConversationNote
++	require.NoError(t, app.DB.Where("id = ?", resp.Data.ID).First(&got).Error)
++	assert.Equal(t, orgA.ID, got.OrganizationID, "note must be scoped to the caller's org")
++}
++
+ // --- UpdateConversationNote ---
+ 
+ func TestApp_UpdateConversationNote_OnlyCreatorCanEdit(t *testing.T) {
+diff --git a/internal/handlers/messages.go b/internal/handlers/messages.go
+index 47138811..ae0676c9 100644
+--- a/internal/handlers/messages.go
++++ b/internal/handlers/messages.go
+@@ -30,6 +30,11 @@ import (
+ // Unified Message Sending
+ // ============================================================================
+ 
++// maxHeaderMediaBytes caps bytes read from a caller-supplied header_media_url
++// (SSRF/DoS bound). Mirrors the 16MB media-upload ceiling (maxMediaSize) in
++// campaigns.go for the same media domain.
++const maxHeaderMediaBytes = 16 << 20 // 16MB
++
+ // OutgoingMessageRequest contains all parameters for sending any type of message
+ type OutgoingMessageRequest struct {
+ 	// Required
+@@ -941,8 +946,19 @@ func (a *App) SendTemplateMessage(r *fastglue.Request) error {
+ 	var headerMimeType string
+ 	if template.HeaderType == "IMAGE" || template.HeaderType == "VIDEO" || template.HeaderType == "DOCUMENT" {
+ 		if req.HeaderMediaURL != "" {
+-			// Option 1: Download from URL
+-			resp, err := http.Get(req.HeaderMediaURL)
++			// SSRF guard (H1): validate URL shape + block internal IPs/hosts before
++			// fetch, then go through the shared SSRF-safe client (re-resolves DNS at
++			// dial time to defeat rebinding). Mirrors webhook/custom-action fetches.
++			if err := validateWebhookURL(req.HeaderMediaURL); err != nil {
++				return r.SendErrorEnvelope(fasthttp.StatusBadRequest,
++					fmt.Sprintf("Invalid header media URL: %v", err), nil, "")
++			}
++
++			httpReq, err := http.NewRequestWithContext(r.RequestCtx, http.MethodGet, req.HeaderMediaURL, nil)
++			if err != nil {
++				return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid header media URL", nil, "")
++			}
++			resp, err := a.HTTPClient.Do(httpReq)
+ 			if err != nil {
+ 				return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Failed to download header media from URL", nil, "")
+ 			}
+@@ -950,7 +966,8 @@ func (a *App) SendTemplateMessage(r *fastglue.Request) error {
+ 			if resp.StatusCode != http.StatusOK {
+ 				return r.SendErrorEnvelope(fasthttp.StatusBadRequest, fmt.Sprintf("Header media URL returned status %d", resp.StatusCode), nil, "")
+ 			}
+-			headerMediaData, err = io.ReadAll(resp.Body)
++			// Cap the download (H1 + DoS): same 16MB ceiling used by campaign media uploads.
++			headerMediaData, err = io.ReadAll(io.LimitReader(resp.Body, maxHeaderMediaBytes))
+ 			if err != nil {
+ 				a.Log.Error("Failed to read header media from URL", "error", err)
+ 				return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to read header media from URL", nil, "")
+diff --git a/internal/handlers/webhooks_internal_test.go b/internal/handlers/webhooks_internal_test.go
+new file mode 100644
+index 00000000..8da02971
+--- /dev/null
++++ b/internal/handlers/webhooks_internal_test.go
+@@ -0,0 +1,62 @@
++package handlers
++
++import (
++	"net/url"
++	"testing"
++)
++
++// TestValidateWebhookURL_SSRFGuard covers the structural SSRF guard (Fix 1, H1)
++// reused by SendTemplateMessage's header_media_url fetch and by the webhook /
++// custom-action fetches. It must reject schemes other than http/https and
++// block hostnames/IPs that resolve to private/loopback/link-local/unspecified
++// ranges, while accepting ordinary public URLs.
++//
++// This is a pure-function unit test (no HTTP / DB infra) — the runtime
++// DNS-rebinding defense is provided by SSRFSafeDialer on a.HTTPClient and is
++// exercised indirectly via the network layer, not here.
++func TestValidateWebhookURL_SSRFGuard(t *testing.T) {
++	t.Parallel()
++
++	tests := []struct {
++		name    string
++		url     string
++		wantErr bool
++	}{
++		// Scheme allowlist.
++		{"ftp scheme rejected", "ftp://example.com/x.png", true},
++		{"file scheme rejected", "file:///etc/passwd", true},
++		{"javascript scheme rejected", "javascript:alert(1)", true},
++
++		// Loopback / link-local / private IP literals (cloud metadata + localhost).
++		{"loopback v4 rejected", "http://127.0.0.1/x.png", true},
++		{"loopback v6 rejected", "http://[::1]/x.png", true},
++		{"aws metadata rejected", "http://169.254.169.254/latest/meta-data/", true},
++		{"private rfc1918 rejected", "http://10.0.0.1/x.png", true},
++		{"private rfc1918 rejected 2", "http://192.168.1.1/x.png", true},
++		{"private rfc1918 rejected 3", "http://172.16.0.1/x.png", true},
++
++		// Internal hostnames (the function's internal-hostname blocklist).
++		{"localhost rejected", "http://localhost/x.png", true},
++
++		// Valid public URLs (regression — must still pass).
++		{"public https accepted", "https://cdn.example.com/img.png", false},
++		{"public http accepted", "http://example.com/img.png", false},
++	}
++
++	for _, tc := range tests {
++		t.Run(tc.name, func(t *testing.T) {
++			t.Parallel()
++			err := validateWebhookURL(tc.url)
++			if tc.wantErr && err == nil {
++				t.Errorf("validateWebhookURL(%q) expected error, got nil", tc.url)
++			}
++			if !tc.wantErr && err != nil {
++				t.Errorf("validateWebhookURL(%q) expected no error, got %v", tc.url, err)
++			}
++			// Sanity: ensure the parsed URL is well-formed for non-empty inputs.
++			if _, perr := url.Parse(tc.url); perr != nil && !tc.wantErr {
++				t.Errorf("test case URL %q does not parse: %v", tc.url, perr)
++			}
++		})
++	}
++}
+diff --git a/internal/handlers/websocket.go b/internal/handlers/websocket.go
+index db16b1b1..5b8c1467 100644
+--- a/internal/handlers/websocket.go
++++ b/internal/handlers/websocket.go
+@@ -57,9 +57,7 @@ func (a *App) WebSocketHandler(r *fastglue.Request) error {
+ // and returns user ID and organization ID.
+ func (a *App) validateWSTokenFn() ws.AuthenticateFn {
+ 	return func(tokenString string) (uuid.UUID, uuid.UUID, error) {
+-		token, err := jwt.ParseWithClaims(tokenString, &middleware.JWTClaims{}, func(token *jwt.Token) (any, error) {
+-			return []byte(a.Config.JWT.Secret), nil
+-		})
++		token, err := jwt.ParseWithClaims(tokenString, &middleware.JWTClaims{}, middleware.HMACKeyFunc(a.Config.JWT.Secret))
+ 
+ 		if err != nil || !token.Valid {
+ 			return uuid.Nil, uuid.Nil, err
+diff --git a/internal/middleware/middleware.go b/internal/middleware/middleware.go
+index 83b61be9..eff2870b 100644
+--- a/internal/middleware/middleware.go
++++ b/internal/middleware/middleware.go
+@@ -2,6 +2,7 @@ package middleware
+ 
+ import (
+ 	"context"
++	"fmt"
+ 	"strings"
+ 	"time"
+ 
+@@ -36,6 +37,19 @@ type JWTClaims struct {
+ 	jwt.RegisteredClaims
+ }
+ 
++// HMACKeyFunc returns a jwt.Keyfunc that only accepts HMAC signing methods
++// and returns the given secret. Pinning the method prevents alg-confusion /
++// "alg=none" token forgery (H4). All gowa-ui issuers sign with HS256/HS384/HS512
++// (all *jwt.SigningMethodHMAC) — no RS/ES issuers exist in the tree.
++func HMACKeyFunc(secret string) jwt.Keyfunc {
++	return func(token *jwt.Token) (any, error) {
++		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
++			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
++		}
++		return []byte(secret), nil
++	}
++}
++
+ // RequestLogger logs incoming requests
+ func RequestLogger(log logf.Logger) fastglue.FastMiddleware {
+ 	return func(r *fastglue.Request) *fastglue.Request {
+@@ -164,9 +178,7 @@ func AuthWithDB(secret string, db *gorm.DB) fastglue.FastMiddleware {
+ 		}
+ 
+ 		// Parse and validate token
+-		token, err := jwt.ParseWithClaims(tokenString, &JWTClaims{}, func(token *jwt.Token) (any, error) {
+-			return []byte(secret), nil
+-		})
++		token, err := jwt.ParseWithClaims(tokenString, &JWTClaims{}, HMACKeyFunc(secret))
+ 
+ 		if err != nil || !token.Valid {
+ 			_ = r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid or expired token", nil, "")
+diff --git a/internal/middleware/middleware_test.go b/internal/middleware/middleware_test.go
+index 09e30b0b..f7ebb115 100644
+--- a/internal/middleware/middleware_test.go
++++ b/internal/middleware/middleware_test.go
+@@ -1,6 +1,8 @@
+ package middleware_test
+ 
+ import (
++	"encoding/base64"
++	"encoding/json"
+ 	"testing"
+ 	"time"
+ 
+@@ -573,3 +575,62 @@ func generateTokenWithSecret(t *testing.T, secret string) string {
+ 	require.NoError(t, err)
+ 	return tokenString
+ }
++
++// TestHMACKeyFunc_AlgorithmConfusion verifies HMACKeyFunc (H4) rejects
++// alg-confusion / "alg=none" forged tokens while still accepting valid HS256.
++// All gowa-ui issuers sign with HS256; the pin to *jwt.SigningMethodHMAC
++// blocks attackers submitting alg:none / RS256 to bypass the secret check.
++func TestHMACKeyFunc_AlgorithmConfusion(t *testing.T) {
++	t.Parallel()
++	secret := "super-secret-key-at-least-32-chars-long"
++	keyFunc := middleware.HMACKeyFunc(secret)
++
++	claims := jwt.RegisteredClaims{
++		ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
++		IssuedAt:  jwt.NewNumericDate(time.Now()),
++	}
++
++	t.Run("valid HS256 token accepted", func(t *testing.T) {
++		t.Parallel()
++		tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
++		signed, err := tok.SignedString([]byte(secret))
++		require.NoError(t, err)
++
++		parsed, err := jwt.ParseWithClaims(signed, &middleware.JWTClaims{}, keyFunc)
++		require.NoError(t, err)
++		assert.True(t, parsed.Valid)
++	})
++
++	t.Run("alg none token rejected", func(t *testing.T) {
++		t.Parallel()
++		// Build an unsigned token with alg:"none" — the classic alg-confusion forgery.
++		// jwt v5 refuses to produce one via SignedString, so construct the serialization
++		// by hand: header {"alg":"none","typ":"JWT"} + payload + empty signature.
++		header := `{"alg":"none","typ":"JWT"}`
++		payloadBytes, err := json.Marshal(claims)
++		require.NoError(t, err)
++		forged := base64.RawURLEncoding.EncodeToString([]byte(header)) + "." +
++			base64.RawURLEncoding.EncodeToString(payloadBytes) + "."
++
++		// jwt v5 returns a non-nil token (with Valid==false) alongside the error so
++		// callers can inspect headers; the security property is "not accepted as valid".
++		parsed, err := jwt.ParseWithClaims(forged, &middleware.JWTClaims{}, keyFunc)
++		require.Error(t, err)
++		if parsed != nil {
++			assert.False(t, parsed.Valid, "alg:none token must not be valid")
++		}
++	})
++
++	t.Run("HS256 wrong secret rejected", func(t *testing.T) {
++		t.Parallel()
++		tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
++		signed, err := tok.SignedString([]byte("completely-different-secret-32-chars"))
++		require.NoError(t, err)
++
++		parsed, err := jwt.ParseWithClaims(signed, &middleware.JWTClaims{}, keyFunc)
++		require.Error(t, err)
++		if parsed != nil {
++			assert.False(t, parsed.Valid, "wrong-secret token must not be valid")
++		}
++	})
++}

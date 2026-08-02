@@ -5,8 +5,8 @@ import (
 	"net/mail"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/models"
+	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 	"golang.org/x/crypto/bcrypt"
@@ -932,6 +932,11 @@ func (a *App) ChangePassword(r *fastglue.Request) error {
 		a.Log.Error("Failed to update password", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to change password", nil, "")
 	}
+
+	// H3: invalidate all of the user's outstanding access (and versioned refresh)
+	// tokens so other sessions must re-authenticate after a password change.
+	// Best-effort; only reached after the password save succeeded.
+	a.bumpTokenVersion(user.ID)
 
 	return r.SendEnvelope(map[string]string{"message": "Password changed successfully"})
 }

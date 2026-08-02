@@ -5,14 +5,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
+	"github.com/compnew2006/gowa-ui/internal/handlers"
 	"github.com/compnew2006/gowa-ui/internal/middleware"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/test/testutil"
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
+	"github.com/zerodha/fastglue"
 )
 
 func TestApp_Login_Success(t *testing.T) {
@@ -425,4 +427,150 @@ func TestApp_GeneratedTokensAreValid(t *testing.T) {
 	refreshClaims, ok := refreshToken.Claims.(*middleware.JWTClaims)
 	require.True(t, ok)
 	assert.Equal(t, user.ID, refreshClaims.UserID)
+}
+
+// authMiddlewareForTest wires AuthWithDBAndRedis exactly as routes.go does,
+// so H3 revocation is exercised through the production middleware path.
+func authMiddlewareForTest(app *handlers.App) fastglue.FastMiddleware {
+	return middleware.AuthWithDBAndRedis(testutil.TestJWTSecret, app.DB, app.Redis, testutil.NopLogger())
+}
+
+// TestLogout_BumpsTokenVersion (H3 end-to-end) proves that calling Logout
+// immediately invalidates the caller's outstanding access token via the
+// per-user token_version bump, not just at natural JWT expiry.
+//
+// Flow: Login → access token validates against AuthWithDBAndRedis →
+// Logout (presenting the refresh token) → the SAME access token is now
+// rejected with 401. Skips when Redis is unavailable (the bump lives in
+// Redis; without it the test cannot observe revocation).
+func TestLogout_BumpsTokenVersion(t *testing.T) {
+	app := newTestApp(t)
+	if app.Redis == nil {
+		t.Skip("TEST_REDIS_URL not set, skipping H3 revocation test")
+	}
+	org := testutil.CreateTestOrganization(t, app.DB)
+	email := testutil.UniqueEmail("logout-revoke")
+	password := "validpassword123"
+	testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(email), testutil.WithPassword(password))
+
+	// 1. Login to obtain real access + refresh tokens (production stamping path).
+	loginReq := testutil.NewJSONRequest(t, map[string]string{
+		"email":    email,
+		"password": password,
+	})
+	require.NoError(t, app.Login(loginReq))
+	require.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(loginReq))
+
+	accessToken := testutil.GetResponseCookie(loginReq, "whm_access")
+	refreshToken := testutil.GetResponseCookie(loginReq, "whm_refresh")
+	require.NotEmpty(t, accessToken)
+	require.NotEmpty(t, refreshToken)
+
+	// Sanity: the freshly-issued access token must pass the Redis-backed
+	// middleware before logout (version matches).
+	preReq := testutil.NewGETRequest(t)
+	testutil.SetAuthHeader(preReq, accessToken)
+	require.NotNil(t, authMiddlewareForTest(app)(preReq), "fresh access token must validate before logout")
+
+	// 2. Logout, presenting the refresh token via the whm_refresh cookie
+	//    (mirrors the browser flow). This must bump token_version:<user>.
+	logoutReq := testutil.NewRequest(t)
+	logoutReq.RequestCtx.Request.Header.SetCookie("whm_refresh", refreshToken)
+	logoutReq.RequestCtx.Request.Header.SetContentType("application/json")
+	require.NoError(t, app.Logout(logoutReq))
+	require.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(logoutReq))
+
+	// 3. The SAME access token must now be rejected (version is now stale).
+	postReq := testutil.NewGETRequest(t)
+	testutil.SetAuthHeader(postReq, accessToken)
+	result := authMiddlewareForTest(app)(postReq)
+	assert.Nil(t, result, "access token must be rejected after logout (H3 revocation)")
+	assert.Equal(t, fasthttp.StatusUnauthorized, postReq.RequestCtx.Response.StatusCode())
+}
+
+// TestLogout_BumpsTokenVersionViaAccessTokenCookie (H3, Reviewer note 1)
+// covers the fallback path: when no refresh token is presented, Logout
+// recovers the user identity from the whm_access cookie and still bumps the
+// version — so a client that only sends the access token is also revoked.
+func TestLogout_BumpsTokenVersionViaAccessTokenCookie(t *testing.T) {
+	app := newTestApp(t)
+	if app.Redis == nil {
+		t.Skip("TEST_REDIS_URL not set, skipping H3 revocation test")
+	}
+	org := testutil.CreateTestOrganization(t, app.DB)
+	email := testutil.UniqueEmail("logout-access-revoke")
+	password := "validpassword123"
+	testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(email), testutil.WithPassword(password))
+
+	loginReq := testutil.NewJSONRequest(t, map[string]string{
+		"email":    email,
+		"password": password,
+	})
+	require.NoError(t, app.Login(loginReq))
+	require.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(loginReq))
+
+	accessToken := testutil.GetResponseCookie(loginReq, "whm_access")
+	require.NotEmpty(t, accessToken)
+
+	preReq := testutil.NewGETRequest(t)
+	testutil.SetAuthHeader(preReq, accessToken)
+	require.NotNil(t, authMiddlewareForTest(app)(preReq), "fresh access token must validate before logout")
+
+	// Logout with ONLY the access-token cookie (no refresh token).
+	logoutReq := testutil.NewRequest(t)
+	logoutReq.RequestCtx.Request.Header.SetCookie("whm_access", accessToken)
+	logoutReq.RequestCtx.Request.Header.SetContentType("application/json")
+	require.NoError(t, app.Logout(logoutReq))
+	require.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(logoutReq))
+
+	postReq := testutil.NewGETRequest(t)
+	testutil.SetAuthHeader(postReq, accessToken)
+	result := authMiddlewareForTest(app)(postReq)
+	assert.Nil(t, result, "access token must be rejected after access-cookie-only logout")
+	assert.Equal(t, fasthttp.StatusUnauthorized, postReq.RequestCtx.Response.StatusCode())
+}
+
+// TestChangePassword_BumpsTokenVersion (H3) proves that a successful password
+// change invalidates the user's outstanding access token immediately, forcing
+// re-auth on all sessions.
+func TestChangePassword_BumpsTokenVersion(t *testing.T) {
+	app := newTestApp(t)
+	if app.Redis == nil {
+		t.Skip("TEST_REDIS_URL not set, skipping H3 revocation test")
+	}
+	org := testutil.CreateTestOrganization(t, app.DB)
+	email := testutil.UniqueEmail("changepass-revoke")
+	password := "validpassword123"
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(email), testutil.WithPassword(password))
+
+	// Mint an access token via Login (real stamping).
+	loginReq := testutil.NewJSONRequest(t, map[string]string{
+		"email":    email,
+		"password": password,
+	})
+	require.NoError(t, app.Login(loginReq))
+	require.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(loginReq))
+	accessToken := testutil.GetResponseCookie(loginReq, "whm_access")
+	require.NotEmpty(t, accessToken)
+
+	// Token valid before password change.
+	preReq := testutil.NewGETRequest(t)
+	testutil.SetAuthHeader(preReq, accessToken)
+	require.NotNil(t, authMiddlewareForTest(app)(preReq), "access token must validate before password change")
+
+	// Change the password (ChangePassword reads user_id from context).
+	cpReq := testutil.NewJSONRequest(t, map[string]string{
+		"current_password": password,
+		"new_password":     "brandnewpassword456",
+	})
+	testutil.SetAuthContext(cpReq, org.ID, user.ID)
+	require.NoError(t, app.ChangePassword(cpReq))
+	require.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(cpReq))
+
+	// The pre-change access token must now be rejected.
+	postReq := testutil.NewGETRequest(t)
+	testutil.SetAuthHeader(postReq, accessToken)
+	result := authMiddlewareForTest(app)(postReq)
+	assert.Nil(t, result, "access token must be rejected after password change (H3)")
+	assert.Equal(t, fasthttp.StatusUnauthorized, postReq.RequestCtx.Response.StatusCode())
 }

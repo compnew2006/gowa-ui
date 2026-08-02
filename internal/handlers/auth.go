@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/middleware"
 	"github.com/compnew2006/gowa-ui/internal/models"
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 	"golang.org/x/crypto/bcrypt"
@@ -293,6 +293,9 @@ func (a *App) generateAccessToken(user *models.User) (string, error) {
 		Email:          user.Email,
 		RoleID:         user.RoleID,
 		IsSuperAdmin:   user.IsSuperAdmin,
+		// H3: stamp the current revocation version so a later bump invalidates
+		// this token via middleware.AuthWithDBAndRedis.
+		TokenVersion: a.currentTokenVersion(user.ID),
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(a.Config.JWT.AccessExpiryMins) * time.Minute)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -314,6 +317,9 @@ func (a *App) generateRefreshToken(user *models.User) (string, error) {
 		Email:          user.Email,
 		RoleID:         user.RoleID,
 		IsSuperAdmin:   user.IsSuperAdmin,
+		// H3: version the refresh token too so bumpTokenVersion revokes it
+		// alongside access tokens (defense-in-depth on top of the JTI denylist).
+		TokenVersion: a.currentTokenVersion(user.ID),
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        jti,
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiry)),
@@ -341,6 +347,65 @@ func (a *App) generateRefreshToken(user *models.User) (string, error) {
 // refreshTokenKey returns the Redis key for a refresh token JTI.
 func refreshTokenKey(jti string) string {
 	return fmt.Sprintf("refresh:%s", jti)
+}
+
+// currentTokenVersion returns the user's current token-revocation version from
+// Redis (H3). It defaults to 0 when Redis is unavailable, the key is absent
+// (redis.Nil), or GET errors — matching the fail-open contract in
+// middleware.AuthWithDBAndRedis. The returned value is stamped into every
+// issued access/refresh token so a later bumpTokenVersion invalidates them.
+func (a *App) currentTokenVersion(userID uuid.UUID) int {
+	if a.Redis == nil {
+		return 0
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	v, err := a.Redis.Get(ctx, middleware.TokenVersionKey(userID)).Int()
+	if err != nil {
+		// redis.Nil (no key yet) or a real error → version 0 (fail-open).
+		return 0
+	}
+	return v
+}
+
+// bumpTokenVersion increments the user's token-revocation version in Redis
+// (H3), immediately invalidating every outstanding access and refresh token
+// stamped with a lower TokenVersion. Used by Logout and ChangePassword. It is
+// best-effort: a logging-only failure does NOT abort the caller, because the
+// caller's primary effect (cookie clear / password save / refresh-token Del)
+// must still take effect, and the access token expires within 15 minutes
+// regardless. The key has no TTL — see spec (version must persist across
+// Redis restarts; a fresh Redis reads as 0, matching newly-issued v0 tokens).
+func (a *App) bumpTokenVersion(userID uuid.UUID) {
+	if a.Redis == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := a.Redis.Incr(ctx, middleware.TokenVersionKey(userID)).Err(); err != nil {
+		a.Log.Error("Failed to bump token version", "error", err, "user_id", userID)
+	}
+}
+
+// userIDFromToken extracts the UserID claim from a JWT without enforcing its
+// validity beyond signature/alg (alg is pinned via HMACKeyFunc per H4). It is
+// used by Logout (an auth-skip route, so context user_id is NOT set by the
+// auth middleware) to identify whose token version to bump. Returns ok=false
+// when the token cannot be parsed or has no user_id — callers treat that as
+// "no identity, skip the bump" (idempotent).
+func userIDFromToken(tokenStr, secret string) (uuid.UUID, bool) {
+	if tokenStr == "" {
+		return uuid.Nil, false
+	}
+	token, _ := jwt.ParseWithClaims(tokenStr, &middleware.JWTClaims{}, middleware.HMACKeyFunc(secret))
+	if token == nil {
+		return uuid.Nil, false
+	}
+	claims, ok := token.Claims.(*middleware.JWTClaims)
+	if !ok || claims.UserID == uuid.Nil {
+		return uuid.Nil, false
+	}
+	return claims.UserID, true
 }
 
 // SwitchOrgRequest represents the request body for switching organization
@@ -439,7 +504,16 @@ type LogoutRequest struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
-// Logout invalidates the user's refresh token
+// Logout invalidates the user's refresh token and revokes all outstanding
+// access tokens for the user (H3) by bumping their token-revocation version.
+//
+// Note (Reviewer note 1): /api/auth/logout is on the auth-skip list
+// (routes.go), so the auth middleware did NOT populate context user_id. The
+// user identity is therefore recovered from the presented token itself:
+// prefer the refresh token (already parsed for JTI deletion), and fall back
+// to the access token in the whm_access cookie. If neither token is present
+// the caller is already effectively logged out client-side, so the bump is
+// skipped (idempotent) — the cookie clear below remains the primary effect.
 func (a *App) Logout(r *fastglue.Request) error {
 	// Read refresh token from cookie first, fall back to body.
 	refreshTokenStr := string(r.RequestCtx.Request.Header.Cookie(cookieRefreshName))
@@ -449,18 +523,38 @@ func (a *App) Logout(r *fastglue.Request) error {
 		refreshTokenStr = req.RefreshToken
 	}
 
+	// userID to revoke (H3). Captured from the refresh-token claims during the
+	// JTI deletion parse when possible, else parsed from the access cookie.
+	var revokeUserID uuid.UUID
+
 	if refreshTokenStr != "" {
 		// Parse the token to extract JTI (don't need to fully validate — just extract claims).
 		// Alg is still pinned (H4) so a forged "alg:none" token cannot yield a parsed
 		// claims object used to delete a victim's JTI.
 		token, _ := jwt.ParseWithClaims(refreshTokenStr, &middleware.JWTClaims{}, middleware.HMACKeyFunc(a.Config.JWT.Secret))
 		if token != nil {
-			if claims, ok := token.Claims.(*middleware.JWTClaims); ok && claims.ID != "" {
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				a.Redis.Del(ctx, refreshTokenKey(claims.ID))
+			if claims, ok := token.Claims.(*middleware.JWTClaims); ok {
+				revokeUserID = claims.UserID
+				if claims.ID != "" {
+					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+					defer cancel()
+					a.Redis.Del(ctx, refreshTokenKey(claims.ID))
+				}
 			}
 		}
+	}
+
+	// Fall back to the access token cookie if the refresh token didn't yield a user.
+	if revokeUserID == uuid.Nil {
+		if uid, ok := userIDFromToken(string(r.RequestCtx.Request.Header.Cookie(cookieAccessName)), a.Config.JWT.Secret); ok {
+			revokeUserID = uid
+		}
+	}
+
+	// H3: bump the per-user version so every outstanding access token (and the
+	// versioned refresh token) is rejected by AuthWithDBAndRedis. Best-effort.
+	if revokeUserID != uuid.Nil {
+		a.bumpTokenVersion(revokeUserID)
 	}
 
 	a.clearAuthCookies(r)

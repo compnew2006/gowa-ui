@@ -4,11 +4,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/compnew2006/gowa-ui/internal/config"
 	"github.com/compnew2006/gowa-ui/internal/frontend"
 	"github.com/compnew2006/gowa-ui/internal/handlers"
 	"github.com/compnew2006/gowa-ui/internal/middleware"
+	"github.com/redis/go-redis/v9"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 	"github.com/zerodha/logf"
@@ -180,9 +180,11 @@ func setupRouteMiddleware(g *fastglue.Fastglue, app *handlers.App, cfg *config.C
 		if len(path) >= 28 && path[:28] == "/api/custom-actions/redirect" {
 			return r
 		}
-		// Apply auth for all other /api routes (supports both JWT and API key)
+		// Apply auth for all other /api routes (supports both JWT and API key).
+		// AuthWithDBAndRedis wires the Redis client so the per-user token-version
+		// revocation check (H3) runs on every authenticated request.
 		if len(path) > 4 && path[:4] == "/api" {
-			return middleware.AuthWithDB(app.Config.JWT.Secret, app.DB)(r)
+			return middleware.AuthWithDBAndRedis(app.Config.JWT.Secret, app.DB, rdb, lo)(r)
 		}
 		return r
 	})

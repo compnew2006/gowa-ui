@@ -2,13 +2,16 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
+	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"github.com/compnew2006/gowa-ui/internal/models"
+	"github.com/redis/go-redis/v9"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 	"github.com/zerodha/logf"
@@ -34,7 +37,22 @@ type JWTClaims struct {
 	Email          string     `json:"email"`
 	RoleID         *uuid.UUID `json:"role_id,omitempty"`
 	IsSuperAdmin   bool       `json:"is_super_admin"`
+	// TokenVersion is the per-user revocation version stamped at issue time
+	// and compared against the Redis value held at TokenVersionKey(userID)
+	// on every authenticated request (H3: immediate access-token revocation
+	// on logout / password change). Backward compatible: legacy tokens and a
+	// fresh Redis both deserialize to 0, matching — no forced re-login on
+	// deploy. See AuthWithDBAndRedis for the fail-open policy.
+	TokenVersion int `json:"token_version,omitempty"`
 	jwt.RegisteredClaims
+}
+
+// TokenVersionKey is the single owner of the Redis key format for a user's
+// token-revocation version. It is exported so handlers (the write path:
+// currentTokenVersion / bumpTokenVersion) import the one canonical format,
+// avoiding key drift between the middleware read path and the handler writes.
+func TokenVersionKey(userID uuid.UUID) string {
+	return "token_version:" + userID.String()
 }
 
 // HMACKeyFunc returns a jwt.Keyfunc that only accepts HMAC signing methods
@@ -140,8 +158,36 @@ func Auth(secret string) fastglue.FastMiddleware {
 	return AuthWithDB(secret, nil)
 }
 
-// AuthWithDB validates both JWT tokens and API keys
+// nopLogger is a logf.Logger that discards everything. It is used by the
+// AuthWithDB wrapper (which has no caller-supplied logger) so the fail-open
+// warning path has a valid Logger to call without touching stderr in tests.
+var nopLogger = logf.New(logf.Opts{
+	Writer: io.Discard,
+	Level:  logf.ErrorLevel,
+})
+
+// AuthWithDB validates both JWT tokens and API keys. It is a thin wrapper
+// around AuthWithDBAndRedis that passes a nil Redis client, disabling the
+// token-version revocation check (fail-open). Existing callers and tests that
+// do not have a Redis client (e.g. middleware.Auth(secret)) keep working
+// unchanged; the live API wires Redis via AuthWithDBAndRedis in routes.go.
 func AuthWithDB(secret string, db *gorm.DB) fastglue.FastMiddleware {
+	return AuthWithDBAndRedis(secret, db, nil, nopLogger)
+}
+
+// AuthWithDBAndRedis validates both JWT tokens and API keys and, when a Redis
+// client is supplied, enforces per-user access-token revocation via the
+// TokenVersion claim (H3). After the token's signature/expiry are verified,
+// the claim's TokenVersion is compared to the integer stored at
+// TokenVersionKey(claims.UserID); on mismatch the request is rejected with 401.
+//
+// Fail-open policy (matches ratelimit.go): if Redis is nil (tests) or the
+// version GET errors / times out, the request is allowed through and a warning
+// is logged. Rationale and trade-offs are documented in the spec — primarily
+// that fail-closed would take the entire authenticated API down during a Redis
+// outage, an availability blast radius the project has already rejected
+// elsewhere, and that access tokens still expire within 15 minutes.
+func AuthWithDBAndRedis(secret string, db *gorm.DB, rdb *redis.Client, log logf.Logger) fastglue.FastMiddleware {
 	return func(r *fastglue.Request) *fastglue.Request {
 		authHeader := string(r.RequestCtx.Request.Header.Peek("Authorization"))
 		apiKey := string(r.RequestCtx.Request.Header.Peek("X-API-Key"))
@@ -189,6 +235,39 @@ func AuthWithDB(secret string, db *gorm.DB) fastglue.FastMiddleware {
 		if !ok {
 			_ = r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid token claims", nil, "")
 			return nil
+		}
+
+		// H3: enforce per-user access-token revocation. Compare the version
+		// stamped in the token against the current Redis value. rdb == nil
+		// (tests / AuthWithDB wrapper) skips the check entirely (fail-open).
+		if rdb != nil {
+			// Use context.Background() (not r.RequestCtx): a bare RequestCtx
+			// in tests is not fully initialized and its Done()/Deadline()
+			// panic. Background matches how generateRefreshToken and the rate
+			// limiter derive their Redis timeouts.
+			ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+			stored, err := rdb.Get(ctx, TokenVersionKey(claims.UserID)).Int()
+			cancel()
+			switch {
+			case errors.Is(err, redis.Nil):
+				// No version recorded for this user → treat as 0. A token
+				// stamped 0 (legacy or freshly issued before any bump)
+				// matches and is allowed; a token stamped >0 against an
+				// empty Redis (post-flush) is rejected as stale.
+				if claims.TokenVersion != 0 {
+					_ = r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid or expired token", nil, "")
+					return nil
+				}
+			case err != nil:
+				// Real Redis error / timeout → FAIL-OPEN (see spec): log a
+				// warning and allow the request. Bounded by 15-min expiry.
+				log.Error("token version check failed; failing open", "error", err, "user_id", claims.UserID)
+			default:
+				if stored != claims.TokenVersion {
+					_ = r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid or expired token", nil, "")
+					return nil
+				}
+			}
 		}
 
 		// Store claims in context

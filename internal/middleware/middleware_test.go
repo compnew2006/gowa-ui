@@ -1,15 +1,17 @@
 package middleware_test
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"testing"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/middleware"
 	"github.com/compnew2006/gowa-ui/test/testutil"
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
@@ -633,4 +635,166 @@ func TestHMACKeyFunc_AlgorithmConfusion(t *testing.T) {
 			assert.False(t, parsed.Valid, "wrong-secret token must not be valid")
 		}
 	})
+}
+
+// skipIfNoRedisMW returns a Redis client for tests, skipping when Redis is
+// unavailable. Mirrors the project's established pattern in
+// internal/queue/queue_test.go:20 (real Redis via testutil.SetupTestRedis,
+// skip if absent — the project deliberately does not depend on miniredis).
+func skipIfNoRedisMW(t *testing.T) *redis.Client {
+	t.Helper()
+	client := testutil.SetupTestRedis(t)
+	if client == nil {
+		t.Skip("TEST_REDIS_URL not set, skipping Redis-backed token-version test")
+	}
+	return client
+}
+
+// generateTestTokenWithVersion is generateTestToken with an explicit
+// TokenVersion claim, for H3 middleware tests.
+func generateTestTokenWithVersion(t *testing.T, userID, orgID uuid.UUID, roleID *uuid.UUID, tokenVersion int, expiry time.Duration) string {
+	t.Helper()
+	claims := middleware.JWTClaims{
+		UserID:         userID,
+		OrganizationID: orgID,
+		Email:          "test@example.com",
+		RoleID:         roleID,
+		TokenVersion:   tokenVersion,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiry)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+	}
+	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	s, err := tok.SignedString([]byte(testJWTSecret))
+	require.NoError(t, err)
+	return s
+}
+
+// TestAuthWithDBAndRedis_TokenVersion (H3) verifies the per-user access-token
+// revocation contract enforced by AuthWithDBAndRedis after the JWT signature
+// and expiry checks pass:
+//   - a token whose TokenVersion is below the Redis value is STALE → 401;
+//   - a token whose TokenVersion equals the Redis value is CURRENT → allowed;
+//   - the legacy AuthWithDB path (nil Redis) always passes (fail-open) so the
+//     7 existing middleware tests that use middleware.Auth stay green.
+//
+// The fail-open-on-Redis-error branch is matched to ratelimit.go's posture and
+// is exercised indirectly by every Auth(...) test in this file (nil Redis).
+func TestAuthWithDBAndRedis_TokenVersion(t *testing.T) {
+	t.Parallel()
+
+	log := testutil.NopLogger()
+	roleID := uuid.New()
+
+	t.Run("stale version rejected (401)", func(t *testing.T) {
+		t.Parallel()
+		rdb := skipIfNoRedisMW(t)
+
+		userID := uuid.New()
+		orgID := uuid.New()
+		ctx := context.Background()
+
+		// Redis says the user is at version 1 (e.g. they logged out / changed
+		// password after this token was minted at version 0).
+		require.NoError(t, rdb.Set(ctx, middleware.TokenVersionKey(userID), 1, 0).Err())
+		t.Cleanup(func() { rdb.Del(ctx, middleware.TokenVersionKey(userID)) })
+
+		token := generateTestTokenWithVersion(t, userID, orgID, &roleID, 0, time.Hour)
+		req := newTestRequest()
+		req.RequestCtx.Request.Header.Set("Authorization", "Bearer "+token)
+
+		result := middleware.AuthWithDBAndRedis(testJWTSecret, nil, rdb, log)(req)
+
+		assert.Nil(t, result, "stale token must be rejected")
+		assert.Equal(t, fasthttp.StatusUnauthorized, req.RequestCtx.Response.StatusCode())
+	})
+
+	t.Run("current version allowed", func(t *testing.T) {
+		t.Parallel()
+		rdb := skipIfNoRedisMW(t)
+
+		userID := uuid.New()
+		orgID := uuid.New()
+		ctx := context.Background()
+		require.NoError(t, rdb.Set(ctx, middleware.TokenVersionKey(userID), 1, 0).Err())
+		t.Cleanup(func() { rdb.Del(ctx, middleware.TokenVersionKey(userID)) })
+
+		token := generateTestTokenWithVersion(t, userID, orgID, &roleID, 1, time.Hour)
+		req := newTestRequest()
+		req.RequestCtx.Request.Header.Set("Authorization", "Bearer "+token)
+
+		result := middleware.AuthWithDBAndRedis(testJWTSecret, nil, rdb, log)(req)
+
+		require.NotNil(t, result, "current-version token must pass")
+		gotUserID, ok := result.RequestCtx.UserValue(middleware.ContextKeyUserID).(uuid.UUID)
+		require.True(t, ok)
+		assert.Equal(t, userID, gotUserID)
+	})
+
+	t.Run("no Redis key treats claim 0 as current", func(t *testing.T) {
+		t.Parallel()
+		rdb := skipIfNoRedisMW(t)
+
+		// A user with no token_version key (fresh Redis / never bumped) reads
+		// as version 0. A legacy or freshly-issued v0 token must match → allowed.
+		userID := uuid.New()
+		orgID := uuid.New()
+		ctx := context.Background()
+		t.Cleanup(func() { rdb.Del(ctx, middleware.TokenVersionKey(userID)) })
+
+		token := generateTestTokenWithVersion(t, userID, orgID, &roleID, 0, time.Hour)
+		req := newTestRequest()
+		req.RequestCtx.Request.Header.Set("Authorization", "Bearer "+token)
+
+		result := middleware.AuthWithDBAndRedis(testJWTSecret, nil, rdb, log)(req)
+		require.NotNil(t, result, "v0 token against empty Redis must pass (deploy-compatible)")
+	})
+
+	t.Run("post-bump version rejected", func(t *testing.T) {
+		t.Parallel()
+		rdb := skipIfNoRedisMW(t)
+
+		// Simulate INCR: token was minted at v0, then the user bumped to v1,
+		// then to v2. The v0 token must be rejected.
+		userID := uuid.New()
+		orgID := uuid.New()
+		ctx := context.Background()
+		require.NoError(t, rdb.Set(ctx, middleware.TokenVersionKey(userID), 2, 0).Err())
+		t.Cleanup(func() { rdb.Del(ctx, middleware.TokenVersionKey(userID)) })
+
+		token := generateTestTokenWithVersion(t, userID, orgID, &roleID, 0, time.Hour)
+		req := newTestRequest()
+		req.RequestCtx.Request.Header.Set("Authorization", "Bearer "+token)
+
+		result := middleware.AuthWithDBAndRedis(testJWTSecret, nil, rdb, log)(req)
+		assert.Nil(t, result, "token below current Redis version must be rejected")
+		assert.Equal(t, fasthttp.StatusUnauthorized, req.RequestCtx.Response.StatusCode())
+	})
+
+	// Regression: AuthWithDB (nil Redis) must still pass a valid token. This
+	// is the fail-open path every existing Auth(...) test relies on, made
+	// explicit here so the contract is documented alongside the H3 cases.
+	t.Run("nil Redis passes (fail-open regression)", func(t *testing.T) {
+		t.Parallel()
+		userID := uuid.New()
+		orgID := uuid.New()
+		// Even a non-zero TokenVersion must pass when Redis is nil — the
+		// check is skipped entirely (tests / AuthWithDB wrapper).
+		token := generateTestTokenWithVersion(t, userID, orgID, &roleID, 5, time.Hour)
+		req := newTestRequest()
+		req.RequestCtx.Request.Header.Set("Authorization", "Bearer "+token)
+
+		result := middleware.AuthWithDB(testJWTSecret, nil)(req)
+		require.NotNil(t, result, "nil Redis must fail open (pass)")
+	})
+}
+
+// TestTokenVersionKey_Format confirms the single owner of the key format
+// produces the documented string, so handlers (write path) and middleware
+// (read path) agree. Drift here would silently disable revocation.
+func TestTokenVersionKey_Format(t *testing.T) {
+	t.Parallel()
+	uid := uuid.MustParse("12345678-1234-1234-1234-123456789012")
+	assert.Equal(t, "token_version:12345678-1234-1234-1234-123456789012", middleware.TokenVersionKey(uid))
 }

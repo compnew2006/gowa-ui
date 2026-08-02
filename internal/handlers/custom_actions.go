@@ -14,9 +14,9 @@ import (
 
 	"fmt"
 
+	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/dop251/goja"
 	"github.com/google/uuid"
-	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 )
@@ -391,6 +391,15 @@ func (a *App) executeWebhookAction(action models.CustomAction, context map[strin
 
 	// Replace variables in URL
 	url := replaceVariables(config.URL, context)
+
+	// SSRF pre-check on the substituted URL (mirrors the save-time guard in
+	// validateActionConfig and the canonical H1 pattern in messages.go).
+	// Variable substitution happens at execution time, so the dialer-layer
+	// SSRFSafeDialer defense alone is not sufficient: a template that passes
+	// save-time validation can resolve to an internal address afterwards.
+	if err := validateWebhookURL(url); err != nil {
+		return nil, fmt.Errorf("webhook URL invalid: %w", err)
+	}
 
 	// Replace variables in headers
 	headers := make(map[string]string)
