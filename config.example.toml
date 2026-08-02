@@ -53,7 +53,7 @@ secure = false # Set Secure flag on cookies. Auto-set true when environment=prod
 
 # Rate limiting for auth endpoints (uses Redis fixed-window counters)
 [rate_limit]
-enabled = false                # Set to true to enable rate limiting
+enabled = false                # Set to true to enable rate limiting (REQUIRED true in production — see wiring.go)
 login_max_attempts = 10        # Max login attempts per IP per window
 register_max_attempts = 10     # Max register attempts per IP per window
 refresh_max_attempts = 30      # Max token refresh attempts per IP per window

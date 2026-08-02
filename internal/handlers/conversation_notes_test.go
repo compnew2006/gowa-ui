@@ -167,6 +167,65 @@ func TestApp_CreateConversationNote_PermissionDenied(t *testing.T) {
 	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req))
 }
 
+// TestApp_CreateConversationNote_CrossOrgIsolation is the M1 regression: a
+// caller authed in org A must NOT be able to attach a note to a contact owned
+// by org B by guessing its {id}. Before the fix the path UUID was parsed
+// without an org scope, producing a mis-scoped (org-A-owned) row on org B's
+// contact. Now loadContactByPath scopes by org and returns 404, and no row is
+// created for org B's contact.
+func TestApp_CreateConversationNote_CrossOrgIsolation(t *testing.T) {
+	app := newTestApp(t)
+	orgA := testutil.CreateTestOrganization(t, app.DB)
+	orgB := testutil.CreateTestOrganization(t, app.DB)
+	roleA := chatRWRole(t, app.DB, orgA.ID)
+	userA := testutil.CreateTestUser(t, app.DB, orgA.ID, testutil.WithRoleID(&roleA.ID))
+	// Contact owned by org B — the cross-org target.
+	contactB := testutil.CreateTestContact(t, app.DB, orgB.ID)
+
+	// Caller in org A targets org B's contact.
+	req := testutil.NewJSONRequest(t, map[string]any{"content": "leaked note"})
+	testutil.SetAuthContext(req, orgA.ID, userA.ID)
+	testutil.SetPathParam(req, "id", contactB.ID.String())
+
+	require.NoError(t, app.CreateConversationNote(req))
+	testutil.AssertErrorResponse(t, req, fasthttp.StatusNotFound, "Contact not found")
+
+	// No ConversationNote row may exist for org B's contact (the pre-fix bug).
+	var noteCount int64
+	app.DB.Model(&models.ConversationNote{}).Where("contact_id = ?", contactB.ID).Count(&noteCount)
+	assert.Equal(t, int64(0), noteCount, "no note row must be created for the foreign-org contact")
+}
+
+// TestApp_CreateConversationNote_SameOrgRegression confirms the M1 fix did not
+// break the legitimate same-org create path: contact in org A, caller in org A
+// → 200, note created with the caller's org.
+func TestApp_CreateConversationNote_SameOrgRegression(t *testing.T) {
+	app := newTestApp(t)
+	orgA := testutil.CreateTestOrganization(t, app.DB)
+	roleA := chatRWRole(t, app.DB, orgA.ID)
+	userA := testutil.CreateTestUser(t, app.DB, orgA.ID, testutil.WithRoleID(&roleA.ID))
+	contactA := testutil.CreateTestContact(t, app.DB, orgA.ID)
+
+	req := testutil.NewJSONRequest(t, map[string]any{"content": "legit same-org note"})
+	testutil.SetAuthContext(req, orgA.ID, userA.ID)
+	testutil.SetPathParam(req, "id", contactA.ID.String())
+
+	require.NoError(t, app.CreateConversationNote(req))
+	require.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp struct {
+		Data handlers.ConversationNoteResponse `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+	assert.Equal(t, contactA.ID, resp.Data.ContactID)
+	assert.Equal(t, userA.ID, resp.Data.CreatedByID)
+
+	// The persisted row must carry the caller's org (orgA), not be mis-scoped.
+	var got models.ConversationNote
+	require.NoError(t, app.DB.Where("id = ?", resp.Data.ID).First(&got).Error)
+	assert.Equal(t, orgA.ID, got.OrganizationID, "note must be scoped to the caller's org")
+}
+
 // --- UpdateConversationNote ---
 
 func TestApp_UpdateConversationNote_OnlyCreatorCanEdit(t *testing.T) {

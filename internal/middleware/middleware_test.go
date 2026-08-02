@@ -1,6 +1,8 @@
 package middleware_test
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -572,4 +574,63 @@ func generateTokenWithSecret(t *testing.T, secret string) string {
 	tokenString, err := token.SignedString([]byte(secret))
 	require.NoError(t, err)
 	return tokenString
+}
+
+// TestHMACKeyFunc_AlgorithmConfusion verifies HMACKeyFunc (H4) rejects
+// alg-confusion / "alg=none" forged tokens while still accepting valid HS256.
+// All gowa-ui issuers sign with HS256; the pin to *jwt.SigningMethodHMAC
+// blocks attackers submitting alg:none / RS256 to bypass the secret check.
+func TestHMACKeyFunc_AlgorithmConfusion(t *testing.T) {
+	t.Parallel()
+	secret := "super-secret-key-at-least-32-chars-long"
+	keyFunc := middleware.HMACKeyFunc(secret)
+
+	claims := jwt.RegisteredClaims{
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+		IssuedAt:  jwt.NewNumericDate(time.Now()),
+	}
+
+	t.Run("valid HS256 token accepted", func(t *testing.T) {
+		t.Parallel()
+		tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+		signed, err := tok.SignedString([]byte(secret))
+		require.NoError(t, err)
+
+		parsed, err := jwt.ParseWithClaims(signed, &middleware.JWTClaims{}, keyFunc)
+		require.NoError(t, err)
+		assert.True(t, parsed.Valid)
+	})
+
+	t.Run("alg none token rejected", func(t *testing.T) {
+		t.Parallel()
+		// Build an unsigned token with alg:"none" — the classic alg-confusion forgery.
+		// jwt v5 refuses to produce one via SignedString, so construct the serialization
+		// by hand: header {"alg":"none","typ":"JWT"} + payload + empty signature.
+		header := `{"alg":"none","typ":"JWT"}`
+		payloadBytes, err := json.Marshal(claims)
+		require.NoError(t, err)
+		forged := base64.RawURLEncoding.EncodeToString([]byte(header)) + "." +
+			base64.RawURLEncoding.EncodeToString(payloadBytes) + "."
+
+		// jwt v5 returns a non-nil token (with Valid==false) alongside the error so
+		// callers can inspect headers; the security property is "not accepted as valid".
+		parsed, err := jwt.ParseWithClaims(forged, &middleware.JWTClaims{}, keyFunc)
+		require.Error(t, err)
+		if parsed != nil {
+			assert.False(t, parsed.Valid, "alg:none token must not be valid")
+		}
+	})
+
+	t.Run("HS256 wrong secret rejected", func(t *testing.T) {
+		t.Parallel()
+		tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+		signed, err := tok.SignedString([]byte("completely-different-secret-32-chars"))
+		require.NoError(t, err)
+
+		parsed, err := jwt.ParseWithClaims(signed, &middleware.JWTClaims{}, keyFunc)
+		require.Error(t, err)
+		if parsed != nil {
+			assert.False(t, parsed.Valid, "wrong-secret token must not be valid")
+		}
+	})
 }

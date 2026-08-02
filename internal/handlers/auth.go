@@ -229,9 +229,7 @@ func (a *App) RefreshToken(r *fastglue.Request) error {
 	}
 
 	// Parse and validate refresh token
-	token, err := jwt.ParseWithClaims(refreshTokenStr, &middleware.JWTClaims{}, func(token *jwt.Token) (any, error) {
-		return []byte(a.Config.JWT.Secret), nil
-	})
+	token, err := jwt.ParseWithClaims(refreshTokenStr, &middleware.JWTClaims{}, middleware.HMACKeyFunc(a.Config.JWT.Secret))
 
 	if err != nil || !token.Valid {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid refresh token", nil, "")
@@ -452,10 +450,10 @@ func (a *App) Logout(r *fastglue.Request) error {
 	}
 
 	if refreshTokenStr != "" {
-		// Parse the token to extract JTI (don't need to fully validate — just extract claims)
-		token, _ := jwt.ParseWithClaims(refreshTokenStr, &middleware.JWTClaims{}, func(token *jwt.Token) (any, error) {
-			return []byte(a.Config.JWT.Secret), nil
-		})
+		// Parse the token to extract JTI (don't need to fully validate — just extract claims).
+		// Alg is still pinned (H4) so a forged "alg:none" token cannot yield a parsed
+		// claims object used to delete a victim's JTI.
+		token, _ := jwt.ParseWithClaims(refreshTokenStr, &middleware.JWTClaims{}, middleware.HMACKeyFunc(a.Config.JWT.Secret))
 		if token != nil {
 			if claims, ok := token.Claims.(*middleware.JWTClaims); ok && claims.ID != "" {
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

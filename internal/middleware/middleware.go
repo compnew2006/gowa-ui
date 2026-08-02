@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -34,6 +35,19 @@ type JWTClaims struct {
 	RoleID         *uuid.UUID `json:"role_id,omitempty"`
 	IsSuperAdmin   bool       `json:"is_super_admin"`
 	jwt.RegisteredClaims
+}
+
+// HMACKeyFunc returns a jwt.Keyfunc that only accepts HMAC signing methods
+// and returns the given secret. Pinning the method prevents alg-confusion /
+// "alg=none" token forgery (H4). All gowa-ui issuers sign with HS256/HS384/HS512
+// (all *jwt.SigningMethodHMAC) — no RS/ES issuers exist in the tree.
+func HMACKeyFunc(secret string) jwt.Keyfunc {
+	return func(token *jwt.Token) (any, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return []byte(secret), nil
+	}
 }
 
 // RequestLogger logs incoming requests
@@ -164,9 +178,7 @@ func AuthWithDB(secret string, db *gorm.DB) fastglue.FastMiddleware {
 		}
 
 		// Parse and validate token
-		token, err := jwt.ParseWithClaims(tokenString, &JWTClaims{}, func(token *jwt.Token) (any, error) {
-			return []byte(secret), nil
-		})
+		token, err := jwt.ParseWithClaims(tokenString, &JWTClaims{}, HMACKeyFunc(secret))
 
 		if err != nil || !token.Valid {
 			_ = r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid or expired token", nil, "")

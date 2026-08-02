@@ -58,6 +58,13 @@ func loadAndValidateConfig(path string, lo logf.Logger) *config.Config {
 		lo.Warn("JWT secret is empty, using a random secret (tokens will not persist across restarts)")
 	}
 
+	// Validate encryption key (AES-256-GCM at rest — internal/crypto/crypto.go).
+	// Mirrors the JWT-secret guard above and enforces the contract already
+	// documented at config.example.toml: encryption_key (32+ chars, required in production).
+	if cfg.App.Environment == "production" && len(cfg.App.EncryptionKey) < 32 {
+		lo.Fatal("app.encryption_key must be at least 32 characters in production (used for AES-256-GCM at rest)")
+	}
+
 	// Warn if debug mode is on in production
 	if cfg.App.Environment == "production" && cfg.App.Debug {
 		lo.Warn("Debug mode is enabled in production! This may expose sensitive information.")
@@ -66,6 +73,13 @@ func loadAndValidateConfig(path string, lo logf.Logger) *config.Config {
 	// Require explicit CORS origins in production
 	if cfg.App.Environment == "production" && cfg.Server.AllowedOrigins == "" {
 		lo.Fatal("server.allowed_origins must be set in production (e.g. \"https://app.example.com\")")
+	}
+
+	// Require rate limiting in production (H5). Auth/SSO/API routes are otherwise
+	// unthrottled, exposing login brute-force and API abuse. Mirrors the JWT/CORS/
+	// encryption-key guards above; dev/staging are unaffected (gated on Environment).
+	if cfg.App.Environment == "production" && !cfg.RateLimit.Enabled {
+		lo.Fatal("rate_limit.enabled must be true in production (set [rate_limit] enabled = true in config.toml)")
 	}
 
 	return cfg

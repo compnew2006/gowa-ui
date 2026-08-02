@@ -30,6 +30,11 @@ import (
 // Unified Message Sending
 // ============================================================================
 
+// maxHeaderMediaBytes caps bytes read from a caller-supplied header_media_url
+// (SSRF/DoS bound). Mirrors the 16MB media-upload ceiling (maxMediaSize) in
+// campaigns.go for the same media domain.
+const maxHeaderMediaBytes = 16 << 20 // 16MB
+
 // OutgoingMessageRequest contains all parameters for sending any type of message
 type OutgoingMessageRequest struct {
 	// Required
@@ -941,8 +946,19 @@ func (a *App) SendTemplateMessage(r *fastglue.Request) error {
 	var headerMimeType string
 	if template.HeaderType == "IMAGE" || template.HeaderType == "VIDEO" || template.HeaderType == "DOCUMENT" {
 		if req.HeaderMediaURL != "" {
-			// Option 1: Download from URL
-			resp, err := http.Get(req.HeaderMediaURL)
+			// SSRF guard (H1): validate URL shape + block internal IPs/hosts before
+			// fetch, then go through the shared SSRF-safe client (re-resolves DNS at
+			// dial time to defeat rebinding). Mirrors webhook/custom-action fetches.
+			if err := validateWebhookURL(req.HeaderMediaURL); err != nil {
+				return r.SendErrorEnvelope(fasthttp.StatusBadRequest,
+					fmt.Sprintf("Invalid header media URL: %v", err), nil, "")
+			}
+
+			httpReq, err := http.NewRequestWithContext(r.RequestCtx, http.MethodGet, req.HeaderMediaURL, nil)
+			if err != nil {
+				return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid header media URL", nil, "")
+			}
+			resp, err := a.HTTPClient.Do(httpReq)
 			if err != nil {
 				return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Failed to download header media from URL", nil, "")
 			}
@@ -950,7 +966,8 @@ func (a *App) SendTemplateMessage(r *fastglue.Request) error {
 			if resp.StatusCode != http.StatusOK {
 				return r.SendErrorEnvelope(fasthttp.StatusBadRequest, fmt.Sprintf("Header media URL returned status %d", resp.StatusCode), nil, "")
 			}
-			headerMediaData, err = io.ReadAll(resp.Body)
+			// Cap the download (H1 + DoS): same 16MB ceiling used by campaign media uploads.
+			headerMediaData, err = io.ReadAll(io.LimitReader(resp.Body, maxHeaderMediaBytes))
 			if err != nil {
 				a.Log.Error("Failed to read header media from URL", "error", err)
 				return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to read header media from URL", nil, "")

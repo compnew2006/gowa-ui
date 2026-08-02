@@ -57,9 +57,7 @@ func (a *App) WebSocketHandler(r *fastglue.Request) error {
 // and returns user ID and organization ID.
 func (a *App) validateWSTokenFn() ws.AuthenticateFn {
 	return func(tokenString string) (uuid.UUID, uuid.UUID, error) {
-		token, err := jwt.ParseWithClaims(tokenString, &middleware.JWTClaims{}, func(token *jwt.Token) (any, error) {
-			return []byte(a.Config.JWT.Secret), nil
-		})
+		token, err := jwt.ParseWithClaims(tokenString, &middleware.JWTClaims{}, middleware.HMACKeyFunc(a.Config.JWT.Secret))
 
 		if err != nil || !token.Valid {
 			return uuid.Nil, uuid.Nil, err

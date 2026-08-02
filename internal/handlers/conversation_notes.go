@@ -94,10 +94,13 @@ func (a *App) CreateConversationNote(r *fastglue.Request) error {
 		return nil
 	}
 
-	contactID, err := parsePathUUID(r, "id", "contact")
-	if err != nil {
+	// Verify the contact belongs to the caller's org before writing (M1).
+	// loadContactByPath parses {id}, scopes by org, and sends 404 on miss.
+	contact, ok := a.loadContactByPath(r, orgID)
+	if !ok {
 		return nil
 	}
+	contactID := contact.ID
 
 	var req ConversationNoteRequest
 	if err := a.decodeRequest(r, &req); err != nil {
