@@ -215,7 +215,9 @@ function openConnect(d: GowaDevice) {
 }
 
 // openPair opens the connect dialog on the Pair Code tab (no QR fetch).
-// Always available: re-pairing is legitimate even on a connected device.
+// Note: GOWA refuses login-with-code when the device is already logged in
+// (ErrAlreadyLoggedIn); the backend detects that and returns
+// already_connected=true, which we handle in fetchPair like a QR success.
 function openPair(d: GowaDevice) {
   connectDevice.value = d;
   connectTab.value = "pair";
@@ -266,6 +268,13 @@ async function fetchPair() {
       pairPhone.value.trim(),
     );
     const data = unwrap(resp);
+    // Device is already connected — GOWA refuses a fresh pair code with
+    // ErrAlreadyLoggedIn. The backend mirrors the QR handler's signal; close
+    // the dialog like a successful QR scan instead of showing an empty code.
+    if (data.already_connected) {
+      await onPairingSuccess();
+      return;
+    }
     pairCode.value = data.pair_code || "";
   } catch (e) {
     toast.error(

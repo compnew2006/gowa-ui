@@ -1030,7 +1030,7 @@ export const gowaServersService = {
   deviceQR: (serverId: string, deviceId: string) =>
     api.get<{ qr_link: string; qr_duration: number; already_connected?: boolean }>(`/gowa/servers/${serverId}/devices/${encodeURIComponent(deviceId)}/qr`),
   devicePairCode: (serverId: string, deviceId: string, phone: string) =>
-    api.post<{ pair_code: string }>(`/gowa/servers/${serverId}/devices/${encodeURIComponent(deviceId)}/pair-code`, { phone }),
+    api.post<{ pair_code: string; already_connected?: boolean; jid?: string }>(`/gowa/servers/${serverId}/devices/${encodeURIComponent(deviceId)}/pair-code`, { phone }),
   deviceLogout: (serverId: string, deviceId: string) =>
     api.post(`/gowa/servers/${serverId}/devices/${encodeURIComponent(deviceId)}/logout`),
   deviceReconnect: (serverId: string, deviceId: string) =>

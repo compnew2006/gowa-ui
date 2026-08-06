@@ -297,6 +297,8 @@ func setupAccountRoutes(g *fastglue.Fastglue, app *handlers.App) {
 	g.PUT("/api/accounts/{id}/daily-reset", app.UpdateChatResetSettings)
 
 	// GOWA device management (QR code, pair code, connection status)
+	g.GET("/api/accounts/{id}/gowa/qr", app.GowaLoginQR)
+	g.GET("/api/accounts/{id}/gowa/status", app.GowaStatus)
 	g.POST("/api/accounts/{id}/gowa/pair-code", app.GowaPairCode)
 }
 

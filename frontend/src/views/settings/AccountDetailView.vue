@@ -337,6 +337,16 @@ async function fetchGowaPairCode() {
   try {
     const resp = await api.post(`/accounts/${account.value.id}/gowa/pair-code`, { phone: gowaPairPhone.value.trim() })
     const data = resp.data.data || resp.data
+    // Device is already connected — GOWA refuses a fresh pair code. Mirror the
+    // QR handler's signal so the status poller closes the dialog immediately.
+    if (data.already_connected) {
+      gowaStatus.value = { is_connected: true, is_logged_in: true, jid: data.jid || '' }
+      toast.success(t('accounts.gowaConnected', 'Device connected!'))
+      gowaConnectOpen.value = false
+      clearGowaTimers()
+      await loadAccount()
+      return
+    }
     gowaPairCode.value = data.pair_code || ''
   } catch (e) {
     toast.error(getErrorMessage(e, t('accounts.gowaPairFailed', 'Failed to get pair code')))

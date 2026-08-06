@@ -916,7 +916,21 @@ func (a *App) GowaInstanceDevicePairCode(r *fastglue.Request) error {
 	if req.Phone == "" {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Phone number is required", nil, "")
 	}
-	result, err := bundle.client.LoginWithCode(context.Background(), deviceID, req.Phone)
+	ctx := context.Background()
+	// If the device is already logged in, GOWA rejects login-with-code with
+	// ErrAlreadyLoggedIn. Detect that up-front (matching the QR handler) so the
+	// frontend closes the connect dialog instead of getting a generic 502.
+	if st, err := bundle.client.GetDeviceStatus(ctx, deviceID); err == nil && st.IsConnected && st.IsLoggedIn {
+		jid := ""
+		if appStatus, err := bundle.client.GetAppStatus(ctx, deviceID); err == nil {
+			jid = appStatus.JID
+		}
+		return r.SendEnvelope(map[string]any{
+			"already_connected": true,
+			"jid":               jid,
+		})
+	}
+	result, err := bundle.client.LoginWithCode(ctx, deviceID, req.Phone)
 	if err != nil {
 		a.Log.Error("Failed to get GOWA pair code", "error", err, "device", deviceID)
 		return r.SendErrorEnvelope(fasthttp.StatusBadGateway, "Failed to get pair code from GOWA", nil, "")

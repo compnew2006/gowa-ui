@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -54,6 +55,55 @@ func (a *App) resolveGowaAccount(r *fastglue.Request, orgID uuid.UUID) (gowaAcco
 // The QR image is fetched from GOWA and returned as a base64 data URI so the
 // browser can render it directly without needing Basic Auth credentials.
 // GET /api/accounts/{id}/gowa/qr
+func (a *App) GowaLoginQR(r *fastglue.Request) error {
+	orgID, _, err := a.requireAuth(r, models.ResourceDevices, models.ActionWrite)
+	if err != nil {
+		return nil
+	}
+
+	ga, ok := a.resolveGowaAccount(r, orgID)
+	if !ok {
+		return nil
+	}
+
+	ctx := context.Background()
+
+	// If the device is already connected, short-circuit: GOWA rejects a fresh
+	// /app/login call when a session is live, so we return the connected state
+	// and let the frontend close the connect dialog instead of erroring.
+	if status, err := ga.client.GetDeviceStatus(ctx, ga.account.GowaDeviceID); err == nil && status.IsConnected {
+		jid := ""
+		if appStatus, err := ga.client.GetAppStatus(ctx, ga.account.GowaDeviceID); err == nil {
+			jid = appStatus.JID
+		}
+		return r.SendEnvelope(map[string]any{
+			"already_connected": true,
+			"jid":               jid,
+		})
+	}
+
+	qr, err := ga.client.GetLoginQR(ctx, ga.account.GowaDeviceID)
+	if err != nil {
+		a.Log.Error("Failed to get GOWA login QR", "error", err, "account", ga.account.Name)
+		return r.SendErrorEnvelope(fasthttp.StatusBadGateway, "Failed to get QR code from GOWA", nil, "")
+	}
+
+	// GOWA's qr_link is sometimes returned with an internal host (e.g. localhost)
+	// that gowa-ui cannot reach. Rebase it onto the account's configured BaseURL
+	// before downloading the image bytes.
+	qrLink := rebaseGowaQRLink(qr.QRLink, ga.account.GowaBaseURL)
+	qrData, err := ga.client.DownloadMedia(ctx, qrLink, "")
+	if err != nil {
+		a.Log.Error("Failed to download GOWA QR image", "error", err, "account", ga.account.Name, "qr_link", qrLink, "original", qr.QRLink)
+		return r.SendErrorEnvelope(fasthttp.StatusBadGateway, "Failed to download QR image", nil, "")
+	}
+
+	dataURI := fmt.Sprintf("data:image/png;base64,%s", base64.StdEncoding.EncodeToString(qrData))
+	return r.SendEnvelope(map[string]any{
+		"qr_link":     dataURI,
+		"qr_duration": qr.QRDuration,
+	})
+}
 
 // GowaPairCode requests a phone-code pairing for a GOWA device.
 // POST /api/accounts/{id}/gowa/pair-code  body: {"phone": "16505551234"}
@@ -79,6 +129,22 @@ func (a *App) GowaPairCode(r *fastglue.Request) error {
 	}
 
 	ctx := context.Background()
+
+	// If the device is already logged in, GOWA rejects login-with-code with
+	// ErrAlreadyLoggedIn. Detect that up-front (matching the QR handler) and
+	// short-circuit so the frontend can close the connect dialog instead of
+	// surfacing a generic 502.
+	if st, err := ga.client.GetDeviceStatus(ctx, ga.account.GowaDeviceID); err == nil && st.IsConnected && st.IsLoggedIn {
+		jid := ""
+		if appStatus, err := ga.client.GetAppStatus(ctx, ga.account.GowaDeviceID); err == nil {
+			jid = appStatus.JID
+		}
+		return r.SendEnvelope(map[string]any{
+			"already_connected": true,
+			"jid":               jid,
+		})
+	}
+
 	result, err := ga.client.LoginWithCode(ctx, ga.account.GowaDeviceID, req.Phone)
 	if err != nil {
 		a.Log.Error("Failed to get GOWA pair code", "error", err, "account", ga.account.Name)
@@ -186,5 +252,39 @@ func (a *App) GowaCreateDevice(r *fastglue.Request) error {
 	})
 }
 
-// GowaDeviceStatus retrieves the connection status of a GOWA device.
+// GowaStatus retrieves the connection status of a GOWA device.
 // GET /api/accounts/{id}/gowa/status
+func (a *App) GowaStatus(r *fastglue.Request) error {
+	orgID, _, err := a.requireAuth(r, models.ResourceDevices, models.ActionRead)
+	if err != nil {
+		return nil
+	}
+
+	ga, ok := a.resolveGowaAccount(r, orgID)
+	if !ok {
+		return nil
+	}
+
+	// Prefer the overall app status which carries the JID; fall back to the
+	// device-level status (connected/logged-in flags) when the app endpoint is
+	// unavailable so the frontend still gets a usable connection signal.
+	if appStatus, err := ga.client.GetAppStatus(r.RequestCtx, ga.account.GowaDeviceID); err == nil {
+		return r.SendEnvelope(map[string]any{
+			"is_connected": appStatus.IsConnected,
+			"is_logged_in": appStatus.IsLoggedIn,
+			"jid":          appStatus.JID,
+		})
+	}
+
+	status, err := ga.client.GetDeviceStatus(r.RequestCtx, ga.account.GowaDeviceID)
+	if err != nil {
+		a.Log.Error("Failed to get GOWA device status", "error", err, "account", ga.account.Name)
+		return r.SendErrorEnvelope(fasthttp.StatusBadGateway, "Failed to get device status from GOWA", nil, "")
+	}
+
+	return r.SendEnvelope(map[string]any{
+		"is_connected": status.IsConnected,
+		"is_logged_in": status.IsLoggedIn,
+		"jid":          "",
+	})
+}
