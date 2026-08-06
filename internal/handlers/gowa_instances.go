@@ -938,6 +938,47 @@ func (a *App) GowaInstanceDevicePairCode(r *fastglue.Request) error {
 	return r.SendEnvelope(map[string]any{"pair_code": result.PairCode})
 }
 
+// GowaInstanceDeviceStatus returns the connection state of a device.
+// The connect dialog polls this every few seconds to detect a successful
+// QR scan / pair-code link WITHOUT regenerating a QR (which would interrupt
+// an in-progress pairing on the same device).
+// GET /api/gowa/servers/{id}/devices/{deviceId}/status
+func (a *App) GowaInstanceDeviceStatus(r *fastglue.Request) error {
+	orgID, _, err := a.requireAuth(r, models.ResourceDevices, models.ActionRead)
+	if err != nil {
+		return nil
+	}
+	bundle, ok := a.resolveGowaInstance(r, orgID)
+	if !ok {
+		return nil
+	}
+	deviceID := parseDeviceID(r)
+	if deviceID == "" {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "deviceId is required", nil, "")
+	}
+
+	ctx := context.Background()
+	// Prefer the overall app status (carries the JID); fall back to the
+	// device-level status so the frontend still gets a usable signal.
+	if appStatus, err := bundle.client.GetAppStatus(ctx, deviceID); err == nil {
+		return r.SendEnvelope(map[string]any{
+			"is_connected": appStatus.IsConnected,
+			"is_logged_in": appStatus.IsLoggedIn,
+			"jid":          appStatus.JID,
+		})
+	}
+	status, err := bundle.client.GetDeviceStatus(ctx, deviceID)
+	if err != nil {
+		a.Log.Error("Failed to get GOWA device status", "error", err, "device", deviceID)
+		return r.SendErrorEnvelope(fasthttp.StatusBadGateway, "Failed to get device status from GOWA", nil, "")
+	}
+	return r.SendEnvelope(map[string]any{
+		"is_connected": status.IsConnected,
+		"is_logged_in": status.IsLoggedIn,
+		"jid":          "",
+	})
+}
+
 // GowaInstanceDeviceLogout logs out a device (keeps the slot).
 // POST /api/gowa/servers/{id}/devices/{deviceId}/logout
 func (a *App) GowaInstanceDeviceLogout(r *fastglue.Request) error {

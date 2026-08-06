@@ -321,6 +321,7 @@ func setupGowaServerRoutes(g *fastglue.Fastglue, app *handlers.App) {
 	g.POST("/api/gowa/servers/{id}/devices", app.CreateGowaInstanceDevice)
 	g.DELETE("/api/gowa/servers/{id}/devices/{deviceId}", app.DeleteGowaInstanceDevice)
 	g.GET("/api/gowa/servers/{id}/devices/{deviceId}/qr", app.GowaInstanceDeviceQR)
+	g.GET("/api/gowa/servers/{id}/devices/{deviceId}/status", app.GowaInstanceDeviceStatus)
 	g.POST("/api/gowa/servers/{id}/devices/{deviceId}/pair-code", app.GowaInstanceDevicePairCode)
 	g.POST("/api/gowa/servers/{id}/devices/{deviceId}/logout", app.GowaInstanceDeviceLogout)
 	g.POST("/api/gowa/servers/{id}/devices/{deviceId}/reconnect", app.GowaInstanceDeviceReconnect)

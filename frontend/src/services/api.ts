@@ -1028,7 +1028,9 @@ export const gowaServersService = {
     api.post<{ device_id: string; webhook_secret: string }>(`/gowa/servers/${serverId}/devices`, data),
   deleteDevice: (serverId: string, deviceId: string) => api.delete(`/gowa/servers/${serverId}/devices/${encodeURIComponent(deviceId)}`),
   deviceQR: (serverId: string, deviceId: string) =>
-    api.get<{ qr_link: string; qr_duration: number; already_connected?: boolean }>(`/gowa/servers/${serverId}/devices/${encodeURIComponent(deviceId)}/qr`),
+    api.get<{ qr_link: string; qr_duration: number; already_connected?: boolean; jid?: string }>(`/gowa/servers/${serverId}/devices/${encodeURIComponent(deviceId)}/qr`),
+  deviceStatus: (serverId: string, deviceId: string) =>
+    api.get<{ is_connected: boolean; is_logged_in: boolean; jid?: string }>(`/gowa/servers/${serverId}/devices/${encodeURIComponent(deviceId)}/status`),
   devicePairCode: (serverId: string, deviceId: string, phone: string) =>
     api.post<{ pair_code: string; already_connected?: boolean; jid?: string }>(`/gowa/servers/${serverId}/devices/${encodeURIComponent(deviceId)}/pair-code`, { phone }),
   deviceLogout: (serverId: string, deviceId: string) =>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from "vue";
+import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue";
 import { useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
 import {
@@ -95,7 +95,15 @@ const connectTab = ref<"qr" | "pair">("qr");
 const qrLink = ref("");
 const qrDuration = ref(30);
 const qrLoading = ref(false);
+// qrTimer schedules the NEXT QR refresh (single setTimeout, refreshed on each
+// fetch) so a new QR is only requested when the current one is about to expire
+// (qr_duration + 2s). This replaces the old setInterval(fetchQr, 3000) which
+// regenerated a QR every 3s and kept interrupting any in-progress pairing on
+// the same device (the cause of the pair-code "websocket disconnected" errors).
 const qrTimer = ref<ReturnType<typeof setTimeout> | null>(null);
+// statusPoll queries the device connection state every 5s and closes the dialog
+// on a successful link. It must NOT call fetchQr — regenerating a QR kills an
+// in-progress pair-code WebSocket session on the same GOWA device.
 const statusPoll = ref<ReturnType<typeof setInterval> | null>(null);
 const pairPhone = ref("");
 const pairCode = ref("");
@@ -209,15 +217,15 @@ function openConnect(d: GowaDevice) {
   qrLink.value = "";
   pairCode.value = "";
   pairPhone.value = "";
+  startStatusPoll();
   fetchQr();
-  if (statusPoll.value) clearInterval(statusPoll.value);
-  statusPoll.value = setInterval(fetchQr, 3000);
 }
 
-// openPair opens the connect dialog on the Pair Code tab (no QR fetch).
-// Note: GOWA refuses login-with-code when the device is already logged in
-// (ErrAlreadyLoggedIn); the backend detects that and returns
-// already_connected=true, which we handle in fetchPair like a QR success.
+// openPair opens the connect dialog on the Pair Code tab. Critically it does
+// NOT start QR fetching: regenerating a QR on the same GOWA device interrupts
+// the pair-code WebSocket session (the prior setInterval(fetchQr, 3000) caused
+// the "websocket disconnected before info query returned response" errors).
+// Only the lightweight connection-status poll runs so we still detect success.
 function openPair(d: GowaDevice) {
   connectDevice.value = d;
   connectTab.value = "pair";
@@ -225,12 +233,37 @@ function openPair(d: GowaDevice) {
   qrLink.value = "";
   pairCode.value = "";
   pairPhone.value = "";
+  startStatusPoll();
+}
+
+// startStatusPoll polls ONLY the device connection state every 5s and closes
+// the dialog on success. It never regenerates a QR.
+function startStatusPoll() {
   if (statusPoll.value) clearInterval(statusPoll.value);
-  statusPoll.value = setInterval(fetchQr, 3000);
+  statusPoll.value = setInterval(async () => {
+    if (!connectDevice.value) return;
+    try {
+      const resp = await gowaServersService.deviceStatus(
+        serverId.value,
+        connectDevice.value.id,
+      );
+      const data = unwrap(resp);
+      if (data.is_connected) {
+        await onPairingSuccess();
+      }
+    } catch {
+      // Status polling is best-effort; transient failures are ignored so we
+      // keep retrying until the dialog is closed.
+    }
+  }, 5000);
 }
 
 async function fetchQr() {
   if (!connectDevice.value) return;
+  // Don't regenerate a QR while the pair-code tab is active: the two flows
+  // share one GOWA device session, and a fresh QR interrupts an in-progress
+  // pair-code WebSocket.
+  if (connectTab.value !== "qr") return;
   qrLoading.value = true;
   try {
     const resp = await gowaServersService.deviceQR(
@@ -245,9 +278,10 @@ async function fetchQr() {
     }
     qrLink.value = data.qr_link || "";
     qrDuration.value = data.qr_duration || 30;
-    if (!statusPoll.value && qrTimer.value === null) {
-      qrTimer.value = setTimeout(fetchQr, (qrDuration.value + 2) * 1000);
-    }
+    // Schedule the next QR refresh for when this one expires. Using a single
+    // setTimeout (rescheduled each fetch) replaces the broken 3s interval.
+    if (qrTimer.value) clearTimeout(qrTimer.value);
+    qrTimer.value = setTimeout(fetchQr, (qrDuration.value + 2) * 1000);
   } catch (e) {
     toast.error(
       getErrorMessage(e, t("accounts.gowaQrFailed", "Failed to get QR code")),
@@ -304,6 +338,20 @@ function clearTimers() {
     statusPoll.value = null;
   }
 }
+
+// Switching to the Pair Code tab must stop QR auto-refresh: the two flows
+// share one GOWA device session, and a background QR request interrupts the
+// pair-code WebSocket ("websocket disconnected ..."). Switching back to QR
+// kicks a fresh fetch. The status poll keeps running on both tabs.
+watch(connectTab, (tab) => {
+  if (qrTimer.value) {
+    clearTimeout(qrTimer.value);
+    qrTimer.value = null;
+  }
+  if (tab === "qr" && !qrLink.value) {
+    fetchQr();
+  }
+});
 
 async function copyText(txt: string) {
   try {
