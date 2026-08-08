@@ -23,6 +23,7 @@ export default defineConfig({
         {
           label: 'Features',
           items: [
+            { label: 'Chat', slug: 'features/chat' },
             { label: 'Dashboard', slug: 'features/dashboard' },
             { label: 'WhatsApp Accounts', slug: 'features/accounts' },
             { label: 'Roles & Permissions', slug: 'features/roles-permissions' },

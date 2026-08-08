@@ -357,6 +357,47 @@ curl -X POST "http://your-server:8080/api/contacts/{contact_id}/messages" \
   Button titles have a maximum length of 20 characters. Button IDs are returned when the user clicks a button.
 </Aside>
 
+## Revoke (Delete for Everyone)
+
+Unsend an outgoing message for everyone in the chat. The message is marked as
+revoked (its status flips to `revoked`) and GOWA unsends it on WhatsApp. The
+message row is **preserved** — its original content and media stay in the
+database so the sender still sees what was unsent, rendered dimmed under a
+"deleted" badge (see [Chat features](/features/chat/#revoking-a-message)).
+
+Requires the **`chat.revoke:write`** permission (granted to Admin, Manager, and
+Supervisor by default). The message must be outgoing, have a WhatsApp message
+ID (`wamid`), and not already be revoked or failed.
+
+```
+POST /api/contacts/{contact_id}/messages/{message_id}/revoke
+```
+
+| Parameter | Location | Description |
+|-----------|----------|-------------|
+| `contact_id` | path | The contact (chat) UUID |
+| `message_id` | path | The message UUID |
+
+### Response
+
+```json
+{
+  "status": "success",
+  "data": {
+    "message_id": "550e8400-e29b-41d4-a716-446655440000",
+    "status": "revoked"
+  }
+}
+```
+
+<Aside type="caution">
+  Revocation is irreversible. The message is unsent on every device in the chat.
+  A WebSocket <code>status_update</code> with <code>status: "revoked"</code> is
+  broadcast so all open clients update in real time. The inbound
+  <code>message.revoked</code> webhook from GOWA mirrors the same DB state when
+  the other side (or another device) unsends.
+</Aside>
+
 ## Mark Message as Read
 
 Mark a message as read.
@@ -378,13 +419,27 @@ PUT /api/messages/{id}/read
 
 Messages go through the following status flow:
 
-| Status | Description |
-|--------|-------------|
-| `pending` | Message queued for sending |
-| `sent` | Message sent to WhatsApp servers |
-| `delivered` | Message delivered to recipient's device |
-| `read` | Message read by recipient |
-| `failed` | Message failed to send |
+| Status | Description | Bubble icon |
+|--------|-------------|-------------|
+| `pending` | Message queued for sending | 🕐 Clock |
+| `sent` | Message sent to WhatsApp servers | ✓ single check (gray) |
+| `delivered` | Message delivered to recipient's device | ✓✓ double check (gray) |
+| `read` | Message read by recipient | ✓✓ double check (blue) |
+| `failed` | Message failed to send | ⚠ alert |
+| `revoked` | Message unsent (deleted for everyone) | 🚫 badge over dimmed content |
+
+Status only ever progresses forward (`pending` → `sent` → `delivered` → `read`),
+except `failed` can override any status and `revoked` is terminal. A downgraded
+update (e.g. `delivered` arriving after `read`) is ignored.
+
+<Aside type="note">
+  **Send is synchronous from the UI.** The HTTP response to
+  <code>POST /api/contacts/&#123;id&#125;/messages</code> already carries the
+  final <code>status</code> (typically <code>sent</code>) and the
+  <code>wamid</code>, so the chat bubble advances off the clock immediately — no
+  refresh needed. Subsequent <code>delivered</code>/<code>read</code> receipts
+  arrive over WebSocket (<code>status_update</code> events) in real time.
+</Aside>
 
 <Aside type="note">
   Status updates are delivered via webhooks in real-time. Configure your webhook endpoint to receive these updates.

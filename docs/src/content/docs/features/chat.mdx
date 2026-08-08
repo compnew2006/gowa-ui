@@ -1,0 +1,103 @@
+---
+title: Chat
+description: Real-time WhatsApp conversations, message status, and revoking
+---
+
+import { Card, CardGrid, Aside, Steps } from '@astrojs/starlight/components';
+
+The Chat view is where agents handle WhatsApp conversations in real time. It
+shows the full message history for a contact, live status ticks, reactions,
+replies, and media — backed by a WebSocket connection so new messages and
+receipts appear without a refresh.
+
+## Opening a conversation
+
+<Steps>
+
+1. Click **Chat** in the sidebar.
+2. Select a contact from the conversation list.
+3. The thread loads with all prior messages, oldest at the top.
+
+</Steps>
+
+The composer at the bottom supports text, media (image/video/audio/document),
+templates, and canned responses. Reactions and replies are available on every
+message via the hover action menu.
+
+## Message status (delivery ticks)
+
+Every outgoing message shows a status icon that progresses as WhatsApp
+acknowledges it:
+
+| Icon | Status | Meaning |
+|------|--------|---------|
+| 🕐 | `pending` | Queued for sending |
+| ✓ gray | `sent` | Sent to the WhatsApp server |
+| ✓✓ gray | `delivered` | Delivered to the recipient's device |
+| ✓✓ blue | `read` | Read by the recipient |
+| ⚠ | `failed` | Send failed (retry available) |
+| 🚫 badge | `revoked` | Unsent (see [Revoking](#revoking-a-message)) |
+
+Status only moves forward (`pending` → `sent` → `delivered` → `read`). A
+receipt that would downgrade the status (e.g. a `delivered` arriving after
+`read`) is ignored.
+
+<Aside type="note">
+  When you send a message from the UI, the response already carries the final
+  status and WhatsApp message ID, so the clock advances to a check
+  immediately — no manual refresh needed. Later receipts (`delivered`, `read`)
+  arrive over WebSocket and update the tick in real time.
+</Aside>
+
+## Revoking a message
+
+You can **unsend** (delete for everyone) an outgoing message you sent by
+mistake. Revocation removes it from every device in the chat.
+
+<Steps>
+
+1. Hover the message you want to revoke.
+2. Click the trash icon (🗑) in the hover action menu.
+3. Confirm in the dialog — revocation is **irreversible**.
+
+</Steps>
+
+After revocation:
+- The message is unsent on WhatsApp (via GOWA's revoke API).
+- Its status flips to `revoked` and a WebSocket event updates every open client.
+- **The original content stays visible to you**, rendered dimmed under a small
+  "deleted" badge — so you can still see what you unsent, exactly like
+  WhatsApp's own behaviour. The recipient sees it removed entirely.
+
+<Aside type="caution">
+  Revoking requires the <strong><code>chat.revoke</code></strong> permission
+  (granted to <strong>Admin</strong>, <strong>Manager</strong>, and
+  <strong>Supervisor</strong> by default). An agent without it will not see the
+  revoke button. The backend re-validates the permission on every revoke
+  request. See [Roles & Permissions](/features/roles-permissions).
+</Aside>
+
+Only outgoing messages that have a WhatsApp message ID (`wamid`) and are not
+already revoked or failed can be revoked. Failed messages offer a **retry**
+instead.
+
+## Replying and reacting
+
+- **Reply**: hover a message → click the reply arrow → the composer shows a
+  quote preview of the original. Sends a threaded reply.
+- **React**: hover → click the smiley → pick an emoji. Reactions are sent via
+  the GOWA reaction API and broadcast over WebSocket so both sides see them
+  live.
+
+## Media messages
+
+Images, videos, audio, and documents (including PDFs) render inline. Click an
+image to open a full preview; documents show a download link. Media is fetched
+per-message from `/api/media/{message_id}` and is lazily downloaded from the
+provider on first view if it isn't cached locally yet.
+
+<Aside type="tip">
+  All outgoing message types — text, image, video, audio, document — support
+  revoke and reactions. The hover action menu is the same regardless of
+  message type.
+</Aside>
