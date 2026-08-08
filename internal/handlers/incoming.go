@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -190,8 +191,35 @@ func (a *App) updateMessageStatus(orgID uuid.UUID, accountName, whatsappMsgID, s
 	result := a.DB.Where("whats_app_message_id = ? AND organization_id = ? AND whats_app_account = ?",
 		whatsappMsgID, orgID, accountName).First(&message)
 	if result.Error != nil {
-		a.Log.Debug("No message found for status update", "whats_app_message_id", whatsappMsgID)
-		return
+		// Wamid-shape fallback. The send path may store the GOWA-returned id
+		// (e.g. "true_…@s.whatsapp.net") while the ack carries a different form
+		// (bare, with/without the "FQIA" envelope, etc.). Mirror the reaction
+		// path's strategy (message_ingest.go): if the strict lookup misses, try
+		// matching on the unique suffix after the "FQIA" type indicator, then a
+		// scoped LIKE on the raw id. Without this, delivered/read ticks never
+		// advance because the equality never matches.
+		matched := false
+		if idx := strings.Index(whatsappMsgID, "FQIA"); idx != -1 {
+			suffixStart := idx + 8
+			if suffixStart < len(whatsappMsgID) {
+				suffix := whatsappMsgID[suffixStart:]
+				if err := a.DB.Where("whats_app_message_id LIKE ? AND organization_id = ? AND whats_app_account = ?",
+					"%"+suffix, orgID, accountName).First(&message).Error; err == nil {
+					matched = true
+				}
+			}
+		}
+		if !matched {
+			// Non-FQIA id (e.g. a bare GOWA message id) — scoped LIKE fallback.
+			if err := a.DB.Where("whats_app_message_id LIKE ? AND organization_id = ? AND whats_app_account = ?",
+				"%"+whatsappMsgID+"%", orgID, accountName).First(&message).Error; err == nil {
+				matched = true
+			}
+		}
+		if !matched {
+			a.Log.Debug("No message found for status update", "whats_app_message_id", whatsappMsgID)
+			return
+		}
 	}
 
 	newStatus := models.MessageStatus(statusValue)

@@ -121,7 +121,7 @@ func (a *App) handleGowaWebhook(r *fastglue.Request, pathDeviceID string) error 
 	case "message":
 		go a.processGowaMessage(account, &envelope)
 	case "message.ack":
-		go a.processGowaAck(&envelope)
+		go a.processGowaAck(account, &envelope)
 	case "chat_presence":
 		go a.processGowaChatPresence(&envelope)
 	case "connection":
@@ -550,12 +550,22 @@ func (a *App) processGowaOutgoingMessage(account *models.WhatsAppAccount, msg *g
 
 // processGowaAck converts GOWA receipt events into status updates.
 // GOWA sends "delivered" and "read" receipts with an array of message IDs.
-func (a *App) processGowaAck(envelope *gowa.WebhookPayload) {
+// The resolved `account` is passed in (like every other GOWA sub-handler) so
+// the status update is scoped to the acking device's org + account WITHOUT a
+// second, non-write-back lookup via getWhatsAppAccountCached — which was the
+// root cause of delivered/read ticks never advancing (the scoped WHERE found
+// nothing and silently no-op'd).
+func (a *App) processGowaAck(account *models.WhatsAppAccount, envelope *gowa.WebhookPayload) {
 	defer func() {
 		if rv := recover(); rv != nil {
 			a.Log.Error("Panic in processGowaAck", "panic", rv, "device_id", envelope.DeviceID)
 		}
 	}()
+
+	if account == nil {
+		a.Log.Warn("processGowaAck called with nil account; skipping", "device_id", envelope.DeviceID)
+		return
+	}
 
 	var ack gowa.AckPayload
 	if err := json.Unmarshal(envelope.Payload, &ack); err != nil {
@@ -575,14 +585,17 @@ func (a *App) processGowaAck(envelope *gowa.WebhookPayload) {
 		return
 	}
 
-	// Process each message ID in the batch.
+	// Process each message ID in the batch. Use the already-resolved account's
+	// org + name directly (the same scalars the other handlers pass through)
+	// instead of re-resolving via getWhatsAppAccountCached, which does not
+	// write back the JID and would scope the lookup to (uuid.Nil, "").
 	webhookStatus := WebhookStatus{
 		Status:    status,
 		Timestamp: envelope.Timestamp, // top-level for ack events
 	}
 	for _, msgID := range ack.IDs {
 		webhookStatus.ID = msgID
-		a.processStatusUpdate(envelope.DeviceID, webhookStatus)
+		a.updateMessageStatus(account.OrganizationID, account.Name, msgID, status, webhookStatus.Errors)
 	}
 }
 
