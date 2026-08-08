@@ -740,12 +740,14 @@ func (a *App) processGowaRevoked(account *models.WhatsAppAccount, envelope *gowa
 	// MessageStatusRevoked value (not "failed") so the UI can render a
 	// distinct "[message revoked]" placeholder instead of an error state,
 	// and so the outbound revoke handler can reuse the exact same status.
+	// We flip ONLY status — the original content/media stays in the DB so the
+	// UI can render it under a "deleted" overlay. The frontend keys the
+	// revoked render entirely off status === "revoked".
 	var msg models.Message
 	if err := a.DB.Model(&models.Message{}).
 		Where("whats_app_message_id = ? AND organization_id = ?", revoked.RevokedMessageID, account.OrganizationID).
 		Updates(map[string]any{
-			"status":  models.MessageStatusRevoked,
-			"content": "[message revoked]",
+			"status": models.MessageStatusRevoked,
 		}).Error; err != nil {
 		a.Log.Error("Failed to mark GOWA message as revoked",
 			"revoked_message_id", revoked.RevokedMessageID, "error", err)

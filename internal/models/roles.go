@@ -62,6 +62,7 @@ const (
 	ResourceChat                    = "chat"
 	ResourceChatAssign              = "chat.assign"
 	ResourceChatCollaborate         = "chat.collaborate"
+	ResourceChatRevoke              = "chat.revoke"
 	ResourceContacts                = "contacts"
 	ResourceTags                    = "tags"
 	ResourceAnalytics               = "analytics"
@@ -141,6 +142,7 @@ func DefaultPermissions() []Permission {
 		// Chat
 		{Resource: ResourceChat, Action: ActionRead, Description: "View chat conversations"},
 		{Resource: ResourceChat, Action: ActionWrite, Description: "Send messages"},
+		{Resource: ResourceChatRevoke, Action: ActionWrite, Description: "Revoke (delete for everyone) sent messages"},
 		{Resource: ResourceChatAssign, Action: ActionWrite, Description: "Assign conversations to agents"},
 		{Resource: ResourceChatCollaborate, Action: ActionWrite, Description: "Join assigned chats as a collaborator"},
 
@@ -222,7 +224,7 @@ func SystemRolePermissions() map[string][]string {
 		// Campaigns
 		"campaigns:read", "campaigns:write", "campaigns:delete", "campaigns:execute",
 		// Chat
-		"chat:read", "chat:write", "chat.assign:write", "chat.collaborate:write",
+		"chat:read", "chat:write", "chat.revoke:write", "chat.assign:write", "chat.collaborate:write",
 		// Contacts
 		"contacts:read", "contacts:write", "contacts:delete", "contacts:import", "contacts:export",
 		// Tags
@@ -243,7 +245,7 @@ func SystemRolePermissions() map[string][]string {
 		// Accounts (read only)
 		"accounts:read",
 		// Chat
-		"chat:read", "chat:write", "chat.assign:write",
+		"chat:read", "chat:write", "chat.revoke:write", "chat.assign:write",
 		// Contacts (read only)
 		"contacts:read",
 		// Tags (read only - agents can see tags on contacts)

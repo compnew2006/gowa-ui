@@ -212,13 +212,24 @@ export function useChatMessaging(options: UseChatMessagingOptions) {
   }
 
   // Revoke (delete-for-everyone). GOWA-only; the backend re-validates and 400s
+  // Revoke (delete-for-everyone). GOWA-only; the backend re-validates and 400s
   // for non-GOWA. The optimistic local status is reconciled by the status_update
   // WS broadcast the handler emits on success.
-  async function revokeMessage(message: Message) {
-    if (!contactsStore.currentContact || revokingMessageId.value) return
-    // Destructive, irreversible action — confirm before hitting GOWA.
-    if (!window.confirm(t('chat.revokeConfirm'))) return
+  // This opens a styled ConfirmDialog (state: revokeDialogOpen + revokeTarget)
+  // rather than the old native window.confirm. The actual revoke runs in
+  // confirmRevoke() once the user confirms.
+  const revokeDialogOpen = ref(false)
+  const revokeTarget = ref<Message | null>(null)
 
+  function requestRevoke(message: Message) {
+    if (!contactsStore.currentContact || revokingMessageId.value) return
+    revokeTarget.value = message
+    revokeDialogOpen.value = true
+  }
+
+  async function confirmRevoke() {
+    const message = revokeTarget.value
+    if (!message || !contactsStore.currentContact) return
     revokingMessageId.value = message.id
     try {
       await messagesService.revokeMessage(contactsStore.currentContact.id, message.id)
@@ -227,6 +238,8 @@ export function useChatMessaging(options: UseChatMessagingOptions) {
       // handler routes through updateMessageStatus — so this just stays ahead.
       contactsStore.updateMessageStatus(message.id, 'revoked')
       toast.success(t('chat.messageRevoked'))
+      revokeDialogOpen.value = false
+      revokeTarget.value = null
     } catch (error) {
       toast.error(getErrorMessage(error, t('chat.revokeFailed')))
     } finally {
@@ -247,12 +260,16 @@ export function useChatMessaging(options: UseChatMessagingOptions) {
     isSending,
     retryingMessageId,
     revokingMessageId,
+    // Revoke dialog state (styled ConfirmDialog replaces window.confirm)
+    revokeDialogOpen,
+    revokeTarget,
     // Actions
     sendMessage,
     sendStatusText,
     sendStatusMedia,
     retryMessage,
-    revokeMessage,
+    requestRevoke,
+    confirmRevoke,
     replyToMessage,
     autoResizeTextarea,
     resetTextareaHeight,

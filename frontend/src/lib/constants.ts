@@ -40,6 +40,7 @@ export const RESOURCE_LABELS: Record<string, string> = {
   chat: 'Chat',
   'chat.assign': 'Chat Assignment',
   'chat.collaborate': 'Chat Collaboration',
+  'chat.revoke': 'Revoke Messages',
   contacts: 'Contacts',
   tags: 'Tags',
   analytics: 'Analytics',

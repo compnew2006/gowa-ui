@@ -2037,7 +2037,7 @@ type RevokeMessageRequest struct{}
 // here mirror the inbound message.revoked webhook handler so the two paths
 // stay consistent.
 func (a *App) RevokeMessage(r *fastglue.Request) error {
-	orgID, userID, err := a.requireAuth(r, models.ResourceChat, models.ActionWrite)
+	orgID, userID, err := a.requireAuth(r, models.ResourceChatRevoke, models.ActionWrite)
 	if err != nil {
 		return nil
 	}
@@ -2097,11 +2097,15 @@ func (a *App) RevokeMessage(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadGateway, "Failed to revoke message", nil, "")
 	}
 
-	// Persist the revoked status locally using the same values as the inbound
-	// message.revoked webhook so outbound and inbound stay consistent.
+	// Persist the revoked status locally. We flip ONLY status — the original
+	// content/media stays in the DB so the UI can render it under a "deleted"
+	// overlay (matching WhatsApp's "This message was deleted" behaviour where
+	// the sender still sees what they sent, dimmed). The frontend keys the
+	// revoked render entirely off status === "revoked", so content is never
+	// interpreted as live text after this point. Outbound and inbound paths
+	// stay consistent.
 	if err := a.DB.Model(&models.Message{}).Where("id = ?", message.ID).Updates(map[string]any{
-		"status":  models.MessageStatusRevoked,
-		"content": "[message revoked]",
+		"status": models.MessageStatusRevoked,
 	}).Error; err != nil {
 		a.Log.Error("Failed to mark message as revoked after outbound revoke", "error", err, "message_id", message.ID)
 	}

@@ -98,7 +98,7 @@ import { useNotesStore } from '@/stores/notes'
 import ScheduleMessageDialog from '@/components/chat/ScheduleMessageDialog.vue'
 import ScheduledMessagesPanel from '@/components/chat/ScheduledMessagesPanel.vue'
 import { useScheduledMessagesStore } from '@/stores/scheduledMessages'
-import { CreateContactDialog } from '@/components/shared'
+import { CreateContactDialog, ConfirmDialog } from '@/components/shared'
 import HeaderMediaUpload from '@/components/shared/HeaderMediaUpload.vue'
 import { Download } from 'lucide-vue-next'
 import MediaBurstDialog from '@/components/chat/MediaBurstDialog.vue'
@@ -129,6 +129,7 @@ const { isDark } = useColorMode()
 
 const canWriteContacts = authStore.hasPermission('contacts', 'write')
 const canExportMedia = authStore.hasPermission('contacts', 'export')
+const canRevokeMessages = authStore.hasPermission('chat.revoke', 'write')
 
 const contactId = computed(() => route.params.contactId as string | undefined)
 
@@ -343,10 +344,12 @@ const {
   isSending,
   retryingMessageId,
   revokingMessageId,
+  revokeDialogOpen,
   sendMessage,
   sendStatusMedia,
   retryMessage,
-  revokeMessage,
+  requestRevoke,
+  confirmRevoke,
   replyToMessage,
   autoResizeTextarea,
   resetTextareaHeight,
@@ -1357,11 +1360,20 @@ onUnmounted(() => {
                      deleted label overlaid, since the backend preserves
                      media_url on revoke. -->
                 <template v-if="message.status === 'revoked'">
-                  <div v-if="hasRevokedMedia(message)" class="revoked-media relative mb-1">
+                  <!-- Revoked: the original content stays VISIBLE (dimmed) with a
+                       small "deleted" badge on top — NOT an opaque red overlay that
+                       hides it. Matches WhatsApp: you still see what you sent, just
+                       marked as unsent. Applies to text, image, video, audio, document. -->
+                  <div class="revoked-badge">
+                    <Ban class="h-3 w-3 shrink-0" />
+                    {{ $t('chat.messageRevokedPlaceholder') }}
+                  </div>
+                  <div class="revoked-content mt-1">
+                    <!-- Original media (kept dimmed, still previewable/downloadable) -->
                     <img
                       v-if="message.message_type === 'image' || message.message_type === 'sticker'"
                       :src="getMediaUrl(message)"
-                      :alt="$t('chat.messageRevokedPlaceholder')"
+                      :alt="message.media_filename || 'media'"
                       class="max-w-[280px] max-h-[300px] rounded-lg cursor-pointer object-cover"
                       @click="openMediaPreview(message)"
                       @error="handleImageError($event)"
@@ -1379,7 +1391,7 @@ onUnmounted(() => {
                       class="max-w-[280px]"
                     />
                     <a
-                      v-else
+                      v-else-if="hasRevokedMedia(message)"
                       :href="getMediaUrl(message)"
                       :download="message.media_filename || 'document'"
                       class="flex items-center gap-2 px-3 py-2 bg-background/50 rounded-lg hover:bg-background/80 transition-colors"
@@ -1387,17 +1399,12 @@ onUnmounted(() => {
                       <FileText class="h-5 w-5 text-muted-foreground" />
                       <span class="text-sm truncate max-w-[200px]">{{ message.media_filename || 'Document' }}</span>
                     </a>
-                    <div class="revoked-media-overlay">
-                      <span class="revoked-media-label">
-                        <Ban class="h-3 w-3 shrink-0" />
-                        {{ $t('chat.messageRevokedPlaceholder') }}
-                      </span>
-                    </div>
+                    <!-- Original text (kept dimmed + line-through) -->
+                    <span
+                      v-else-if="getMessageContent(message)"
+                      class="block whitespace-pre-wrap break-words line-through opacity-60"
+                    >{{ getMessageContent(message) }}</span>
                   </div>
-                  <span v-else class="block italic text-red-400 light:text-red-500">
-                    <Ban class="inline h-3 w-3 mr-1 align-text-bottom" />
-                    {{ $t('chat.messageRevokedPlaceholder') }}
-                  </span>
                 </template>
                 <template v-else>
                 <div
@@ -1714,15 +1721,16 @@ onUnmounted(() => {
                 </Button>
                 <!-- Revoke (delete-for-everyone). GOWA-only and only for sent
                      outgoing messages that have a WhatsApp ID and aren't already
-                     revoked. The backend re-validates the GOWA guard. -->
+                     revoked. The backend re-validates the GOWA guard. Opens a
+                     styled ConfirmDialog (requestRevoke) — never deletes inline. -->
                 <Button
-                  v-if="message.direction === 'outgoing' && isCurrentAccountGowa && message.status !== 'revoked' && message.status !== 'failed' && message.wamid"
+                  v-if="canRevokeMessages && message.direction === 'outgoing' && isCurrentAccountGowa && message.status !== 'revoked' && message.status !== 'failed' && message.wamid"
                   variant="ghost"
                   size="icon"
                   class="h-6 w-6 text-muted-foreground hover:text-destructive"
                   :disabled="revokingMessageId === message.id"
                   :title="$t('chat.revoke')"
-                  @click="revokeMessage(message)"
+                  @click="requestRevoke(message)"
                 >
                   <Loader2 v-if="revokingMessageId === message.id" class="h-3 w-3 animate-spin" />
                   <Trash2 v-else class="h-3 w-3" />
@@ -2193,6 +2201,21 @@ onUnmounted(() => {
 
     <!-- Add Contact Dialog -->
     <CreateContactDialog v-model:open="isAddContactOpen" @created="onContactCreated" />
+
+    <!-- Revoke (delete-for-everyone) confirmation. Styled dialog replaces the
+         old native window.confirm. confirmRevoke runs the actual revoke once
+         the user confirms. -->
+    <ConfirmDialog
+      v-model:open="revokeDialogOpen"
+      :title="$t('chat.revoke')"
+      variant="destructive"
+      :confirm-label="$t('chat.revoke')"
+      :cancel-label="$t('common.cancel')"
+      :is-submitting="!!revokingMessageId"
+      @confirm="confirmRevoke"
+    >
+      <template #description>{{ $t('chat.revokeConfirm') }}</template>
+    </ConfirmDialog>
 
     <!-- Media burst download dialog -->
     <MediaBurstDialog
