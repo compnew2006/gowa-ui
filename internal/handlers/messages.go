@@ -1550,12 +1550,32 @@ func (a *App) SendMessage(r *fastglue.Request) error {
 
 	opts := DefaultSendOptions()
 	opts.SentByUserID = &userID
+	// The agent UI text send must be SYNCHRONOUS so the HTTP response carries
+	// the final status (sent/failed) + wamid. With Async:true the response
+	// returns "pending" and the bubble only advances to "sent" via a later WS
+	// status_update event — which races with the message's insertion into the
+	// frontend store (the update can arrive before addMessage runs, or be
+	// dropped by the hub under load), leaving the bubble stuck on the clock
+	// icon until a manual refresh. Synchronous send closes that race: the
+	// store gets the correct status straight from the response.
+	opts.Async = false
 
 	ctx := context.Background()
 	message, err := a.SendOutgoingMessage(ctx, msgReq, opts)
 	if err != nil {
 		a.Log.Error("Failed to send message", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to send message", nil, "")
+	}
+
+	// Sync send updates the DB row (status + wamid) inside finalizeMessageSend,
+	// but deliberately does NOT mutate the in-memory `message` struct (see the
+	// comment there — it avoids a race in the async path). Re-read the row so
+	// the HTTP response carries the FINAL status (sent/failed) + wamid. Without
+	// this the response is stuck at "pending" and the chat bubble shows a clock
+	// icon until a manual refresh.
+	var fresh models.Message
+	if e := a.DB.First(&fresh, "id = ?", message.ID).Error; e == nil {
+		message = &fresh
 	}
 
 	// Build response
@@ -1567,6 +1587,7 @@ func (a *App) SendMessage(r *fastglue.Request) error {
 		Content:         map[string]string{"body": message.Content},
 		InteractiveData: message.InteractiveData,
 		Status:          message.Status,
+		WAMID:           message.WhatsAppMessageID,
 		IsReply:         message.IsReply,
 		WhatsAppAccount: message.WhatsAppAccount,
 		CreatedAt:       message.CreatedAt,
