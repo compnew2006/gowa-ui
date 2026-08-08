@@ -527,7 +527,7 @@ onMounted(async () => {
                 <Input
                   id="gowa_base_url"
                   v-model="form.gowa_base_url"
-                  :placeholder="isNew ? 'http://127.0.0.1:3000' : ''"
+                  :placeholder="isNew ? 'https://your-gowa-server.example.com' : ''"
                   class="font-mono text-xs h-9"
                   :disabled="!canWrite"
                 />

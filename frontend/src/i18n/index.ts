@@ -3,6 +3,11 @@ import en from './locales/en.json'
 
 export type MessageSchema = typeof en
 
+// RTL languages (written right-to-left). Used by setLocale to flip the
+// document direction so Arabic/Urdu render correctly. Any locale not listed
+// here defaults to LTR.
+const RTL_LOCALES = new Set(['ar', 'ur', 'he', 'fa'])
+
 // Auto-discover available locales from the locales folder
 // Vite imports all JSON files at build time
 // Using import: 'default' to get JSON content directly (required for Vite 5+)
@@ -14,7 +19,7 @@ const localeNames: Record<string, { name: string; nativeName: string }> = {
   es: { name: 'Spanish', nativeName: 'Español' },
   fr: { name: 'French', nativeName: 'Français' },
   de: { name: 'German', nativeName: 'Deutsch' },
-  hi: { name: 'Hindi', nativeName: 'हिंदी' },
+  hi: { name: 'Hindi', nativeName: 'हिन्दी' },
   pt: { name: 'Portuguese', nativeName: 'Português' },
   zh: { name: 'Chinese', nativeName: '中文' },
   ja: { name: 'Japanese', nativeName: '日本語' },
@@ -31,6 +36,8 @@ const localeNames: Record<string, { name: string; nativeName: string }> = {
   pl: { name: 'Polish', nativeName: 'Polski' },
   uk: { name: 'Ukrainian', nativeName: 'Українська' },
   ta: { name: 'Tamil', nativeName: 'தமிழ்' },
+  bn: { name: 'Bengali', nativeName: 'বাংলা' },
+  ur: { name: 'Urdu', nativeName: 'اُردُو' },
 
 }
 
@@ -72,6 +79,10 @@ export const i18n = createI18n({
   messages,
 })
 
+// Apply the document direction on first load so an RTL locale saved in
+// localStorage (e.g. Arabic/Urdu) renders correctly before any switch.
+document.documentElement.setAttribute('dir', RTL_LOCALES.has(i18n.global.locale.value) ? 'rtl' : 'ltr')
+
 // Helper to change locale
 export function setLocale(locale: string) {
   if (!messages[locale]) {
@@ -81,4 +92,7 @@ export function setLocale(locale: string) {
   i18n.global.locale.value = locale
   localStorage.setItem('locale', locale)
   document.documentElement.setAttribute('lang', locale)
+  // Flip the document direction for RTL languages (Arabic, Urdu, ...).
+  // Logical CSS utilities (ms-, me-, start, end) follow this automatically.
+  document.documentElement.setAttribute('dir', RTL_LOCALES.has(locale) ? 'rtl' : 'ltr')
 }

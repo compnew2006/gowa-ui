@@ -259,6 +259,28 @@ func getIndexes() []string {
 				UPDATE whatsapp_accounts SET gowa_jid = phone_id WHERE (gowa_jid IS NULL OR gowa_jid = '') AND phone_id LIKE '%@s.whatsapp.net';
 			END IF;
 		END $$`,
+		// The GOWA-only refactor dropped the PhoneID, BusinessID, and AccessToken
+		// fields, but AutoMigrate never drops columns or relaxes constraints, so
+		// the legacy phone_id / business_id / access_token columns keep their Meta-
+		// era NOT NULL constraint. Creating a GOWA account then fails with
+		// SQLSTATE 23502 ("null value in column ... violates not-null constraint")
+		// because the handler never populates them. Relax them to NULL with an
+		// empty-string default so inserts succeed; guarded by IF EXISTS so this is
+		// a harmless no-op on fresh databases where the columns never existed.
+		`DO $$ BEGIN
+			IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'whatsapp_accounts' AND column_name = 'phone_id') THEN
+				ALTER TABLE whatsapp_accounts ALTER COLUMN phone_id DROP NOT NULL;
+				ALTER TABLE whatsapp_accounts ALTER COLUMN phone_id SET DEFAULT '';
+			END IF;
+			IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'whatsapp_accounts' AND column_name = 'business_id') THEN
+				ALTER TABLE whatsapp_accounts ALTER COLUMN business_id DROP NOT NULL;
+				ALTER TABLE whatsapp_accounts ALTER COLUMN business_id SET DEFAULT '';
+			END IF;
+			IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'whatsapp_accounts' AND column_name = 'access_token') THEN
+				ALTER TABLE whatsapp_accounts ALTER COLUMN access_token DROP NOT NULL;
+				ALTER TABLE whatsapp_accounts ALTER COLUMN access_token SET DEFAULT '';
+			END IF;
+		END $$`,
 		`ALTER TABLE bulk_message_recipients ALTER COLUMN phone_number TYPE varchar(50)`,
 		// An earlier prototype of the CSAT feature created chat_closure_ratings
 		// with NOT NULL columns (chat_id, closing_agent_id, closed_at, ...) the

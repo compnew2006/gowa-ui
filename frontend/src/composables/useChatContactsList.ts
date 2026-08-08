@@ -308,8 +308,11 @@ export function useChatContactsList(options: UseChatContactsListOptions) {
       }
       contactAccounts.value = Array.from(accounts).sort()
 
-      // Auto-select account and filter client-side (avoids a second fetch)
-      if (orgAccounts.value.length > 1) {
+      // Auto-select account and filter client-side (avoids a second fetch).
+      // Account tabs are shown per-CONTACT, based on the accounts that actually
+      // have messages with this number — not all org accounts. A contact with
+      // messages on a single account (or none) gets no tabs.
+      if (contactAccounts.value.length > 1) {
         // Find account of the most recent incoming message
         for (let i = contactsStore.messages.length - 1; i >= 0; i--) {
           const msg = contactsStore.messages[i]

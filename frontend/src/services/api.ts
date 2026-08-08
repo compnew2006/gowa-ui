@@ -1041,7 +1041,7 @@ export const gowaServersService = {
   // server but has no account row in gowa-ui. Required for devices created
   // before the provisioning fix, otherwise their chats never reach the inbox.
   deviceSync: (serverId: string, deviceId: string) =>
-    api.post<{ device_id: string; account_id: string; account_name: string }>(`/gowa/servers/${serverId}/devices/${encodeURIComponent(deviceId)}/sync`),
+    api.post<{ device_id: string; account_id: string; account_name: string; jid?: string; webhook_unsupported?: boolean }>(`/gowa/servers/${serverId}/devices/${encodeURIComponent(deviceId)}/sync`),
   // Imports the device's chat list from GOWA into the gowa-ui contacts table,
   // so the Contacts page is populated for a connected device without waiting
   // for an inbound message. Idempotent; safe to run repeatedly.

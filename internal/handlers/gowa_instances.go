@@ -328,6 +328,18 @@ func (a *App) ListGowaInstanceDevices(r *fastglue.Request) error {
 		if st, err := bundle.client.GetDeviceStatus(ctx, d.ID); err == nil {
 			entry.IsConnected = st.IsConnected
 			entry.IsLoggedIn = st.IsLoggedIn
+		} else {
+			// GOWA's /devices/{id}/status route cannot resolve device IDs
+			// containing non-ASCII characters or spaces (the router matches the
+			// URL-encoded path segment literally and returns 500 "device not
+			// found"). ListDevices already returned the authoritative State and
+			// JID, so derive the connection flags from those to keep the UI
+			// consistent — a logged_in state with a JID is connected and logged
+			// in. Without this fallback the device shows "Connect / Pair Code"
+			// actions even though it is paired and online.
+			a.Log.Debug("GetDeviceStatus failed; deriving state from ListDevices", "error", err, "device", d.ID)
+			entry.IsConnected = d.State == "logged_in" || d.State == "connected"
+			entry.IsLoggedIn = d.State == "logged_in"
 		}
 		out = append(out, entry)
 	}
@@ -357,6 +369,20 @@ func lookupGowaDeviceJID(ctx context.Context, client *gowa.Client, deviceID stri
 		}
 	}
 	return ""
+}
+
+// isGowaDeviceNotFound reports whether a GOWA client error is the router's
+// "device not found" response, which is how GOWA signals that a device ID
+// containing non-ASCII characters or spaces cannot be addressed on a
+// /devices/{id}/* path route (the router matches the URL-encoded segment
+// literally). doRaw/doJSONRaw format non-2xx responses as
+// "gowa API returned status N: <body>", so we substring-match the body.
+func isGowaDeviceNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "device not found") || strings.Contains(msg, `"NOT_FOUND"`)
 }
 
 // ensureGowaAccountOpts parameterizes ensureGowaAccountForDevice.
@@ -482,14 +508,41 @@ func (a *App) SyncGowaInstanceDevice(r *fastglue.Request) error {
 	// Pull the live webhook config so the stored secret is authoritative. If
 	// GOWA has no secret configured, generate one and push it so the account
 	// row and GOWA agree before any webhook arrives.
+	//
+	// GOWA's webhook endpoints (GET/PATCH /devices/{id}/webhook) cannot resolve
+	// device IDs containing non-ASCII characters or spaces — the router matches
+	// the URL-encoded path segment literally and returns 404/500 "device not
+	// found" even though the device exists and is connected. This is a GOWA-
+	// side limitation, not a gowa-ui bug. For such devices we fall back to a
+	// locally-generated secret so the account row and history sync still work;
+	// live inbound webhooks won't reach the device until its ID is renamed to
+	// ASCII. Everything below this step (JID lookup via ListDevices, account
+	// creation, history sync) is unaffected because it uses POST /devices with
+	// the ID in the body or matches in-memory.
+	webhookUnsupported := false
 	cfg, err := bundle.client.GetDeviceWebhook(context.Background(), deviceID)
 	if err != nil {
-		a.Log.Error("Failed to read GOWA device webhook during sync", "error", err, "device", deviceID)
-		return r.SendErrorEnvelope(fasthttp.StatusBadGateway, "Failed to read device webhook from GOWA", nil, "")
+		if isGowaDeviceNotFound(err) {
+			webhookUnsupported = true
+			a.Log.Warn("GOWA webhook endpoint unsupported for this device ID (non-ASCII/spaces); falling back to local secret", "error", err, "device", deviceID)
+		} else {
+			a.Log.Error("Failed to read GOWA device webhook during sync", "error", err, "device", deviceID)
+			return r.SendErrorEnvelope(fasthttp.StatusBadGateway, "Failed to read device webhook from GOWA", nil, "")
+		}
 	}
-	secret := cfg.WebhookSecret
+	// cfg is nil when the webhook endpoint returned "device not found" (the
+	// unsupported-ID branch above); fall back to a freshly generated secret.
+	var secret string
+	if cfg != nil {
+		secret = cfg.WebhookSecret
+	}
 	if secret == "" {
 		secret = gowa.GenerateWebhookSecret()
+	}
+	// Only push the webhook config when GOWA can actually address the device
+	// on its webhook route. Attempting SetDeviceWebhook on an unsupported ID
+	// would fail with the same 404/500 and is a guaranteed no-op.
+	if !webhookUnsupported && cfg != nil && cfg.WebhookSecret == "" {
 		webhookURL := bundle.instance.WebhookURL
 		if webhookURL == "" {
 			webhookURL = fmt.Sprintf("%s://%s%s", "http", r.RequestCtx.Host(), a.Config.GOWA.WebhookPath)
@@ -527,11 +580,15 @@ func (a *App) SyncGowaInstanceDevice(r *fastglue.Request) error {
 	a.logAudit(orgID, userID, "devices", account.ID, models.AuditActionUpdated, nil, map[string]any{
 		"device_id": deviceID, "synced_account": true, "jid": jid,
 	})
+	if webhookUnsupported {
+		a.Log.Warn("Device synced but live webhooks are unavailable; rename the device to ASCII in GOWA to enable them", "device", deviceID)
+	}
 	return r.SendEnvelope(map[string]any{
-		"device_id":    deviceID,
-		"account_id":   account.ID,
-		"account_name": account.Name,
-		"jid":          jid,
+		"device_id":           deviceID,
+		"account_id":          account.ID,
+		"account_name":        account.Name,
+		"jid":                 jid,
+		"webhook_unsupported": webhookUnsupported,
 	})
 }
 

@@ -387,8 +387,22 @@ async function reconnect(d: GowaDevice) {
 async function syncDevice(d: GowaDevice) {
   statusLoading.value = true;
   try {
-    await gowaServersService.deviceSync(serverId.value, d.id);
-    toast.success(t("gowaServers.synced", "Device synced"));
+    const resp = await gowaServersService.deviceSync(serverId.value, d.id);
+    const data = unwrap(resp);
+    // GOWA's webhook route can't address device IDs with non-ASCII characters
+    // or spaces — sync still works (account created, history sync runs), but
+    // live inbound webhooks are unavailable until the device is renamed to
+    // ASCII in GOWA. Surface this clearly instead of a bare "synced".
+    if (data.webhook_unsupported) {
+      toast.warning(
+        t(
+          "gowaServers.syncedWebhookUnsupported",
+          "Device synced, but live webhooks are unavailable (rename the device to ASCII in GOWA to enable them)",
+        ),
+      );
+    } else {
+      toast.success(t("gowaServers.synced", "Device synced"));
+    }
     await refreshDevices();
   } catch (e) {
     toast.error(getErrorMessage(e, "Failed to sync device"));

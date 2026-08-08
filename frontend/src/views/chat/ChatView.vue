@@ -437,7 +437,10 @@ const {
 
 // 8) Contacts list (tabs, tag filter, custom actions, multi-account, selectContact)
 const {
-  orgAccounts,
+  // Accounts that actually have messages with the selected contact — drives
+  // the per-contact account tabs (showing every org account instead would
+  // surface accounts with no conversation for this number).
+  contactAccounts,
   isTagFilterOpen,
   toggleTagFilter,
   clearTagFilter,
@@ -1176,24 +1179,25 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <!-- Account Tabs (shown when contact has messages from multiple WhatsApp accounts) -->
+        <!-- Account Tabs (per-contact: only the accounts that have messages
+             with this number, and only when more than one such account exists) -->
         <div
-          v-if="orgAccounts.length > 1 && selectedAccount"
+          v-if="contactAccounts.length > 1 && selectedAccount"
           class="flex-shrink-0 px-4 py-2 border-b border-white/[0.08] light:border-gray-200 bg-[#0a0a0b] light:bg-gray-50"
         >
           <div class="inline-flex items-center gap-1 rounded-lg bg-white/[0.06] light:bg-gray-100 p-1">
             <button
-              v-for="acct in orgAccounts"
-              :key="acct.name"
+              v-for="acct in contactAccounts"
+              :key="acct"
               :class="[
                 'rounded-md px-3 py-1 text-xs font-medium whitespace-nowrap transition-all',
-                acct.name === selectedAccount
+                acct === selectedAccount
                   ? 'bg-emerald-600 text-white shadow-sm'
                   : 'bg-white/[0.08] text-white/70 hover:text-white/90 hover:bg-white/[0.12] light:bg-gray-200 light:text-gray-600 light:hover:text-gray-800 light:hover:bg-gray-300'
               ]"
-              @click="switchAccount(acct.name)"
+              @click="switchAccount(acct)"
             >
-              {{ acct.name }}
+              {{ acct }}
             </button>
           </div>
         </div>

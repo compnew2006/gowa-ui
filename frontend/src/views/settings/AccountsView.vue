@@ -22,13 +22,14 @@ import {
   Trash2,
   Check,
   CheckCircle2,
-  Globe,
   Wifi,
   WifiOff
 } from 'lucide-vue-next'
 
-import ConnectionCard from '@/components/settings/ConnectionCard.vue'
-import ServerInfoCard from '@/components/settings/ServerInfoCard.vue'
+// NOTE: The "Server Connection" tab (ConnectionCard / ServerInfoCard) was
+// removed — it made the browser probe GOWA directly (Path B), the source of
+// the CORS / mixed-content / wrong-host issues. Account→GOWA connectivity is
+// now managed entirely server-side via /api/gowa/servers (gowa_instances).
 
 const { t } = useI18n()
 const organizationsStore = useOrganizationsStore()
@@ -213,10 +214,6 @@ async function confirmDelete() {
                 <Phone class="h-3.5 w-3.5 text-emerald-500" />
                 {{ $t('accounts.yourAccounts', 'WhatsApp Accounts') }}
               </TabsTrigger>
-              <TabsTrigger value="connection" class="flex items-center gap-2 text-xs">
-                <Globe class="h-3.5 w-3.5 text-blue-500" />
-                {{ $t('accounts.serverConnection', 'Server Connection') }}
-              </TabsTrigger>
             </TabsList>
           </div>
 
@@ -332,13 +329,6 @@ async function confirmDelete() {
                 </DataTable>
               </CardContent>
             </Card>
-          </TabsContent>
-
-          <TabsContent value="connection" class="space-y-6 mt-0">
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <ConnectionCard />
-              <ServerInfoCard />
-            </div>
           </TabsContent>
         </Tabs>
       </div>
