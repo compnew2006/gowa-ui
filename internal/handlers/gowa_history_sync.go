@@ -242,18 +242,29 @@ func (a *App) syncGowaHistory(ctx context.Context, client *gowa.Client, account 
 			}
 		}
 
-		// Stamp the contact's last_message_at/preview from the newest message.
-		if newest.ID != uuid.Nil {
-			preview := getMessagePreviewFromContent(newest.MessageType, newest.Content)
-			// Use the chat's last_message_time (authoritative from GOWA) when available.
-			lastAt := gowa.ParseTimestamp(ch.LastMessageTime)
-			if lastAt.IsZero() {
-				lastAt = time.Now()
+		// Always reconcile the contact's last_message_at from the GOWA chat's
+		// authoritative last_message_time, EVEN when no new messages were stored.
+		// Previously this ran only inside `if newest.ID != uuid.Nil`, so a re-sync
+		// of a chat whose messages all already existed left last_message_at frozen
+		// at the time of the FIRST sync forever — the conversation then got buried
+		// off the visible list (sorted by last_message_at). Forward-only via
+		// GREATEST so a clock skew or stale GOWA timestamp can never rewind a
+		// newer local value. The preview is only refreshed when we actually saw a
+		// new (newest) message this run, to avoid clobbering it with stale text.
+		lastAt := gowa.ParseTimestamp(ch.LastMessageTime)
+		if lastAt.IsZero() && newest.ID != uuid.Nil {
+			lastAt = newest.CreatedAt
+		}
+		if !lastAt.IsZero() {
+			updates := map[string]any{
+				"last_message_at": gorm.Expr("GREATEST(COALESCE(last_message_at, '1970-01-01'::timestamptz), ?)", lastAt),
 			}
-			a.DB.Model(contact).Updates(map[string]any{
-				"last_message_at":      lastAt,
-				"last_message_preview": preview,
-			})
+			if newest.ID != uuid.Nil {
+				updates["last_message_preview"] = getMessagePreviewFromContent(newest.MessageType, newest.Content)
+			}
+			a.DB.Model(contact).Updates(updates)
+		}
+		if newest.ID != uuid.Nil {
 			stats.ChatsWithMsgs++
 		}
 	}
