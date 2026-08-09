@@ -42,6 +42,20 @@ Status only moves forward (`pending` → `sent` → `delivered` → `read`). A
 receipt that would downgrade the status (e.g. a `delivered` arriving after
 `read`) is ignored.
 
+<Aside type="caution">
+  <strong>Delivered/read ticks require the GOWA webhook to point at THIS
+  gowa-ui instance.</strong> The <code>delivered</code> and <code>read</code>
+  receipts arrive as <code>message.ack</code> webhook events from GOWA. If the
+  GOWA device's <code>webhook_url</code> is configured to a different host
+  (e.g. your production domain while you test on <code>localhost:8080</code>),
+  the receipts are delivered there and this instance's ticks stay at ✓ forever.
+  Verify with <code>GET /devices/&#123;device_id&#125;/webhook</code> on the
+  GOWA API — the <code>webhook_url</code> must reach this gowa-ui's
+  <code>/api/gowa/webhook/&#123;device_id&#125;</code> route, and
+  <code>webhook_events</code> should be empty (all events) or include
+  <code>message.ack</code>.
+</Aside>
+
 <Aside type="note">
   When you send a message from the UI, the response already carries the final
   status and WhatsApp message ID, so the clock advances to a check
@@ -101,3 +115,45 @@ provider on first view if it isn't cached locally yet.
   revoke and reactions. The hover action menu is the same regardless of
   message type.
 </Aside>
+
+## Troubleshooting
+
+### A conversation is missing from the chat list
+
+The chat list is sorted by the contact's `last_message_at` timestamp. If a
+conversation you expect to see is buried or absent — even though its messages
+exist in the database — the contact's `last_message_at` is stale (older than
+its newest message).
+
+GOWA history sync reconciles this on every run (every 15 minutes) in a
+forward-only way (it can only move the timestamp forward, never rewind it).
+If you've just imported a database or migrated, run this one-shot backfill to
+unstick every contact immediately:
+
+```sql
+UPDATE contacts c
+SET last_message_at = GREATEST(
+  COALESCE(c.last_message_at, '1970-01-01'::timestamptz),
+  (SELECT MAX(created_at) FROM messages m WHERE m.contact_id = c.id)
+)
+WHERE EXISTS (SELECT 1 FROM messages m WHERE m.contact_id = c.id);
+```
+
+After that, the conversation reappears in the list at the correct position.
+
+### Sent messages stay on a single ✓ (never delivered/read)
+
+This means the `message.ack` webhook events from GOWA aren't reaching this
+gowa-ui instance. Check the GOWA device's webhook configuration:
+
+```bash
+curl -u <gowa_user>:<gowa_pass> \
+  -H "X-Device-Id: <device_id>" \
+  https://<gowa-host>/devices/<device_id>/webhook
+```
+
+The `webhook_url` must point to this gowa-ui's
+`/api/gowa/webhook/{device_id}` route (not a different host), and
+`webhook_events` should be empty (all events) or include `message.ack`. The
+`webhook_secret` must match the value stored on the account (Settings →
+Accounts). See the delivery-tick note at the top of this page.
