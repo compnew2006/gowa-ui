@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/contactutil"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/pkg/gowa"
+	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 	"gorm.io/gorm"
@@ -189,7 +189,7 @@ func (a *App) CreateGowaInstance(r *fastglue.Request) error {
 	// Drop any cached GOWA client for this base URL so the messaging registry
 	// picks up the new credentials on the next send.
 	if a.WARegistry != nil {
-		a.WARegistry.InvalidateGowa(inst.BaseURL)
+		a.WARegistry.InvalidateGowa(inst.OrganizationID, inst.BaseURL)
 	}
 
 	a.logAudit(orgID, userID, "gowa_instances", inst.ID, models.AuditActionCreated, nil, map[string]any{
@@ -250,8 +250,8 @@ func (a *App) UpdateGowaInstance(r *fastglue.Request) error {
 	// messaging registry re-resolves credentials on the next send. The base
 	// URL may have changed, and credentials were just (re)encrypted.
 	if a.WARegistry != nil {
-		a.WARegistry.InvalidateGowa(old.BaseURL)
-		a.WARegistry.InvalidateGowa(instance.BaseURL)
+		a.WARegistry.InvalidateGowa(old.OrganizationID, old.BaseURL)
+		a.WARegistry.InvalidateGowa(instance.OrganizationID, instance.BaseURL)
 	}
 
 	a.logAudit(orgID, userID, "gowa_instances", instance.ID, models.AuditActionUpdated,
@@ -281,7 +281,7 @@ func (a *App) DeleteGowaInstance(r *fastglue.Request) error {
 	// Drop the cached GOWA client so future sends no longer resolve to a
 	// provider whose credentials were just removed.
 	if a.WARegistry != nil {
-		a.WARegistry.InvalidateGowa(instance.BaseURL)
+		a.WARegistry.InvalidateGowa(instance.OrganizationID, instance.BaseURL)
 	}
 
 	a.logAudit(orgID, userID, "gowa_instances", instance.ID, models.AuditActionDeleted, map[string]any{
@@ -543,10 +543,7 @@ func (a *App) SyncGowaInstanceDevice(r *fastglue.Request) error {
 	// on its webhook route. Attempting SetDeviceWebhook on an unsupported ID
 	// would fail with the same 404/500 and is a guaranteed no-op.
 	if !webhookUnsupported && cfg != nil && cfg.WebhookSecret == "" {
-		webhookURL := bundle.instance.WebhookURL
-		if webhookURL == "" {
-			webhookURL = fmt.Sprintf("%s://%s%s", "http", r.RequestCtx.Host(), a.Config.GOWA.WebhookPath)
-		}
+		webhookURL := buildPublicWebhookURL(r, bundle.instance.WebhookURL, a.Config.GOWA.WebhookPath)
 		if _, err := bundle.client.SetDeviceWebhook(context.Background(), deviceID, gowa.WebhookConfig{
 			WebhookURL:    webhookURL,
 			WebhookSecret: secret,
@@ -789,6 +786,39 @@ func (a *App) SyncGowaInstanceMessages(r *fastglue.Request) error {
 	})
 }
 
+// buildPublicWebhookURL derives the webhook URL to register on a GOWA device.
+// Priority: an explicitly-configured per-instance WebhookURL (the reliable,
+// deployment-specific override) > derived from the incoming request.
+//
+// Derivation is protocol-aware (gap #8b): it honors X-Forwarded-Proto when set
+// (the standard signal from a TLS-terminating reverse proxy, which is how
+// production is normally deployed) and otherwise falls back to the request's
+// own TLS state, then to http. Previously this was hard-coded to "http", so
+// even HTTPS deployments registered an http webhook URL with GOWA — meaning the
+// body and HMAC signature traveled in cleartext over the network where they
+// could be observed or replayed.
+//
+// Trust note: X-Forwarded-Proto is only meaningful behind a proxy that sets it;
+// a spoofed header from a direct client can at worst register a non-functional
+// scheme (GOWA then fails to reach the webhook — a availability, not security,
+// issue). For a hard guarantee, set instance.WebhookURL explicitly.
+func buildPublicWebhookURL(r *fastglue.Request, instanceWebhookURL, webhookPath string) string {
+	if instanceWebhookURL != "" {
+		return instanceWebhookURL
+	}
+	scheme := "http"
+	if proto := string(r.RequestCtx.Request.Header.Peek("X-Forwarded-Proto")); proto == "https" {
+		scheme = "https"
+	} else if r.RequestCtx.IsTLS() {
+		scheme = "https"
+	}
+	host := string(r.RequestCtx.Host())
+	if host == "" {
+		host = "localhost"
+	}
+	return fmt.Sprintf("%s://%s%s", scheme, host, webhookPath)
+}
+
 // getMessagePreviewFromContent returns a short preview string for a message,
 // mirroring updateContactLastMessage/getMessagePreview logic but for history.
 func getMessagePreviewFromContent(msgType models.MessageType, content string) string {
@@ -832,10 +862,7 @@ func (a *App) CreateGowaInstanceDevice(r *fastglue.Request) error {
 	}
 
 	ctx := context.Background()
-	webhookURL := bundle.instance.WebhookURL
-	if webhookURL == "" {
-		webhookURL = fmt.Sprintf("%s://%s%s", "http", r.RequestCtx.Host(), a.Config.GOWA.WebhookPath)
-	}
+	webhookURL := buildPublicWebhookURL(r, bundle.instance.WebhookURL, a.Config.GOWA.WebhookPath)
 	webhookSecret := gowa.GenerateWebhookSecret()
 	deviceID := gowa.GenerateDeviceID(req.DeviceName)
 

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/pkg/gowa"
 	"github.com/compnew2006/gowa-ui/pkg/whatsapp"
@@ -185,7 +186,7 @@ func newCallRejectTestApp(t *testing.T, mock *callRejectMock) *App {
 		Log:        log,
 		WARegistry: whatsapp.NewRegistryWithFactory(
 			log,
-			func(baseURL string) (string, string) { return "", "" },
+			func(_ uuid.UUID, baseURL string) (string, string) { return "", "" },
 			func(baseURL, username, password string) whatsapp.Provider {
 				return gowa.New(mock.server.URL, username, password)
 			},

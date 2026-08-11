@@ -2,7 +2,6 @@ package gowa
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/compnew2006/gowa-ui/pkg/whatsapp"
 )
@@ -147,16 +146,18 @@ func (c *Client) PostStatusVideo(ctx context.Context, account *whatsapp.Account,
 }
 
 // MarkMessageRead marks a message as read via /message/{id}/read.
+//
+// The whatsapp.Provider interface mandates this signature, but GOWA's
+// /message/{id}/read REQUIRES the chat JID (`phone`) that this signature does
+// not carry. The previous implementation sent an empty phone, which GOWA
+// rejects with 400 — a latent API defect (gap #12). It now fails fast with
+// ErrNotSupported and directs callers to the GOWA-specific method that carries
+// the JID. The production read path already uses MarkMessageReadWithJID.
 func (c *Client) MarkMessageRead(ctx context.Context, account *whatsapp.Account, messageID string) error {
-	path := fmt.Sprintf("/message/%s/read", messageID)
-	body := map[string]any{
-		"phone": toJID(""), // phone is required but unknown at this point
-	}
-	// We cannot know the sender JID from just a messageID in the current
-	// interface signature. GOWA requires it. This is a known limitation;
-	// callers that have the phone should use a GOWA-specific method.
-	_, err := c.doJSON(ctx, "POST", path, deviceID(account), body)
-	return err
+	_ = ctx
+	_ = account
+	_ = messageID
+	return whatsapp.ErrNotSupported
 }
 
 // hasExtension reports whether the filename has a file extension (contains a dot

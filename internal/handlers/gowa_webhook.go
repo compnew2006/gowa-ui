@@ -2,18 +2,21 @@ package handlers
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/contactutil"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/internal/websocket"
 	"github.com/compnew2006/gowa-ui/pkg/gowa"
+	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
+	"gorm.io/gorm/clause"
 )
 
 // GowaWebhookHandler processes incoming webhook events from a GOWA instance.
@@ -115,55 +118,176 @@ func (a *App) handleGowaWebhook(r *fastglue.Request, pathDeviceID string) error 
 		return r.SendEnvelope(map[string]string{"status": "ok"}) // 200 to prevent GOWA retries
 	}
 
-	// Route based on event type. Processing is async so we respond 200
-	// within GOWA's 10-second timeout.
+	// DURABLE INGRESS (gap #1): persist the RAW event to the webhook inbox and
+	// return 2xx ONLY after the row is durable. A background processor
+	// (GowaWebhookProcessor) then dispatches it with retries + dead-lettering,
+	// so a crash, DB outage, or panic AFTER this 200 can never silently drop an
+	// inbound event — the row survives and is processed on restart. The
+	// idempotency key + partial unique index dedupes concurrent/replayed
+	// deliveries of the same logical event (gap #8), including call.offer.
+	eventKey := deriveGowaEventKey(&envelope)
+	evt := models.GowaWebhookEvent{
+		OrganizationID: account.OrganizationID,
+		AccountID:      account.ID,
+		DeviceID:       envelope.DeviceID,
+		Event:          envelope.Event,
+		EventKey:       eventKey,
+		// Copy the body: fasthttp reuses PostBody()'s underlying buffer across
+		// requests, so a live reference would be overwritten by the next
+		// webhook before the worker reads it.
+		RawBody: append([]byte(nil), rawBody...),
+		Status:  models.GowaWebhookEventPending,
+	}
+	res := a.DB.Clauses(clause.OnConflict{DoNothing: true}).Create(&evt)
+	if res.Error != nil {
+		a.Log.Error("Failed to persist GOWA webhook event to inbox",
+			"error", res.Error, "event", envelope.Event, "device_id", envelope.DeviceID)
+		// 500 → GOWA retries, because we did NOT durably accept the event.
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "accept failed", nil, "")
+	}
+	// Wake the worker for immediate (near-real-time) processing. Falls back to
+	// the worker's poll interval when no processor is wired (tests / worker cmd).
+	if a.GowaWebhookNotify != nil {
+		a.GowaWebhookNotify()
+	}
+	return r.SendEnvelope(map[string]string{"status": "ok"})
+}
+
+// deriveGowaEventKey returns the idempotency key for a GOWA webhook event —
+// the value that makes a redelivery of the SAME logical event collide with the
+// original at the inbox boundary. Combined with the partial unique index
+// idx_gowa_webhook_events_idempotency, this deduplicates concurrent or replayed
+// deliveries (gap #8) so every event is processed at most once.
+//
+// Keys are namespaced by type to avoid cross-event collisions (a wamid reused
+// as a call_id, etc.). Events with no natural identity fall back to a stable
+// hash of the payload; chat_presence/connection additionally collapse into a
+// per-minute window so bursts don't pile up while still refreshing state.
+func deriveGowaEventKey(envelope *gowa.WebhookPayload) string {
 	switch envelope.Event {
 	case "message":
-		go a.processGowaMessage(account, &envelope)
+		var p struct {
+			ID string `json:"id"`
+		}
+		if json.Unmarshal(envelope.Payload, &p) == nil && p.ID != "" {
+			return "wamid:" + p.ID
+		}
 	case "message.ack":
-		go a.processGowaAck(account, &envelope)
-	case "chat_presence":
-		go a.processGowaChatPresence(&envelope)
-	case "connection":
-		go a.processGowaConnection(account, &envelope)
+		var p struct {
+			IDs         []string `json:"ids"`
+			ReceiptType string   `json:"receipt_type"`
+		}
+		if json.Unmarshal(envelope.Payload, &p) == nil && len(p.IDs) > 0 {
+			return "ack:" + p.ReceiptType + ":" + p.IDs[0]
+		}
 	case "message.reaction":
-		go a.processGowaReaction(account, &envelope)
+		var p struct {
+			ReactedMessageID string `json:"reacted_message_id"`
+			Reaction         string `json:"reaction"`
+		}
+		if json.Unmarshal(envelope.Payload, &p) == nil && p.ReactedMessageID != "" {
+			return "react:" + p.ReactedMessageID + ":" + p.Reaction
+		}
 	case "message.revoked":
-		go a.processGowaRevoked(account, &envelope)
+		var p struct {
+			RevokedMessageID string `json:"revoked_message_id"`
+		}
+		if json.Unmarshal(envelope.Payload, &p) == nil && p.RevokedMessageID != "" {
+			return "revoke:" + p.RevokedMessageID
+		}
 	case "message.edited":
-		go a.processGowaEdited(account, &envelope)
+		var p struct {
+			OriginalMessageID string `json:"original_message_id"`
+			Body              string `json:"body"`
+		}
+		if json.Unmarshal(envelope.Payload, &p) == nil && p.OriginalMessageID != "" {
+			// Include the body hash so a SECOND edit (different body) to the same
+			// message is a distinct event, while a redelivery of the same edit
+			// dedupes.
+			return "edit:" + p.OriginalMessageID + ":" + hashShort(p.Body)
+		}
 	case "call.offer":
-		go a.processGowaCallOffer(account, &envelope)
-	default:
-		a.Log.Debug("Unhandled GOWA event type", "event", envelope.Event)
+		var p struct {
+			CallID string `json:"call_id"`
+		}
+		if json.Unmarshal(envelope.Payload, &p) == nil && p.CallID != "" {
+			return "call:" + p.CallID
+		}
+	case "chat_presence":
+		var p struct {
+			From   string `json:"from"`
+			ChatID string `json:"chat_id"`
+		}
+		if json.Unmarshal(envelope.Payload, &p) == nil && (p.From != "" || p.ChatID != "") {
+			// Per-minute window: rapid typing/idle toggles collapse, but a
+			// sustained state still refreshes once a minute.
+			return fmt.Sprintf("presence:%s:%s:%d", p.From, p.ChatID, time.Now().Unix()/60)
+		}
+	case "connection":
+		var p struct {
+			Event string `json:"event"`
+		}
+		_ = json.Unmarshal(envelope.Payload, &p)
+		return fmt.Sprintf("conn:%s:%s:%d", envelope.DeviceID, p.Event, time.Now().Unix()/60)
 	}
+	// No natural key — stable hash of the payload (redelivery → same hash →
+	// deduped). Empty payload collapses to a single sentinel.
+	if len(envelope.Payload) == 0 {
+		return "empty"
+	}
+	return "hash:" + hashShort(string(envelope.Payload))
+}
 
-	return r.SendEnvelope(map[string]string{"status": "ok"})
+// hashShort returns the first 16 hex chars of the SHA-256 of s — a compact,
+// collision-resistant identity for fallback event keys.
+func hashShort(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:8])
 }
 
 // getGowaAccountByDeviceID looks up a WhatsAppAccount by its GOWA device ID.
 // The device_id in the webhook is the GOWA session identifier (typically the
 // account's phone JID, e.g. "628123456789@s.whatsapp.net").
+//
+// Resolution is deterministic and priority-ordered: exact gowa_device_id first
+// (the reliable GOWA session id), then gowa_jid, then the phone-only fallbacks.
+// The partial UNIQUE indexes idx_wa_accounts_gowa_device / idx_wa_accounts_gowa_jid
+// (see internal/database/postgres.go) guarantee each value maps to at most one
+// account globally, so a duplicated device_id/jid across orgs can no longer make
+// First() pick an arbitrary (possibly cross-tenant) account — closing the
+// webhook-routing hole where a valid webhook could be HMAC-checked against the
+// wrong account's secret or routed into the wrong org.
+//
+// NOTE: the previous implementation had (a) a single OR query across four
+// columns that could match different accounts for device_id vs phone and let
+// First() pick arbitrarily, and (b) a fallback that iterated ALL GOWA accounts
+// across every org with outbound GetAppStatus calls on each unauthenticated
+// request — an abuse vector since removed. Resolution is now a direct indexed
+// lookup only.
 func (a *App) getGowaAccountByDeviceID(deviceID string) (*models.WhatsAppAccount, error) {
 	var account models.WhatsAppAccount
-	// GOWA v8 webhooks send the connected JID (e.g. "201007181781@s.whatsapp.net")
-	// as device_id, but gowa-ui stores the custom device ID assigned during
-	// device creation (e.g. "test-account-d9768a03"). We try multiple match
-	// strategies: exact device_id, phone portion of JID, gowa_jid field.
-	//
-	// NOTE: the previous implementation had a fallback that iterated ALL GOWA
-	// accounts across every org and made outbound GetAppStatus calls on every
-	// unauthenticated request. That fallback was an abuse vector (M5) and has
-	// been removed. The account must resolve via the direct query below.
 	phone := gowa.PhoneFromJID(deviceID)
-	if err := a.DB.Where(
-		"gowa_device_id = ? OR gowa_device_id = ? OR gowa_jid = ? OR gowa_jid = ?",
-		deviceID, phone, deviceID, phone,
-	).First(&account).Error; err != nil {
+
+	// Priority 1: exact gowa_device_id (indexed, unique). Happy path.
+	err := a.DB.Where("gowa_device_id = ?", deviceID).First(&account).Error
+	// Priority 2: exact gowa_jid (indexed, unique) — GOWA v8 sends the connected JID.
+	if err != nil {
+		err = a.DB.Where("gowa_jid = ?", deviceID).First(&account).Error
+	}
+	// Priority 3/4: phone-only fallbacks for legacy rows where the stored id is
+	// the bare phone digits. Skipped when phone equals the device_id (no point
+	// re-querying the same value) or is empty.
+	if err != nil && phone != "" && phone != deviceID {
+		err = a.DB.Where("gowa_device_id = ?", phone).First(&account).Error
+		if err != nil {
+			err = a.DB.Where("gowa_jid = ?", phone).First(&account).Error
+		}
+	}
+	if err != nil {
 		return nil, fmt.Errorf("gowa account not found for device %s: %w", deviceID, err)
 	}
 
-	// Cache the JID as gowa_jid for faster future lookups.
+	// Cache the connected JID as gowa_jid for faster future exact-match lookups.
 	if phone != "" && phone != deviceID && account.GowaJID != deviceID {
 		a.DB.Model(&account).Update("gowa_jid", deviceID)
 	}
@@ -318,6 +442,35 @@ func (a *App) processGowaMessage(account *models.WhatsAppAccount, envelope *gowa
 			ID:       mf.URL,
 			MimeType: "image/webp",
 		}
+
+	case len(msg.VideoNote) > 0:
+		// Video note (round, muted) — render as a video. Previously this fell
+		// through to the default and was silently dropped as "Unhandled GOWA
+		// message type" because it carries no body (gap #10).
+		vnf := gowa.ResolveMediaField(msg.VideoNote)
+		incoming.Type = "video"
+		incoming.Video = &struct {
+			ID       string `json:"id"`
+			MimeType string `json:"mime_type"`
+			SHA256   string `json:"sha256"`
+			Caption  string `json:"caption,omitempty"`
+		}{
+			ID:       vnf.URL,
+			MimeType: "video/mp4",
+			Caption:  vnf.Caption,
+		}
+
+	case msg.Location != nil:
+		// Location message. Direct assign: MessagePayload.Location and
+		// IncomingTextMessage.Location share an identical anonymous struct
+		// shape by construction — keep them in sync if either changes.
+		incoming.Type = "location"
+		incoming.Location = msg.Location
+
+	case len(msg.Contacts) > 0:
+		// Contact-card message. Direct assign (see Location note above).
+		incoming.Type = "contacts"
+		incoming.Contacts = msg.Contacts
 
 	default:
 		// Unknown message type — treat body as text if present.
@@ -475,6 +628,17 @@ func (a *App) processGowaOutgoingMessage(account *models.WhatsAppAccount, msg *g
 		} else {
 			mediaURL = localPath
 		}
+	case len(msg.VideoNote) > 0:
+		// Video note echoed from the phone — render as a video (gap #10).
+		vnf := gowa.ResolveMediaField(msg.VideoNote)
+		msgType = models.MessageTypeVideo
+		content = vnf.Caption
+		mediaMime = "video/mp4"
+		if localPath, err := a.DownloadAndSaveMedia(ctx, vnf.URL, mediaMime, waAccount); err != nil {
+			a.Log.Error("Failed to download outgoing video note", "error", err)
+		} else {
+			mediaURL = localPath
+		}
 	}
 
 	// Fallback: if there's no body and no media, use a placeholder.
@@ -515,8 +679,19 @@ func (a *App) processGowaOutgoingMessage(account *models.WhatsAppAccount, msg *g
 		}
 	}
 
-	if err := a.DB.Create(outgoing).Error; err != nil {
-		a.Log.Error("Failed to save outgoing GOWA message", "error", err)
+	// Create the outgoing message record. The partial unique index
+	// idx_messages_org_account_wamid is the race backstop: if a concurrent
+	// echo/webhook already inserted this (org, account, wamid), ON CONFLICT DO
+	// NOTHING skips the insert and RowsAffected is 0 — in that case skip the
+	// preview/broadcast side effects so we don't double-emit.
+	outgResult := a.DB.Clauses(clause.OnConflict{DoNothing: true}).Create(outgoing)
+	if outgResult.Error != nil {
+		a.Log.Error("Failed to save outgoing GOWA message", "error", outgResult.Error)
+		return
+	}
+	if outgResult.RowsAffected == 0 {
+		a.Log.Debug("Outgoing GOWA message race-lost to a concurrent insert; skipping side effects",
+			"message_id", outgoing.ID, "wamid", msg.ID)
 		return
 	}
 
@@ -599,10 +774,16 @@ func (a *App) processGowaAck(account *models.WhatsAppAccount, envelope *gowa.Web
 	}
 }
 
-// processGowaChatPresence handles typing/recording presence events.
-// Currently this only logs; it can be extended to broadcast typing
-// indicators via the WebSocket hub.
-func (a *App) processGowaChatPresence(envelope *gowa.WebhookPayload) {
+// processGowaChatPresence handles typing/recording presence events and
+// broadcasts them to connected clients so the UI can show a live typing
+// indicator (gap #9 — previously parsed and only logged, with an explicit TODO).
+func (a *App) processGowaChatPresence(account *models.WhatsAppAccount, envelope *gowa.WebhookPayload) {
+	defer func() {
+		if rv := recover(); rv != nil {
+			a.Log.Error("Panic in processGowaChatPresence", "panic", rv, "device_id", envelope.DeviceID)
+		}
+	}()
+
 	var presence gowa.ChatPresencePayload
 	if err := json.Unmarshal(envelope.Payload, &presence); err != nil {
 		a.Log.Error("Failed to parse GOWA chat_presence payload", "error", err)
@@ -628,7 +809,20 @@ func (a *App) processGowaChatPresence(envelope *gowa.WebhookPayload) {
 		"is_group", presence.IsGroup,
 	)
 
-	// TODO: broadcast typing indicator via WebSocket hub for real-time UI.
+	// Broadcast so the frontend can render a typing/recording indicator for the
+	// matching contact. chat_id is the conversation JID (group @g.us or 1:1
+	// @s.whatsapp.net); the frontend matches it against the open contact.
+	if a.WSHub != nil {
+		a.WSHub.BroadcastToOrg(account.OrganizationID, websocket.WSMessage{
+			Type: websocket.TypeChatPresence,
+			Payload: map[string]any{
+				"chat_id":  presence.ChatID,
+				"from":     presence.From,
+				"activity": activity,
+				"is_group": presence.IsGroup,
+			},
+		})
+	}
 }
 
 // processGowaConnection handles device connection state changes.
@@ -758,7 +952,8 @@ func (a *App) processGowaRevoked(account *models.WhatsAppAccount, envelope *gowa
 	// revoked render entirely off status === "revoked".
 	var msg models.Message
 	if err := a.DB.Model(&models.Message{}).
-		Where("whats_app_message_id = ? AND organization_id = ?", revoked.RevokedMessageID, account.OrganizationID).
+		Where("whats_app_message_id = ? AND organization_id = ? AND whats_app_account = ?",
+			revoked.RevokedMessageID, account.OrganizationID, account.Name).
 		Updates(map[string]any{
 			"status": models.MessageStatusRevoked,
 		}).Error; err != nil {
@@ -770,8 +965,8 @@ func (a *App) processGowaRevoked(account *models.WhatsAppAccount, envelope *gowa
 	// Broadcast the revoked status over WebSocket so every open client
 	// updates the bubble in real time. The existing status_update handler
 	// on the frontend keys off message_id, so we resolve the row first.
-	if err := a.DB.Where("whats_app_message_id = ? AND organization_id = ?",
-		revoked.RevokedMessageID, account.OrganizationID).
+	if err := a.DB.Where("whats_app_message_id = ? AND organization_id = ? AND whats_app_account = ?",
+		revoked.RevokedMessageID, account.OrganizationID, account.Name).
 		First(&msg).Error; err != nil {
 		return
 	}
@@ -824,11 +1019,56 @@ func (a *App) processGowaEdited(account *models.WhatsAppAccount, envelope *gowa.
 		"new_body_length", len(edited.Body),
 	)
 
-	// Update the message content in the database.
-	if err := a.DB.Model(&models.Message{}).
-		Where("whats_app_message_id = ? AND organization_id = ?", edited.OriginalMessageID, account.OrganizationID).
-		Update("content", edited.Body).Error; err != nil {
+	// Update the message content in the database. Scoped to the owning account
+	// (mirrors ack/reaction/revoke): two org accounts can share a WAMID, so an
+	// edit from one device must only touch THAT account's copy.
+	res := a.DB.Model(&models.Message{}).
+		Where("whats_app_message_id = ? AND organization_id = ? AND whats_app_account = ?",
+			edited.OriginalMessageID, account.OrganizationID, account.Name).
+		Update("content", edited.Body)
+	if res.Error != nil {
 		a.Log.Error("Failed to update GOWA edited message content",
-			"original_message_id", edited.OriginalMessageID, "error", err)
+			"original_message_id", edited.OriginalMessageID, "error", res.Error)
+		return
 	}
+	if res.RowsAffected == 0 {
+		// Unknown wamid locally (e.g. a message we never stored). Nothing to
+		// patch or broadcast.
+		a.Log.Debug("GOWA edit target not found locally; skipping side effects",
+			"original_message_id", edited.OriginalMessageID)
+		return
+	}
+
+	// Re-fetch the row to drive side effects with the resolved local ids.
+	var msg models.Message
+	if err := a.DB.Where("whats_app_message_id = ? AND organization_id = ? AND whats_app_account = ?",
+		edited.OriginalMessageID, account.OrganizationID, account.Name).
+		First(&msg).Error; err != nil {
+		a.Log.Error("Edited message vanished after update", "error", err,
+			"original_message_id", edited.OriginalMessageID)
+		return
+	}
+
+	// Refresh the contact-list preview ONLY when the edit targets the
+	// conversation's newest message (the only row whose preview the list
+	// shows). Avoids clobbering a newer message's preview with an older edit.
+	var lastMsg models.Message
+	if err := a.DB.Where("contact_id = ? AND organization_id = ?", msg.ContactID, account.OrganizationID).
+		Order("created_at DESC").Limit(1).First(&lastMsg).Error; err == nil && lastMsg.ID == msg.ID {
+		a.DB.Model(&models.Contact{}).Where("id = ?", msg.ContactID).
+			Update("last_message_preview", getMessagePreviewFromContent(msg.MessageType, edited.Body))
+	}
+
+	// Real-time patch: open chat bubbles re-render the new body without a refetch (gap #11).
+	a.broadcastMessageEdited(account.OrganizationID, msg.ID, msg.ContactID, edited.Body)
+
+	// Outbound application webhook so integrations see the edit.
+	a.DispatchWebhook(account.OrganizationID, models.WebhookEventMessageEdited, MessageEventData{
+		MessageID:       msg.ID.String(),
+		ContactID:       msg.ContactID.String(),
+		MessageType:     msg.MessageType,
+		Content:         edited.Body,
+		WhatsAppAccount: account.Name,
+		Direction:       msg.Direction,
+	})
 }

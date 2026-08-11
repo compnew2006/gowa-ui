@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/pkg/gowa"
 	"github.com/compnew2006/gowa-ui/pkg/whatsapp"
+	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 )
@@ -100,7 +100,16 @@ func (a *App) DownloadAndSaveMedia(ctx context.Context, mediaID string, mimeType
 	gowaClient, ok := provider.(*gowa.Client)
 	if ok {
 		if strings.HasPrefix(mediaID, "http") {
-			// Full URL — download directly
+			// SECURITY (gap #7): only fetch absolute media URLs that belong to
+			// the GOWA instance itself. A signed webhook can carry an arbitrary
+			// URL; fetching an external one would (a) be an SSRF vector into
+			// internal services and (b) risk leaking Basic Auth. Reject any URL
+			// not on the account's GOWA base origin. (DownloadMedia is also
+			// hardened as defense-in-depth: no cross-origin auth, no cross-host
+			// redirects, size-capped.)
+			if !gowa.URLMatchesBase(mediaID, account.GowaBaseURL) {
+				return "", fmt.Errorf("refusing media URL not on the GOWA base host")
+			}
 			data, err = gowaClient.DownloadMedia(ctx, mediaID, "")
 		} else if strings.Contains(mediaID, "/") {
 			// Relative path — prepend base URL

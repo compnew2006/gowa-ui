@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/compnew2006/gowa-ui/internal/chatlifecycle"
 	"github.com/compnew2006/gowa-ui/internal/config"
 	"github.com/compnew2006/gowa-ui/internal/database"
@@ -13,6 +12,8 @@ import (
 	"github.com/compnew2006/gowa-ui/internal/websocket"
 	"github.com/compnew2006/gowa-ui/pkg/gowa"
 	"github.com/compnew2006/gowa-ui/pkg/whatsapp"
+	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/logf"
 	"gorm.io/gorm"
@@ -143,8 +144,8 @@ func setupHTTPClient() *http.Client {
 func setupWARegistry(db *gorm.DB, cfg *config.Config, lo logf.Logger) *whatsapp.Registry {
 	return whatsapp.NewRegistryWithFactory(
 		lo,
-		func(baseURL string) (string, string) {
-			return handlers.ResolveGowaCreds(db, cfg, baseURL)
+		func(orgID uuid.UUID, baseURL string) (string, string) {
+			return handlers.ResolveGowaCreds(db, cfg, orgID, baseURL)
 		},
 		func(baseURL, username, password string) whatsapp.Provider {
 			return gowa.New(baseURL, username, password)

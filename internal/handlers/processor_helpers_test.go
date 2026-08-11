@@ -41,7 +41,7 @@ func newProcessorTestApp(t *testing.T) *App {
 		Log: log,
 		WARegistry: whatsapp.NewRegistryWithFactory(
 			log,
-			func(baseURL string) (string, string) { return "", "" },
+			func(_ uuid.UUID, baseURL string) (string, string) { return "", "" },
 			func(baseURL, username, password string) whatsapp.Provider {
 				return gowa.New(waServer.URL, username, password)
 			},

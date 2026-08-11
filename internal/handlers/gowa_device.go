@@ -5,9 +5,9 @@ import (
 	"encoding/base64"
 	"fmt"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/pkg/gowa"
+	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 )
@@ -218,12 +218,9 @@ func (a *App) GowaCreateDevice(r *fastglue.Request) error {
 	ctx := context.Background()
 
 	// Create the device on GOWA with webhook pointing back to gowa-ui.
-	// Prefer the instance-configured webhook URL; fall back to deriving from
-	// the request host (works when GOWA and gowa-ui are on the same host).
-	webhookURL := inst.WebhookURL
-	if webhookURL == "" {
-		webhookURL = fmt.Sprintf("%s://%s%s", "http", r.RequestCtx.Host(), a.Config.GOWA.WebhookPath)
-	}
+	// buildPublicWebhookURL prefers the instance-configured URL and otherwise
+	// derives a protocol-aware URL (https behind a proxy) — see gap #8b.
+	webhookURL := buildPublicWebhookURL(r, inst.WebhookURL, a.Config.GOWA.WebhookPath)
 	webhookSecret := gowa.GenerateWebhookSecret()
 	deviceID := gowa.GenerateDeviceID(req.DeviceName)
 

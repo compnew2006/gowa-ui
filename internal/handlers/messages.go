@@ -15,13 +15,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/internal/templateutil"
 	"github.com/compnew2006/gowa-ui/internal/utils"
 	"github.com/compnew2006/gowa-ui/internal/websocket"
 	"github.com/compnew2006/gowa-ui/pkg/gowa"
 	"github.com/compnew2006/gowa-ui/pkg/whatsapp"
+	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 )
@@ -654,6 +654,25 @@ func (a *App) broadcastReactionUpdate(orgID uuid.UUID, messageID, contactID uuid
 	})
 }
 
+// broadcastMessageEdited pushes a content patch for an edited message to every
+// connected client so chat bubbles re-render the new body in real time without a
+// full refetch. Mirrors broadcastReactionUpdate's "patch one field by message_id"
+// shape (gap #11 — previously an edit only updated the DB, leaving the UI stale
+// until refresh).
+func (a *App) broadcastMessageEdited(orgID, messageID, contactID uuid.UUID, newContent string) {
+	if a.WSHub == nil {
+		return
+	}
+	a.WSHub.BroadcastToOrg(orgID, websocket.WSMessage{
+		Type: websocket.TypeMessageEdited,
+		Payload: map[string]any{
+			"message_id": messageID.String(),
+			"contact_id": contactID.String(),
+			"content":    map[string]string{"body": newContent},
+		},
+	})
+}
+
 // dispatchMessageSentWebhook dispatches webhook for message.sent event
 func (a *App) dispatchMessageSentWebhook(account *models.WhatsAppAccount, contact *models.Contact, msg *models.Message) {
 	var sentByUserID string
@@ -1048,7 +1067,6 @@ func (a *App) SendTemplateMessage(r *fastglue.Request) error {
 	}
 	return r.SendEnvelope(response)
 }
-
 
 // ============================================================================
 // Contact message handlers (split out of contacts.go): list / send / react /
@@ -2149,4 +2167,3 @@ func (a *App) RevokeMessage(r *fastglue.Request) error {
 		"status":     models.MessageStatusRevoked,
 	})
 }
-

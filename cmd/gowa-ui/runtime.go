@@ -44,6 +44,9 @@ type processorHandles struct {
 
 	gowaHistory     *handlers.GowaHistorySyncProcessor
 	gowaHistoryStop context.CancelFunc
+
+	gowaWebhook     *handlers.GowaWebhookProcessor
+	gowaWebhookStop context.CancelFunc
 }
 
 // startProcessors starts the three periodic background processors (chat-reset
@@ -75,6 +78,16 @@ func startProcessors(app *handlers.App, lo logf.Logger) *processorHandles {
 	go gowaHistoryProcessor.Start(gowaHistoryCtx)
 	lo.Info("GOWA history sync processor started")
 
+	// Start the durable GOWA webhook inbox processor. The webhook handler
+	// persists every inbound event before 2xx and calls app.GowaWebhookNotify
+	// (wired here) to wake this processor for near-real-time dispatch; the
+	// 5s poll is the safety net (crash recovery + events enqueued while down).
+	gowaWebhookProcessor := handlers.NewGowaWebhookProcessor(app, 5*time.Second)
+	gowaWebhookCtx, gowaWebhookCancel := context.WithCancel(context.Background())
+	app.GowaWebhookNotify = gowaWebhookProcessor.Notify
+	go gowaWebhookProcessor.Start(gowaWebhookCtx)
+	lo.Info("GOWA webhook inbox processor started")
+
 	return &processorHandles{
 		chatReset:     chatResetProcessor,
 		chatResetStop: chatResetCancel,
@@ -84,6 +97,9 @@ func startProcessors(app *handlers.App, lo logf.Logger) *processorHandles {
 
 		gowaHistory:     gowaHistoryProcessor,
 		gowaHistoryStop: gowaHistoryCancel,
+
+		gowaWebhook:     gowaWebhookProcessor,
+		gowaWebhookStop: gowaWebhookCancel,
 	}
 }
 
@@ -163,6 +179,12 @@ func gracefulShutdown(
 	procs.gowaHistoryStop()
 	procs.gowaHistory.Stop()
 	lo.Info("GOWA history sync processor stopped")
+
+	// Stop GOWA webhook inbox processor
+	lo.Info("Stopping GOWA webhook inbox processor...")
+	procs.gowaWebhookStop()
+	procs.gowaWebhook.Stop()
+	lo.Info("GOWA webhook inbox processor stopped")
 
 	// Stop workers first
 	if workerCancel != nil {

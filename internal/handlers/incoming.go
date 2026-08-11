@@ -5,10 +5,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/contactutil"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/internal/websocket"
+	"github.com/google/uuid"
 )
 
 // WebhookStatusError represents an error in a status update

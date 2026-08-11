@@ -117,7 +117,7 @@ func newMsgTestApp(t *testing.T, mockServer *mockGowaServer) *handlers.App {
 	// a hard-coded default.
 	app.WARegistry = whatsapp.NewRegistryWithFactory(
 		testutil.NopLogger(),
-		func(baseURL string) (string, string) { return "", "" },
+		func(_ uuid.UUID, baseURL string) (string, string) { return "", "" },
 		func(baseURL, username, password string) whatsapp.Provider {
 			return gowa.New(mockServer.server.URL, username, password)
 		},

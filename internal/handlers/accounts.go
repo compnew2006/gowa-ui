@@ -3,10 +3,10 @@ package handlers
 import (
 	"context"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/crypto"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/pkg/gowa"
+	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 	"gorm.io/gorm"
@@ -195,6 +195,17 @@ func (a *App) CreateAccount(r *fastglue.Request) error {
 	a.logAudit(orgID, userID,
 		"account", account.ID, models.AuditActionCreated, nil, &account)
 
+	// Best-effort: push the new webhook secret to GOWA so it signs with the
+	// same secret we verify with (gap #6). Without this, manually-created
+	// accounts diverge and every webhook 403s. Failure is logged, not fatal —
+	// the account row is already saved. The modern GOWA-Servers provisioning
+	// path pushes at device creation; this covers the manual CRUD path.
+	if req.GowaWebhookSecret != "" && account.GowaDeviceID != "" {
+		if gc, ok := a.resolveProvider(&account).(*gowa.Client); ok && gc != nil {
+			syncDeviceWebhookSecret(context.Background(), gc, a.Log, account.Name, account.GowaDeviceID, req.GowaWebhookSecret)
+		}
+	}
+
 	return r.SendEnvelope(accountToResponse(account))
 }
 
@@ -265,7 +276,11 @@ func (a *App) UpdateAccount(r *fastglue.Request) error {
 	if req.GowaDeviceID != "" {
 		account.GowaDeviceID = req.GowaDeviceID
 	}
+	// Track the plaintext secret (if any was set this request) so we can push it
+	// to GOWA after the save (gap #6). Empty when the secret is unchanged.
+	var newPlainSecret string
 	if req.GowaWebhookSecret != "" {
+		newPlainSecret = req.GowaWebhookSecret
 		enc, err := crypto.Encrypt(req.GowaWebhookSecret, a.Config.App.EncryptionKey)
 		if err != nil {
 			a.Log.Error("Failed to encrypt GOWA webhook secret", "error", err)
@@ -274,8 +289,8 @@ func (a *App) UpdateAccount(r *fastglue.Request) error {
 		account.GowaWebhookSecret = enc
 	} else if account.GowaWebhookSecret == "" {
 		// Auto-generate webhook secret for accounts that don't have one (FR-017).
-		secret := gowa.GenerateWebhookSecret()
-		enc, err := crypto.Encrypt(secret, a.Config.App.EncryptionKey)
+		newPlainSecret = gowa.GenerateWebhookSecret()
+		enc, err := crypto.Encrypt(newPlainSecret, a.Config.App.EncryptionKey)
 		if err != nil {
 			a.Log.Error("Failed to encrypt auto-generated GOWA webhook secret", "error", err)
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update account", nil, "")
@@ -312,6 +327,14 @@ func (a *App) UpdateAccount(r *fastglue.Request) error {
 
 	a.logAudit(orgID, userID,
 		"account", account.ID, models.AuditActionUpdated, &oldAccount, account)
+
+	// Best-effort: push a rotated/new secret to GOWA so it re-signs with it
+	// (gap #6). Failure is logged, not fatal — the row is already saved.
+	if newPlainSecret != "" && account.GowaDeviceID != "" {
+		if gc, ok := a.resolveProvider(account).(*gowa.Client); ok && gc != nil {
+			syncDeviceWebhookSecret(context.Background(), gc, a.Log, account.Name, account.GowaDeviceID, newPlainSecret)
+		}
+	}
 
 	return r.SendEnvelope(accountToResponse(*account))
 }

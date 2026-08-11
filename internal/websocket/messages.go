@@ -13,6 +13,8 @@ const (
 	TypeAuth          = "auth"
 	TypeNewMessage    = "new_message"
 	TypeStatusUpdate  = "status_update"
+	TypeMessageEdited = "message_edited"
+	TypeChatPresence  = "chat_presence"
 	TypeContactUpdate = "contact_update"
 	TypeSetContact    = "set_contact"
 	TypePing          = "ping"

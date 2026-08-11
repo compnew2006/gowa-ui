@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/models"
+	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 )
@@ -123,6 +123,7 @@ var AvailableWebhookEvents = []map[string]string{
 	{"value": string(models.WebhookEventMessageIncoming), "label": "Message Incoming", "description": "When a new message is received from a contact"},
 	{"value": string(models.WebhookEventMessageSent), "label": "Message Sent", "description": "When an agent sends a message"},
 	{"value": string(models.WebhookEventMessageOutgoing), "label": "Message Outgoing", "description": "When a message is sent to a contact (includes echoes)"},
+	{"value": string(models.WebhookEventMessageEdited), "label": "Message Edited", "description": "When a contact edits a message (GOWA message.edited)"},
 	{"value": string(models.WebhookEventContactCreated), "label": "Contact Created", "description": "When a new contact is created"},
 }
 

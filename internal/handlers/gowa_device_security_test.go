@@ -415,8 +415,17 @@ func TestGowaWebhook_ReactionWithoutTimestamp_Accepted(t *testing.T) {
 	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req),
 		"reaction webhook must be accepted (HMAC valid, no timestamp tolerated)")
 
-	// processGowaReaction runs in a goroutine and writes the reaction to the
-	// message's metadata. Poll for it (the write is async).
+	// The webhook handler now durably enqueues the event to the inbox and
+	// returns 200; the GowaWebhookProcessor performs the actual dispatch. Drain
+	// the inbox synchronously so this regression test exercises the full
+	// accept→process path (in production the worker's wakeCh triggers the same
+	// drain immediately after the enqueue).
+	proc := handlers.NewGowaWebhookProcessor(app, time.Hour)
+	require.Equal(t, 1, proc.ProcessBatch(),
+		"the enqueued reaction must be claimed and processed by the inbox worker")
+
+	// processGowaReaction (invoked via the worker) writes the reaction to the
+	// message's metadata synchronously inside dispatch, so it is present now.
 	deadline := time.Now().Add(2 * time.Second)
 	for {
 		var fresh models.Message

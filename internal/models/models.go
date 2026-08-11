@@ -6,9 +6,9 @@ import (
 	"errors"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/crypto"
 	"github.com/compnew2006/gowa-ui/pkg/whatsapp"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -341,8 +341,9 @@ func (WhatsAppAccount) TableName() string {
 // ToWAAccount converts the model to the whatsapp client's Account type.
 func (a *WhatsAppAccount) ToWAAccount() *whatsapp.Account {
 	return &whatsapp.Account{
-		GowaBaseURL:  a.GowaBaseURL,
-		GowaDeviceID: a.GowaDeviceID,
+		OrganizationID: a.OrganizationID,
+		GowaBaseURL:    a.GowaBaseURL,
+		GowaDeviceID:   a.GowaDeviceID,
 	}
 }
 
@@ -361,7 +362,7 @@ type Contact struct {
 	// fetched via the GOWA /user/avatar endpoint. Empty when the contact has
 	// no picture, hasn't been synced yet, or the provider doesn't expose one —
 	// the UI falls back to colored initials in that case.
-	AvatarURL          string     `gorm:"size:2048" json:"avatar_url"`
+	AvatarURL string `gorm:"size:2048" json:"avatar_url"`
 	// AvatarLocalPath is the on-disk relative path (under the media storage
 	// root) of the cached copy of the picture at AvatarURL. WhatsApp CDN URLs
 	// are signed and expire, so the bytes are downloaded once and served from a

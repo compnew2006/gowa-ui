@@ -37,7 +37,23 @@ type Client struct {
 // New creates a new GOWA client targeting the given REST API base URL.
 func New(baseURL, username, password string) *Client {
 	return &Client{
-		httpClient: &http.Client{Timeout: DefaultTimeout},
+		httpClient: &http.Client{
+			Timeout: DefaultTimeout,
+			// SECURITY (gap #7): never follow a redirect to a different host.
+			// A webhook can carry an arbitrary media URL; even with auth bound
+			// to the base origin, a cross-host redirect (initial same-host URL
+			// 302→external) could exfiltrate data or probe internal services
+			// (SSRF). Block it hard at the transport layer.
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				if len(via) == 0 {
+					return nil
+				}
+				if req.URL.Host != via[0].URL.Host {
+					return fmt.Errorf("redirect to different host blocked: %s -> %s", via[0].URL.Host, req.URL.Host)
+				}
+				return nil
+			},
+		},
 		baseURL:    baseURL,
 		username:   username,
 		password:   password,

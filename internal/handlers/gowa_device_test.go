@@ -97,7 +97,7 @@ func newGowaDeviceApp(t *testing.T, mock *mockGowaDeviceAPI) *handlers.App {
 	// noise out of the test output) to NewRegistryWithFactory.
 	app.WARegistry = whatsapp.NewRegistryWithFactory(
 		logf.New(logf.Opts{Level: logf.ErrorLevel}),
-		func(baseURL string) (string, string) { return "user", "pass" },
+		func(_ uuid.UUID, baseURL string) (string, string) { return "user", "pass" },
 		func(baseURL, username, password string) whatsapp.Provider {
 			return gowa.New(baseURL, username, password)
 		},

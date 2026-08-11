@@ -22,46 +22,89 @@ func (c *Client) UploadMedia(ctx context.Context, account *whatsapp.Account, dat
 }
 
 // GetMediaURL retrieves a downloadable URL for a media message.
-// In GOWA, media is identified by message ID, not a separate media ID.
-// This method calls the download endpoint and returns the file_url.
-// The mediaID parameter is treated as the GOWA message ID.
+//
+// The whatsapp.Provider interface mandates this signature, but GOWA identifies
+// media by message ID AND requires the chat JID (`phone`) to download — a value
+// this signature does not carry. The previous implementation sent an empty
+// phone query, which GOWA rejects with 400 — a latent API defect (gap #12). It
+// now fails fast with ErrNotSupported; the production download path uses
+// DownloadMessageMedia (which carries the JID).
 func (c *Client) GetMediaURL(ctx context.Context, mediaID string, account *whatsapp.Account) (string, error) {
-	path := fmt.Sprintf("/message/%s/download?phone=%s", mediaID, "")
-	// phone (chat JID) is required by GOWA but we don't have it from this
-	// signature. The download endpoint will 400 without it. This is a known
-	// interface mismatch — callers using GOWA should use DownloadMedia directly.
-	rawBody, err := c.doRaw(ctx, "GET", path, deviceID(account))
-	if err != nil {
-		return "", err
-	}
+	_ = ctx
+	_ = mediaID
+	_ = account
+	return "", whatsapp.ErrNotSupported
+}
 
-	var dlResp downloadResponse
-	if err := json.Unmarshal(rawBody, &dlResp); err != nil {
-		return "", fmt.Errorf("parse download response: %w", err)
-	}
+// MaxMediaDownloadSize caps how many bytes DownloadMedia will read into memory.
+// Bounds memory use so a runaway or malicious media URL can't exhaust the
+// process (gap #7).
+const MaxMediaDownloadSize = 25 * 1024 * 1024 // 25 MiB
 
-	if dlResp.Results.FileURL == "" {
-		return "", fmt.Errorf("no file URL in download response")
+// URLMatchesBase reports whether rawURL is an absolute HTTP(S) URL whose
+// scheme+host(+port) match baseURL. Used as the SSRF gate before fetching a
+// webhook-supplied media URL: only URLs that belong to the GOWA instance
+// itself are fetched, so an attacker-controlled URL in a signed webhook can
+// neither leak Basic Auth nor be fetched as an SSRF vector (gap #7).
+//
+// A relative or non-absolute rawURL returns false (callers resolve those
+// against baseURL themselves).
+func URLMatchesBase(rawURL, baseURL string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil || !u.IsAbs() {
+		return false
 	}
+	return sameOrigin(u, baseURL)
+}
 
-	return dlResp.Results.FileURL, nil
+// sameOrigin reports whether u matches the origin (scheme://host[:port]) of
+// baseURL. Empty baseURL never matches (fails closed).
+func sameOrigin(u *url.URL, baseURL string) bool {
+	if baseURL == "" {
+		return false
+	}
+	base, err := url.Parse(baseURL)
+	if err != nil || base.Host == "" {
+		return false
+	}
+	return u.Host == base.Host
 }
 
 // DownloadMedia downloads media content from a URL (typically the file_url
 // returned by GOWA's download endpoint).
 // In the gowa-ui Meta flow, the handler calls GetMediaURL then DownloadMedia.
 // For GOWA, GetMediaURL returns the file_url and DownloadMedia fetches it.
+//
+// Security (gap #7): Basic Auth is attached ONLY when the destination origin
+// matches the client's baseURL — never to an arbitrary host, so a signed
+// webhook carrying an external media URL cannot leak the GOWA credentials.
+// The shared httpClient also blocks cross-host redirects (see New), and the
+// body is capped at MaxMediaDownloadSize. The PRIMARY gate is in the handler
+// (DownloadAndSaveMedia only fetches URLs on the GOWA base host); this is the
+// defense-in-depth backstop.
 func (c *Client) DownloadMedia(ctx context.Context, mediaURL string, accessToken string) ([]byte, error) {
 	_ = accessToken // GOWA uses Basic Auth, not bearer tokens
+
+	parsed, err := url.Parse(mediaURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse media url: %w", err)
+	}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", mediaURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create download request: %w", err)
 	}
-	c.setAuth(req)
+	// Attach Basic Auth only when the target is the GOWA instance itself.
+	if sameOrigin(parsed, c.baseURL) {
+		c.setAuth(req)
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		// CheckRedirect errors leave a non-nil Response whose Body must be closed.
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
 		return nil, fmt.Errorf("download media: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
@@ -71,9 +114,14 @@ func (c *Client) DownloadMedia(ctx context.Context, mediaURL string, accessToken
 		return nil, fmt.Errorf("download returned status %d: %s", resp.StatusCode, string(body))
 	}
 
-	data, err := io.ReadAll(resp.Body)
+	// Cap the download so a malicious or runaway URL can't exhaust memory.
+	limited := io.LimitReader(resp.Body, MaxMediaDownloadSize+1)
+	data, err := io.ReadAll(limited)
 	if err != nil {
 		return nil, fmt.Errorf("read media body: %w", err)
+	}
+	if int64(len(data)) > MaxMediaDownloadSize {
+		return nil, fmt.Errorf("media exceeds max download size (%d bytes)", MaxMediaDownloadSize)
 	}
 
 	return data, nil

@@ -104,6 +104,10 @@ export const useContactsStore = defineStore('contacts', () => {
   const contacts = ref<Contact[]>([])
   const currentContact = ref<Contact | null>(null)
   const messages = ref<Message[]>([])
+  // Live typing/recording indicator per contact id, driven by GOWA
+  // chat_presence broadcasts. Cleared on "idle"/"paused". A contact id absent
+  // from the map means "not typing".
+  const typingActivity = ref<Record<string, 'typing' | 'recording'>>({})
   // Session-local log of status posts (the Status conversation is send-only).
   const statusMessages = ref<Message[]>([])
   const isLoading = ref(false)
@@ -733,6 +737,23 @@ export const useContactsStore = defineStore('contacts', () => {
     }
   }
 
+  function updateMessageContent(messageId: string, content: { body?: string } | string) {
+    // Normalize: the WS payload carries content as { body: "..." } (matching
+    // the new_message shape); accept a raw string too for safety.
+    const message = messages.value.find(m => m.id === messageId)
+    if (message) {
+      message.content = typeof content === 'string' ? { body: content } : content
+    }
+  }
+
+  function setTypingActivity(contactId: string, activity: 'typing' | 'recording' | null) {
+    if (activity === null) {
+      delete typingActivity.value[contactId]
+    } else {
+      typingActivity.value[contactId] = activity
+    }
+  }
+
   function updateContactTags(contactId: string, tags: string[]) {
     // Update in contacts list
     const contact = contacts.value.find(c => c.id === contactId)
@@ -1001,6 +1022,9 @@ export const useContactsStore = defineStore('contacts', () => {
     setReplyingTo,
     clearReplyingTo,
     updateMessageReactions,
+    updateMessageContent,
+    setTypingActivity,
+    typingActivity,
     updateContactTags
   }
 })

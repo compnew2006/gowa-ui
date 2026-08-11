@@ -51,6 +51,12 @@ const WS_TYPE_PONG = 'pong'
 // Reaction types
 const WS_TYPE_REACTION_UPDATE = 'reaction_update'
 
+// Message edit type (GOWA message.edited — content patch for an existing bubble)
+const WS_TYPE_MESSAGE_EDITED = 'message_edited'
+
+// Chat presence type (GOWA chat_presence — typing/recording indicator)
+const WS_TYPE_CHAT_PRESENCE = 'chat_presence'
+
 // Campaign types
 const WS_TYPE_CAMPAIGN_STATS_UPDATE = 'campaign_stats_update'
 
@@ -168,6 +174,12 @@ class WebSocketService {
           break
         case WS_TYPE_REACTION_UPDATE:
           this.handleReactionUpdate(store, message.payload)
+          break
+        case WS_TYPE_MESSAGE_EDITED:
+          this.handleMessageEdited(store, message.payload)
+          break
+        case WS_TYPE_CHAT_PRESENCE:
+          this.handleChatPresence(store, message.payload)
           break
         case WS_TYPE_PONG:
           // Pong received, connection is alive
@@ -322,6 +334,28 @@ class WebSocketService {
     if (currentContact && payload.contact_id === currentContact.id) {
       store.updateMessageReactions(payload.message_id, payload.reactions)
     }
+  }
+
+  private handleMessageEdited(store: ReturnType<typeof useContactsStore>, payload: any) {
+    // Patch the edited message's content in place so the open chat re-renders
+    // the new body without a refetch. Only relevant when viewing that contact.
+    const currentContact = store.currentContact
+    if (currentContact && payload.contact_id === currentContact.id) {
+      store.updateMessageContent(payload.message_id, payload.content)
+    }
+  }
+
+  private handleChatPresence(store: ReturnType<typeof useContactsStore>, payload: any) {
+    // Match the presence against the currently-open contact so a typing /
+    // recording indicator can render for that conversation only. Groups key by
+    // their full @g.us JID (stored as phone_number); 1:1 chats by bare digits.
+    const currentContact = store.currentContact
+    if (!currentContact) return
+    const id = payload.chat_id || payload.from || ''
+    const bare = id.split('@')[0]
+    const matches = id === currentContact.phone_number || bare === currentContact.phone_number
+    if (!matches) return
+    store.setTypingActivity(currentContact.id, payload.activity === 'idle' ? null : payload.activity)
   }
 
   private handleCampaignStatsUpdate(payload: any) {

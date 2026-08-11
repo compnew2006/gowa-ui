@@ -7,13 +7,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 	"github.com/compnew2006/gowa-ui/internal/chatlifecycle"
 	"github.com/compnew2006/gowa-ui/internal/config"
 	"github.com/compnew2006/gowa-ui/internal/queue"
 	"github.com/compnew2006/gowa-ui/internal/websocket"
 	"github.com/compnew2006/gowa-ui/pkg/whatsapp"
+	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 	"github.com/zerodha/logf"
@@ -40,6 +40,13 @@ type App struct {
 	ChatLifecycle *chatlifecycle.Service
 	// wg tracks background goroutines for graceful shutdown
 	wg sync.WaitGroup
+
+	// GowaWebhookNotify, when set by the webhook-processor wiring at startup,
+	// wakes the durable-inbox worker to process a just-enqueued event
+	// immediately instead of waiting for the next poll tick (keeps inbound
+	// message latency near-real-time). Nil when no processor is wired (tests,
+	// worker command) — the handler then relies on the poll interval alone.
+	GowaWebhookNotify func()
 
 	// gowaHistorySyncMu guards gowaHistoryLastSync, the per-account cooldown
 	// state for automatic GOWA history backfills (see gowa_history_sync.go).

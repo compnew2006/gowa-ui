@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/pkg/gowa"
 	"github.com/compnew2006/gowa-ui/pkg/whatsapp"
 	"github.com/stretchr/testify/assert"
@@ -27,7 +28,7 @@ func TestE2E_GOWAAccountResolvesGOWAProvider(t *testing.T) {
 	defer mock.close()
 
 	whatsapp.RegisterGowaFactory(
-		func(baseURL string) (string, string) { return "", "" },
+		func(_ uuid.UUID, baseURL string) (string, string) { return "", "" },
 		func(baseURL, username, password string) whatsapp.Provider {
 			return gowa.New(baseURL, username, password)
 		},
@@ -51,7 +52,7 @@ func TestE2E_GOWAAccountResolvesGOWAProvider(t *testing.T) {
 func TestE2E_Registry_GOWADownReturnsErrorNotMetaFallback(t *testing.T) {
 	t.Parallel()
 	whatsapp.RegisterGowaFactory(
-		func(baseURL string) (string, string) { return "", "" },
+		func(_ uuid.UUID, baseURL string) (string, string) { return "", "" },
 		func(baseURL, username, password string) whatsapp.Provider {
 			return gowa.New(baseURL, username, password)
 		},

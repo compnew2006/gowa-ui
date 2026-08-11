@@ -83,10 +83,11 @@ const (
 type WebhookEvent string
 
 const (
-	WebhookEventMessageIncoming  WebhookEvent = "message.incoming"
-	WebhookEventMessageOutgoing  WebhookEvent = "message.outgoing"
-	WebhookEventMessageSent      WebhookEvent = "message.sent"
-	WebhookEventContactCreated   WebhookEvent = "contact.created"
+	WebhookEventMessageIncoming WebhookEvent = "message.incoming"
+	WebhookEventMessageOutgoing WebhookEvent = "message.outgoing"
+	WebhookEventMessageSent     WebhookEvent = "message.sent"
+	WebhookEventMessageEdited   WebhookEvent = "message.edited"
+	WebhookEventContactCreated  WebhookEvent = "contact.created"
 )
 
 // ActionType represents custom action types

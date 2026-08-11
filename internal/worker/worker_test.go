@@ -48,7 +48,7 @@ func testWorker(t *testing.T) *Worker {
 func pointWorkerAtGowa(w *Worker) {
 	w.WARegistry = whatsapp.NewRegistryWithFactory(
 		w.Log,
-		func(baseURL string) (string, string) { return "", "" },
+		func(_ uuid.UUID, baseURL string) (string, string) { return "", "" },
 		func(baseURL, username, password string) whatsapp.Provider {
 			return gowa.New(baseURL, username, password)
 		},

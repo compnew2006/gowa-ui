@@ -78,7 +78,7 @@ func newStatusTestApp(t *testing.T, m *statusMockGowa) *handlers.App {
 	// mock closures + logger to NewRegistryWithFactory.
 	app.WARegistry = whatsapp.NewRegistryWithFactory(
 		testutil.NopLogger(),
-		func(baseURL string) (string, string) { return "", "" },
+		func(_ uuid.UUID, baseURL string) (string, string) { return "", "" },
 		func(baseURL, username, password string) whatsapp.Provider {
 			return gowa.New(m.server.URL, username, password)
 		},

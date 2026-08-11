@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/compnew2006/gowa-ui/internal/models"
+	"github.com/compnew2006/gowa-ui/internal/database"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -76,48 +76,27 @@ func SetupTestDBWithCleanup(t *testing.T, cleanup bool) *gorm.DB {
 	return db
 }
 
-// runMigrations runs all model migrations.
+// runMigrations mirrors production schema setup so the test DB is faithful to
+// prod: AutoMigrate every registered model (single source of truth:
+// database.GetMigrationModels) followed by the raw-SQL index/healing
+// statements (database.ApplyRawIndexes) — including the partial unique indexes
+// AutoMigrate cannot express. No seeding runs here (no default admin /
+// permissions / widgets), keeping the test DB data-empty and fast.
+//
+// Using GetMigrationModels instead of a duplicated inline list prevents drift:
+// registering a new model once in GetMigrationModels covers both prod and
+// tests, so a uniqueness/dedup index added for a feature is automatically
+// exercised by the test suite.
 func runMigrations(db *gorm.DB) error {
-	return db.AutoMigrate(
-		// Core models
-		&models.Organization{},
-		&models.Permission{},
-		&models.CustomRole{},
-		&models.User{},
-		&models.UserOrganization{},
-		&models.UserWhatsAppAccount{},
-		&models.Team{},
-		&models.TeamMember{},
-		&models.APIKey{},
-		&models.SSOProvider{},
-		&models.Webhook{},
-		&models.CustomAction{},
-		&models.UserAvailabilityLog{},
-		// WhatsApp models
-		&models.WhatsAppAccount{},
-		&models.Contact{},
-		&models.Tag{},
-		&models.Message{},
-		&models.Template{},
-		// Bulk message models
-		&models.BulkMessageCampaign{},
-		&models.BulkMessageRecipient{},
-		&models.NotificationRule{},
-		// Canned responses
-		&models.CannedResponse{},
-		// Chat close rating (CSAT)
-		&models.ChatClosureRating{},
-		// Scheduled outgoing messages
-		&models.ScheduledMessage{},
-		// Dashboard
-		&models.Widget{},
-		// Conversation Notes
-		&models.ConversationNote{},
-		// Audit
-		&models.AuditLog{},
-		// GOWA instances
-		&models.GowaInstance{},
-	)
+	for _, m := range database.GetMigrationModels() {
+		if err := db.AutoMigrate(m.Model); err != nil {
+			return fmt.Errorf("failed to migrate %s: %w", m.Name, err)
+		}
+	}
+	if err := database.ApplyRawIndexes(db); err != nil {
+		return fmt.Errorf("failed to apply raw indexes: %w", err)
+	}
+	return nil
 }
 
 // cleanupTables removes all data from tables (for PostgreSQL cleanup).

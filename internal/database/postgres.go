@@ -5,9 +5,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/config"
 	"github.com/compnew2006/gowa-ui/internal/models"
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -101,6 +101,10 @@ func GetMigrationModels() []MigrationModel {
 
 		// Scheduled outgoing messages
 		{"ScheduledMessage", &models.ScheduledMessage{}},
+
+		// Durable GOWA webhook inbox — events are persisted before 2xx so a
+		// crash never silently drops an inbound event (gap #1).
+		{"GowaWebhookEvent", &models.GowaWebhookEvent{}},
 	}
 }
 
@@ -137,6 +141,15 @@ func RunMigrationWithProgress(db *gorm.DB, adminCfg *config.DefaultAdminConfig) 
 			return fmt.Errorf("failed to migrate %s: %w", m.Name, err)
 		}
 		currentStep++
+	}
+
+	// Collapse any pre-existing rows that would violate the new partial UNIQUE
+	// indexes (messages by wamid, accounts by gowa_device_id/gowa_jid) BEFORE
+	// those indexes are created — otherwise CREATE UNIQUE INDEX fails and blocks
+	// startup. No-op on a clean DB; only production runs this (tests start empty).
+	if err := dedupBeforeUniqueIndexes(silentDB); err != nil {
+		fmt.Printf("\n  \033[31m✗ Pre-index dedup failed\033[0m\n\n")
+		return fmt.Errorf("pre-index dedup: %w", err)
 	}
 
 	// Create indexes
@@ -212,6 +225,28 @@ func RunMigrationWithProgress(db *gorm.DB, adminCfg *config.DefaultAdminConfig) 
 	return nil
 }
 
+// ApplyRawIndexes runs the raw-SQL index/healing statements from getIndexes()
+// against the database. It is the schema-only slice of RunMigrationWithProgress
+// (no model AutoMigrate, no seeding): AutoMigrate cannot express partial
+// `WHERE`-filtered unique indexes, so this applies them separately.
+//
+// Exported so the test harness can apply the SAME partial unique indexes
+// production gets (e.g. idx_chat_closure_ratings_pending, and the GOWA
+// message/event dedup indexes), keeping the test schema faithful to prod —
+// otherwise uniqueness/dedup behaviour cannot be exercised in tests.
+//
+// All statements are idempotent (`IF NOT EXISTS` / `IF EXISTS`), so this is a
+// safe no-op when run more than once.
+func ApplyRawIndexes(db *gorm.DB) error {
+	silent := db.Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)})
+	for _, stmt := range getIndexes() {
+		if err := silent.Exec(stmt).Error; err != nil {
+			return fmt.Errorf("apply raw index statement: %w", err)
+		}
+	}
+	return nil
+}
+
 // repeatChar repeats a character n times
 func repeatChar(char string, n int) string {
 	result := ""
@@ -230,6 +265,86 @@ func dropChatbotArtifacts() []string {
 		`DROP TABLE IF EXISTS chatbot_session_messages, chatbot_sessions, chatbot_flow_steps, chatbot_flows, keyword_rules, ai_contexts, agent_transfers, chatbot_settings CASCADE`,
 		`ALTER TABLE contacts DROP COLUMN IF EXISTS chatbot_last_message_at, DROP COLUMN IF EXISTS chatbot_reminder_sent`,
 	}
+}
+
+// dedupBeforeUniqueIndexes collapses rows that would otherwise violate the
+// partial UNIQUE indexes added for GOWA webhook dedup — messages by
+// (organization_id, whats_app_account, whats_app_message_id) and
+// whatsapp_accounts by gowa_device_id / gowa_jid. For each key it keeps the
+// oldest row (lowest created_at, then id) and soft-deletes the rest.
+//
+// This MUST run immediately before the matching CREATE UNIQUE INDEX statements:
+// any pre-existing duplicate makes index creation fail and blocks startup. It
+// is idempotent (a second run finds nothing to collapse) and runs only in
+// production migrations (RunMigrationWithProgress) — the test DB starts empty
+// so testutil never calls it.
+//
+// Soft-delete (not hard DELETE) is deliberate: referential integrity
+// (messages.reply_to_message_id self-reference, audit rows, bulk recipients)
+// is preserved, and a mistakenly-collapsed row can be restored by clearing
+// deleted_at. Any non-zero collapse is logged prominently for operator review.
+func dedupBeforeUniqueIndexes(db *gorm.DB) error {
+	type dedupStep struct {
+		name string
+		sql  string
+	}
+	steps := []dedupStep{
+		{
+			"messages(organization_id,whats_app_account,whats_app_message_id)",
+			`UPDATE messages SET deleted_at = NOW(), updated_at = NOW()
+			 WHERE id IN (
+			   SELECT id FROM (
+			     SELECT id,
+			            ROW_NUMBER() OVER (
+			              PARTITION BY organization_id, whats_app_account, whats_app_message_id
+			              ORDER BY created_at ASC, id ASC
+			            ) AS rn
+			     FROM messages
+			     WHERE whats_app_message_id <> '' AND deleted_at IS NULL
+			   ) t WHERE rn > 1
+			 )`,
+		},
+		{
+			"whatsapp_accounts(gowa_device_id)",
+			`UPDATE whatsapp_accounts SET deleted_at = NOW(), updated_at = NOW()
+			 WHERE id IN (
+			   SELECT id FROM (
+			     SELECT id,
+			            ROW_NUMBER() OVER (
+			              PARTITION BY gowa_device_id
+			              ORDER BY created_at ASC, id ASC
+			            ) AS rn
+			     FROM whatsapp_accounts
+			     WHERE gowa_device_id <> '' AND deleted_at IS NULL
+			   ) t WHERE rn > 1
+			 )`,
+		},
+		{
+			"whatsapp_accounts(gowa_jid)",
+			`UPDATE whatsapp_accounts SET deleted_at = NOW(), updated_at = NOW()
+			 WHERE id IN (
+			   SELECT id FROM (
+			     SELECT id,
+			            ROW_NUMBER() OVER (
+			              PARTITION BY gowa_jid
+			              ORDER BY created_at ASC, id ASC
+			            ) AS rn
+			     FROM whatsapp_accounts
+			     WHERE gowa_jid <> '' AND deleted_at IS NULL
+			   ) t WHERE rn > 1
+			 )`,
+		},
+	}
+	for _, s := range steps {
+		res := db.Exec(s.sql)
+		if res.Error != nil {
+			return fmt.Errorf("dedup %s: %w", s.name, res.Error)
+		}
+		if res.RowsAffected > 0 {
+			fmt.Printf("  \033[33m! dedup: soft-deleted %d duplicate row(s) for %s (kept oldest; restore via deleted_at = NULL)\033[0m\n", res.RowsAffected, s.name)
+		}
+	}
+	return nil
 }
 
 // getIndexes returns all index creation SQL statements
@@ -315,6 +430,31 @@ func getIndexes() []string {
 		`CREATE INDEX IF NOT EXISTS idx_notification_rules_account ON notification_rules(whats_app_account, is_enabled)`,
 		`CREATE INDEX IF NOT EXISTS idx_messages_account ON messages(whats_app_account, created_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_contacts_account ON contacts(whats_app_account)`,
+		// GOWA inbound dedup at the DB level: a webhook redelivery (or a
+		// check-then-insert race between concurrent goroutines) must not create
+		// a second row for the same (org, account, wamid). Partial so rows with
+		// no wamid (e.g. locally-generated notes) and soft-deleted rows don't
+		// conflict. See dedupBeforeUniqueIndexes for the one-time collapse of
+		// pre-existing duplicates.
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_org_account_wamid ON messages(organization_id, whats_app_account, whats_app_message_id) WHERE whats_app_message_id <> '' AND deleted_at IS NULL`,
+		// A GOWA device maps to exactly one WhatsApp account. Enforcing uniqueness
+		// at the DB level makes webhook account resolution (getGowaAccountByDeviceID)
+		// deterministic and closes the cross-org routing hole where a duplicated
+		// device_id/jid made First() pick an arbitrary account. Partial so unset /
+		// soft-deleted accounts don't conflict.
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_wa_accounts_gowa_device ON whatsapp_accounts(gowa_device_id) WHERE gowa_device_id <> '' AND deleted_at IS NULL`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_wa_accounts_gowa_jid ON whatsapp_accounts(gowa_jid) WHERE gowa_jid <> '' AND deleted_at IS NULL`,
+		// GOWA durable webhook inbox. The due index keeps the worker's pending
+		// scan cheap; only pending, non-deleted rows matter.
+		`CREATE INDEX IF NOT EXISTS idx_gowa_webhook_events_due ON gowa_webhook_events(status, created_at) WHERE status = 'pending' AND deleted_at IS NULL`,
+		// Idempotency window: a redelivery of the same (device, event, event_key)
+		// while one is still pending/processing must NOT create a second row —
+		// ON CONFLICT DO NOTHING in the handler collapses it. Processed/dead
+		// rows are excluded so a later genuine retry can get a fresh attempt
+		// (downstream consumers are themselves idempotent via the messages
+		// unique index and account-scoped updates). Closes gap #8 (replay /
+		// duplicate delivery of every event type, including call.offer).
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_gowa_webhook_events_idempotency ON gowa_webhook_events(device_id, event, event_key) WHERE status IN ('pending','processing') AND deleted_at IS NULL`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_canned_responses_org_name ON canned_responses(organization_id, name)`,
 		`CREATE INDEX IF NOT EXISTS idx_canned_responses_active ON canned_responses(organization_id, is_active, usage_count DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_webhooks_org_active ON webhooks(organization_id, is_active)`,

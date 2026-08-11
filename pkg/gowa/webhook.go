@@ -45,6 +45,31 @@ type MessagePayload struct {
 
 	ViewOnce  bool `json:"view_once,omitempty"`
 	Forwarded bool `json:"forwarded,omitempty"`
+
+	// Location message. GOWA's readme lists location under the "message" event,
+	// but the exact payload field names are not formally documented — these
+	// follow the WhatsApp/Common convention. Adjust if GOWA sends different
+	// keys (a mismatch leaves the field nil and the message falls through, same
+	// as before, so this is strictly additive).
+	Location *struct {
+		Latitude  float64 `json:"latitude"`
+		Longitude float64 `json:"longitude"`
+		Name      string  `json:"name,omitempty"`
+		Address   string  `json:"address,omitempty"`
+	} `json:"location,omitempty"`
+
+	// Contact-card message (one event may carry multiple cards).
+	Contacts []struct {
+		Name struct {
+			FormattedName string `json:"formatted_name"`
+			FirstName     string `json:"first_name,omitempty"`
+			LastName      string `json:"last_name,omitempty"`
+		} `json:"name"`
+		Phones []struct {
+			Phone string `json:"phone"`
+			Type  string `json:"type,omitempty"`
+		} `json:"phones,omitempty"`
+	} `json:"contacts,omitempty"`
 }
 
 // AckPayload is decoded from WebhookPayload.Payload when event == "message.ack".

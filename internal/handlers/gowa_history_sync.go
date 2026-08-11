@@ -7,12 +7,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/config"
 	"github.com/compnew2006/gowa-ui/internal/contactutil"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/pkg/gowa"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // GOWA performs its own history synchronization when a device (re)connects,
@@ -229,8 +230,18 @@ func (a *App) syncGowaHistory(ctx context.Context, client *gowa.Client, account 
 				}
 			}
 
-			if err := a.DB.Create(&msg).Error; err != nil {
-				a.Log.Error("Failed to store GOWA history message", "error", err, "msg_id", m.ID)
+			// INSERT against the partial unique index idx_messages_org_account_wamid
+			// as the race backstop: a concurrent webhook may have stored the same
+			// wamid between our pre-filter and this insert. ON CONFLICT DO NOTHING
+			// skips silently; RowsAffected==0 means it already exists, so don't
+			// count it or treat it as the chat's newest (would clobber the real
+			// newest with an older timestamp).
+			createRes := a.DB.Clauses(clause.OnConflict{DoNothing: true}).Create(&msg)
+			if createRes.Error != nil {
+				a.Log.Error("Failed to store GOWA history message", "error", createRes.Error, "msg_id", m.ID)
+				continue
+			}
+			if createRes.RowsAffected == 0 {
 				continue
 			}
 			stats.MessagesStored++
@@ -288,17 +299,26 @@ func gowaChatIdentity(jid string) (identity string, isGroup, isNewsletter bool) 
 }
 
 // ResolveGowaCreds resolves the Basic Auth credentials for a GOWA server by
-// its base URL. It prefers the DB-managed instance (created via the UI;
-// credentials are encrypted at rest) and falls back to the config-file
+// its (organization, base URL) pair. It prefers the DB-managed instance
+// (created via the UI; credentials are encrypted at rest) — scoped to the
+// owning org so two orgs that register the same GOWA base URL resolve their
+// OWN credentials, never each other's — and falls back to the config-file
 // [[gowa_instances]] section for backward compatibility, then to empty
 // credentials. This is the single source of truth for GOWA Basic Auth: the
 // provider-registry factory (main) and gowaClientForAccount both call it.
-func ResolveGowaCreds(db *gorm.DB, cfg *config.Config, baseURL string) (username, password string) {
-	// 1. DB-managed instance (UI-created). Credentials are encrypted at rest.
+//
+// A zero orgID (uuid.Nil) preserves the legacy cross-org lookup for callers
+// that don't yet know the owning org; new callers should always pass it.
+func ResolveGowaCreds(db *gorm.DB, cfg *config.Config, orgID uuid.UUID, baseURL string) (username, password string) {
+	// 1. DB-managed instance (UI-created), org-scoped. Credentials are
+	//    encrypted at rest. Org scoping is the tenant-isolation boundary: it
+	//    prevents org B from resolving org A's credentials for the same URL.
+	q := db.Where("base_url = ? AND is_active = ?", baseURL, true)
+	if orgID != uuid.Nil {
+		q = q.Where("organization_id = ?", orgID)
+	}
 	var inst models.GowaInstance
-	err := db.Where("base_url = ? AND is_active = ?", baseURL, true).
-		Order("created_at DESC").
-		First(&inst).Error
+	err := q.Order("created_at DESC").First(&inst).Error
 	if err == nil {
 		inst.DecryptCredentials(cfg.App.EncryptionKey)
 		if inst.HasCredentials() {
@@ -306,11 +326,22 @@ func ResolveGowaCreds(db *gorm.DB, cfg *config.Config, baseURL string) (username
 		}
 	}
 
-	// 2. Config-file fallback (legacy/manual provisioning).
-	if c := cfg.FindGOWAInstance(baseURL); c != nil {
+	// 2. Config-file fallback (legacy/manual provisioning), org-scoped when
+	//    possible. FindGOWAInstance takes a variadic orgID for this.
+	if c := cfg.FindGOWAInstance(baseURL, orgIDString(orgID)); c != nil {
 		return c.Username, c.Password
 	}
 	return "", ""
+}
+
+// orgIDString renders a uuid.UUID for the variadic orgID parameter of
+// FindGOWAInstance, returning "" for uuid.Nil so the config lookup stays
+// org-agnostic (legacy behavior) when the org is unknown.
+func orgIDString(orgID uuid.UUID) string {
+	if orgID == uuid.Nil {
+		return ""
+	}
+	return orgID.String()
 }
 
 // gowaClientForAccount returns a gowa.Client for the account's GOWA base URL.
@@ -327,7 +358,7 @@ func (a *App) gowaClientForAccount(account *models.WhatsAppAccount) *gowa.Client
 	if baseURL == "" {
 		baseURL = "http://localhost:3000"
 	}
-	user, pass := ResolveGowaCreds(a.DB, a.Config, baseURL)
+	user, pass := ResolveGowaCreds(a.DB, a.Config, account.OrganizationID, baseURL)
 	return gowa.New(baseURL, user, pass)
 }
 

@@ -6,9 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/contactutil"
 	"github.com/compnew2006/gowa-ui/internal/models"
+	"github.com/google/uuid"
+	"gorm.io/gorm/clause"
 )
 
 // IncomingTextMessage represents a text, interactive, or media message from the webhook
@@ -408,8 +409,21 @@ func (a *App) saveIncomingMessage(account *models.WhatsAppAccount, contact *mode
 		message.MediaFilename = mediaInfo.MediaFilename
 	}
 
-	if err := a.DB.Create(&message).Error; err != nil {
-		a.Log.Error("Failed to save incoming message", "error", err)
+	// INSERT against the partial unique index idx_messages_org_account_wamid.
+	// The pre-check in processIncomingMessage catches the common serial
+	// redelivery; ON CONFLICT DO NOTHING closes the check-then-insert race when
+	// two webhook deliveries for the same wamid land concurrently. A zero
+	// RowsAffected means a concurrent insert won the race — skip side effects
+	// (preview / broadcast / outgoing webhook) so the message is never
+	// double-emitted on the wire.
+	result := a.DB.Clauses(clause.OnConflict{DoNothing: true}).Create(&message)
+	if result.Error != nil {
+		a.Log.Error("Failed to save incoming message", "error", result.Error)
+		return
+	}
+	if result.RowsAffected == 0 {
+		a.Log.Debug("Incoming message race-lost to a concurrent insert; skipping side effects",
+			"message_id", message.ID, "wamid", whatsappMsgID)
 		return
 	}
 
