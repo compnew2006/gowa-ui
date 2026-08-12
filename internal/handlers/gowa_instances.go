@@ -293,6 +293,14 @@ func (a *App) DeleteGowaInstance(r *fastglue.Request) error {
 // parseDeviceID extracts the {deviceId} path param (a GOWA device string id).
 func parseDeviceID(r *fastglue.Request) string {
 	v, _ := r.RequestCtx.UserValue("deviceId").(string)
+	// fastglue/fasthttp return path params URL-ENCODED (e.g. an Arabic device id
+	// arrives as "%D8%AA%D8%B5..."). Without decoding, the account lookup fails
+	// for any non-ASCII device id, so all per-device instance APIs (sync-messages,
+	// sync-contacts, qr, status, webhook, logout) silently 404/409 on Arabic-named
+	// devices. PathUnescape (not QueryUnescape) so "+" is left intact.
+	if dec, err := url.PathUnescape(v); err == nil {
+		return dec
+	}
 	return v
 }
 

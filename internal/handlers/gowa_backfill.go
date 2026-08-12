@@ -18,9 +18,19 @@ import (
 // accounts that already have a secret are skipped.
 //
 // This runs at startup after migrations, before the server accepts traffic.
+// BackfillGowaWebhookSecrets generates and stores a webhook secret for every
+// GOWA-type WhatsApp account that doesn't have one. This ensures no GOWA
+// account is left webhook-unprotected (FR-017). The function is idempotent —
+// accounts that already have a secret are skipped.
+//
+// This runs at startup after migrations, before the server accepts traffic.
+//
+// Note: gowa-ui is GOWA-only, so a GOWA account is identified by having a
+// gowa_device_id (a configured GOWA device). The legacy `provider_type` column
+// was removed from the model — querying it crashed against a fresh schema.
 func BackfillGowaWebhookSecrets(db *gorm.DB, cfg *config.Config, log logf.Logger) error {
 	var accounts []models.WhatsAppAccount
-	if err := db.Where("provider_type = ? AND (gowa_webhook_secret = ? OR gowa_webhook_secret IS NULL)", "gowa", "").Find(&accounts).Error; err != nil {
+	if err := db.Where("gowa_device_id <> ? AND (gowa_webhook_secret = ? OR gowa_webhook_secret IS NULL)", "", "").Find(&accounts).Error; err != nil {
 		return err
 	}
 
