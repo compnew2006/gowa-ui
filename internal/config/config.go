@@ -145,6 +145,13 @@ type AIConfig struct {
 type StorageConfig struct {
 	Type      string `koanf:"type"` // local
 	LocalPath string `koanf:"local_path"`
+	// EagerHistoryMedia controls whether the GOWA history-sync processor
+	// downloads media bytes at sync time. Default false: media metadata is
+	// stored and bytes are fetched lazily via ServeMedia's recovery path when
+	// an agent first opens them. Set true only on a host with ample disk,
+	// since eager download of large histories can fill the disk (each device
+	// pulls up to 50 msgs × every chat).
+	EagerHistoryMedia bool `koanf:"eager_history_media"`
 }
 
 type DefaultAdminConfig struct {

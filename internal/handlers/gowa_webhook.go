@@ -52,25 +52,48 @@ func (a *App) handleGowaWebhook(r *fastglue.Request, pathDeviceID string) error 
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid payload", nil, "")
 	}
 
-	// Per-device routing: the path device_id overrides the payload device_id.
+	// Per-device routing: prefer the path device_id, falling back to the
+	// payload device_id. GOWA's per-device webhook URL embeds an identifier in
+	// the path. A previous platform registered per-device webhooks with its OWN
+	// account UUID in the path; those registrations persist on the GOWA side
+	// and cannot always be cleared via the API (notably for devices whose ids
+	// contain non-ASCII characters, where GOWA's path router 404s). To stay
+	// forward-compatible, try the path id first, and if it does not resolve to
+	// an account, retry with the payload device_id — which GOWA populates with
+	// the device JID and getGowaAccountByDeviceID resolves via gowa_jid. The
+	// HMAC check below still authenticates the event against the resolved
+	// account's secret, so the fallback only changes routing, not trust.
+	deviceID := envelope.DeviceID
 	if pathDeviceID != "" {
-		envelope.DeviceID = pathDeviceID
+		deviceID = pathDeviceID
 	}
 
-	if envelope.DeviceID == "" {
+	if deviceID == "" {
 		a.Log.Warn("GOWA webhook missing device_id")
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Missing device_id", nil, "")
 	}
 
 	// Resolve the WhatsApp account for this GOWA device.
-	account, err := a.getGowaAccountByDeviceID(envelope.DeviceID)
+	account, err := a.getGowaAccountByDeviceID(deviceID)
+	if err != nil && pathDeviceID != "" && envelope.DeviceID != "" && envelope.DeviceID != pathDeviceID {
+		// Legacy path id (e.g. a prior platform's UUID) did not resolve; retry
+		// with the payload device_id (the device JID).
+		if acct, err2 := a.getGowaAccountByDeviceID(envelope.DeviceID); err2 == nil {
+			account = acct
+			err = nil
+			deviceID = envelope.DeviceID
+		}
+	}
 	if err != nil {
-		a.Log.Warn("Unknown GOWA device", "device_id", envelope.DeviceID, "error", err)
+		a.Log.Warn("Unknown GOWA device", "device_id", deviceID, "error", err)
 		// Return the same generic rejection as a signature failure so an
 		// attacker cannot distinguish an unconfigured device from a bad
 		// signature (FR-023: indistinguishable responses).
 		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Webhook verification failed", nil, "")
 	}
+	// Normalize so downstream (inbox, event-key, broadcast) uses the resolved
+	// device id, not a stale path UUID.
+	envelope.DeviceID = deviceID
 
 	// Verify HMAC signature using the account's webhook secret (FAIL-CLOSED).
 	// All rejection paths return the exact same error message so that an

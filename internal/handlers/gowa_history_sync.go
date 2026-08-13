@@ -201,7 +201,13 @@ func (a *App) syncGowaHistory(ctx context.Context, client *gowa.Client, account 
 			// helpers as ServeMedia's recovery path (media.go) — no logic fork.
 			// Only attempt for real media types with a WA message ID; skip for
 			// status/newsletter JIDs where GOWA rejects the download anyway.
-			if msgType != models.MessageTypeText && m.ID != "" {
+			//
+			// Gated by storage.eager_history_media (default false): eager download
+			// of every chat's history across many devices can fill the disk. With
+			// the flag off (the fresh-start default), media_url metadata is still
+			// stored above and ServeMedia's lazy recovery fetches bytes on first
+			// view — so no functionality is lost, only the disk-amplifying burst.
+			if a.Config.Storage.EagerHistoryMedia && msgType != models.MessageTypeText && m.ID != "" {
 				chatJID := gowaChatJID(contact)
 				if chatJID != "" {
 					dlCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
