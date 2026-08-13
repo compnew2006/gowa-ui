@@ -26,6 +26,42 @@ func (a *App) getMediaStoragePath() string {
 	return basePath
 }
 
+// resolveGowaAccountForRecovery resolves a GOWA account for media recovery. It
+// tries each name in order, then — because every GOWA account of an org shares
+// the same GOWA server + credentials and GOWA keys media by message id + chat
+// JID (not per-account) — falls back to ANY active GOWA account in the org.
+// The broad fallback covers messages whose whats_app_account references a
+// stale/renamed name (common with history-sync rows written before an account
+// was renamed/re-imported), which would otherwise leave the media permanently
+// unrenderable. Returns nil only when the org has no GOWA account at all.
+func (a *App) resolveGowaAccountForRecovery(orgID uuid.UUID, names ...string) *models.WhatsAppAccount {
+	for _, n := range names {
+		if n == "" {
+			continue
+		}
+		var acct models.WhatsAppAccount
+		if err := a.DB.Where("organization_id = ? AND name = ?", orgID, n).First(&acct).Error; err == nil {
+			if acct.GowaDeviceID != "" {
+				a.decryptAccountSecrets(&acct)
+				return &acct
+			}
+		}
+	}
+	// Final fallback: any GOWA account in the org (shared server/creds). GOWA
+	// keys media by message id + chat JID, not per-account, so any account's
+	// client can recover any media. We scope only by gowa_device_id (presence of
+	// a device config) rather than an active flag, since the active-state column
+	// name varies and the device-id check is sufficient to identify a usable
+	// GOWA account.
+	var any models.WhatsAppAccount
+	if err := a.DB.Where("organization_id = ? AND gowa_device_id <> ''", orgID).
+		First(&any).Error; err == nil {
+		a.decryptAccountSecrets(&any)
+		return &any
+	}
+	return nil
+}
+
 // ensureMediaDir ensures the media directory exists
 func (a *App) ensureMediaDir(subdir string) error {
 	path := filepath.Join(a.getMediaStoragePath(), subdir)
@@ -347,30 +383,28 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 		var contact models.Contact
 		hasContact := a.DB.Where("id = ? AND organization_id = ?", message.ContactID, orgID).First(&contact).Error == nil
 
-		var account models.WhatsAppAccount
+		var account *models.WhatsAppAccount
 		acctName := message.WhatsAppAccount
-		accountErr := a.DB.Where("organization_id = ? AND name = ?", orgID, acctName).First(&account).Error
-		if accountErr != nil && hasContact && contact.WhatsAppAccount != "" && contact.WhatsAppAccount != acctName {
-			// The message's account no longer exists, but the contact carries a
-			// (possibly different) account name that may be the renamed successor.
-			// Try it rather than silently giving up. Log the mismatch so the
-			// drift between message.whats_app_account and contact.whats_app_account
-			// is visible for later cleanup.
-			fallbackName := contact.WhatsAppAccount
-			a.Log.Warn("Message references a non-existent account; falling back to the contact's current account",
-				"message_id", message.ID, "msg_account", acctName, "contact_account", fallbackName)
-			accountErr = a.DB.Where("organization_id = ? AND name = ?", orgID, fallbackName).First(&account).Error
+		contactName := ""
+		if hasContact {
+			contactName = contact.WhatsAppAccount
 		}
+		// Resolve a GOWA account to fetch the media from. All GOWA accounts in
+		// the org share the same server + credentials, and GOWA keys media by
+		// message id + chat JID, so any of them can recover any media. The broad
+		// fallback covers messages whose whats_app_account references a
+		// stale/renamed name (e.g. history-sync rows written before an account
+		// was renamed), which would otherwise leave media unrenderable.
+		account = a.resolveGowaAccountForRecovery(orgID, acctName, contactName)
 
-		if accountErr != nil {
+		if account == nil {
 			// No usable account — make the failure explicit instead of a silent 404.
 			a.Log.Warn("Media missing from disk and no recoverable account for message",
 				"message_id", message.ID, "wa_message_id", message.WhatsAppMessageID,
 				"msg_account", acctName, "error", err)
 		} else if message.WhatsAppMessageID != "" && hasContact {
-			a.decryptAccountSecrets(&account)
 			waAccount := account.ToWAAccount()
-			provider := a.resolveProvider(&account)
+			provider := a.resolveProvider(account)
 			gowaClient, ok := provider.(*gowa.Client)
 			if ok {
 				a.Log.Info("Media missing from disk, attempting auto-recovery", "message_id", message.ID, "path", fullPath)

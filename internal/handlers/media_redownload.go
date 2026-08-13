@@ -71,23 +71,16 @@ func (a *App) RedownloadMedia(r *fastglue.Request) error {
 	}
 
 	// Resolve the account. A message may reference an account that was renamed
-	// or deleted (common with legacy GOWA history-sync rows); fall back to the
-	// contact's current account before giving up. Mirrors ServeMedia's logic.
-	var account models.WhatsAppAccount
-	acctName := message.WhatsAppAccount
-	if err := a.DB.Where("name = ? AND organization_id = ?", acctName, orgID).First(&account).Error; err != nil {
-		if contact.WhatsAppAccount != "" && contact.WhatsAppAccount != acctName {
-			a.Log.Warn("Re-download: message references a non-existent account; falling back to the contact's current account",
-				"message_id", message.ID, "msg_account", acctName, "contact_account", contact.WhatsAppAccount)
-			err = a.DB.Where("name = ? AND organization_id = ?", contact.WhatsAppAccount, orgID).First(&account).Error
-		}
-		if err != nil {
-			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Account not found", nil, "")
-		}
+	// or deleted (common with legacy GOWA history-sync rows). All GOWA accounts
+	// in the org share the same server + credentials and GOWA keys media by
+	// message id + chat JID, so fall back through the named account → the
+	// contact's account → any active GOWA account in the org before giving up.
+	account := a.resolveGowaAccountForRecovery(orgID, message.WhatsAppAccount, contact.WhatsAppAccount)
+	if account == nil {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Account not found", nil, "")
 	}
-	a.decryptAccountSecrets(&account)
 
-	provider := a.resolveProvider(&account)
+	provider := a.resolveProvider(account)
 	gowaClient, ok := provider.(*gowa.Client)
 	if !ok {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest,
