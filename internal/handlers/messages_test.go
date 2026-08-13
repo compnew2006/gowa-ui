@@ -8,13 +8,13 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/handlers"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/internal/templateutil"
 	"github.com/compnew2006/gowa-ui/pkg/gowa"
 	"github.com/compnew2006/gowa-ui/pkg/whatsapp"
 	"github.com/compnew2006/gowa-ui/test/testutil"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -37,6 +37,9 @@ type mockGowaServer struct {
 	returnError   bool
 	errorMessage  string
 	nextMessageID string
+	// devicesResponse, when non-nil, makes GET /devices return these devices
+	// (opt-in: every other test keeps the generic envelope below).
+	devicesResponse []gowa.DeviceInfo
 }
 
 func newMockGowaServer() *mockGowaServer {
@@ -65,9 +68,18 @@ func newMockGowaServer() *mockGowaServer {
 		m.mu.Lock()
 		m.requests = append(m.requests, req)
 		returnError, errorMessage := m.returnError, m.errorMessage
+		devices := append([]gowa.DeviceInfo(nil), m.devicesResponse...)
 		m.mu.Unlock()
 
 		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodGet && r.URL.Path == "/devices" && devices != nil {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"code":    "SUCCESS",
+				"message": "Success",
+				"results": devices,
+			})
+			return
+		}
 		if returnError {
 			w.WriteHeader(http.StatusBadRequest)
 			_ = json.NewEncoder(w).Encode(map[string]any{
@@ -92,6 +104,14 @@ func (m *mockGowaServer) setError(msg string) {
 	defer m.mu.Unlock()
 	m.returnError = true
 	m.errorMessage = msg
+}
+
+// setDevicesResponse makes GET /devices return the given devices. Passing nil
+// restores the generic envelope behavior.
+func (m *mockGowaServer) setDevicesResponse(devices []gowa.DeviceInfo) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.devicesResponse = devices
 }
 
 // sentRequests returns a snapshot of the recorded requests.

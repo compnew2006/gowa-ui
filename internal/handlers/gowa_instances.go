@@ -324,15 +324,51 @@ func (a *App) ListGowaInstanceDevices(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadGateway, "Failed to list devices from GOWA", nil, "")
 	}
 
+	// Enrich each device with its linked WhatsApp account so the UI can name
+	// the business account affected by device operations (delete warning,
+	// linked-account link) without fragile string matching. The DB enforces
+	// one account per gowa_device_id (idx_wa_accounts_gowa_device), so the
+	// mapping is 1:1; soft-deleted accounts are excluded by GORM's default
+	// scope.
+	type linkedAccountRef struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	}
 	type deviceWithStatus struct {
 		gowa.DeviceInfo
-		IsConnected bool   `json:"is_connected"`
-		IsLoggedIn  bool   `json:"is_logged_in"`
-		JID         string `json:"jid"`
+		IsConnected   bool              `json:"is_connected"`
+		IsLoggedIn    bool              `json:"is_logged_in"`
+		JID           string            `json:"jid"`
+		LinkedAccount *linkedAccountRef `json:"linked_account,omitempty"`
 	}
+
+	deviceIDs := make([]string, 0, len(devices))
+	for _, d := range devices {
+		deviceIDs = append(deviceIDs, d.ID)
+	}
+	linkedByDevice := map[string]*linkedAccountRef{}
+	if len(deviceIDs) > 0 {
+		var accounts []models.WhatsAppAccount
+		if err := a.DB.Select("id", "name", "gowa_device_id").
+			Where("organization_id = ? AND gowa_device_id IN ?", orgID, deviceIDs).
+			Find(&accounts).Error; err != nil {
+			a.Log.Warn("ListGowaInstanceDevices: failed to load linked accounts", "error", err)
+		} else {
+			for i := range accounts {
+				linkedByDevice[accounts[i].GowaDeviceID] = &linkedAccountRef{
+					ID:   accounts[i].ID.String(),
+					Name: accounts[i].Name,
+				}
+			}
+		}
+	}
+
 	out := make([]deviceWithStatus, 0, len(devices))
 	for _, d := range devices {
 		entry := deviceWithStatus{DeviceInfo: d}
+		if la, ok := linkedByDevice[d.ID]; ok {
+			entry.LinkedAccount = la
+		}
 		if st, err := bundle.client.GetDeviceStatus(ctx, d.ID); err == nil {
 			entry.IsConnected = st.IsConnected
 			entry.IsLoggedIn = st.IsLoggedIn
@@ -939,10 +975,40 @@ func (a *App) DeleteGowaInstanceDevice(r *fastglue.Request) error {
 		a.Log.Error("Failed to delete GOWA device", "error", err, "device", deviceID)
 		return r.SendErrorEnvelope(fasthttp.StatusBadGateway, "Failed to delete device on GOWA", nil, "")
 	}
+	// The device is gone server-side; clean up any WhatsAppAccount rows that
+	// point at it so they do not silently orphan (gap #5).
+	a.cleanupGowaDeviceAccounts(orgID, bundle.instance.BaseURL, deviceID)
 	a.logAudit(orgID, userID, "devices", uuid.Nil, models.AuditActionDeleted, nil, map[string]any{
 		"device_id": deviceID, "instance": bundle.instance.Name,
 	})
 	return r.SendEnvelope(map[string]any{"deleted": true})
+}
+
+// cleanupGowaDeviceAccounts soft-deletes WhatsAppAccount rows linked to a
+// deleted GOWA device (gap #5). Without this the account keeps pointing at a
+// device that no longer exists and can never be re-paired. Best-effort: GOWA
+// already removed the device, so failures here only leave orphaned rows.
+func (a *App) cleanupGowaDeviceAccounts(orgID uuid.UUID, baseURL, deviceID string) {
+	normalized := strings.TrimRight(baseURL, "/")
+	var accounts []models.WhatsAppAccount
+	if err := a.DB.Where("organization_id = ? AND gowa_device_id = ?", orgID, deviceID).Find(&accounts).Error; err != nil {
+		a.Log.Error("cleanupGowaDeviceAccounts: lookup failed", "device_id", deviceID, "error", err)
+		return
+	}
+	for i := range accounts {
+		acc := accounts[i]
+		if strings.TrimRight(acc.GowaBaseURL, "/") != normalized {
+			// Same device id on a different server — leave it alone.
+			continue
+		}
+		if err := a.DB.Delete(&acc).Error; err != nil {
+			a.Log.Error("cleanupGowaDeviceAccounts: soft-delete failed", "account_id", acc.ID, "error", err)
+			continue
+		}
+		a.DB.Where("whats_app_account_id = ?", acc.ID).Delete(&models.UserWhatsAppAccount{})
+		a.InvalidateWhatsAppAccountCache(acc.GowaDeviceID)
+		a.logAudit(orgID, uuid.Nil, "account", acc.ID, models.AuditActionDeleted, &acc, nil)
+	}
 }
 
 // GowaInstanceDeviceQR fetches a login QR (as a base64 data URI) for a device.

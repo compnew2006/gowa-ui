@@ -13,6 +13,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { api } from '@/services/api'
 import { useOrganizationsStore } from '@/stores/organizations'
 import { useAuthStore } from '@/stores/auth'
+import { useGowaServersStore } from '@/stores/gowaServers'
 import { toast } from 'vue-sonner'
 import { getErrorMessage } from '@/lib/api-utils'
 import { formatDate } from '@/lib/utils'
@@ -23,7 +24,9 @@ import {
   Check,
   CheckCircle2,
   Wifi,
-  WifiOff
+  WifiOff,
+  Server,
+  Link2
 } from 'lucide-vue-next'
 
 // NOTE: The "Server Connection" tab (ConnectionCard / ServerInfoCard) was
@@ -34,6 +37,7 @@ import {
 const { t } = useI18n()
 const organizationsStore = useOrganizationsStore()
 const authStore = useAuthStore()
+const gowaServersStore = useGowaServersStore()
 
 interface WhatsAppAccount {
   id: string
@@ -57,6 +61,7 @@ const isDeleting = ref(false)
 
 const canWrite = computed(() => authStore.hasPermission('accounts', 'write'))
 const canDelete = computed(() => authStore.hasPermission('accounts', 'delete'))
+const canWriteDevices = computed(() => authStore.hasPermission('devices', 'write'))
 const breadcrumbs = computed(() => [{ label: t('nav.settings'), href: '/settings' }, { label: t('settings.accounts', 'Accounts') }])
 
 const sortKey = ref('name')
@@ -79,10 +84,12 @@ const columns = computed<Column<WhatsAppAccount>[]>(() => [
 
 watch(() => organizationsStore.selectedOrgId, () => {
   fetchAccounts()
+  gowaServersStore.fetchServers().catch(() => {})
 })
 
 onMounted(() => {
   fetchAccounts()
+  gowaServersStore.fetchServers().catch(() => {})
 })
 
 async function fetchAccounts() {
@@ -102,6 +109,22 @@ async function fetchAccounts() {
 function openDeleteDialog(account: WhatsAppAccount) {
   accountToDelete.value = account
   deleteDialogOpen.value = true
+}
+
+// Deep-link target for pairing/connecting a device on the GOWA Gateway page.
+// The account's base URL is matched (trailing-slash normalized) against the
+// DB-managed servers; returns null for config-based/unmatched servers so the
+// UI falls back to the plain gateway link.
+function linkForAccount(account: WhatsAppAccount) {
+  const norm = (u: string) => (u || '').replace(/\/+$/, '')
+  const base = norm(account.gowa_base_url || '')
+  if (!account.gowa_device_id || !base) return null
+  const server = gowaServersStore.servers.find(s => norm(s.base_url) === base)
+  if (!server) return null
+  return {
+    path: `/settings/gowa-servers/${server.id}`,
+    query: { device: account.gowa_device_id, connect: '1' },
+  }
 }
 
 async function confirmDelete() {
@@ -184,10 +207,10 @@ async function confirmDelete() {
               </div>
             </PopoverContent>
           </Popover>
-          <RouterLink v-if="canWrite" to="/settings/accounts/new">
+          <RouterLink v-if="canWrite" to="/settings/gowa-servers">
             <Button size="sm" class="bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-sm">
               <Plus class="h-4 w-4 mr-1.5" />
-              {{ $t('accounts.addAccount', 'Add Account') }}
+              {{ $t('accounts.addNumber', 'Add WhatsApp Number') }}
             </Button>
           </RouterLink>
         </div>
@@ -218,6 +241,49 @@ async function confirmDelete() {
           </div>
 
           <TabsContent value="accounts" class="space-y-6 mt-0">
+            <!-- Gateway card — the canonical entry point for device lifecycle -->
+            <Card>
+              <CardHeader>
+                <div class="flex items-center justify-between">
+                  <div>
+                    <CardTitle>{{ $t('accounts.gatewayCardTitle', 'GOWA Gateway') }}</CardTitle>
+                    <CardDescription>{{ $t('accounts.gatewayCardDesc', 'GOWA server instances and their WhatsApp devices.') }}</CardDescription>
+                  </div>
+                  <RouterLink to="/settings/gowa-servers">
+                    <Button variant="outline" size="sm">
+                      <Server class="h-4 w-4 mr-1.5" />
+                      {{ $t('accounts.gatewayPage', 'GOWA Gateway') }}
+                    </Button>
+                  </RouterLink>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div v-if="gowaServersStore.loading" class="text-xs text-muted-foreground py-2">
+                  {{ $t('common.loading', 'Loading...') }}
+                </div>
+                <p v-else-if="gowaServersStore.servers.length === 0" class="text-xs text-muted-foreground py-2">
+                  {{ $t('accounts.noServersHint', 'No GOWA servers configured. Add one to start managing WhatsApp numbers.') }}
+                </p>
+                <ul v-else class="divide-y divide-border/50">
+                  <li
+                    v-for="s in gowaServersStore.servers"
+                    :key="s.id"
+                    class="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0"
+                  >
+                    <div class="flex items-center gap-2 min-w-0">
+                      <Server class="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                      <span class="text-sm truncate">{{ s.name }}</span>
+                      <code class="text-[10px] bg-muted px-1.5 py-0.5 rounded font-mono truncate">{{ s.base_url }}</code>
+                    </div>
+                    <Badge v-if="s.is_active" variant="outline" class="text-[10px] border-emerald-600 text-emerald-600 shrink-0">
+                      {{ $t('gowaServers.isActive', 'Active') }}
+                    </Badge>
+                    <Badge v-else variant="outline" class="text-[10px] text-muted-foreground shrink-0">Inactive</Badge>
+                  </li>
+                </ul>
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader>
                 <div class="flex items-center justify-between">
@@ -225,10 +291,10 @@ async function confirmDelete() {
                     <CardTitle>{{ $t('accounts.yourAccounts', 'WhatsApp Accounts') }}</CardTitle>
                     <CardDescription>{{ $t('accounts.yourAccountsDesc', 'Manage connected GOWA WhatsApp devices') }}</CardDescription>
                   </div>
-                  <RouterLink to="/settings/accounts/new" v-if="canWrite">
+                  <RouterLink to="/settings/gowa-servers" v-if="canWrite">
                     <Button variant="outline" size="sm">
                       <Plus class="h-4 w-4 mr-1.5" />
-                      {{ $t('accounts.addAccount', 'Add Account') }}
+                      {{ $t('accounts.addNumber', 'Add WhatsApp Number') }}
                     </Button>
                   </RouterLink>
                 </div>
@@ -247,10 +313,10 @@ async function confirmDelete() {
                 >
                   <template #empty-action>
                     <div v-if="canWrite" class="flex gap-3 justify-center">
-                      <RouterLink to="/settings/accounts/new">
+                      <RouterLink to="/settings/gowa-servers">
                         <Button size="lg" class="bg-emerald-600 hover:bg-emerald-700 text-white font-medium">
                           <Plus class="mr-2 h-5 w-5" />
-                          {{ $t('accounts.addAccount', 'Add Account') }}
+                          {{ $t('accounts.addNumber', 'Add WhatsApp Number') }}
                         </Button>
                       </RouterLink>
                     </div>
@@ -308,6 +374,17 @@ async function confirmDelete() {
 
                   <template #cell-actions="{ item: account }">
                     <div class="flex items-center justify-end gap-1">
+                      <Tooltip v-if="canWriteDevices && account.gowa_connected !== true">
+                        <TooltipTrigger as-child>
+                          <RouterLink v-if="linkForAccount(account)" :to="linkForAccount(account)!">
+                            <Button variant="ghost" size="icon" class="h-8 w-8"><Link2 class="h-4 w-4" /></Button>
+                          </RouterLink>
+                          <RouterLink v-else to="/settings/gowa-servers">
+                            <Button variant="ghost" size="icon" class="h-8 w-8"><Link2 class="h-4 w-4" /></Button>
+                          </RouterLink>
+                        </TooltipTrigger>
+                        <TooltipContent>{{ $t('accounts.linkDevice', 'Link device') }}</TooltipContent>
+                      </Tooltip>
                       <Tooltip>
                         <TooltipTrigger as-child>
                           <RouterLink :to="`/settings/accounts/${account.id}`">

@@ -1,4 +1,5 @@
 import { APIRequestContext } from '@playwright/test'
+import { randomUUID } from 'node:crypto'
 
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8080'
 
@@ -424,10 +425,19 @@ export class ApiHelper {
     phone_id: string
     business_id: string
     access_token: string
+    gowa_base_url?: string
+    gowa_device_id?: string
   }): Promise<any> {
     const response = await this.request.post(`${BASE_URL}/api/accounts`, {
       headers: this.csrfHeaders,
-      data
+      data: {
+        // The API requires GOWA fields since account creation moved to the
+        // gateway-provisioning flow; seed with a fake server/device pair so
+        // list/detail page tests have a stable row.
+        gowa_base_url: 'http://gowa.test:3000',
+        gowa_device_id: `dev-${randomUUID().slice(0, 8)}`,
+        ...data
+      }
     })
     if (!response.ok()) {
       throw new Error(`Failed to create WhatsApp account: ${await response.text()}`)

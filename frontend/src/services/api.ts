@@ -1011,6 +1011,7 @@ export interface GowaDevice {
   webhook_events?: string
   is_connected: boolean
   is_logged_in: boolean
+  linked_account?: { id: string; name: string }
 }
 
 export const gowaServersService = {

@@ -141,7 +141,7 @@ export function useChatContactsList(options: UseChatContactsListOptions) {
     executingActionId.value = action.id
     try {
       const response = await customActionsService.execute(action.id, contactsStore.currentContact.id)
-      let result: ActionResult = (response.data as any).data || response.data
+      const result: ActionResult = (response.data as any).data || response.data
 
       // JavaScript actions are now executed server-side via goja.
       // The response already contains structured result fields (toast, clipboard, redirect_url, message).

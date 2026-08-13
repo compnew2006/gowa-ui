@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { loginAsAdmin, navigateToFirstItem, expectMetadataVisible, expectActivityLogVisible, expectDeleteFromForm, ApiHelper } from '../../helpers'
 import { AccountsPage } from '../../pages'
-import { createTestScope, loginAsSuperAdmin, SUPER_ADMIN } from '../../framework'
+import { createTestScope, SUPER_ADMIN } from '../../framework'
 
 const scope = createTestScope('accounts')
 
@@ -16,7 +16,10 @@ test.describe('WhatsApp Accounts - List View', () => {
     const api = new ApiHelper(request)
     await api.login(SUPER_ADMIN.email, SUPER_ADMIN.password)
     await api.createWhatsAppAccount({
-      name: scope.name('seed').toLowerCase().replace(/\s/g, '-'),
+      // scope.name() (no suffix) appends a random suffix: workers are reused
+      // across tests and the module-level scope runId is identical for both,
+      // so a fixed suffix would collide with the previous test's row.
+      name: scope.name().toLowerCase().replace(/\s/g, '-'),
       phone_id: `phone-seed-${Date.now()}`,
       business_id: `biz-seed-${Date.now()}`,
       access_token: 'test-token-e2e',
@@ -28,6 +31,7 @@ test.describe('WhatsApp Accounts - List View', () => {
   test('should display accounts page', async () => {
     await accountsPage.expectPageVisible()
     await expect(accountsPage.addButton).toBeVisible()
+    await accountsPage.expectGatewayCardVisible()
   })
 
   // Merged: previously two near-duplicate tests ('should load create page' +
@@ -71,7 +75,7 @@ test.describe('WhatsApp Accounts - Detail Page CRUD', () => {
     const api = new ApiHelper(request)
     await api.login(SUPER_ADMIN.email, SUPER_ADMIN.password)
     await api.createWhatsAppAccount({
-      name: scope.name('detail-seed').toLowerCase().replace(/\s/g, '-'),
+      name: scope.name().toLowerCase().replace(/\s/g, '-'),
       phone_id: `phone-detail-${Date.now()}`,
       business_id: `biz-detail-${Date.now()}`,
       access_token: 'test-token-e2e',
@@ -95,141 +99,62 @@ test.describe('WhatsApp Accounts - Detail Page CRUD', () => {
     await expect(toast).toBeVisible({ timeout: 5000 })
   })
 
-  test('should show webhook config on existing account', async ({ page }) => {
-    await page.goto('/settings/accounts')
-    await page.waitForLoadState('networkidle')
-
-    const href = await navigateToFirstItem(page)
-    expect(href, 'a seeded account row should be navigable').not.toBeNull()
-    await expect(page.getByText('Webhook Configuration')).toBeVisible()
-  })
-
-  test('should have test connection button', async ({ page }) => {
-    await page.goto('/settings/accounts')
-    await page.waitForLoadState('networkidle')
-
-    const href = await navigateToFirstItem(page)
-    expect(href, 'a seeded account row should be navigable').not.toBeNull()
-    await expect(page.getByRole('button', { name: /Test/i })).toBeVisible()
-  })
-
-  test('should have subscribe button', async ({ page }) => {
-    await page.goto('/settings/accounts')
-    await page.waitForLoadState('networkidle')
-
-    const href = await navigateToFirstItem(page)
-    expect(href, 'a seeded account row should be navigable').not.toBeNull()
-    await expect(page.getByRole('button', { name: /Subscribe/i })).toBeVisible()
-  })
-
-  test('should have business profile button', async ({ page }) => {
-    await page.goto('/settings/accounts')
-    await page.waitForLoadState('networkidle')
-
-    const href = await navigateToFirstItem(page)
-    expect(href, 'a seeded account row should be navigable').not.toBeNull()
-    await expect(page.getByRole('button', { name: /Profile/i })).toBeVisible()
-  })
-
-  test('should delete from detail page', async ({ page }) => {
-    await page.goto('/settings/accounts')
-    await page.waitForLoadState('networkidle')
-
-    const href = await navigateToFirstItem(page)
-    expect(href, 'a seeded account row should be navigable').not.toBeNull()
-    await expectDeleteFromForm(page, '/settings/accounts')
-  })
-
-  test('should show metadata', async ({ page }) => {
-    await page.goto('/settings/accounts')
-    await page.waitForLoadState('networkidle')
-
-    const href = await navigateToFirstItem(page)
-    expect(href, 'a seeded account row should be navigable').not.toBeNull()
-    await expectMetadataVisible(page)
-  })
-
-  test('should show activity log', async ({ page }) => {
-    await page.goto('/settings/accounts')
-    await page.waitForLoadState('networkidle')
-
-    const href = await navigateToFirstItem(page)
-    expect(href, 'a seeded account row should be navigable').not.toBeNull()
-    await expectActivityLogVisible(page)
-  })
-
-  test('should show setup guide', async ({ page, request }) => {
-    // Seed our own account so we don't race with parallel workers that
-    // create-then-delete accounts (e.g. audit-trail.spec). navigateToFirstItem
-    // grabs the first row's href, but if another worker deletes that account
-    // before goto lands, the detail page renders the "not found" error state
-    // and Setup Guide never appears.
+  // Each of these detail-page tests seeds its OWN account and navigates to it
+  // directly, so parallel workers that create-then-delete rows (delete test,
+  // audit-trail.spec) can never invalidate a first-row navigation.
+  async function seedAndOpenOwnAccount(page: any, request: any, label: string) {
     const api = new ApiHelper(request)
     await api.login(SUPER_ADMIN.email, SUPER_ADMIN.password)
     const acc = await api.createWhatsAppAccount({
-      name: scope.name('setup-guide').toLowerCase().replace(/\s/g, '-'),
-      phone_id: `phone-setup-${Date.now()}`,
-      business_id: `biz-setup-${Date.now()}`,
+      name: scope.name(label).toLowerCase().replace(/\s/g, '-'),
+      phone_id: `phone-${label}-${Date.now()}`,
+      business_id: `biz-${label}-${Date.now()}`,
+      access_token: 'test-token-e2e',
+    })
+    await page.goto(`/settings/accounts/${acc.id}`)
+    await page.waitForLoadState('networkidle')
+    return acc
+  }
+
+  test('should show webhook config on existing account', async ({ page, request }) => {
+    await seedAndOpenOwnAccount(page, request, 'webhook-config')
+    await expect(page.getByText('Webhook Configuration')).toBeVisible()
+  })
+
+  test('should delete from detail page', async ({ page, request }) => {
+    await seedAndOpenOwnAccount(page, request, 'delete-detail')
+    await expectDeleteFromForm(page, '/settings/accounts')
+  })
+
+  test('should show metadata', async ({ page, request }) => {
+    await seedAndOpenOwnAccount(page, request, 'meta-info')
+    await expectMetadataVisible(page)
+  })
+
+  test('should show activity log', async ({ page, request }) => {
+    await seedAndOpenOwnAccount(page, request, 'activity-log')
+    await expectActivityLogVisible(page)
+  })
+
+  test('should link to GOWA Gateway from detail page', async ({ page, request }) => {
+    // Device lifecycle (pairing/connect) is owned by the GOWA Gateway page.
+    // A plain account without gowa_base_url/gowa_device_id falls back to the
+    // generic gateway link.
+    const api = new ApiHelper(request)
+    await api.login(SUPER_ADMIN.email, SUPER_ADMIN.password)
+    const acc = await api.createWhatsAppAccount({
+      name: scope.name('gateway-link').toLowerCase().replace(/\s/g, '-'),
+      phone_id: `phone-gateway-${Date.now()}`,
+      business_id: `biz-gateway-${Date.now()}`,
       access_token: 'test-token-e2e',
     })
 
     await page.goto(`/settings/accounts/${acc.id}`)
     await page.waitForLoadState('networkidle')
 
-    await expect(page.getByText('Setup Guide')).toBeVisible({ timeout: 15000 })
+    const gatewayLink = page.locator('a').filter({ hasText: 'GOWA Gateway' }).first()
+    await expect(gatewayLink).toBeVisible({ timeout: 15000 })
+    await gatewayLink.click()
+    await expect(page).toHaveURL(/\/settings\/gowa-servers/)
   })
-
-  // Collapsed: previously two near-duplicate page.route()-mocked tests for
-  // GREEN and UNKNOWN quality_rating. Data-driven per Rule 3/4. The route mock
-  // stays — it's a justified HTTP-boundary mock (Rule 2).
-  for (const [qualityRating, expectedLabel] of [
-    ['GREEN', 'High'],
-    ['UNKNOWN', 'Unknown'],
-  ] as const) {
-    test(`should show connection details card for ${qualityRating} quality rating (${expectedLabel})`, async ({ page, request }) => {
-      // Browser must share identity with the API session below; otherwise
-      // /settings/accounts/:id 404s for the wrong org. See framework/auth.ts.
-      await loginAsSuperAdmin(page)
-      const api = new ApiHelper(request)
-      await api.login(SUPER_ADMIN.email, SUPER_ADMIN.password)
-      const acc = await api.createWhatsAppAccount({
-        name: scope.name(`conn-${qualityRating}`).toLowerCase().replace(/\s/g, '-'),
-        phone_id: `phone-conn-${Date.now()}`,
-        business_id: `biz-conn-${Date.now()}`,
-        access_token: 'test-token-e2e',
-      })
-
-      // Stub the connection test response
-      await page.route(`**/api/accounts/${acc.id}/test`, async (route) => {
-        await route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({
-            success: true,
-            data: {
-              success: true,
-              display_phone_number: '1234567890',
-              verified_name: 'Test Verified Company Name',
-              quality_rating: qualityRating,
-              messaging_limit_tier: 'TIER_250',
-              code_verification_status: 'VERIFIED',
-              account_mode: 'LIVE',
-              is_test_number: false
-            }
-          })
-        })
-      })
-
-      await page.goto(`/settings/accounts/${acc.id}`)
-      await page.waitForLoadState('networkidle')
-
-      // Click the Test button
-      await page.getByRole('button', { name: /Test/i }).click()
-
-      // Assert details card is shown and the rating is translated correctly
-      await expect(page.getByText('Details', { exact: true })).toBeVisible()
-      await expect(page.getByText('Test Verified Company Name')).toBeVisible()
-      await expect(page.getByText(expectedLabel)).toBeVisible()
-    })
-  }
 })

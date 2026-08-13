@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount } from "vue";
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from "vue";
 import { useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
 import {
@@ -153,6 +153,11 @@ const deleteOpen = ref(false);
 const deviceToDelete = ref<GowaDevice | null>(null);
 const isDeleting = ref(false);
 
+// Device deep-link support: the Accounts page links here with
+// ?device=<deviceId>&connect=1 to open the pairing dialog for a specific
+// device and highlight its card.
+const highlightDeviceId = ref<string | null>(null);
+
 onMounted(load);
 onBeforeUnmount(clearTimers);
 
@@ -165,12 +170,35 @@ async function load() {
       store.fetchDevices(serverId.value),
     ]);
     devices.value = store.devices;
+    handleConnectQuery();
   } catch {
     fetchError.value = true;
     toast.error(t("common.failedLoad", { resource: "server" }));
   } finally {
     loading.value = false;
   }
+}
+
+function handleConnectQuery() {
+  const qDevice = route.query.device as string | undefined;
+  const qConnect = route.query.connect;
+  if (!qDevice || devices.value.length === 0) return;
+  const device = devices.value.find(
+    (d) => d.id === qDevice || d.display_name === qDevice || d.jid === qDevice,
+  );
+  if (!device) return;
+  if ((qConnect === "1" || qConnect === "true") && canWriteDevices.value) {
+    openConnect(device);
+  }
+  highlightDeviceId.value = device.id;
+  nextTick(() => {
+    document
+      .getElementById(`device-${device.id}`)
+      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
+  setTimeout(() => {
+    highlightDeviceId.value = null;
+  }, 4000);
 }
 
 async function refreshDevices() {
@@ -586,7 +614,16 @@ async function confirmDelete() {
               v-else
               class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
             >
-              <Card v-for="d in devices" :key="d.id" class="border-border/60">
+              <Card
+                v-for="d in devices"
+                :key="d.id"
+                :id="`device-${d.id}`"
+                :class="
+                  highlightDeviceId === d.id
+                    ? 'border-border/60 ring-2 ring-emerald-500/50'
+                    : 'border-border/60'
+                "
+              >
                 <CardContent class="pt-4 space-y-3">
                   <div class="flex items-start justify-between gap-2">
                     <div class="min-w-0">
@@ -597,6 +634,15 @@ async function confirmDelete() {
                         class="text-[10px] bg-muted px-1.5 py-0.5 rounded font-mono block mt-1 truncate"
                         >{{ d.jid || d.phone_number || d.id }}</code
                       >
+                      <RouterLink
+                        v-if="d.linked_account"
+                        :to="`/settings/accounts/${d.linked_account.id}`"
+                        class="inline-flex items-center gap-1 text-xs text-emerald-500 hover:text-emerald-400 mt-1.5"
+                      >
+                        <Link2 class="h-3 w-3" />
+                        {{ $t("gowaServers.linkedAccount", "Linked account") }}:
+                        {{ d.linked_account.name }}
+                      </RouterLink>
                     </div>
                     <Badge
                       variant="outline"
@@ -880,6 +926,13 @@ async function confirmDelete() {
       v-model:open="deleteOpen"
       :title="$t('gowaServers.deleteDevice', 'Delete Device')"
       :item-name="deviceToDelete?.display_name || deviceToDelete?.id"
+      :description="
+        deviceToDelete?.linked_account
+          ? $t('gowaServers.deleteLinkedAccountWarning', 'This device is linked to the WhatsApp account \u00ab{name}\u00bb — it will be deleted as well.', {
+              named: { name: deviceToDelete.linked_account.name },
+            })
+          : undefined
+      "
       :is-submitting="isDeleting"
       @confirm="confirmDelete"
     />

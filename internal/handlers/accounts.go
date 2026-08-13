@@ -362,6 +362,17 @@ func (a *App) DeleteAccount(r *fastglue.Request) error {
 		return nil
 	}
 
+	// Best-effort: log the GOWA device out before removing the account so the
+	// pairing dies server-side too (gap #4). Failure is logged, not fatal —
+	// the account deletion must not be blocked by an unreachable gateway.
+	if account.GowaDeviceID != "" {
+		if gc, ok := a.resolveProvider(account).(*gowa.Client); ok && gc != nil {
+			if err := gc.LogoutDevice(context.Background(), account.GowaDeviceID); err != nil {
+				a.Log.Warn("DeleteAccount: failed to logout GOWA device", "device_id", account.GowaDeviceID, "error", err)
+			}
+		}
+	}
+
 	if err := a.DB.Delete(account).Error; err != nil {
 		a.Log.Error("Failed to delete account", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete account", nil, "")

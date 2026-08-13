@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
+import { useGowaServersStore } from '@/stores/gowaServers'
 import { api } from '@/services/api'
 import { toast } from 'vue-sonner'
 import { getErrorMessage } from '@/lib/api-utils'
 import { useUnsavedChangesGuard } from '@/composables/useUnsavedChangesGuard'
 import DetailPageLayout from '@/components/shared/DetailPageLayout.vue'
 import AuditLogPanel from '@/components/shared/AuditLogPanel.vue'
+import MetadataPanel from '@/components/shared/MetadataPanel.vue'
 import UnsavedChangesDialog from '@/components/shared/UnsavedChangesDialog.vue'
 import AccountCloseRatingPanel from '@/components/settings/AccountCloseRatingPanel.vue'
 import AccountCallRejectPanel from '@/components/settings/AccountCallRejectPanel.vue'
@@ -34,39 +36,20 @@ import {
   Phone,
   Save,
   Trash2,
-  Copy,
-  RefreshCw,
   Loader2,
-  AlertCircle,
-  CheckCircle2,
-  QrCode,
-  Link2,
   Smartphone,
   Lightbulb,
   ServerCog,
   Route,
   Cpu,
+  ExternalLink,
+  Webhook,
 } from 'lucide-vue-next'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from '@/components/ui/dialog'
-import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-} from '@/components/ui/tabs'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+
+// NOTE: Device lifecycle (QR/pair connect, reconnect, logout, sync, webhook
+// URL/events, delete) lives on the GOWA Gateway page — the canonical source.
+// This page keeps the business configuration (routing, automation) plus a
+// live device-connection glance, and links out to the gateway for device ops.
 
 interface WhatsAppAccount {
   id: string
@@ -92,6 +75,7 @@ const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const authStore = useAuthStore()
+const gowaServersStore = useGowaServersStore()
 
 const accountId = computed(() => route.params.id as string)
 const isNew = computed(() => accountId.value === 'new')
@@ -124,17 +108,66 @@ function bumpAccountLog() {
   accountLogKey.value++
 }
 
-// Connection status summary for the sidebar Quick-Ref card. The account
-// `status` field means "configured/active" on the platform; the GOWA device
-// connection (live WhatsApp session) is reflected by `gowa_status`, which we
-// fetch lazily here for the glance card. Both default to a safe "unknown".
-const connectionSummary = computed(() => {
-  if (!account.value) return { tone: 'unknown', label: t('accounts.deviceStatusUnknown') }
-  const isActive = account.value.status === 'active'
+// Live device-connection status, polled from the backend (which proxies GOWA).
+// This replaces the old "connection summary" that reflected the account's
+// config `status` field instead of the actual WhatsApp session state.
+const liveStatus = ref<{ is_connected: boolean; is_logged_in: boolean; jid: string } | null>(null)
+const liveStatusLoading = ref(false)
+let liveStatusTimer: ReturnType<typeof setInterval> | null = null
+
+async function fetchLiveStatus() {
+  if (!account.value || !account.value.gowa_device_id) return
+  liveStatusLoading.value = true
+  try {
+    const resp = await api.get(`/accounts/${account.value.id}/gowa/status`)
+    liveStatus.value = resp.data.data || resp.data
+  } catch {
+    liveStatus.value = null
+  } finally {
+    liveStatusLoading.value = false
+  }
+}
+
+function startLiveStatusPoll() {
+  stopLiveStatusPoll()
+  fetchLiveStatus()
+  liveStatusTimer = setInterval(fetchLiveStatus, 5000)
+}
+
+function stopLiveStatusPoll() {
+  if (liveStatusTimer) {
+    clearInterval(liveStatusTimer)
+    liveStatusTimer = null
+  }
+}
+
+onBeforeUnmount(stopLiveStatusPoll)
+
+const deviceStatus = computed(() => {
+  if (liveStatus.value?.is_connected) {
+    return { tone: 'active', label: t('accounts.connected', 'Connected') }
+  }
+  if (liveStatus.value) {
+    return { tone: 'inactive', label: t('accounts.disconnected', 'Disconnected') }
+  }
+  return { tone: 'unknown', label: t('accounts.deviceStatusUnknown', 'Status unknown') }
+})
+
+// Resolve the DB-managed GOWA server for this account's base URL so device
+// management can deep-link into the gateway page. Falls back to a plain link
+// when the base URL is config-based (no DB server row) or unmatched.
+const matchedServer = computed(() => {
+  const norm = (u: string) => (u || '').replace(/\/+$/, '')
+  const base = norm(account.value?.gowa_base_url || '')
+  if (!base) return null
+  return gowaServersStore.servers.find(s => norm(s.base_url) === base) || null
+})
+
+const manageDeviceTarget = computed(() => {
+  if (!account.value?.gowa_device_id || !matchedServer.value) return null
   return {
-    tone: isActive ? 'active' : 'inactive',
-    label: isActive ? t('accounts.statusActive') : t('accounts.statusInactive'),
-    desc: isActive ? t('accounts.statusActiveDesc') : t('accounts.statusInactiveDesc'),
+    path: `/settings/gowa-servers/${matchedServer.value.id}`,
+    query: { device: account.value.gowa_device_id, connect: '1' },
   }
 })
 
@@ -167,6 +200,9 @@ async function loadAccount() {
     const data = response.data.data || response.data
     account.value = data
     syncForm()
+    if (!isNew.value && account.value?.gowa_device_id) {
+      startLiveStatusPoll()
+    }
     nextTick(() => { hasChanges.value = false })
   } catch {
     isNotFound.value = true
@@ -253,154 +289,11 @@ async function deleteAccount() {
   deleteDialogOpen.value = false
 }
 
-async function copyToClipboard(text: string) {
-  try {
-    await navigator.clipboard.writeText(text)
-    toast.success(t('common.copiedToClipboard', 'Copied to clipboard'))
-  } catch {
-    toast.error(t('common.clipboardFailed', 'Failed to copy'))
-  }
-}
-
-// --- GOWA Instance & Device Creation ---
-const gowaInstances = ref<Array<{ name: string; base_url: string }>>([])
-const selectedGowaInstance = ref('')
-const creatingDevice = ref(false)
-
-async function fetchGowaInstances() {
-  try {
-    const resp = await api.get('/gowa/instances')
-    gowaInstances.value = resp.data.data?.instances || []
-  } catch {
-    gowaInstances.value = []
-  }
-}
-
-async function createGowaDevice() {
-  if (!selectedGowaInstance.value) return
-  creatingDevice.value = true
-  try {
-    const resp = await api.post('/gowa/create-device', { base_url: selectedGowaInstance.value, device_name: form.value.name || 'gowa-ui' })
-    const data = resp.data.data || resp.data
-    form.value.gowa_base_url = data.base_url
-    form.value.gowa_device_id = data.device_id
-    form.value.gowa_webhook_secret = data.webhook_secret
-    toast.success(t('accounts.deviceCreated', 'Device created on GOWA instance'))
-  } catch (e) {
-    toast.error(getErrorMessage(e, t('accounts.deviceCreateFailed', 'Failed to create device')))
-  } finally {
-    creatingDevice.value = false
-  }
-}
-
-// --- GOWA Device Connection ---
-const gowaConnectOpen = ref(false)
-const gowaQrLink = ref('')
-const gowaQrDuration = ref(30)
-const gowaQrLoading = ref(false)
-const gowaQrTimer = ref<ReturnType<typeof setTimeout> | null>(null)
-const gowaPairPhone = ref('')
-const gowaPairCode = ref('')
-const gowaPairLoading = ref(false)
-const gowaStatus = ref<{ is_connected: boolean; is_logged_in: boolean; jid: string } | null>(null)
-const gowaStatusLoading = ref(false)
-const gowaStatusTimer = ref<ReturnType<typeof setInterval> | null>(null)
-
-async function fetchGowaQr() {
-  if (!account.value) return
-  gowaQrLoading.value = true
-  try {
-    const resp = await api.get(`/accounts/${account.value.id}/gowa/qr`)
-    const data = resp.data.data || resp.data
-    if (data.already_connected) {
-      gowaStatus.value = { is_connected: true, is_logged_in: true, jid: data.jid || '' }
-      gowaQrLink.value = ''
-      return
-    }
-    gowaQrLink.value = data.qr_link || ''
-    gowaQrDuration.value = data.qr_duration || 30
-    if (gowaQrTimer.value) clearTimeout(gowaQrTimer.value)
-    if (!gowaStatus.value?.is_connected) {
-      gowaQrTimer.value = setTimeout(fetchGowaQr, (gowaQrDuration.value + 2) * 1000)
-    }
-  } catch (e) {
-    toast.error(getErrorMessage(e, t('accounts.gowaQrFailed', 'Failed to get QR code')))
-  } finally {
-    gowaQrLoading.value = false
-  }
-}
-
-async function fetchGowaPairCode() {
-  if (!account.value || !gowaPairPhone.value.trim()) return
-  gowaPairLoading.value = true
-  gowaPairCode.value = ''
-  try {
-    const resp = await api.post(`/accounts/${account.value.id}/gowa/pair-code`, { phone: gowaPairPhone.value.trim() })
-    const data = resp.data.data || resp.data
-    // Device is already connected — GOWA refuses a fresh pair code. Mirror the
-    // QR handler's signal so the status poller closes the dialog immediately.
-    if (data.already_connected) {
-      gowaStatus.value = { is_connected: true, is_logged_in: true, jid: data.jid || '' }
-      toast.success(t('accounts.gowaConnected', 'Device connected!'))
-      gowaConnectOpen.value = false
-      clearGowaTimers()
-      await loadAccount()
-      return
-    }
-    gowaPairCode.value = data.pair_code || ''
-  } catch (e) {
-    toast.error(getErrorMessage(e, t('accounts.gowaPairFailed', 'Failed to get pair code')))
-  } finally {
-    gowaPairLoading.value = false
-  }
-}
-
-async function fetchGowaStatus() {
-  if (!account.value) return
-  gowaStatusLoading.value = true
-  try {
-    const resp = await api.get(`/accounts/${account.value.id}/gowa/status`)
-    gowaStatus.value = resp.data.data || resp.data
-  } catch {
-    gowaStatus.value = null
-  } finally {
-    gowaStatusLoading.value = false
-  }
-}
-
-function openGowaConnect() {
-  gowaConnectOpen.value = true
-  gowaQrLink.value = ''
-  gowaPairCode.value = ''
-  gowaPairPhone.value = ''
-  fetchGowaStatus()
-  fetchGowaQr()
-  gowaStatusTimer.value = setInterval(async () => {
-    await fetchGowaStatus()
-    if (gowaStatus.value?.is_connected) {
-      clearGowaTimers()
-      toast.success(t('accounts.gowaConnected', 'Device connected!'))
-      gowaConnectOpen.value = false
-      await loadAccount()
-    }
-  }, 5000)
-}
-
-function closeGowaConnect() {
-  gowaConnectOpen.value = false
-  clearGowaTimers()
-}
-
-function clearGowaTimers() {
-  if (gowaQrTimer.value) { clearTimeout(gowaQrTimer.value); gowaQrTimer.value = null }
-  if (gowaStatusTimer.value) { clearInterval(gowaStatusTimer.value); gowaStatusTimer.value = null }
-}
-
 onMounted(async () => {
+  gowaServersStore.fetchServers().catch(() => {})
   if (isNew.value) {
     isLoading.value = false
     hasChanges.value = false
-    fetchGowaInstances()
   } else {
     await loadAccount()
   }
@@ -421,10 +314,20 @@ onMounted(async () => {
     >
       <template #actions>
         <div class="flex items-center gap-2">
-          <Button v-if="!isNew && account && canWriteDevices" variant="outline" size="sm" @click="openGowaConnect">
-            <QrCode class="h-4 w-4 me-1.5" />
-            {{ $t('accounts.connectDevice', 'Connect Device') }}
-          </Button>
+          <template v-if="!isNew && account && canWriteDevices">
+            <RouterLink v-if="manageDeviceTarget" :to="manageDeviceTarget">
+              <Button variant="outline" size="sm">
+                <ExternalLink class="h-4 w-4 me-1.5" />
+                {{ $t('accounts.manageDevice', 'Manage Device') }}
+              </Button>
+            </RouterLink>
+            <RouterLink v-else to="/settings/gowa-servers">
+              <Button variant="outline" size="sm">
+                <ServerCog class="h-4 w-4 me-1.5" />
+                {{ $t('accounts.gatewayPage', 'GOWA Gateway') }}
+              </Button>
+            </RouterLink>
+          </template>
           <Button v-if="canWrite && (hasChanges || isNew)" size="sm" @click="save" :disabled="isSaving" class="bg-emerald-600 hover:bg-emerald-700 text-white font-medium">
             <Save class="h-4 w-4 me-1.5" /> {{ isSaving ? $t('common.saving', 'Saving...') : isNew ? $t('common.create', 'Create') : $t('common.save', 'Save') }}
           </Button>
@@ -436,6 +339,21 @@ onMounted(async () => {
 
       <!-- ════════════ SECTION 1 — Identity & Connection ════════════ -->
       <section class="space-y-3">
+        <Card v-if="isNew" class="border-emerald-500/30 bg-emerald-500/5">
+          <CardContent class="py-3 flex items-center justify-between gap-3 flex-wrap">
+            <p class="text-xs text-muted-foreground min-w-0">
+              <Lightbulb class="h-3.5 w-3.5 inline me-1.5 text-amber-500 -mt-0.5" />
+              {{ $t('accounts.tips.connect', 'Create the device in the GOWA Gateway — the account is provisioned automatically.') }}
+            </p>
+            <RouterLink to="/settings/gowa-servers">
+              <Button variant="outline" size="sm" class="shrink-0">
+                <ServerCog class="h-4 w-4 me-1.5" />
+                {{ $t('accounts.gatewayPage', 'GOWA Gateway') }}
+              </Button>
+            </RouterLink>
+          </CardContent>
+        </Card>
+
         <header class="flex items-start gap-3">
           <div class="h-7 w-7 rounded-md bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0">
             <ServerCog class="h-4 w-4" />
@@ -453,19 +371,21 @@ onMounted(async () => {
                 <CardTitle class="text-sm font-medium">{{ $t('accounts.accountDetails') }}</CardTitle>
                 <CardDescription class="text-xs">{{ $t('accounts.sectionConnectionDesc') }}</CardDescription>
               </div>
-              <!-- Prominent status pill -->
+              <!-- Prominent live device-status pill -->
               <div
                 v-if="account"
                 class="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-xs font-medium shrink-0"
-                :class="connectionSummary.tone === 'active'
+                :class="deviceStatus.tone === 'active'
                   ? 'bg-emerald-500/15 text-emerald-400'
-                  : 'bg-muted text-muted-foreground'"
+                  : deviceStatus.tone === 'inactive'
+                    ? 'bg-amber-500/15 text-amber-500'
+                    : 'bg-muted text-muted-foreground'"
               >
                 <span
                   class="h-1.5 w-1.5 rounded-full"
-                  :class="connectionSummary.tone === 'active' ? 'bg-emerald-400' : 'bg-muted-foreground/60'"
+                  :class="deviceStatus.tone === 'active' ? 'bg-emerald-400' : deviceStatus.tone === 'inactive' ? 'bg-amber-500' : 'bg-muted-foreground/60'"
                 />
-                {{ connectionSummary.label }}
+                {{ deviceStatus.label }}
               </div>
             </div>
           </CardHeader>
@@ -487,36 +407,6 @@ onMounted(async () => {
             </div>
 
             <Separator />
-
-            <!-- Provisioning (new accounts only) -->
-            <div v-if="isNew && gowaInstances.length > 0" class="space-y-3">
-              <div class="space-y-1.5">
-                <Label class="text-xs">{{ $t('accounts.gowaInstance') }}</Label>
-                <Select v-model="selectedGowaInstance" :disabled="!canWrite">
-                  <SelectTrigger class="h-9">
-                    <SelectValue :placeholder="$t('accounts.selectInstance')" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">{{ $t('accounts.selectInstance') }}</SelectItem>
-                    <SelectItem v-for="inst in gowaInstances" :key="inst.base_url" :value="inst.base_url">
-                      {{ inst.name }} ({{ inst.base_url }})
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div
-                v-if="selectedGowaInstance && !form.gowa_device_id"
-                class="flex flex-col sm:flex-row sm:items-center gap-3 p-3 rounded-lg border border-border/60 bg-muted/30"
-              >
-                <Button variant="outline" size="sm" :disabled="creatingDevice" @click="createGowaDevice" class="shrink-0">
-                  <Loader2 v-if="creatingDevice" class="h-4 w-4 me-1.5 animate-spin" />
-                  <Smartphone v-else class="h-4 w-4 me-1.5 text-emerald-500" />
-                  {{ $t('accounts.createDevice') }}
-                </Button>
-                <span class="text-xs text-muted-foreground">{{ $t('accounts.createDeviceDesc') }}</span>
-              </div>
-            </div>
 
             <!-- GOWA connection grid — unified for new + existing accounts -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -567,6 +457,9 @@ onMounted(async () => {
               </div>
             </div>
             <p class="text-[11px] text-muted-foreground -mt-2">{{ $t('accounts.gowaAuthHint') }}</p>
+            <p class="text-[11px] text-muted-foreground -mt-3">
+              {{ $t('accounts.deviceLifecycleHint', 'Device pairing and connection controls live in the GOWA Gateway.') }}
+            </p>
           </CardContent>
         </Card>
       </section>
@@ -626,15 +519,17 @@ onMounted(async () => {
           </header>
           <Card>
             <CardContent class="space-y-4 pt-6">
-              <!-- status row -->
+              <!-- Live connection status row -->
               <div class="flex items-center gap-2 flex-wrap">
-                <span
-                  class="h-2 w-2 rounded-full shrink-0"
-                  :class="connectionSummary.tone === 'active' ? 'bg-emerald-400' : 'bg-muted-foreground/50'"
-                />
-                <span class="text-sm font-medium">{{ connectionSummary.label }}</span>
-                <span class="text-xs text-muted-foreground">·</span>
-                <span class="text-xs text-muted-foreground">{{ connectionSummary.desc }}</span>
+                <Loader2 v-if="liveStatusLoading && !liveStatus" class="h-3.5 w-3.5 animate-spin text-muted-foreground shrink-0" />
+                <template v-else>
+                  <span
+                    class="h-2 w-2 rounded-full shrink-0"
+                    :class="liveStatus?.is_connected ? 'bg-emerald-400' : 'bg-muted-foreground/50'"
+                  />
+                  <span class="text-sm font-medium">{{ deviceStatus.label }}</span>
+                  <span v-if="liveStatus?.jid" class="text-xs text-muted-foreground font-mono truncate min-w-0" :title="liveStatus.jid">{{ liveStatus.jid }}</span>
+                </template>
               </div>
               <Separator />
               <!-- key/value reference -->
@@ -648,16 +543,18 @@ onMounted(async () => {
                   <dd class="font-mono text-end truncate min-w-0" :title="form.gowa_base_url">{{ form.gowa_base_url || '—' }}</dd>
                 </div>
               </dl>
-              <Button
-                v-if="canWriteDevices"
-                variant="outline"
-                size="sm"
-                class="w-full"
-                @click="openGowaConnect"
-              >
-                <QrCode class="h-4 w-4 me-1.5" />
-                {{ $t('accounts.deviceConnectCta') }}
-              </Button>
+              <RouterLink v-if="manageDeviceTarget" :to="manageDeviceTarget">
+                <Button v-if="canWriteDevices" variant="outline" size="sm" class="w-full">
+                  <ExternalLink class="h-4 w-4 me-1.5" />
+                  {{ $t('accounts.manageDevice', 'Manage Device') }}
+                </Button>
+              </RouterLink>
+              <RouterLink v-else to="/settings/gowa-servers">
+                <Button v-if="canWriteDevices" variant="outline" size="sm" class="w-full">
+                  <ServerCog class="h-4 w-4 me-1.5" />
+                  {{ $t('accounts.gatewayPage', 'GOWA Gateway') }}
+                </Button>
+              </RouterLink>
             </CardContent>
           </Card>
         </section>
@@ -725,6 +622,55 @@ onMounted(async () => {
         </div>
       </section>
 
+      <!-- ════════════ Section 4 — Webhook Configuration ════════════ -->
+      <section v-if="account && !isNew" class="space-y-3">
+        <header class="flex items-start gap-3">
+          <div class="h-7 w-7 rounded-md bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0">
+            <Webhook class="h-4 w-4" />
+          </div>
+          <div class="min-w-0">
+            <h2 class="text-sm font-semibold leading-tight">{{ $t('accounts.webhookConfig', 'Webhook Configuration') }}</h2>
+            <p class="text-xs text-muted-foreground mt-0.5">{{ $t('accounts.webhookConfigDesc') }}</p>
+          </div>
+        </header>
+        <Card>
+          <CardContent class="space-y-4 pt-6">
+            <div class="space-y-1.5">
+              <div class="flex items-center justify-between">
+                <Label for="gowa_webhook_secret" class="text-xs">{{ $t('accounts.gowaWebhookSecret', 'Webhook secret') }}</Label>
+                <Badge v-if="account.has_gowa_webhook_secret" variant="outline" class="border-emerald-600 text-emerald-600 text-[10px]">
+                  {{ $t('accounts.configured', 'Configured') }}
+                </Badge>
+              </div>
+              <Input
+                id="gowa_webhook_secret"
+                v-model="form.gowa_webhook_secret"
+                type="password"
+                :placeholder="$t('accounts.gowaWebhookSecretPlaceholder', 'Set a new secret (leave blank to keep current)')"
+                autocomplete="new-password"
+                :disabled="!canWrite"
+                class="font-mono text-xs h-9"
+              />
+            </div>
+            <p class="text-[11px] text-muted-foreground">
+              {{ $t('accounts.webhookNote', 'The webhook URL and events are managed per device in the GOWA Gateway.') }}
+              <RouterLink to="/settings/gowa-servers" class="text-emerald-500 hover:underline">
+                {{ $t('accounts.gatewayPage', 'GOWA Gateway') }}
+              </RouterLink>
+            </p>
+          </CardContent>
+        </Card>
+      </section>
+
+      <!-- Metadata -->
+      <MetadataPanel
+        v-if="account && !isNew"
+        :created-at="account.created_at"
+        :updated-at="account.updated_at"
+        :created-by-name="account.created_by_name"
+        :updated-by-name="account.updated_by_name"
+      />
+
       <!-- Activity Log (aggregated: account + per-account settings blocks) -->
       <AuditLogPanel
         v-if="account && !isNew"
@@ -749,83 +695,6 @@ onMounted(async () => {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
-
-    <!-- GOWA Connect Device Dialog -->
-    <Dialog :open="gowaConnectOpen" @update:open="(v) => !v && closeGowaConnect()">
-      <DialogContent class="max-w-lg" @escape-key-down="closeGowaConnect" @pointer-down-outside="closeGowaConnect">
-        <DialogHeader>
-          <DialogTitle>{{ $t('accounts.connectDevice', 'Connect Device') }}</DialogTitle>
-          <DialogDescription>
-            {{ $t('accounts.gowaConnectDesc', 'Scan the QR code or use a pair code to link your WhatsApp account.') }}
-          </DialogDescription>
-        </DialogHeader>
-
-        <!-- Connection Status -->
-        <div class="flex items-center gap-2 text-sm mb-2">
-          <Loader2 v-if="gowaStatusLoading" class="h-4 w-4 animate-spin text-muted-foreground" />
-          <template v-else-if="gowaStatus">
-            <Badge v-if="gowaStatus.is_connected" variant="outline" class="border-green-600 text-green-600">
-              <CheckCircle2 class="h-3 w-3 mr-1" /> {{ $t('accounts.connected', 'Connected') }}
-            </Badge>
-            <Badge v-else variant="outline" class="border-amber-600 text-amber-600">
-              <AlertCircle class="h-3 w-3 mr-1" /> {{ $t('accounts.disconnected', 'Disconnected') }}
-            </Badge>
-            <span v-if="gowaStatus.jid" class="text-xs text-muted-foreground font-mono">{{ gowaStatus.jid }}</span>
-          </template>
-        </div>
-
-        <Tabs default-value="qr">
-          <TabsList class="grid w-full grid-cols-2">
-            <TabsTrigger value="qr">
-              <QrCode class="h-4 w-4 mr-1.5" /> {{ $t('accounts.qrCode', 'QR Code') }}
-            </TabsTrigger>
-            <TabsTrigger value="pair">
-              <Link2 class="h-4 w-4 mr-1.5" /> {{ $t('accounts.pairCode', 'Pair Code') }}
-            </TabsTrigger>
-          </TabsList>
-
-          <!-- QR Code Tab -->
-          <TabsContent value="qr" class="flex flex-col items-center gap-3 py-4">
-            <div class="relative w-64 h-64 bg-white rounded-lg flex items-center justify-center border border-border shadow-inner">
-              <Loader2 v-if="gowaQrLoading && !gowaQrLink" class="h-8 w-8 animate-spin text-muted-foreground" />
-              <img v-else-if="gowaQrLink" :src="gowaQrLink" alt="QR Code" class="w-full h-full object-contain p-2" />
-              <QrCode v-else class="h-16 w-16 text-muted-foreground" />
-            </div>
-            <p class="text-xs text-muted-foreground text-center">
-              {{ $t('accounts.qrInstructions', 'Open WhatsApp on your phone → Settings → Linked Devices → Link a Device → scan this code') }}
-            </p>
-            <Button variant="outline" size="sm" :disabled="gowaQrLoading" @click="fetchGowaQr">
-              <RefreshCw class="h-4 w-4 mr-1" :class="{ 'animate-spin': gowaQrLoading }" />
-              {{ $t('accounts.refreshQr', 'Refresh QR') }}
-            </Button>
-          </TabsContent>
-
-          <!-- Pair Code Tab -->
-          <TabsContent value="pair" class="space-y-4 py-4">
-            <div class="space-y-2">
-              <Label class="text-xs">{{ $t('accounts.phoneNumber', 'Phone Number') }}</Label>
-              <div class="flex gap-2">
-                <Input v-model="gowaPairPhone" placeholder="16505551234" class="flex-1" />
-                <Button size="sm" :disabled="gowaPairLoading || !gowaPairPhone.trim()" @click="fetchGowaPairCode">
-                  <Loader2 v-if="gowaPairLoading" class="h-4 w-4 animate-spin mr-1" />
-                  {{ $t('accounts.getCode', 'Get Code') }}
-                </Button>
-              </div>
-              <p class="text-xs text-muted-foreground">
-                {{ $t('accounts.pairCodeInstructions', 'Enter your phone number with country code. You will receive an 8-digit code to enter on your phone.') }}
-              </p>
-            </div>
-            <div v-if="gowaPairCode" class="flex flex-col items-center gap-2 p-4 bg-muted rounded-lg">
-              <span class="text-xs text-muted-foreground">{{ $t('accounts.yourPairCode', 'Your Pair Code') }}</span>
-              <span class="text-3xl font-bold font-mono tracking-[0.3em]">{{ gowaPairCode }}</span>
-              <Button variant="ghost" size="sm" @click="copyToClipboard(gowaPairCode)">
-                <Copy class="h-3 w-3 mr-1" /> {{ $t('common.copy', 'Copy') }}
-              </Button>
-            </div>
-          </TabsContent>
-        </Tabs>
-      </DialogContent>
-    </Dialog>
 
     <UnsavedChangesDialog :open="showLeaveDialog" @stay="cancelLeave" @leave="confirmLeave" />
   </div>
