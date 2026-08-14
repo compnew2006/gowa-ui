@@ -708,6 +708,12 @@ export const useContactsStore = defineStore('contacts', () => {
   async function refreshAvatar(contactId: string): Promise<string> {
     const res = await contactsService.refreshAvatar(contactId)
     const avatarUrl = (res.data as any)?.avatar_url ?? ''
+    // Only patch when the refresh returned a real URL. A live fetch can come
+    // back empty (provider unavailable, rate-limited, or the contact genuinely
+    // has no picture right now); overwriting a valid cached avatar_url with ''
+    // here would blank the avatar in the sidebar the moment the conversation is
+    // selected. Keep the existing cached picture in that case.
+    if (!avatarUrl) return ''
     // Patch both the list entry and the active contact so the avatar appears
     // without a full refetch.
     const inList = contacts.value.find((c) => c.id === contactId)

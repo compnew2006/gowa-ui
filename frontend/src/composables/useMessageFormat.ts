@@ -114,7 +114,13 @@ export function useMessageFormat(options: UseMessageFormatOptions) {
       return '' // Audio doesn't have captions
     }
     if (message.message_type === 'document') {
-      return message.content?.body || ''
+      const body = message.content?.body || ''
+      // The document card already displays media_filename as the download
+      // label. When the stored body is just the filename echoed back (no real
+      // caption), don't render it again as text below the card — otherwise the
+      // filename shows twice.
+      if (body === message.media_filename) return ''
+      return body
     }
     if (message.message_type === 'template') {
       // Show actual content if available (campaign messages), otherwise fallback

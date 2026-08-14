@@ -819,7 +819,7 @@ onUnmounted(() => {
             :class="[
               'flex items-center gap-2 px-3 py-2 cursor-pointer border-l-[3px] border-transparent transition-colors',
               contactsStore.currentContact?.id === contact.id
-                ? 'bg-primary/20 light:bg-primary/10 border-primary ring-1 ring-inset ring-primary/40 shadow-sm'
+                ? 'bg-white/[0.14] light:bg-slate-200 border-primary'
                 : 'hover:bg-white/[0.04] light:hover:bg-gray-50'
             ]"
             @click="contactsStore.bulkSelectMode ? contactsStore.toggleBulkSelect(contact.id) : handleContactClick(contact)"
@@ -1599,7 +1599,7 @@ onUnmounted(() => {
                      and the provider's /message/{id}/download endpoint rejects
                      the JID. Show a neutral card with the filename instead of a
                      broken image or a guaranteed-404 request. -->
-                <div v-else-if="isMediaMessage(message) && !message.media_url" class="mb-2 flex items-center gap-2 px-3 py-2 bg-background/50 rounded-lg max-w-[280px]">
+                <div v-else-if="isMediaMessage(message) && message.message_type !== 'document' && !message.media_url" class="mb-2 flex items-center gap-2 px-3 py-2 bg-background/50 rounded-lg max-w-[280px]">
                   <ImageIcon v-if="message.message_type === 'image' || message.message_type === 'sticker'" class="h-5 w-5 text-muted-foreground shrink-0" />
                   <Video v-else-if="message.message_type === 'video'" class="h-5 w-5 text-muted-foreground shrink-0" />
                   <FileText v-else class="h-5 w-5 text-muted-foreground shrink-0" />
