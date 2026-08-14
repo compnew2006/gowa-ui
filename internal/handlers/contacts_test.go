@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/handlers"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/test/testutil"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
@@ -1667,4 +1667,65 @@ func TestApp_ListContacts_UnknownSortKeyFallsBackToDefault(t *testing.T) {
 	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
 	assert.Equal(t, int64(3), resp.Data.Total)
 	assert.Len(t, resp.Data.Contacts, 3)
+}
+
+// TestApp_ListContacts_ScopedByAssignedAccounts pins the fix for scoped users
+// seeing every account's conversations in /chat: a user assigned a subset of
+// WhatsApp accounts must only see conversations under those accounts, while
+// super admins and users with no assignments keep full org visibility.
+func TestApp_ListContacts_ScopedByAssignedAccounts(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID) // contacts:read + write
+
+	// Two accounts, each with one conversation.
+	assignedAcct := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID)
+	otherAcct := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID)
+	assignedContact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(assignedAcct.Name))
+	otherContact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(otherAcct.Name))
+	_ = assignedContact
+	_ = otherContact
+
+	listContacts := func(userID uuid.UUID) ([]string, int64) {
+		req := testutil.NewGETRequest(t)
+		testutil.SetAuthContext(req, org.ID, userID)
+		require.NoError(t, app.ListContacts(req))
+		assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+		var resp struct {
+			Data struct {
+				Contacts []handlers.ContactResponse `json:"contacts"`
+				Total    int64                      `json:"total"`
+			} `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+		names := make([]string, 0, len(resp.Data.Contacts))
+		for _, c := range resp.Data.Contacts {
+			names = append(names, c.WhatsAppAccount)
+		}
+		return names, resp.Data.Total
+	}
+
+	// 1) User WITH an assignment (the regression case): sees only their account.
+	scopedUser := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	testutil.AssignAccountToUser(t, app.DB, scopedUser.ID, assignedAcct.ID)
+	got, total := listContacts(scopedUser.ID)
+	assert.Equal(t, int64(1), total, "scoped user must see only their assigned account's conversations")
+	assert.ElementsMatch(t, []string{assignedAcct.Name}, got,
+		"scoped user must not see other accounts' conversations")
+
+	// 2) User with NO assignments: full org visibility (fallback).
+	noAssignUser := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	got, total = listContacts(noAssignUser.ID)
+	assert.Equal(t, int64(2), total, "user without assignments must fall back to full org visibility")
+	assert.ElementsMatch(t, []string{assignedAcct.Name, otherAcct.Name}, got)
+
+	// 3) Super admin: full org visibility regardless of assignments.
+	superAdmin := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithRoleID(&adminRole.ID), testutil.WithSuperAdmin())
+	testutil.AssignAccountToUser(t, app.DB, superAdmin.ID, assignedAcct.ID) // assigned, but bypassed
+	got, total = listContacts(superAdmin.ID)
+	assert.Equal(t, int64(2), total, "super admin must see all accounts despite having assignments")
+	assert.ElementsMatch(t, []string{assignedAcct.Name, otherAcct.Name}, got)
 }

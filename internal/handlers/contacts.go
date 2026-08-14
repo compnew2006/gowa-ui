@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/internal/utils"
+	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 	"gorm.io/gorm"
@@ -241,12 +241,28 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 	return r.SendEnvelope(listEnvelope("contacts", response, total, pg))
 }
 
-// scopeAssignedContact narrows a contact query for users who lack the
-// contacts:read permission: they may only access contacts assigned to them
-// (assigned_user_id) or contacts where they are a collaborator. With the
-// permission, the query is returned unchanged. Keeping this in one place
-// ensures every contact endpoint enforces the same visibility.
+// scopeAssignedContact narrows a contact query to what the user may see. It
+// combines two independent gates, AND-combined:
+//
+//  1. Account scoping (scopeContactsByAssignedAccounts): users who have been
+//     assigned specific WhatsApp accounts (user_whatsapp_accounts) only see
+//     conversations belonging to those accounts. Super admins and users with
+//     no assignments keep full org visibility (fallback). This is the fix for
+//     scoped users seeing every account's conversations in /chat.
+//
+//  2. Assignment/collaborator scoping: users who lack the contacts:read
+//     permission may only access contacts assigned to them
+//     (assigned_user_id) or where they are a collaborator.
+//
+// Keeping this in one place ensures every contact endpoint enforces the same
+// visibility (ListContacts, GetMessages, media serving, scheduled messages,
+// … — every call site that already applied scopeAssignedContact).
 func (a *App) scopeAssignedContact(query *gorm.DB, userID, orgID uuid.UUID) *gorm.DB {
+	// Account scoping applies regardless of permissions: a user assigned to a
+	// subset of accounts must not see other accounts' conversations even with
+	// contacts:read.
+	query = a.scopeContactsByAssignedAccounts(query, userID, orgID)
+
 	if a.HasPermission(userID, models.ResourceContacts, models.ActionRead, orgID) {
 		return query
 	}
@@ -262,6 +278,48 @@ func (a *App) scopeAssignedContact(query *gorm.DB, userID, orgID uuid.UUID) *gor
 		userID,
 		collaboratorJSON,
 	)
+}
+
+// scopeContactsByAssignedAccounts narrows a contacts query to the WhatsApp
+// accounts explicitly assigned to the user via user_whatsapp_accounts. It is
+// the contacts-table mirror of scopeAccountsToUser (accounts.go), which scopes
+// the /settings/accounts picker. Because contacts reference accounts by Name
+// (a soft string, not a FK — see AGENTS.md), the assigned account IDs are
+// resolved to names before filtering.
+//
+// Bypass rules (identical to scopeAccountsToUser):
+//   - super admins see every account;
+//   - users with NO assignments fall back to full org visibility (so org
+//     owners and pre-assignment users are unaffected);
+//   - a load error fails open (returns the query unchanged) to avoid locking
+//     users out on a transient DB hiccup.
+func (a *App) scopeContactsByAssignedAccounts(query *gorm.DB, userID, orgID uuid.UUID) *gorm.DB {
+	if a.IsSuperAdmin(userID) {
+		return query
+	}
+	ids, err := a.assignedAccountIDs(userID, orgID)
+	if err != nil {
+		a.Log.Error("Failed to load account assignments for contact scoping",
+			"error", err, "user_id", userID)
+		return query
+	}
+	if len(ids) == 0 {
+		return query // no assignments — full org visibility (fallback)
+	}
+	var names []string
+	if err := a.DB.Model(&models.WhatsAppAccount{}).
+		Where("id IN ? AND organization_id = ?", ids, orgID).
+		Pluck("name", &names).Error; err != nil {
+		a.Log.Error("Failed to resolve assigned account names for contact scoping",
+			"error", err, "user_id", userID)
+		return query
+	}
+	if len(names) == 0 {
+		// Assigned to accounts that no longer exist in this org — show nothing
+		// rather than leaking unrelated conversations.
+		return query.Where("1 = 0")
+	}
+	return query.Where("whats_app_account IN ?", names)
 }
 
 // GetContact returns a single contact

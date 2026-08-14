@@ -131,7 +131,7 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
 - E2E: module-level `createTestScope` runId is shared per worker → fixed-suffix seeds collide when workers are reused → always `scope.name()` (random suffix)
 - E2E: account name containing 'metadata' breaks shared helper's loose `getByText('Metadata')` (strict mode) → seed label 'meta-info'
 - Playwright webServer auto-starts Vite:3000; backend on 8080 must run manually (`go run ./cmd/gowa-ui server -config config.toml`)
-- Pre-existing failures on clean HEAD: TestApp_ListCampaigns_Success/FilterByStatus (dirty test DB) — not ours
+- Campaign test failures seen mid-work (TestApp_ListCampaigns_Success/FilterByStatus) did NOT reproduce: full suite on clean parent commit ef23c19f (fresh worktree, -count=1) = 181 PASS / 0 FAIL, and same on 04981680. → order/state-dependent flakiness (shared test state), not pre-existing deterministic failures, and not ours
 
 **Tests:** gofmt/vet/build ✓; handlers related slice ✓; typecheck+lint ✓; E2E settings/accounts **10/10 twice**; graphify update ✓ (11446 nodes)
 

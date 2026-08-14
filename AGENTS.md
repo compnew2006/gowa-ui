@@ -65,6 +65,22 @@ responsibility. Do not re-merge these.
 - **Renaming `WhatsAppAccount.Name` does not cascade** — every referencing row
   keeps the stale string. There is no DB-level integrity here.
 
+## Contact visibility scoping
+
+- **`scopeAssignedContact` (`internal/handlers/contacts.go`) is the single
+  gate for contact/conversation visibility.** It AND-combines two gates and is
+  applied at every contact endpoint (ListContacts, GetMessages, media serving,
+  scheduled messages — ~17 call sites). New contact endpoints must route their
+  query through it, never scope by hand.
+- **Account scoping lives inside `scopeAssignedContact`** via
+  `scopeContactsByAssignedAccounts`: a user assigned a subset of WhatsApp
+  accounts (`user_whatsapp_accounts`) only sees conversations under those
+  accounts; super admins and users with **no** assignment fall back to full org
+  visibility. This mirrors `scopeAccountsToUser` (accounts.go, used by
+  `/settings/accounts`) so `/chat` and `/settings/contacts` stay consistent.
+  Because contacts key off `whats_app_account` (the account **Name** string),
+  the helper resolves assigned account IDs → names before filtering.
+
 ## Conventions
 
 - **Go:** idiomatic, table-driven tests (`*_test.go`), `gofmt` + `go vet`.
