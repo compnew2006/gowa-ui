@@ -82,7 +82,7 @@ export const navigationSections: NavSection[] = [
   },
   {
     label: '',
-    permissions: ['settings.general', 'accounts', 'contacts', 'canned_responses', 'tags', 'templates', 'teams', 'users', 'roles', 'api_keys', 'webhooks', 'custom_actions', 'settings.sso', 'audit_logs', 'gowa_instances'],
+    permissions: ['settings.general', 'accounts', 'contacts.manage', 'canned_responses', 'tags', 'templates', 'teams', 'users', 'roles', 'api_keys', 'webhooks', 'custom_actions', 'settings.sso', 'audit_logs', 'gowa_instances'],
     pinBottom: true,
     items: [
       {
@@ -90,11 +90,11 @@ export const navigationSections: NavSection[] = [
         path: '/settings',
         icon: Settings,
         permission: 'settings.general',
-        childPermissions: ['settings.general', 'accounts', 'contacts', 'canned_responses', 'tags', 'templates', 'teams', 'users', 'roles', 'api_keys', 'webhooks', 'custom_actions', 'settings.sso', 'audit_logs', 'gowa_instances'],
+        childPermissions: ['settings.general', 'accounts', 'contacts.manage', 'canned_responses', 'tags', 'templates', 'teams', 'users', 'roles', 'api_keys', 'webhooks', 'custom_actions', 'settings.sso', 'audit_logs', 'gowa_instances'],
         children: [
           { name: 'nav.general', path: '/settings', icon: Settings, permission: 'settings.general' },
           { name: 'nav.accounts', path: '/settings/accounts', icon: Users, permission: 'accounts' },
-          { name: 'nav.contacts', path: '/settings/contacts', icon: Contact, permission: 'contacts' },
+          { name: 'nav.contacts', path: '/settings/contacts', icon: Contact, permission: 'contacts.manage' },
           { name: 'nav.cannedResponses', path: '/settings/canned-responses', icon: MessageSquareText, permission: 'canned_responses' },
           { name: 'nav.tags', path: '/settings/tags', icon: Tags, permission: 'tags' },
           { name: 'nav.templates', path: '/settings/templates', icon: LayoutTemplate, permission: 'templates' },

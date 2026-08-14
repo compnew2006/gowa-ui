@@ -54,25 +54,30 @@ const (
 	ResourceSettingsCallAutoReject = "settings.call_auto_reject"
 	// Audit-only resource for the daily chat-reset settings tab (not a permission).
 	ResourceSettingsChatReset = "settings.chat_reset"
-	ResourceAccounts                = "accounts"
-	ResourceDevices                 = "devices"
-	ResourceGowaInstances           = "gowa_instances"
-	ResourceTemplates               = "templates"
-	ResourceCampaigns               = "campaigns"
-	ResourceChat                    = "chat"
-	ResourceChatAssign              = "chat.assign"
-	ResourceChatCollaborate         = "chat.collaborate"
-	ResourceChatRevoke              = "chat.revoke"
-	ResourceContacts                = "contacts"
-	ResourceTags                    = "tags"
-	ResourceAnalytics               = "analytics"
-	ResourceAnalyticsAgents         = "analytics.agents"
-	ResourceWebhooks                = "webhooks"
-	ResourceAPIKeys                 = "api_keys"
-	ResourceCannedResponses         = "canned_responses"
-	ResourceCustomActions           = "custom_actions"
-	ResourceOrganizations           = "organizations"
-	ResourceAuditLogs               = "audit_logs"
+	ResourceAccounts          = "accounts"
+	ResourceDevices           = "devices"
+	ResourceGowaInstances     = "gowa_instances"
+	ResourceTemplates         = "templates"
+	ResourceCampaigns         = "campaigns"
+	ResourceChat              = "chat"
+	ResourceChatAssign        = "chat.assign"
+	ResourceChatCollaborate   = "chat.collaborate"
+	ResourceChatRevoke        = "chat.revoke"
+	ResourceContacts          = "contacts"
+	// Contacts management page (settings). Separate from contacts:read (which
+	// drives chat-list visibility/scoping) so a role can see conversations in
+	// /chat while being blocked from the /settings/contacts directory page and
+	// its Import/Export features.
+	ResourceContactsManage  = "contacts.manage"
+	ResourceTags            = "tags"
+	ResourceAnalytics       = "analytics"
+	ResourceAnalyticsAgents = "analytics.agents"
+	ResourceWebhooks        = "webhooks"
+	ResourceAPIKeys         = "api_keys"
+	ResourceCannedResponses = "canned_responses"
+	ResourceCustomActions   = "custom_actions"
+	ResourceOrganizations   = "organizations"
+	ResourceAuditLogs       = "audit_logs"
 )
 
 // PermissionAction constants for available actions
@@ -152,6 +157,9 @@ func DefaultPermissions() []Permission {
 		{Resource: ResourceContacts, Action: ActionDelete, Description: "Delete contacts"},
 		{Resource: ResourceContacts, Action: ActionImport, Description: "Import contacts"},
 		{Resource: ResourceContacts, Action: ActionExport, Description: "Export contacts"},
+		// Contacts management page (settings) — gates /settings/contacts so it
+		// can be hidden from roles that still see conversations via contacts:read.
+		{Resource: ResourceContactsManage, Action: ActionRead, Description: "Access the contacts management page"},
 
 		// Tags
 		{Resource: ResourceTags, Action: ActionRead, Description: "View tags"},
@@ -227,6 +235,7 @@ func SystemRolePermissions() map[string][]string {
 		"chat:read", "chat:write", "chat.revoke:write", "chat.assign:write", "chat.collaborate:write",
 		// Contacts
 		"contacts:read", "contacts:write", "contacts:delete", "contacts:import", "contacts:export",
+		"contacts.manage:read",
 		// Tags
 		"tags:read", "tags:write", "tags:delete",
 		// Analytics

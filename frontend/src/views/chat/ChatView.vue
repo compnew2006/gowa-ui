@@ -460,6 +460,7 @@ const {
   switchAccount,
   handleContactClick,
   selectContact,
+  scrollActiveContactIntoView,
   fetchOrgAccounts,
 } = useChatContactsList({
   t,
@@ -567,6 +568,10 @@ onMounted(async () => {
 
   if (contactId.value) {
     await selectContact(contactId.value)
+    // Keep the restored conversation visible in the sidebar after a refresh,
+    // even if it sits far down the list. 'nearest' only moves the viewport
+    // when the active row is off-screen, so it never fights a manual click.
+    scrollActiveContactIntoView()
   }
 
   // Auto-scroll to unread divider + mark read when the agent returns. Covers
@@ -810,9 +815,12 @@ onUnmounted(() => {
           <div
             v-for="contact in contactsStore.visibleContacts"
             :key="contact.id"
+            :data-contact-id="contact.id"
             :class="[
-              'flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-white/[0.04] light:hover:bg-gray-50 transition-colors',
-              contactsStore.currentContact?.id === contact.id && 'bg-white/[0.08] light:bg-gray-100'
+              'flex items-center gap-2 px-3 py-2 cursor-pointer border-l-[3px] border-transparent transition-colors',
+              contactsStore.currentContact?.id === contact.id
+                ? 'bg-primary/20 light:bg-primary/10 border-primary ring-1 ring-inset ring-primary/40 shadow-sm'
+                : 'hover:bg-white/[0.04] light:hover:bg-gray-50'
             ]"
             @click="contactsStore.bulkSelectMode ? contactsStore.toggleBulkSelect(contact.id) : handleContactClick(contact)"
           >

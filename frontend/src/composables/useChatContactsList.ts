@@ -355,6 +355,23 @@ export function useChatContactsList(options: UseChatContactsListOptions) {
     }
   }
 
+  /**
+   * Scroll the active conversation row into view within the sidebar. Used after
+   * a refresh/restore so a conversation that sits low in the list stays visible
+   * instead of being scrolled out of the viewport. Uses block:'nearest', so it
+   * is a no-op when the row is already on screen (e.g. right after a click).
+   */
+  function scrollActiveContactIntoView() {
+    nextTick(() => {
+      const id = contactsStore.currentContact?.id
+      if (!id) return
+      const el = document.querySelector<HTMLElement>(
+        `[data-contact-id="${CSS.escape(id)}"]`
+      )
+      el?.scrollIntoView({ block: 'nearest', behavior: 'instant' as ScrollBehavior })
+    })
+  }
+
   return {
     // Multi-account (selectedAccount is owned by the view; not re-returned)
     contactAccounts,
@@ -380,6 +397,7 @@ export function useChatContactsList(options: UseChatContactsListOptions) {
     switchAccount,
     handleContactClick,
     selectContact,
+    scrollActiveContactIntoView,
     fetchOrgAccounts,
   }
 }

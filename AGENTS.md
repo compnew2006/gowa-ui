@@ -80,6 +80,16 @@ responsibility. Do not re-merge these.
   `/settings/accounts`) so `/chat` and `/settings/contacts` stay consistent.
   Because contacts key off `whats_app_account` (the account **Name** string),
   the helper resolves assigned account IDs → names before filtering.
+- **`contacts:read` (chat visibility) ≠ `contacts.manage:read` (settings page).**
+  `contacts:read` drives chat-list scoping inside `scopeAssignedContact`
+  (users with it see all conversations; without it, only assigned ones). The
+  `/settings/contacts` management page (and its Import/Export) is gated
+  separately on the `contacts.manage` resource (`router/index.ts` route meta +
+  `navigation.ts`, checked with the `read` action). This lets a role see
+  conversations in `/chat` while being blocked from the contacts directory.
+  Default seeding: `admin` + `manager` get `contacts.manage:read`; `agent` does
+  not. Import/Export stay additionally enforced by the `contacts:import`/
+  `contacts:export` actions.
 
 ## Conventions
 

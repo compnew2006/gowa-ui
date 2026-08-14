@@ -129,13 +129,13 @@ const router = createRouter({
           path: 'settings/contacts',
           name: 'contacts',
           component: () => import('@/views/settings/ContactsView.vue'),
-          meta: { permission: 'contacts' }
+          meta: { permission: 'contacts.manage' }
         },
         {
           path: 'settings/contacts/:id',
           name: 'contact-detail',
           component: () => import('@/views/settings/ContactDetailView.vue'),
-          meta: { permission: 'contacts' }
+          meta: { permission: 'contacts.manage' }
         },
         {
           path: 'settings/tags',
@@ -254,7 +254,7 @@ const navigationOrder = [
     { path: '/settings', permission: 'settings.general' },
     { path: '/settings/accounts', permission: 'accounts' },
     { path: '/settings/canned-responses', permission: 'canned_responses' },
-    { path: '/settings/contacts', permission: 'contacts' },
+    { path: '/settings/contacts', permission: 'contacts.manage' },
     { path: '/settings/tags', permission: 'tags' },
     { path: '/settings/templates', permission: 'templates' },
     { path: '/settings/teams', permission: 'teams' },
