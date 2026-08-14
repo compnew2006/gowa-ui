@@ -223,6 +223,21 @@ func (a *App) SendOutgoingMessage(ctx context.Context, req OutgoingMessageReques
 	} else {
 		wamid, err := sendFn(ctx)
 		a.finalizeMessageSend(msg, req, opts, wamid, err)
+
+		// finalizeMessageSend deliberately updates only the DB row (the async
+		// path shares this struct with a goroutine). The sync path owns msg
+		// until return, so refresh status/wamid from the row here: both the
+		// new_message broadcast below and the caller's HTTP response must
+		// carry the FINAL values. Otherwise the broadcast races ahead of the
+		// response carrying an empty wamid, the frontend's duplicate check
+		// keeps whichever copy lands first, and per-message actions (revoke,
+		// which requires wamid) stay hidden until a manual refresh.
+		var fresh models.Message
+		if e := a.DB.First(&fresh, "id = ?", msg.ID).Error; e == nil {
+			msg.Status = fresh.Status
+			msg.WhatsAppMessageID = fresh.WhatsAppMessageID
+			msg.ErrorMessage = fresh.ErrorMessage
+		}
 	}
 
 	// 4. Immediate actions (before send completes for async)
@@ -1043,6 +1058,10 @@ func (a *App) SendTemplateMessage(r *fastglue.Request) error {
 
 	opts := DefaultSendOptions()
 	opts.SentByUserID = &userID
+	// Synchronous, same rationale as SendMessage/SendMediaMessage: the
+	// response must carry the final status + wamid so the sent bubble and its
+	// per-message actions (revoke) are correct without a manual refresh.
+	opts.Async = false
 
 	ctx := context.Background()
 	message, err := a.SendOutgoingMessage(ctx, msgReq, opts)
@@ -1060,6 +1079,7 @@ func (a *App) SendTemplateMessage(r *fastglue.Request) error {
 		Content:         map[string]string{"body": message.Content},
 		InteractiveData: message.InteractiveData,
 		Status:          message.Status,
+		WAMID:           message.WhatsAppMessageID,
 		IsReply:         message.IsReply,
 		WhatsAppAccount: message.WhatsAppAccount,
 		CreatedAt:       message.CreatedAt,
@@ -1782,6 +1802,14 @@ func (a *App) SendMediaMessage(r *fastglue.Request) error {
 
 	opts := DefaultSendOptions()
 	opts.SentByUserID = &userID
+	// Synchronous, same rationale as SendMessage: the HTTP response must carry
+	// the final status (sent/failed) + wamid so the bubble skips the "pending"
+	// clock state and per-message actions (revoke, which needs wamid) work
+	// immediately instead of after a manual refresh. The agent UI already
+	// awaits this request for its upload spinner, so blocking until the
+	// WhatsApp upload completes (bounded by the 15-min media timeout and the
+	// 900s server/nginx limits) does not change the UX.
+	opts.Async = false
 
 	ctx := context.Background()
 	message, err := a.SendOutgoingMessage(ctx, msgReq, opts)
@@ -1800,6 +1828,7 @@ func (a *App) SendMediaMessage(r *fastglue.Request) error {
 		MediaMimeType:   message.MediaMimeType,
 		MediaFilename:   message.MediaFilename,
 		Status:          message.Status,
+		WAMID:           message.WhatsAppMessageID,
 		WhatsAppAccount: message.WhatsAppAccount,
 		CreatedAt:       message.CreatedAt,
 		UpdatedAt:       message.UpdatedAt,

@@ -85,6 +85,12 @@ func sameOrigin(u *url.URL, baseURL string) bool {
 func (c *Client) DownloadMedia(ctx context.Context, mediaURL string, accessToken string) ([]byte, error) {
 	_ = accessToken // GOWA uses Basic Auth, not bearer tokens
 
+	// Large media (up to MaxMediaDownloadSize) can take a while to transfer;
+	// give downloads the same extended budget as sends instead of the 30s
+	// default (the http.Client no longer caps this).
+	ctx, cancel := context.WithTimeout(ctx, MediaSendTimeout)
+	defer cancel()
+
 	parsed, err := url.Parse(mediaURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse media url: %w", err)

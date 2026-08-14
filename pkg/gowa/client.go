@@ -21,6 +21,12 @@ import (
 // DefaultTimeout for GOWA REST API requests.
 const DefaultTimeout = 30 * time.Second
 
+// MediaSendTimeout bounds media send/download requests. These carry large
+// bodies (documents up to 100MB) whose upload to WhatsApp takes minutes, so
+// they need a far larger budget than regular API calls. Applied as a
+// per-request context deadline; every other call keeps DefaultTimeout.
+const MediaSendTimeout = 15 * time.Minute
+
 // Client is a GOWA (Go WhatsApp Web Multi-Device) REST API client.
 // It implements whatsapp.Provider.
 type Client struct {
@@ -38,7 +44,10 @@ type Client struct {
 func New(baseURL, username, password string) *Client {
 	return &Client{
 		httpClient: &http.Client{
-			Timeout: DefaultTimeout,
+			// No client-level Timeout: media sends/downloads set their own
+			// long deadline (MediaSendTimeout) via the request context, and
+			// doRequest applies DefaultTimeout to everything that doesn't
+			// carry one, so hung regular calls still fail fast.
 			// SECURITY (gap #7): never follow a redirect to a different host.
 			// A webhook can carry an arbitrary media URL; even with auth bound
 			// to the base origin, a cross-host redirect (initial same-host URL
@@ -106,6 +115,14 @@ func toJID(phone string) string {
 // the raw response body and status code. Callers (doJSON, doMultipart, doRaw,
 // doJSONRaw) own only their serialization and response interpretation.
 func (c *Client) doRequest(ctx context.Context, method, path, deviceID, contentType string, body io.Reader) (int, []byte, error) {
+	// The http.Client carries no global Timeout (media paths need minutes).
+	// Apply the short default here unless the caller already set a deadline
+	// (media sends arrive with MediaSendTimeout from sendMedia/DownloadMedia).
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, DefaultTimeout)
+		defer cancel()
+	}
 	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, body)
 	if err != nil {
 		return 0, nil, fmt.Errorf("create request: %w", err)

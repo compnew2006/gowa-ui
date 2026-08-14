@@ -132,9 +132,15 @@ export function useChatMedia(options: UseChatMediaOptions) {
     const file = input.files?.[0]
     if (!file) return
 
-    // Validate file type
-    const allowedTypes = ['image/', 'video/', 'audio/', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument']
-    const isAllowed = allowedTypes.some(type => file.type.startsWith(type))
+    // Validate file type. The MIME check alone is not enough: browsers report
+    // empty or generic application/octet-stream MIME for archives (.zip/.rar/
+    // .7z) on several platforms, which used to reject valid documents. Fall
+    // back to the file extension — kept in sync with the file input's accept
+    // attribute in ChatView.vue.
+    const allowedMimePrefixes = ['image/', 'video/', 'audio/', 'text/', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument', 'application/zip', 'application/x-zip-compressed', 'application/x-7z-compressed', 'application/x-rar-compressed', 'application/rar', 'application/rtf', 'application/json', 'application/xml', 'application/vnd.oasis.opendocument']
+    const allowedExtensions = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv', 'html', 'htm', 'zip', 'rar', '7z', 'md', 'json', 'xml', 'rtf', 'odt', 'ods', 'odp']
+    const ext = (file.name.split('.').pop() || '').toLowerCase()
+    const isAllowed = allowedMimePrefixes.some(type => file.type.startsWith(type)) || allowedExtensions.includes(ext)
     if (!isAllowed) {
       toast.error(t('chat.unsupportedFileType'), {
         description: t('chat.unsupportedFileTypeDesc')
@@ -142,8 +148,12 @@ export function useChatMedia(options: UseChatMediaOptions) {
       return
     }
 
-    // Validate file size (16MB limit for WhatsApp)
-    const maxSize = 16 * 1024 * 1024
+    // Validate file size — aligned with the engine: GOWA (go-whatsapp-web-
+    // multidevice) enforces a hard 50MB upload limit ("max file upload is
+    // 50 MB"); media (image/video/audio) stay at WhatsApp's 16MB. Everything
+    // upstream (nginx 110M, server body 110MB) only provides headroom.
+    const isMediaType = file.type.startsWith('image/') || file.type.startsWith('video/') || file.type.startsWith('audio/')
+    const maxSize = isMediaType ? 16 * 1024 * 1024 : 50 * 1024 * 1024
     if (file.size > maxSize) {
       toast.error(t('chat.fileTooLarge'), {
         description: t('chat.fileTooLargeDesc')

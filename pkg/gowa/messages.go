@@ -58,6 +58,11 @@ func (c *Client) SendDocumentMessage(ctx context.Context, account *whatsapp.Acco
 // is forwarded as reply_message_id so the recipient sees the quoted
 // context (mirrors SendTextMessage's empty-omit behavior).
 func (c *Client) sendMedia(ctx context.Context, account *whatsapp.Account, rcpt whatsapp.Recipient, mediaID, caption, fileType, path, replyMessageID string) (string, error) {
+	// Media bodies (documents up to 100MB) take minutes to upload through
+	// GOWA to WhatsApp — far beyond DefaultTimeout. Raise the budget for the
+	// whole media send (both the multipart and the URL-based variants).
+	ctx, cancel := context.WithTimeout(ctx, MediaSendTimeout)
+	defer cancel()
 	phone := toJID(rcpt.Phone)
 	data, _, cachedFilename, err := c.resolveMediaData(mediaID)
 	if err != nil {

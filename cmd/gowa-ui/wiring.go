@@ -204,10 +204,13 @@ func setupApp(
 // the server command. The cookie-size comment is preserved.
 func setupHTTPServer(handler fasthttp.RequestHandler, cfg *config.Config) *fasthttp.Server {
 	return &fasthttp.Server{
-		Handler:            handler,
-		ReadTimeout:        time.Duration(cfg.Server.ReadTimeout) * time.Second,
-		WriteTimeout:       time.Duration(cfg.Server.WriteTimeout) * time.Second,
-		MaxRequestBodySize: 15 * 1024 * 1024,
+		Handler:      handler,
+		ReadTimeout:  time.Duration(cfg.Server.ReadTimeout) * time.Second,
+		WriteTimeout: time.Duration(cfg.Server.WriteTimeout) * time.Second,
+		// 110MB matches nginx's client_max_body_size: WhatsApp documents may be
+		// up to 100MB, and anything larger must be rejected by nginx (the public
+		// entry) rather than buffered here.
+		MaxRequestBodySize: 110 * 1024 * 1024,
 		// fasthttp's default ReadBufferSize is 4 KB. Cookie-based auth stores the
 		// access JWT, refresh JWT, and CSRF token in cookies — together these can
 		// exceed 4 KB, which fasthttp rejects with HTTP 431 (Request Header

@@ -647,19 +647,29 @@ export const useContactsStore = defineStore('contacts', () => {
     }
 
     // Check if message already exists
-    const exists = messages.value.some(m => m.id === message.id)
-    if (!exists) {
+    const index = messages.value.findIndex(m => m.id === message.id)
+    if (index === -1) {
       messages.value.push(message)
+    } else if (message.wamid && !messages.value[index].wamid) {
+      // The WS new_message broadcast and the send HTTP response race; the
+      // duplicate check above keeps whichever lands first. Backfill the wamid
+      // when the winning copy lacks it — revoke and other wamid-keyed actions
+      // must not wait for a manual refresh.
+      messages.value[index] = { ...messages.value[index], wamid: message.wamid }
     }
   }
 
-  function updateMessageStatus(messageId: string, status: string, errorMessage?: string) {
+  function updateMessageStatus(messageId: string, status: string, errorMessage?: string, wamid?: string) {
     const index = messages.value.findIndex(m => m.id === messageId)
     if (index !== -1) {
+      const existing = messages.value[index]
       messages.value[index] = {
-        ...messages.value[index],
+        ...existing,
         status,
-        ...(errorMessage ? { error_message: errorMessage } : {})
+        ...(errorMessage ? { error_message: errorMessage } : {}),
+        // status_update carries the wamid for async sends; fill it in when
+        // the stored copy doesn't have one yet (never clobber a known wamid).
+        ...(wamid && !existing.wamid ? { wamid } : {})
       }
     }
   }

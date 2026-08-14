@@ -121,6 +121,13 @@ func (m *mockGowaServer) sentRequests() []gowaRequest {
 	return append([]gowaRequest(nil), m.requests...)
 }
 
+// messageID returns the message_id the mock server hands back for sends.
+func (m *mockGowaServer) messageID() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.nextMessageID
+}
+
 func (m *mockGowaServer) close() {
 	m.server.Close()
 }
@@ -1005,4 +1012,69 @@ func TestResolveParams_WrongParamNames(t *testing.T) {
 	// Both should be empty since names don't match
 	assert.Equal(t, "", result[0])
 	assert.Equal(t, "", result[1])
+}
+
+func TestApp_SendOutgoingMessage_SyncReturnsFinalStatusAndWamid(t *testing.T) {
+	mockServer := newMockGowaServer()
+	defer mockServer.close()
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	ctx := testutil.TestContext(t)
+
+	req := handlers.OutgoingMessageRequest{
+		Account: account,
+		Contact: contact,
+		Type:    models.MessageTypeText,
+		Content: "Sync message",
+	}
+
+	// Sync mode, as used by the agent UI send paths (text/media/template).
+	opts := handlers.DefaultSendOptions()
+	opts.Async = false
+
+	msg, err := app.SendOutgoingMessage(ctx, req, opts)
+
+	require.NoError(t, err)
+	require.NotNil(t, msg)
+	// The returned struct feeds both the new_message WS broadcast and the
+	// HTTP response. It must carry the FINAL row state, not the pre-send
+	// "pending" snapshot — otherwise wamid-keyed actions (revoke) stay
+	// hidden until a manual refresh.
+	assert.Equal(t, models.MessageStatusSent, msg.Status)
+	assert.NotEmpty(t, msg.WhatsAppMessageID)
+	assert.Equal(t, mockServer.messageID(), msg.WhatsAppMessageID)
+}
+
+func TestApp_SendOutgoingMessage_SyncFailedCarriesError(t *testing.T) {
+	mockServer := newMockGowaServer()
+	defer mockServer.close()
+	mockServer.setError("send rejected")
+
+	app := newMsgTestApp(t, mockServer)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	account := createTestAccount(t, app, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(account.Name))
+
+	ctx := testutil.TestContext(t)
+
+	req := handlers.OutgoingMessageRequest{
+		Account: account,
+		Contact: contact,
+		Type:    models.MessageTypeText,
+		Content: "Sync message that fails",
+	}
+
+	opts := handlers.DefaultSendOptions()
+	opts.Async = false
+
+	msg, err := app.SendOutgoingMessage(ctx, req, opts)
+
+	require.NoError(t, err) // provider failure is recorded on the message, not returned
+	require.NotNil(t, msg)
+	assert.Equal(t, models.MessageStatusFailed, msg.Status)
+	assert.Contains(t, msg.ErrorMessage, "send rejected")
 }
