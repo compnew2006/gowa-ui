@@ -86,7 +86,10 @@ type MessageSendOptions struct {
 	SentByUserID *uuid.UUID
 
 	// Async if true, sends in background goroutine and returns immediately
-	// Message is persisted before send, status updated after
+	// (message is persisted before send, status updated after). Defaults to
+	// false everywhere: sync sends return the final status + wamid, which
+	// revoke and the agent UI bubble state require. Opt in only when the
+	// caller genuinely fire-and-forgets.
 	Async bool
 
 	// MarkIncomingRead marks the contact's incoming messages as read after a
@@ -95,12 +98,15 @@ type MessageSendOptions struct {
 	MarkIncomingRead bool
 }
 
-// DefaultSendOptions returns options suitable for agent UI sends
+// DefaultSendOptions returns options suitable for agent UI sends. Sends are
+// SYNCHRONOUS by default: the wamid sync-send invariant requires every send
+// path to return the final status + wamid (revoke needs it), so async is the
+// opt-in, never the default.
 func DefaultSendOptions() MessageSendOptions {
 	return MessageSendOptions{
 		BroadcastWebSocket: true,
 		DispatchWebhook:    true,
-		Async:              true,
+		Async:              false,
 	}
 }
 
@@ -115,12 +121,13 @@ func AutoReplySendOptions() MessageSendOptions {
 	}
 }
 
-// APISendOptions returns options suitable for API/template sends
+// APISendOptions returns options suitable for API/template sends. Sync like
+// every other preset so API callers also get the final status + wamid back.
 func APISendOptions() MessageSendOptions {
 	return MessageSendOptions{
 		BroadcastWebSocket: false,
 		DispatchWebhook:    true,
-		Async:              true,
+		Async:              false,
 	}
 }
 
@@ -245,10 +252,6 @@ func (a *App) SendOutgoingMessage(ctx context.Context, req OutgoingMessageReques
 		a.broadcastNewMessage(req.Account.OrganizationID, msg, req.Contact)
 	}
 
-	// Update contact's last message
-	preview := a.getMessagePreview(req)
-	a.updateContactLastMessage(req.Contact, preview)
-
 	return msg, nil
 }
 
@@ -293,104 +296,39 @@ func renderButtonsAsText(bodyText string, buttons []whatsapp.Button) string {
 }
 
 // sendRenderedTemplate renders a local template blueprint and sends it through
-// the provider as a plain text, media-with-caption, or interactive message.
-// Templates are no longer submitted to a remote API — the body/header/footer
-// are resolved locally from the stored template content and parameters.
+// the provider as a plain text, media-with-caption, or interactive message,
+// via the shared engine in internal/templateutil (also used by the campaign
+// worker, so chat and campaign sends render identically).
 func (a *App) sendRenderedTemplate(ctx context.Context, provider whatsapp.Provider, waAccount *whatsapp.Account, rcpt whatsapp.Recipient, req OutgoingMessageRequest, replyToMsgID string) (string, error) {
-	tpl := req.Template
-
-	// Render body text from params
-	body := templateutil.ReplaceWithStringParams(tpl.BodyContent, req.BodyParams)
-
-	// TEXT headers render above the body; header params fall back to body params.
-	var parts []string
-	if tpl.HeaderType == "TEXT" && tpl.HeaderContent != "" {
-		headerParams := req.HeaderParams
-		if len(headerParams) == 0 {
-			headerParams = req.BodyParams
-		}
-		if header := templateutil.ReplaceWithStringParams(tpl.HeaderContent, headerParams); header != "" {
-			parts = append(parts, "*"+header+"*")
-		}
-	}
-	if body != "" {
-		parts = append(parts, body)
-	}
-	if tpl.FooterContent != "" {
-		parts = append(parts, tpl.FooterContent)
-	}
-
-	// Split template buttons: QUICK_REPLY becomes native reply buttons; URL
-	// buttons can't be rendered natively, so append them as links in the text.
-	var quickReplies []whatsapp.Button
-	for i, raw := range tpl.Buttons {
-		btn, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		btnType, _ := btn["type"].(string)
-		label, _ := btn["text"].(string)
-		switch strings.ToUpper(btnType) {
-		case "QUICK_REPLY":
-			quickReplies = append(quickReplies, whatsapp.Button{ID: fmt.Sprintf("btn_%d", i), Title: label})
-		case "URL":
-			urlStr, _ := btn["url"].(string)
-			if val, exists := req.ButtonURLParams[fmt.Sprintf("%d", i)]; exists {
-				urlStr = templateutil.ParameterPattern.ReplaceAllString(urlStr, val)
-			}
-			if urlStr != "" {
-				if label != "" {
-					parts = append(parts, label+": "+urlStr)
-				} else {
-					parts = append(parts, urlStr)
+	return templateutil.SendRenderedTemplate(ctx, templateutil.SendRequest{
+		Provider:     provider,
+		Account:      waAccount,
+		Recipient:    rcpt,
+		Template:     req.Template,
+		ReplyToMsgID: replyToMsgID,
+		Params: templateutil.TemplateParams{
+			BodyParams:      req.BodyParams,
+			HeaderParams:    req.HeaderParams,
+			ButtonURLParams: req.ButtonURLParams,
+		},
+		Media: templateutil.TemplateMedia{
+			ID:       req.MediaID,
+			Data:     req.MediaData,
+			MimeType: req.MediaMimeType,
+			Filename: req.MediaFilename,
+			// Retry/resend: read the header media back from local storage.
+			Load: func() []byte {
+				if req.MediaURL == "" {
+					return nil
 				}
-			}
-		}
-	}
-
-	text := strings.Join(parts, "\n\n")
-
-	// Media header: send as media with the rendered text as caption.
-	if tpl.HeaderType == "IMAGE" || tpl.HeaderType == "VIDEO" || tpl.HeaderType == "DOCUMENT" {
-		mediaID := req.MediaID
-		mediaData := req.MediaData
-		if mediaID == "" && len(mediaData) == 0 && req.MediaURL != "" {
-			// Retry/resend: read the header media back from local storage
-			mediaPath := filepath.Join(a.getMediaStoragePath(), req.MediaURL)
-			if fileData, readErr := os.ReadFile(mediaPath); readErr == nil && len(fileData) > 0 {
-				mediaData = fileData
-			}
-		}
-		if mediaID == "" && len(mediaData) > 0 {
-			var err error
-			mediaID, err = provider.UploadMedia(ctx, waAccount, mediaData, req.MediaMimeType, req.MediaFilename)
-			if err != nil {
-				return "", fmt.Errorf("failed to upload template header media: %w", err)
-			}
-		}
-		if mediaID != "" {
-			switch tpl.HeaderType {
-			case "IMAGE":
-				return provider.SendImageMessage(ctx, waAccount, rcpt, mediaID, text, replyToMsgID)
-			case "VIDEO":
-				return provider.SendVideoMessage(ctx, waAccount, rcpt, mediaID, text, replyToMsgID)
-			default: // DOCUMENT
-				return provider.SendDocumentMessage(ctx, waAccount, rcpt, mediaID, req.MediaFilename, text, replyToMsgID)
-			}
-		}
-		// No media supplied — fall through to a plain text send.
-	}
-
-	// Quick-reply buttons via interactive send; fall back to plain text when
-	// the provider doesn't support native reply buttons.
-	if len(quickReplies) > 0 {
-		wamid, err := provider.SendInteractiveButtons(ctx, waAccount, rcpt, text, quickReplies)
-		if err == nil || !errors.Is(err, whatsapp.ErrNotSupported) {
-			return wamid, err
-		}
-	}
-
-	return provider.SendTextMessage(ctx, waAccount, rcpt, text, replyToMsgID)
+				mediaPath := filepath.Join(a.getMediaStoragePath(), req.MediaURL)
+				if fileData, readErr := os.ReadFile(mediaPath); readErr == nil && len(fileData) > 0 {
+					return fileData
+				}
+				return nil
+			},
+		},
+	})
 }
 
 // createOutgoingMessage creates a Message model from the request
@@ -550,6 +488,13 @@ func (a *App) finalizeMessageSend(msg *models.Message, req OutgoingMessageReques
 		"whats_app_message_id": wamid,
 	})
 	a.Log.Info("Message sent", "message_id", msg.ID, "wa_message_id", wamid, "type", msg.MessageType)
+
+	// Update the contact's last-message preview only on success — a failed
+	// send must not advertise a message that was never delivered. Runs here
+	// (not in SendOutgoingMessage) so the async path gets the same
+	// outcome-aware behavior.
+	preview := a.getMessagePreview(req)
+	a.updateContactLastMessage(req.Contact, preview)
 
 	// Dispatch webhook for successful send
 	if opts.DispatchWebhook {
@@ -1056,12 +1001,12 @@ func (a *App) SendTemplateMessage(r *fastglue.Request) error {
 		ButtonURLParams: req.ButtonParams,
 	}
 
+	// Synchronous (DefaultSendOptions), same rationale as
+	// SendMessage/SendMediaMessage: the response must carry the final status
+	// + wamid so the sent bubble and its per-message actions (revoke) are
+	// correct without a manual refresh.
 	opts := DefaultSendOptions()
 	opts.SentByUserID = &userID
-	// Synchronous, same rationale as SendMessage/SendMediaMessage: the
-	// response must carry the final status + wamid so the sent bubble and its
-	// per-message actions (revoke) are correct without a manual refresh.
-	opts.Async = false
 
 	ctx := context.Background()
 	message, err := a.SendOutgoingMessage(ctx, msgReq, opts)
@@ -1514,8 +1459,8 @@ func (a *App) SendMessage(r *fastglue.Request) error {
 
 	// Parse request body
 	var req SendMessageRequest
-	if err := json.Unmarshal(r.RequestCtx.PostBody(), &req); err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid request body", nil, "")
+	if err := a.decodeRequest(r, &req); err != nil {
+		return nil
 	}
 
 	// Get contact (users without full read permission can only message their assigned contacts)
@@ -1586,17 +1531,17 @@ func (a *App) SendMessage(r *fastglue.Request) error {
 		}
 	}
 
+	// The agent UI text send is SYNCHRONOUS (DefaultSendOptions) so the HTTP
+	// response carries the final status (sent/failed) + wamid. With Async:true
+	// the response returns "pending" and the bubble only advances to "sent"
+	// via a later WS status_update event — which races with the message's
+	// insertion into the frontend store (the update can arrive before
+	// addMessage runs, or be dropped by the hub under load), leaving the
+	// bubble stuck on the clock icon until a manual refresh. Synchronous send
+	// closes that race: the store gets the correct status straight from the
+	// response.
 	opts := DefaultSendOptions()
 	opts.SentByUserID = &userID
-	// The agent UI text send must be SYNCHRONOUS so the HTTP response carries
-	// the final status (sent/failed) + wamid. With Async:true the response
-	// returns "pending" and the bubble only advances to "sent" via a later WS
-	// status_update event — which races with the message's insertion into the
-	// frontend store (the update can arrive before addMessage runs, or be
-	// dropped by the hub under load), leaving the bubble stuck on the clock
-	// icon until a manual refresh. Synchronous send closes that race: the
-	// store gets the correct status straight from the response.
-	opts.Async = false
 
 	ctx := context.Background()
 	message, err := a.SendOutgoingMessage(ctx, msgReq, opts)
@@ -1800,16 +1745,15 @@ func (a *App) SendMediaMessage(r *fastglue.Request) error {
 		Caption:       caption,
 	}
 
+	// Synchronous (DefaultSendOptions), same rationale as SendMessage: the
+	// HTTP response must carry the final status (sent/failed) + wamid so the
+	// bubble skips the "pending" clock state and per-message actions (revoke,
+	// which needs wamid) work immediately instead of after a manual refresh.
+	// The agent UI already awaits this request for its upload spinner, so
+	// blocking until the WhatsApp upload completes (bounded by the 15-min
+	// media timeout and the 900s server/nginx limits) does not change the UX.
 	opts := DefaultSendOptions()
 	opts.SentByUserID = &userID
-	// Synchronous, same rationale as SendMessage: the HTTP response must carry
-	// the final status (sent/failed) + wamid so the bubble skips the "pending"
-	// clock state and per-message actions (revoke, which needs wamid) work
-	// immediately instead of after a manual refresh. The agent UI already
-	// awaits this request for its upload spinner, so blocking until the
-	// WhatsApp upload completes (bounded by the 15-min media timeout and the
-	// 900s server/nginx limits) does not change the UX.
-	opts.Async = false
 
 	ctx := context.Background()
 	message, err := a.SendOutgoingMessage(ctx, msgReq, opts)
@@ -1884,8 +1828,8 @@ func (a *App) SendReaction(r *fastglue.Request) error {
 
 	// Parse request body
 	var req SendReactionRequest
-	if err := json.Unmarshal(r.RequestCtx.PostBody(), &req); err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid request body", nil, "")
+	if err := a.decodeRequest(r, &req); err != nil {
+		return nil
 	}
 
 	// Get contact (users without full read permission can only react to messages in their assigned contacts)
@@ -2054,8 +1998,8 @@ func (a *App) SendTypingIndicator(r *fastglue.Request) error {
 	}
 
 	var req TypingRequest
-	if err := json.Unmarshal(r.RequestCtx.PostBody(), &req); err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid request body", nil, "")
+	if err := a.decodeRequest(r, &req); err != nil {
+		return nil
 	}
 	// Normalize the action and reject anything that is not start/stop.
 	action := strings.ToLower(strings.TrimSpace(req.Action))

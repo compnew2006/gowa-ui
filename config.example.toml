@@ -42,6 +42,17 @@ secret = "your-super-secret-jwt-key-change-in-production"  # Must be 32+ chars i
 access_expiry_mins = 15
 refresh_expiry_days = 1
 
+# GOWA (Go WhatsApp Web Multi-Device) connection settings. GOWA instances are
+# usually managed in the UI (stored in the DB); this section configures the
+# legacy/config-file fallback and webhook path.
+[gowa]
+webhook_path = "/api/gowa/webhook"
+# Set ONLY when gowa-ui and GOWA run on the same host behind one reverse proxy:
+# server→GOWA API calls then dial this loopback address instead of the public
+# base_url (browser-facing URLs are unaffected). Leave empty otherwise, and
+# especially when running multiple GOWA instances at different hosts.
+#internal_base_url = "http://127.0.0.1:3000"
+
 [storage]
 type = "local"
 local_path = "./uploads"

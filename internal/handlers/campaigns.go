@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -181,6 +182,12 @@ func (a *App) CreateCampaign(r *fastglue.Request) error {
 		CreatedBy:       userID,
 		UpdatedByID:     &userID,
 	}
+	// A campaign created with a schedule goes straight to "scheduled" so the
+	// CampaignSchedulerProcessor picks it up when it comes due. Unscheduled
+	// campaigns stay drafts until started manually.
+	if req.ScheduledAt != nil {
+		campaign.Status = models.CampaignStatusScheduled
+	}
 
 	if err := a.DB.Create(&campaign).Error; err != nil {
 		a.Log.Error("Failed to create campaign", "error", err)
@@ -284,8 +291,9 @@ func (a *App) UpdateCampaign(r *fastglue.Request) error {
 		return nil
 	}
 
-	// Only allow updates to draft campaigns
-	if campaign.Status != models.CampaignStatusDraft {
+	// Only allow updates to draft and scheduled campaigns (a scheduled
+	// campaign may be rescheduled before it fires).
+	if campaign.Status != models.CampaignStatusDraft && campaign.Status != models.CampaignStatusScheduled {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Can only update draft campaigns", nil, "")
 	}
 
@@ -301,6 +309,10 @@ func (a *App) UpdateCampaign(r *fastglue.Request) error {
 		"name":          req.Name,
 		"scheduled_at":  req.ScheduledAt,
 		"updated_by_id": userID,
+		// Keep the status in lockstep with the schedule: a scheduled time
+		// keeps/puts the campaign in "scheduled" (the scheduler fires it),
+		// clearing the schedule returns it to a manual-start draft.
+		"status": campaignStatusForSchedule(req.ScheduledAt),
 	}
 
 	if req.TemplateID != "" {
@@ -421,6 +433,47 @@ func (a *App) loadCampaignByPath(r *fastglue.Request) (orgID, id uuid.UUID, camp
 	return orgID, id, campaign, true
 }
 
+// campaignStatusForSchedule maps a schedule timestamp to the campaign status
+// that goes with it: scheduled when set, draft (manual start) when cleared.
+func campaignStatusForSchedule(scheduledAt *time.Time) models.CampaignStatus {
+	if scheduledAt != nil {
+		return models.CampaignStatusScheduled
+	}
+	return models.CampaignStatusDraft
+}
+
+// enqueuePendingRecipients loads a campaign's pending recipients and enqueues
+// one job per recipient on the Redis Stream. Shared by the manual
+// StartCampaign handler and the scheduled-campaign processor so both paths
+// enqueue identically. Returns the number of jobs enqueued.
+func (a *App) enqueuePendingRecipients(ctx context.Context, orgID, id uuid.UUID) (int, error) {
+	var recipients []models.BulkMessageRecipient
+	if err := a.DB.Where("campaign_id = ? AND status = ?", id, models.MessageStatusPending).Find(&recipients).Error; err != nil {
+		return 0, err
+	}
+	if len(recipients) == 0 {
+		return 0, nil
+	}
+
+	jobs := make([]*queue.RecipientJob, len(recipients))
+	for i, recipient := range recipients {
+		jobs[i] = &queue.RecipientJob{
+			CampaignID:     id,
+			RecipientID:    recipient.ID,
+			OrganizationID: orgID,
+			PhoneNumber:    recipient.PhoneNumber,
+			RecipientName:  recipient.RecipientName,
+			TemplateParams: recipient.TemplateParams,
+			HeaderParams:   recipient.HeaderParams,
+		}
+	}
+
+	if err := a.Queue.EnqueueRecipients(ctx, jobs); err != nil {
+		return 0, err
+	}
+	return len(jobs), nil
+}
+
 // StartCampaign implements starting a campaign
 func (a *App) StartCampaign(r *fastglue.Request) error {
 	orgID, id, campaign, ok := a.loadCampaignByPath(r)
@@ -466,28 +519,15 @@ func (a *App) StartCampaign(r *fastglue.Request) error {
 
 	a.Log.Info("Campaign started", "campaign_id", id, "recipients", len(recipients))
 
-	// Enqueue all recipients as individual jobs for parallel processing
-	jobs := make([]*queue.RecipientJob, len(recipients))
-	for i, recipient := range recipients {
-		jobs[i] = &queue.RecipientJob{
-			CampaignID:     id,
-			RecipientID:    recipient.ID,
-			OrganizationID: orgID,
-			PhoneNumber:    recipient.PhoneNumber,
-			RecipientName:  recipient.RecipientName,
-			TemplateParams: recipient.TemplateParams,
-			HeaderParams:   recipient.HeaderParams,
-		}
-	}
-
-	if err := a.Queue.EnqueueRecipients(r.RequestCtx, jobs); err != nil {
+	enqueued, err := a.enqueuePendingRecipients(r.RequestCtx, orgID, id)
+	if err != nil {
 		a.Log.Error("Failed to enqueue recipients", "error", err)
 		// Revert status on failure
 		a.DB.Model(campaign).Update("status", models.CampaignStatusDraft)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to queue recipients", nil, "")
 	}
 
-	a.Log.Info("Recipients enqueued for processing", "campaign_id", id, "count", len(jobs))
+	a.Log.Info("Recipients enqueued for processing", "campaign_id", id, "count", enqueued)
 
 	return r.SendEnvelope(map[string]any{
 		"message": "Campaign started",

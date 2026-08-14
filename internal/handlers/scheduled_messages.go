@@ -2,12 +2,11 @@ package handlers
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/internal/websocket"
+	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 )
@@ -56,8 +55,8 @@ func (a *App) CreateScheduledMessage(r *fastglue.Request) error {
 	}
 
 	var req ScheduledMessageRequest
-	if err := json.Unmarshal(r.RequestCtx.PostBody(), &req); err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid request body", nil, "")
+	if err := a.decodeRequest(r, &req); err != nil {
+		return nil
 	}
 
 	// Scheduled time must be in the future (small grace for clock skew).
@@ -256,8 +255,8 @@ func (a *App) UpdateScheduledMessage(r *fastglue.Request) error {
 	}
 
 	var req ScheduledMessageRequest
-	if err := json.Unmarshal(r.RequestCtx.PostBody(), &req); err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid request body", nil, "")
+	if err := a.decodeRequest(r, &req); err != nil {
+		return nil
 	}
 
 	sm, err := a.loadScopedScheduledMessage(r, id, orgID, userID)

@@ -350,6 +350,18 @@ func orgIDString(orgID uuid.UUID) string {
 	return orgID.String()
 }
 
+// GowaDialBaseURL returns the base URL server-side code should dial to reach
+// GOWA for the given public base URL: the configured [gowa].internal_base_url
+// override when set (co-located deployments skip the public reverse proxy),
+// otherwise the URL unchanged. Browser-facing URLs (QR links, the webhook
+// media-origin allowlist) keep using the public URL.
+func GowaDialBaseURL(cfg *config.Config, baseURL string) string {
+	if cfg != nil && cfg.GOWA.InternalBaseURL != "" {
+		return strings.TrimRight(cfg.GOWA.InternalBaseURL, "/")
+	}
+	return baseURL
+}
+
 // gowaClientForAccount returns a gowa.Client for the account's GOWA base URL.
 // It prefers the shared provider registry (cached client, invalidated when
 // credentials change) and falls back to building one via ResolveGowaCreds
@@ -360,7 +372,7 @@ func (a *App) gowaClientForAccount(account *models.WhatsAppAccount) *gowa.Client
 			return c
 		}
 	}
-	baseURL := account.GowaBaseURL
+	baseURL := GowaDialBaseURL(a.Config, account.GowaBaseURL)
 	if baseURL == "" {
 		baseURL = "http://localhost:3000"
 	}

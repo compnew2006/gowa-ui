@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"strings"
 	"time"
 
@@ -30,6 +31,13 @@ const (
 	ContextKeyOrganization   = "organization"
 )
 
+// Token class labels stamped into JWTClaims.TokenType.
+const (
+	TokenTypeAccess  = "access"
+	TokenTypeRefresh = "refresh"
+	TokenTypeWS      = "ws"
+)
+
 // JWTClaims represents JWT claims
 type JWTClaims struct {
 	UserID         uuid.UUID  `json:"user_id"`
@@ -44,6 +52,13 @@ type JWTClaims struct {
 	// fresh Redis both deserialize to 0, matching — no forced re-login on
 	// deploy. See AuthWithDBAndRedis for the fail-open policy.
 	TokenVersion int `json:"token_version,omitempty"`
+	// TokenType labels the token class ("access", "refresh", "ws") to prevent
+	// token-type confusion: a leaked refresh token must not authenticate API
+	// requests, and an access token must not be replayed at the refresh
+	// endpoint. Legacy tokens issued before this field carry "" and are
+	// separated by JTI presence (refresh tokens always have one, access
+	// tokens never do).
+	TokenType string `json:"token_type,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -93,12 +108,27 @@ func ParseAllowedOrigins(allowedOrigins string) map[string]bool {
 }
 
 // IsOriginAllowed checks if origin is in the allowed set.
-// If no origins are configured, all origins are allowed (development mode).
+// With no whitelist configured only loopback/localhost origins are allowed
+// (development default) — an unset whitelist must not mean "any website may
+// send credentialed requests". Production deployments are required to set an
+// explicit whitelist (see cmd/gowa-ui/wiring.go).
 func IsOriginAllowed(origin string, allowedOrigins map[string]bool) bool {
 	if len(allowedOrigins) == 0 {
-		return true // No whitelist configured = allow all (development)
+		return IsDevelopmentOrigin(origin)
 	}
 	return allowedOrigins[origin]
+}
+
+// IsDevelopmentOrigin reports whether the origin is a loopback host
+// (localhost / 127.0.0.1 / [::1]) on any port — the Vite dev server talking
+// to a local backend.
+func IsDevelopmentOrigin(origin string) bool {
+	u, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	host := u.Hostname()
+	return host == "localhost" || host == "127.0.0.1" || host == "::1"
 }
 
 // CORS handles Cross-Origin Resource Sharing with origin validation.
@@ -109,11 +139,6 @@ func CORS(allowedOrigins map[string]bool) fastglue.FastMiddleware {
 		if origin != "" && IsOriginAllowed(origin, allowedOrigins) {
 			r.RequestCtx.Response.Header.Set("Access-Control-Allow-Origin", origin)
 			r.RequestCtx.Response.Header.Set("Access-Control-Allow-Credentials", "true")
-		} else if len(allowedOrigins) == 0 {
-			// Development: no whitelist configured, allow the request origin
-			if origin != "" {
-				r.RequestCtx.Response.Header.Set("Access-Control-Allow-Origin", origin)
-			}
 		}
 		// If origin is not allowed, no Access-Control-Allow-Origin header is set,
 		// which causes the browser to block the request.
@@ -237,6 +262,17 @@ func AuthWithDBAndRedis(secret string, db *gorm.DB, rdb *redis.Client, log logf.
 			return nil
 		}
 
+		// Token-type confusion: a long-lived refresh token must never
+		// authenticate API requests. Refresh tokens always carry a JTI
+		// (claims.ID) — including legacy ones issued before TokenType existed
+		// — while access tokens never do, so JTI presence is the discriminator
+		// that covers both. WS handshake tokens carry token_type=ws and are
+		// only valid for the socket auth message.
+		if claims.TokenType == TokenTypeRefresh || claims.TokenType == TokenTypeWS || claims.ID != "" {
+			_ = r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid or expired token", nil, "")
+			return nil
+		}
+
 		// H3: enforce per-user access-token revocation. Compare the version
 		// stamped in the token against the current Redis value. rdb == nil
 		// (tests / AuthWithDB wrapper) skips the check entirely (fail-open).
@@ -319,6 +355,11 @@ func validateAPIKey(r *fastglue.Request, key string, db *gorm.DB) bool {
 
 			// Set context values from the user who created the key
 			if apiKey.User != nil {
+				// A deactivated owner's keys stay dead until the account is
+				// re-enabled — revocation must not hinge on token expiry.
+				if !apiKey.User.IsActive {
+					return false
+				}
 				r.RequestCtx.SetUserValue(ContextKeyUserID, apiKey.UserID)
 				r.RequestCtx.SetUserValue(ContextKeyOrganizationID, apiKey.OrganizationID)
 				r.RequestCtx.SetUserValue(ContextKeyEmail, apiKey.User.Email)

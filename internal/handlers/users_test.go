@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/handlers"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/test/testutil"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
@@ -138,9 +138,11 @@ func TestApp_GetUser(t *testing.T) {
 	t.Run("not found", func(t *testing.T) {
 		app := newTestApp(t)
 		org := testutil.CreateTestOrganization(t, app.DB)
+		adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+		admin := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
 
 		req := testutil.NewGETRequest(t)
-		testutil.SetAuthContext(req, org.ID, uuid.New())
+		testutil.SetAuthContext(req, org.ID, admin.ID)
 		testutil.SetPathParam(req, "id", uuid.New().String())
 
 		err := app.GetUser(req)
@@ -151,14 +153,32 @@ func TestApp_GetUser(t *testing.T) {
 	t.Run("invalid uuid", func(t *testing.T) {
 		app := newTestApp(t)
 		org := testutil.CreateTestOrganization(t, app.DB)
+		adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+		admin := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
 
 		req := testutil.NewGETRequest(t)
-		testutil.SetAuthContext(req, org.ID, uuid.New())
+		testutil.SetAuthContext(req, org.ID, admin.ID)
 		testutil.SetPathParam(req, "id", "not-a-uuid")
 
 		err := app.GetUser(req)
 		require.NoError(t, err)
 		assert.Equal(t, fasthttp.StatusBadRequest, testutil.GetResponseStatusCode(req))
+	})
+
+	t.Run("other user without users:read is forbidden", func(t *testing.T) {
+		app := newTestApp(t)
+		org := testutil.CreateTestOrganization(t, app.DB)
+		target := testutil.CreateTestUser(t, app.DB, org.ID)
+		agentRole := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "agent", []string{"chat:read"})
+		agent := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&agentRole.ID))
+
+		req := testutil.NewGETRequest(t)
+		testutil.SetAuthContext(req, org.ID, agent.ID)
+		testutil.SetPathParam(req, "id", target.ID.String())
+
+		err := app.GetUser(req)
+		require.NoError(t, err)
+		assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req))
 	})
 }
 

@@ -76,6 +76,15 @@ type GOWAConfig struct {
 	WebhookPath string `koanf:"webhook_path"` // Path where GOWA sends webhook events, default "/api/gowa/webhook"
 	Username    string `koanf:"username"`     // Basic Auth username for the GOWA REST API
 	Password    string `koanf:"password"`     // Basic Auth password for the GOWA REST API
+
+	// InternalBaseURL overrides the address server-side GOWA API calls dial,
+	// regardless of the per-instance/account base_url (which stays the
+	// browser-facing public URL for QR links and the media-origin allowlist).
+	// Set it when gowa-ui and GOWA are co-located behind the same reverse
+	// proxy, e.g. public "https://gowa.example.com" → internal
+	// "http://127.0.0.1:3000", so API traffic skips the public hop. It is
+	// global: with multiple GOWA instances at different hosts, leave it empty.
+	InternalBaseURL string `koanf:"internal_base_url"`
 }
 
 // GOWAInstance represents a single GOWA instance configured in the app.

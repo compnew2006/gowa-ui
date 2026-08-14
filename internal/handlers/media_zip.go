@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/models"
+	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 )
@@ -124,8 +124,8 @@ func (a *App) ServeMediaZip(r *fastglue.Request) error {
 	for i := range messages {
 		msg := messages[i]
 
-		// Path security — same guards as ServeMedia (media.go:235-254).
-		fullPath, ok := a.resolveMediaPath(baseDir, msg.MediaURL)
+		// Path security — same guards as ServeMedia (media.go).
+		fullPath, ok := resolveMediaPath(baseDir, msg.MediaURL)
 		if !ok {
 			a.Log.Warn("Skipping zip entry: invalid or missing path", "message_id", msg.ID, "media_url", msg.MediaURL)
 			continue
@@ -186,25 +186,6 @@ func (a *App) canAccessContactMedia(userID, orgID, contactID uuid.UUID) bool {
 	var contact models.Contact
 	q := a.scopeAssignedContact(a.DB.Where("id = ? AND organization_id = ?", contactID, orgID), userID, orgID)
 	return q.First(&contact).Error == nil
-}
-
-// resolveMediaPath validates a stored MediaURL against the storage base dir,
-// rejecting directory traversal and symlinks. Returns the absolute path and
-// true when the file is safe to read.
-func (a *App) resolveMediaPath(baseDir, mediaURL string) (string, bool) {
-	cleaned := filepath.Clean(mediaURL)
-	fullPath, err := filepath.Abs(filepath.Join(baseDir, cleaned))
-	if err != nil || !strings.HasPrefix(fullPath, baseDir+string(os.PathSeparator)) {
-		return "", false
-	}
-	info, err := os.Lstat(fullPath)
-	if err != nil {
-		return "", false
-	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		return "", false
-	}
-	return fullPath, true
 }
 
 // defaultZipEntryName picks a sensible filename for a zip entry from the

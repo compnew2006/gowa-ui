@@ -6,9 +6,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/chatlifecycle"
 	"github.com/compnew2006/gowa-ui/internal/models"
+	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 )
@@ -33,16 +33,20 @@ func (a *App) ensureClaimableChatStatus(orgID uuid.UUID, contact *models.Contact
 }
 
 // loadContactByPath parses the {id} contact path param and loads the contact
-// scoped to orgID. On error it sends the HTTP response and returns ok=false —
+// through scopeAssignedContact, so lifecycle actions (claim/release/close/
+// join/leave/reopen, notes) enforce the same visibility as the chat list —
+// account-scoped agents cannot act on conversations outside their assigned
+// accounts. On error it sends the HTTP response and returns ok=false —
 // callers should `return nil`. It returns a value (not a pointer) so callers
 // keep passing &contact to the lifecycle service unchanged.
-func (a *App) loadContactByPath(r *fastglue.Request, orgID uuid.UUID) (models.Contact, bool) {
+func (a *App) loadContactByPath(r *fastglue.Request, orgID, userID uuid.UUID) (models.Contact, bool) {
 	var contact models.Contact
 	contactID, err := parsePathUUID(r, "id", "contact")
 	if err != nil {
 		return contact, false
 	}
-	if err := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID).First(&contact).Error; err != nil {
+	query := a.scopeAssignedContact(a.DB.Where("id = ? AND organization_id = ?", contactID, orgID), userID, orgID)
+	if err := query.First(&contact).Error; err != nil {
 		_ = r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
 		return contact, false
 	}
@@ -58,7 +62,7 @@ func (a *App) ClaimChat(r *fastglue.Request) error {
 		return nil
 	}
 
-	contact, ok := a.loadContactByPath(r, orgID)
+	contact, ok := a.loadContactByPath(r, orgID, userID)
 	if !ok {
 		return nil
 	}
@@ -117,7 +121,7 @@ func (a *App) ReleaseChat(r *fastglue.Request) error {
 		return nil
 	}
 
-	contact, ok := a.loadContactByPath(r, orgID)
+	contact, ok := a.loadContactByPath(r, orgID, userID)
 	if !ok {
 		return nil
 	}
@@ -171,7 +175,7 @@ func (a *App) JoinChat(r *fastglue.Request) error {
 		return nil
 	}
 
-	contact, ok := a.loadContactByPath(r, orgID)
+	contact, ok := a.loadContactByPath(r, orgID, userID)
 	if !ok {
 		return nil
 	}
@@ -216,12 +220,13 @@ func (a *App) InviteCollaborator(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid user ID", nil, "")
 	}
 
-	var contact models.Contact
-	if err := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID).First(&contact).Error; err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
+	// Scoped load: only act on conversations the caller can see.
+	contact, err := a.findScopedContact(r, contactID, userID, orgID)
+	if err != nil {
+		return nil
 	}
 
-	res, err := a.ChatLifecycle.Invite(r.RequestCtx, orgID, userID, targetUserID, &contact)
+	res, err := a.ChatLifecycle.Invite(r.RequestCtx, orgID, userID, targetUserID, contact)
 	if err != nil {
 		// Service returns a wrapped "target user not found" error.
 		a.Log.Error("Failed to invite collaborator", "error", err, "contact_id", contact.ID)
@@ -252,7 +257,7 @@ func (a *App) LeaveChat(r *fastglue.Request) error {
 		return nil
 	}
 
-	contact, ok := a.loadContactByPath(r, orgID)
+	contact, ok := a.loadContactByPath(r, orgID, userID)
 	if !ok {
 		return nil
 	}
@@ -316,12 +321,13 @@ func (a *App) RemoveCollaborator(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid user ID", nil, "")
 	}
 
-	var contact models.Contact
-	if err := a.DB.Where("id = ? AND organization_id = ?", contactID, orgID).First(&contact).Error; err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
+	// Scoped load: only act on conversations the caller can see.
+	contact, err := a.findScopedContact(r, contactID, userID, orgID)
+	if err != nil {
+		return nil
 	}
 
-	res, err := a.ChatLifecycle.RemoveCollaborator(r.RequestCtx, orgID, userID, targetUserID, &contact)
+	res, err := a.ChatLifecycle.RemoveCollaborator(r.RequestCtx, orgID, userID, targetUserID, contact)
 	if err != nil {
 		switch {
 		case errors.Is(err, chatlifecycle.ErrCannotRemoveOwner):
@@ -352,7 +358,7 @@ func (a *App) CloseChat(r *fastglue.Request) error {
 		return nil
 	}
 
-	contact, ok := a.loadContactByPath(r, orgID)
+	contact, ok := a.loadContactByPath(r, orgID, userID)
 	if !ok {
 		return nil
 	}
@@ -396,7 +402,7 @@ func (a *App) ReopenChat(r *fastglue.Request) error {
 		return nil
 	}
 
-	contact, ok := a.loadContactByPath(r, orgID)
+	contact, ok := a.loadContactByPath(r, orgID, userID)
 	if !ok {
 		return nil
 	}
@@ -448,7 +454,42 @@ func (a *App) BulkReleaseChats(r *fastglue.Request) error {
 	}
 
 	isAdminOrManager := a.HasPermission(userID, models.ResourceContacts, models.ActionWrite, orgID)
-	result := a.ChatLifecycle.BulkRelease(r.RequestCtx, orgID, userID, req.ContactIDs, isAdminOrManager)
+
+	// Scope the batch up-front: only contacts visible through
+	// scopeAssignedContact may be released. Invisible IDs are reported as
+	// "not found" failures instead of being acted on.
+	visible := make(map[uuid.UUID]bool, len(req.ContactIDs))
+	parsedIDs := make([]uuid.UUID, 0, len(req.ContactIDs))
+	for _, raw := range req.ContactIDs {
+		if id, err := uuid.Parse(raw); err == nil {
+			parsedIDs = append(parsedIDs, id)
+		}
+	}
+	if len(parsedIDs) > 0 {
+		var visibleIDs []uuid.UUID
+		if err := a.scopeAssignedContact(
+			a.DB.Model(&models.Contact{}).Select("id"), userID, orgID,
+		).Where("id IN ?", parsedIDs).Pluck("id", &visibleIDs).Error; err != nil {
+			a.Log.Error("Failed to scope bulk-release contacts", "error", err, "user_id", userID)
+			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to release chats", nil, "")
+		}
+		for _, id := range visibleIDs {
+			visible[id] = true
+		}
+	}
+	scopedIDs := make([]string, 0, len(req.ContactIDs))
+	failed := make([]map[string]any, 0)
+	for _, raw := range req.ContactIDs {
+		if id, err := uuid.Parse(raw); err == nil && visible[id] {
+			scopedIDs = append(scopedIDs, raw)
+		} else if _, err := uuid.Parse(raw); err != nil {
+			scopedIDs = append(scopedIDs, raw) // let the service report "invalid uuid"
+		} else {
+			failed = append(failed, map[string]any{"contact_id": raw, "reason": "not found"})
+		}
+	}
+	result := a.ChatLifecycle.BulkRelease(r.RequestCtx, orgID, userID, scopedIDs, isAdminOrManager)
+	result.Failed = append(result.Failed, failed...)
 
 	return r.SendEnvelope(map[string]any{
 		"released_ids": result.ReleasedIDs,

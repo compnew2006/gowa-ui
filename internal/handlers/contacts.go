@@ -175,67 +175,10 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 	// Check if phone masking is enabled
 	shouldMask := a.ShouldMaskPhoneNumbers(orgID)
 
-	// Convert to response format
+	// Convert to response format (masking resolved once for the whole page)
 	response := make([]ContactResponse, len(contacts))
-	for i, c := range contacts {
-		// Count unread messages
-		var unreadCount int64
-		a.DB.Model(&models.Message{}).
-			Where("contact_id = ? AND direction = ? AND status != ?", c.ID, models.DirectionIncoming, models.MessageStatusRead).
-			Count(&unreadCount)
-
-		tags := []string{}
-		if c.Tags != nil {
-			for _, t := range c.Tags {
-				if s, ok := t.(string); ok {
-					tags = append(tags, s)
-				}
-			}
-		}
-
-		phoneNumber := c.PhoneNumber
-		profileName := c.ProfileName
-		if shouldMask {
-			phoneNumber = utils.MaskPhoneNumber(phoneNumber)
-			profileName = utils.MaskIfPhoneNumber(profileName)
-		}
-
-		serviceWindowOpen := c.LastInboundAt != nil && time.Since(*c.LastInboundAt) < 24*time.Hour
-
-		response[i] = ContactResponse{
-			ID:                 c.ID,
-			PhoneNumber:        phoneNumber,
-			Name:               profileName,
-			ProfileName:        profileName,
-			AvatarURL:          contactAvatarURL(&c),
-			Status:             "active",
-			Tags:               tags,
-			Metadata:           c.Metadata,
-			LastMessageAt:      c.LastMessageAt,
-			LastMessagePreview: c.LastMessagePreview,
-			UnreadCount:        int(unreadCount),
-			AssignedUserID:     c.AssignedUserID,
-			AssignedUserName: func() string {
-				if c.AssignedUserID == nil {
-					return ""
-				}
-				var u models.User
-				if a.DB.Select("full_name").First(&u, "id = ?", *c.AssignedUserID).Error == nil {
-					return u.FullName
-				}
-				return ""
-			}(),
-			WhatsAppAccount:   c.WhatsAppAccount,
-			LastInboundAt:     c.LastInboundAt,
-			ServiceWindowOpen: serviceWindowOpen,
-			MarketingOptOut:   c.MarketingOptOut,
-			IsGroupChat:       c.Metadata != nil && c.Metadata["is_group_chat"] == true,
-			IsNewsletter:      c.Metadata != nil && c.Metadata["is_newsletter"] == true,
-			ChatStatus:        string(c.EffectiveStatus()),
-			Collaborators:     a.filterCollaboratorsForViewer(c.GetCollaborators(), userID, orgID),
-			CreatedAt:         c.CreatedAt,
-			UpdatedAt:         c.UpdatedAt,
-		}
+	for i := range contacts {
+		response[i] = a.buildContactResponseMasked(&contacts[i], orgID, userID, shouldMask)
 	}
 
 	return r.SendEnvelope(listEnvelope("contacts", response, total, pg))
@@ -290,9 +233,11 @@ func (a *App) scopeAssignedContact(query *gorm.DB, userID, orgID uuid.UUID) *gor
 // Bypass rules (identical to scopeAccountsToUser):
 //   - super admins see every account;
 //   - users with NO assignments fall back to full org visibility (so org
-//     owners and pre-assignment users are unaffected);
-//   - a load error fails open (returns the query unchanged) to avoid locking
-//     users out on a transient DB hiccup.
+//     owners and pre-assignment users are unaffected).
+//
+// A load error fails CLOSED (returns a query that matches nothing): this is a
+// visibility gate, and leaking every account's conversations during a DB
+// hiccup is worse than showing an empty list until the error clears.
 func (a *App) scopeContactsByAssignedAccounts(query *gorm.DB, userID, orgID uuid.UUID) *gorm.DB {
 	if a.IsSuperAdmin(userID) {
 		return query
@@ -301,7 +246,7 @@ func (a *App) scopeContactsByAssignedAccounts(query *gorm.DB, userID, orgID uuid
 	if err != nil {
 		a.Log.Error("Failed to load account assignments for contact scoping",
 			"error", err, "user_id", userID)
-		return query
+		return query.Where("1 = 0")
 	}
 	if len(ids) == 0 {
 		return query // no assignments — full org visibility (fallback)
@@ -312,7 +257,7 @@ func (a *App) scopeContactsByAssignedAccounts(query *gorm.DB, userID, orgID uuid
 		Pluck("name", &names).Error; err != nil {
 		a.Log.Error("Failed to resolve assigned account names for contact scoping",
 			"error", err, "user_id", userID)
-		return query
+		return query.Where("1 = 0")
 	}
 	if len(names) == 0 {
 		// Assigned to accounts that no longer exist in this org — show nothing
@@ -320,6 +265,20 @@ func (a *App) scopeContactsByAssignedAccounts(query *gorm.DB, userID, orgID uuid
 		return query.Where("1 = 0")
 	}
 	return query.Where("whats_app_account IN ?", names)
+}
+
+// findScopedContact loads a contact by ID through scopeAssignedContact so
+// write endpoints (assign, tags, update, delete, lifecycle actions, custom
+// actions) enforce exactly the same visibility as the read path. Sends a 404
+// envelope on miss and returns errEnvelopeSent, mirroring findByIDAndOrg.
+func (a *App) findScopedContact(r *fastglue.Request, id, userID, orgID uuid.UUID) (*models.Contact, error) {
+	var contact models.Contact
+	query := a.scopeAssignedContact(a.DB.Where("id = ? AND organization_id = ?", id, orgID), userID, orgID)
+	if err := query.First(&contact).Error; err != nil {
+		_ = r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
+		return nil, errEnvelopeSent
+	}
+	return &contact, nil
 }
 
 // GetContact returns a single contact
@@ -381,8 +340,9 @@ func (a *App) AssignContact(r *fastglue.Request) error {
 		return nil
 	}
 
-	// Get contact
-	contact, err := findByIDAndOrg[models.Contact](a.DB, r, contactID, orgID, "Contact")
+	// Get contact (scoped: account-restricted users can only touch contacts
+	// under their assigned accounts, matching what they can see)
+	contact, err := a.findScopedContact(r, contactID, userID, orgID)
 	if err != nil {
 		return nil
 	}
@@ -437,8 +397,8 @@ func (a *App) UpdateContactTags(r *fastglue.Request) error {
 		return nil
 	}
 
-	// Get contact
-	contact, err := findByIDAndOrg[models.Contact](a.DB, r, contactID, orgID, "Contact")
+	// Get contact (scoped to the user's visible accounts — see AssignContact)
+	contact, err := a.findScopedContact(r, contactID, userID, orgID)
 	if err != nil {
 		return nil
 	}
@@ -614,8 +574,8 @@ func (a *App) UpdateContact(r *fastglue.Request) error {
 		return nil
 	}
 
-	// Get contact
-	contact, err := findByIDAndOrg[models.Contact](a.DB, r, contactID, orgID, "Contact")
+	// Get contact (scoped to the user's visible accounts — see AssignContact)
+	contact, err := a.findScopedContact(r, contactID, userID, orgID)
 	if err != nil {
 		return nil
 	}
@@ -685,8 +645,8 @@ func (a *App) DeleteContact(r *fastglue.Request) error {
 		return nil
 	}
 
-	// Get contact
-	contact, err := findByIDAndOrg[models.Contact](a.DB, r, contactID, orgID, "Contact")
+	// Get contact (scoped to the user's visible accounts — see AssignContact)
+	contact, err := a.findScopedContact(r, contactID, userID, orgID)
 	if err != nil {
 		return nil
 	}
@@ -740,8 +700,15 @@ func (a *App) filterCollaboratorsForViewer(collabs []models.Collaborator, viewer
 	return filtered
 }
 
-// buildContactResponse creates a ContactResponse from a Contact model
+// buildContactResponse creates a ContactResponse from a Contact model.
 func (a *App) buildContactResponse(contact *models.Contact, orgID, viewerUserID uuid.UUID) ContactResponse {
+	return a.buildContactResponseMasked(contact, orgID, viewerUserID, a.ShouldMaskPhoneNumbers(orgID))
+}
+
+// buildContactResponseMasked is buildContactResponse with the phone-masking
+// decision supplied by the caller, so list endpoints can resolve it once per
+// page instead of once per contact.
+func (a *App) buildContactResponseMasked(contact *models.Contact, orgID, viewerUserID uuid.UUID, shouldMask bool) ContactResponse {
 	// Count unread messages
 	var unreadCount int64
 	a.DB.Model(&models.Message{}).
@@ -759,7 +726,6 @@ func (a *App) buildContactResponse(contact *models.Contact, orgID, viewerUserID 
 
 	phoneNumber := contact.PhoneNumber
 	profileName := contact.ProfileName
-	shouldMask := a.ShouldMaskPhoneNumbers(orgID)
 	if shouldMask {
 		phoneNumber = utils.MaskPhoneNumber(phoneNumber)
 		profileName = utils.MaskIfPhoneNumber(profileName)

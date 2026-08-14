@@ -58,8 +58,9 @@ responsibility. Do not re-merge these.
 
 - **Soft string references are invisible to the graph.** `Contact.WhatsAppAccount`
   is a `string` (not a GORM FK) pointing at `WhatsAppAccount.Name`, repeated
-  across ~15 tables (`Message`, `CannedResponse`, `ChatbotConfig`, `BulkCampaign`,
-  `Call`, `Catalog`, `IVRFlow`, …). AST extraction cannot see these as edges.
+  across 7 tables (`Contact`, `Message`, `Template`, `BulkMessageCampaign`,
+  `NotificationRule`, `ScheduledMessage`, `ChatClosureRating`). AST extraction
+  cannot see these as edges.
   If your question is about cross-table relationships by `whatsapp_account`,
   grep the schema in `internal/models/` directly.
 - **Renaming `WhatsAppAccount.Name` does not cascade** — every referencing row

@@ -970,3 +970,39 @@ func TestReplaceTemplateContent_NoParams(t *testing.T) {
 
 	assert.Equal(t, "Hello, your order is ready!", result)
 }
+
+// A duplicate job — what a pause→restart re-enqueue produces, with the
+// original job still unread in the Redis Stream — must skip a recipient
+// another job already claimed or finished. Without the atomic claim both
+// jobs would send.
+func TestWorker_HandleRecipientJob_DuplicateJobSkipsClaimedRecipient(t *testing.T) {
+	w := testWorker(t)
+	org, account, _, campaign, recipient := createTestCampaignData(t, w)
+
+	// The original job already claimed and sent this recipient.
+	require.NoError(t, w.DB.Model(recipient).Update("status", models.MessageStatusSent).Error)
+
+	server := newGowaSendServer("wamid.duplicate", nil)
+	defer server.Close()
+	require.NoError(t, w.DB.Model(account).Update("gowa_base_url", server.URL).Error)
+	pointWorkerAtGowa(w)
+
+	job := &queue.RecipientJob{
+		CampaignID:     campaign.ID,
+		RecipientID:    recipient.ID,
+		OrganizationID: org.ID,
+		PhoneNumber:    recipient.PhoneNumber,
+		RecipientName:  recipient.RecipientName,
+		TemplateParams: recipient.TemplateParams,
+	}
+
+	require.NoError(t, w.HandleRecipientJob(context.Background(), job))
+
+	var updatedRecipient models.BulkMessageRecipient
+	require.NoError(t, w.DB.First(&updatedRecipient, recipient.ID).Error)
+	assert.Equal(t, models.MessageStatusSent, updatedRecipient.Status, "duplicate job must not touch a finished recipient")
+
+	var updatedCampaign models.BulkMessageCampaign
+	require.NoError(t, w.DB.First(&updatedCampaign, campaign.ID).Error)
+	assert.Zero(t, updatedCampaign.SentCount, "duplicate job must not double-count")
+}

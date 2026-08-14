@@ -5,8 +5,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/models"
+	"github.com/compnew2006/gowa-ui/internal/utils"
+	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 	"gorm.io/gorm"
@@ -520,6 +521,14 @@ func (a *App) SaveWidgetLayout(r *fastglue.Request) error {
 		return nil
 	}
 
+	// Users may arrange their own widgets; shared widgets can only be
+	// re-arranged by holders of analytics:write (mirrors UpdateWidget's
+	// edit gate — layout is a mutation of the widget row).
+	sharedCond := "user_id = ?"
+	if a.HasPermission(userID, models.ResourceAnalytics, models.ActionWrite, orgID) {
+		sharedCond = "(user_id = ? OR is_shared = true)"
+	}
+
 	var req struct {
 		Layout []struct {
 			ID    uuid.UUID `json:"id"`
@@ -541,7 +550,7 @@ func (a *App) SaveWidgetLayout(r *fastglue.Request) error {
 	err = a.DB.Transaction(func(tx *gorm.DB) error {
 		for i, item := range req.Layout {
 			result := tx.Model(&models.Widget{}).
-				Where("id = ? AND organization_id = ? AND (user_id = ? OR is_shared = true)", item.ID, orgID, userID).
+				Where("id = ? AND organization_id = ? AND "+sharedCond, item.ID, orgID, userID).
 				Updates(map[string]any{
 					"grid_x":        item.GridX,
 					"grid_y":        item.GridY,
@@ -672,6 +681,12 @@ func (a *App) GetWidgetData(r *fastglue.Request) error {
 		return nil
 	}
 
+	// Same gate as ListWidgets/GetWidget: widget data (counts, message
+	// snippets, phone labels) is analytics, not free-for-all org data.
+	if !a.HasPermission(userID, models.ResourceAnalytics, models.ActionRead, orgID) {
+		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You don't have permission to view analytics", nil, "")
+	}
+
 	id, err := parsePathUUID(r, "id", "widget")
 	if err != nil {
 		return nil
@@ -706,6 +721,11 @@ func (a *App) GetAllWidgetsData(r *fastglue.Request) error {
 	orgID, userID, err := a.requireOrgAndUserID(r)
 	if err != nil {
 		return nil
+	}
+
+	// Same gate as ListWidgets/GetWidget (see GetWidgetData).
+	if !a.HasPermission(userID, models.ResourceAnalytics, models.ActionRead, orgID) {
+		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You don't have permission to view analytics", nil, "")
 	}
 
 	// Parse date range from query params
@@ -1346,11 +1366,20 @@ func (a *App) getTableRows(orgID uuid.UUID, widget models.Widget, filters []Filt
 	a.DB.Raw(query, args...).Scan(&results)
 
 	tableRows := make([]TableRow, len(results))
+	// Honor the org's PII masking setting: table labels fall back to raw
+	// phone numbers (contacts rows expose them directly), so they get the
+	// same masking as the contacts list and campaign recipients.
+	shouldMask := a.ShouldMaskPhoneNumbers(orgID)
 	for i, r := range results {
+		label, subLabel := r.Label, r.SubLabel
+		if shouldMask {
+			label = utils.MaskIfPhoneNumber(label)
+			subLabel = utils.MaskIfPhoneNumber(subLabel)
+		}
 		tableRows[i] = TableRow{
 			ID:        r.ID,
-			Label:     r.Label,
-			SubLabel:  r.SubLabel,
+			Label:     label,
+			SubLabel:  subLabel,
 			Status:    r.Status,
 			Direction: r.Direction,
 			CreatedAt: r.CreatedAt.Format(time.RFC3339),

@@ -297,3 +297,42 @@ func TestApp_ExportData_CSVInjectionEscaped(t *testing.T) {
 	assert.Contains(t, csv, "'=cmd",
 		"cells starting with '=' must be prefixed with a single quote to defuse CSV injection")
 }
+
+// Regression: the tags export config used to list a "description" column that
+// models.Tag does not have — every tags export/search errored at the SQL
+// level. It must export only real columns and search on name alone.
+func TestApp_ExportData_Tags_SearchByName(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "tags-exporter", []string{"tags:export", "tags:import"})
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&role.ID))
+
+	for _, name := range []string{"vip", "newsletter"} {
+		require.NoError(t, app.DB.Create(&models.Tag{
+			OrganizationID: org.ID,
+			Name:           name,
+			Color:          "blue",
+		}).Error)
+	}
+
+	body, _ := json.Marshal(map[string]any{
+		"table":   "tags",
+		"columns": []string{"name", "color"},
+		"filters": map[string]string{"search": "vip"},
+	})
+	req := testutil.NewRequest(t)
+	req.RequestCtx.Request.Header.SetContentType("application/json")
+	req.RequestCtx.Request.Header.SetMethod("POST")
+	req.RequestCtx.Request.SetBody(body)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+
+	require.NoError(t, app.ExportData(req))
+	require.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req), "tags export with search must not hit a missing description column: %s", string(testutil.GetResponseBody(req)))
+
+	csv := string(testutil.GetResponseBody(req))
+	lines := strings.Split(strings.TrimRight(csv, "\n"), "\n")
+	require.Len(t, lines, 2, "header + the single matching tag")
+	assert.Contains(t, lines[0], "Name")
+	assert.Contains(t, lines[1], "vip")
+	assert.NotContains(t, lines[1], "newsletter")
+}

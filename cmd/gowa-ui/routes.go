@@ -593,10 +593,10 @@ func corsWrapper(next fasthttp.RequestHandler, allowedOrigins map[string]bool) f
 		if origin != "" && middleware.IsOriginAllowed(origin, allowedOrigins) {
 			ctx.Response.Header.Set("Access-Control-Allow-Origin", origin)
 			ctx.Response.Header.Set("Access-Control-Allow-Credentials", "true")
-		} else if len(allowedOrigins) == 0 && origin != "" {
-			// Development: no whitelist configured
-			ctx.Response.Header.Set("Access-Control-Allow-Origin", origin)
 		}
+		// No whitelist configured → only loopback origins pass (dev server);
+		// see middleware.IsOriginAllowed. Any other origin gets no ACAO header,
+		// so the browser blocks the credentialed request.
 
 		ctx.Response.Header.Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
 		ctx.Response.Header.Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key, X-Organization-ID, X-CSRF-Token")

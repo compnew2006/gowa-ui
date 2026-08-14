@@ -4,10 +4,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/middleware"
 	"github.com/compnew2006/gowa-ui/internal/models"
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/zerodha/fastglue"
 	"golang.org/x/crypto/bcrypt"
@@ -391,7 +391,10 @@ func UniqueEmail(prefix string) string {
 
 // --- JWT ---
 
-// GenerateTestRefreshToken creates a valid refresh token for testing.
+// GenerateTestRefreshToken creates a valid refresh token for testing. The
+// JTI is deterministic ("test-refresh-<user_id>") so callers can seed the
+// single-use Redis entry via TestRefreshJTI when the flow should pass the
+// consumption check.
 func GenerateTestRefreshToken(t *testing.T, user *models.User, secret string, expiry time.Duration) string {
 	t.Helper()
 
@@ -400,7 +403,9 @@ func GenerateTestRefreshToken(t *testing.T, user *models.User, secret string, ex
 		OrganizationID: user.OrganizationID,
 		Email:          user.Email,
 		RoleID:         user.RoleID,
+		TokenType:      middleware.TokenTypeRefresh,
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        TestRefreshJTI(user),
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiry)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			Issuer:    "whatomate",
@@ -411,4 +416,9 @@ func GenerateTestRefreshToken(t *testing.T, user *models.User, secret string, ex
 	tokenString, err := token.SignedString([]byte(secret))
 	require.NoError(t, err)
 	return tokenString
+}
+
+// TestRefreshJTI is the deterministic JTI used by GenerateTestRefreshToken.
+func TestRefreshJTI(user *models.User) string {
+	return "test-refresh-" + user.ID.String()
 }

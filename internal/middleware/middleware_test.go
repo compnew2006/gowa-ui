@@ -56,9 +56,11 @@ func TestCORS(t *testing.T) {
 		wantOrigin string
 	}{
 		{
-			name:       "with origin header",
+			// No whitelist configured → only loopback origins are echoed;
+			// a random site must NOT get credentialed CORS access.
+			name:       "non-local origin without whitelist is rejected",
 			origin:     "https://example.com",
-			wantOrigin: "https://example.com",
+			wantOrigin: "",
 		},
 		{
 			name:       "without origin header",
@@ -69,6 +71,11 @@ func TestCORS(t *testing.T) {
 			name:       "localhost origin",
 			origin:     "http://localhost:3000",
 			wantOrigin: "http://localhost:3000",
+		},
+		{
+			name:       "loopback ipv4 origin",
+			origin:     "http://127.0.0.1:5173",
+			wantOrigin: "http://127.0.0.1:5173",
 		},
 	}
 
@@ -93,8 +100,116 @@ func TestCORS(t *testing.T) {
 			assert.Contains(t, string(result.RequestCtx.Response.Header.Peek("Access-Control-Allow-Headers")), "Authorization")
 			assert.Contains(t, string(result.RequestCtx.Response.Header.Peek("Access-Control-Allow-Headers")), "X-API-Key")
 			assert.Contains(t, string(result.RequestCtx.Response.Header.Peek("Access-Control-Allow-Headers")), "X-Organization-ID")
-			if tt.origin != "" {
+			if tt.wantOrigin != "" {
 				assert.Equal(t, "true", string(result.RequestCtx.Response.Header.Peek("Access-Control-Allow-Credentials")))
+			}
+		})
+	}
+}
+
+func TestCORS_ExplicitWhitelist(t *testing.T) {
+	t.Parallel()
+
+	allowed := middleware.ParseAllowedOrigins("https://app.example.com")
+
+	req := newTestRequest()
+	req.RequestCtx.Request.Header.Set("Origin", "https://app.example.com")
+	result := middleware.CORS(allowed)(req)
+	require.NotNil(t, result)
+	assert.Equal(t, "https://app.example.com",
+		string(result.RequestCtx.Response.Header.Peek("Access-Control-Allow-Origin")))
+
+	req = newTestRequest()
+	req.RequestCtx.Request.Header.Set("Origin", "https://evil.example.net")
+	result = middleware.CORS(allowed)(req)
+	require.NotNil(t, result)
+	assert.Empty(t, string(result.RequestCtx.Response.Header.Peek("Access-Control-Allow-Origin")),
+		"non-whitelisted origin must not receive an ACAO header")
+}
+
+// generateTypedTestToken creates a JWT with an explicit token_type and
+// optional JTI, for token-type-confusion tests.
+func generateTypedTestToken(t *testing.T, tokenType, jti string, expiry time.Duration) string {
+	t.Helper()
+
+	claims := middleware.JWTClaims{
+		UserID:         uuid.New(),
+		OrganizationID: uuid.New(),
+		Email:          "test@example.com",
+		TokenType:      tokenType,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        jti,
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiry)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			Issuer:    "gowa-ui",
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signed, err := token.SignedString([]byte(testJWTSecret))
+	require.NoError(t, err)
+	return signed
+}
+
+func TestAuth_TokenTypeConfusion(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		tokenFn func(t *testing.T) string
+		wantOK  bool
+	}{
+		{
+			name: "refresh token rejected as bearer",
+			tokenFn: func(t *testing.T) string {
+				return generateTypedTestToken(t, middleware.TokenTypeRefresh, "jti-123", time.Hour)
+			},
+			wantOK: false,
+		},
+		{
+			name: "legacy refresh token (JTI, no type) rejected as bearer",
+			tokenFn: func(t *testing.T) string {
+				return generateTypedTestToken(t, "", "jti-456", time.Hour)
+			},
+			wantOK: false,
+		},
+		{
+			name: "ws token rejected as bearer",
+			tokenFn: func(t *testing.T) string {
+				return generateTypedTestToken(t, middleware.TokenTypeWS, "", 30*time.Second)
+			},
+			wantOK: false,
+		},
+		{
+			name: "access token accepted",
+			tokenFn: func(t *testing.T) string {
+				return generateTypedTestToken(t, middleware.TokenTypeAccess, "", time.Hour)
+			},
+			wantOK: true,
+		},
+		{
+			name: "legacy access token (no type, no JTI) accepted",
+			tokenFn: func(t *testing.T) string {
+				return generateTypedTestToken(t, "", "", time.Hour)
+			},
+			wantOK: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			req := newTestRequest()
+			req.RequestCtx.Request.Header.Set("Authorization", "Bearer "+tt.tokenFn(t))
+
+			authMiddleware := middleware.Auth(testJWTSecret)
+			result := authMiddleware(req)
+
+			if tt.wantOK {
+				require.NotNil(t, result, "access token should authenticate")
+			} else {
+				require.Nil(t, result, "non-access token must be rejected")
+				assert.Equal(t, fasthttp.StatusUnauthorized, req.RequestCtx.Response.StatusCode())
 			}
 		})
 	}
@@ -527,7 +642,7 @@ func TestAuth_MultipleMiddlewareChain(t *testing.T) {
 
 	req := newTestRequest()
 	req.RequestCtx.Request.Header.Set("Authorization", "Bearer "+token)
-	req.RequestCtx.Request.Header.Set("Origin", "https://example.com")
+	req.RequestCtx.Request.Header.Set("Origin", "http://localhost:3000")
 
 	// Apply CORS first
 	corsMiddleware := middleware.CORS(nil)
@@ -553,7 +668,7 @@ func TestAuth_MultipleMiddlewareChain(t *testing.T) {
 	assert.Equal(t, roleID, req.RequestCtx.UserValue(middleware.ContextKeyRoleID))
 
 	// Verify CORS headers are still present
-	assert.Equal(t, "https://example.com", string(req.RequestCtx.Response.Header.Peek("Access-Control-Allow-Origin")))
+	assert.Equal(t, "http://localhost:3000", string(req.RequestCtx.Response.Header.Peek("Access-Control-Allow-Origin")))
 }
 
 // generateTokenWithSecret creates a token signed with a specific secret.

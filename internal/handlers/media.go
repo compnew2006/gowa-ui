@@ -68,52 +68,68 @@ func (a *App) ensureMediaDir(subdir string) error {
 	return os.MkdirAll(path, 0755)
 }
 
-// getExtensionFromMimeType returns file extension based on mime type
-func getExtensionFromMimeType(mimeType string) string {
-	switch {
-	case strings.HasPrefix(mimeType, "image/jpeg"):
-		return ".jpg"
-	case strings.HasPrefix(mimeType, "image/png"):
-		return ".png"
-	case strings.HasPrefix(mimeType, "image/gif"):
-		return ".gif"
-	case strings.HasPrefix(mimeType, "image/webp"):
-		return ".webp"
-	case strings.HasPrefix(mimeType, "video/mp4"):
-		return ".mp4"
-	case strings.HasPrefix(mimeType, "video/3gpp"):
-		return ".3gp"
-	case strings.HasPrefix(mimeType, "audio/aac"):
-		return ".aac"
-	case strings.HasPrefix(mimeType, "audio/mp4"):
-		return ".m4a"
-	case strings.HasPrefix(mimeType, "audio/mpeg"):
-		return ".mp3"
-	case strings.HasPrefix(mimeType, "audio/amr"):
-		return ".amr"
-	case strings.HasPrefix(mimeType, "audio/ogg"):
-		return ".ogg"
-	case strings.HasPrefix(mimeType, "application/pdf"):
-		return ".pdf"
-	case strings.HasPrefix(mimeType, "application/vnd.ms-powerpoint"):
-		return ".ppt"
-	case strings.HasPrefix(mimeType, "application/msword"):
-		return ".doc"
-	case strings.HasPrefix(mimeType, "application/vnd.ms-excel"):
-		return ".xls"
-	case strings.HasPrefix(mimeType, "application/vnd.openxmlformats-officedocument.wordprocessingml"):
-		return ".docx"
-	case strings.HasPrefix(mimeType, "application/vnd.openxmlformats-officedocument.spreadsheetml"):
-		return ".xlsx"
-	case strings.HasPrefix(mimeType, "application/vnd.openxmlformats-officedocument.presentationml"):
-		return ".pptx"
-	case strings.HasPrefix(mimeType, "text/plain"):
-		return ".txt"
-	case strings.HasPrefix(mimeType, "text/html"):
-		return ".html"
-	default:
-		return ""
+// mimeExts is the single source of truth mapping media MIME types to their
+// canonical file extensions, matched by prefix so parameterized types like
+// "image/jpeg; charset=..." still resolve. The serving direction
+// (extension→MIME, see mimeFromExt) is derived from this table.
+var mimeExts = []struct {
+	Mime string
+	Ext  string
+}{
+	{"image/jpeg", ".jpg"},
+	{"image/png", ".png"},
+	{"image/gif", ".gif"},
+	{"image/webp", ".webp"},
+	{"video/mp4", ".mp4"},
+	{"video/3gpp", ".3gp"},
+	{"audio/aac", ".aac"},
+	{"audio/mp4", ".m4a"},
+	{"audio/mpeg", ".mp3"},
+	{"audio/amr", ".amr"},
+	{"audio/ogg", ".ogg"},
+	{"application/pdf", ".pdf"},
+	{"application/vnd.ms-powerpoint", ".ppt"},
+	{"application/msword", ".doc"},
+	{"application/vnd.ms-excel", ".xls"},
+	{"application/vnd.openxmlformats-officedocument.wordprocessingml.document", ".docx"},
+	{"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ".xlsx"},
+	{"application/vnd.openxmlformats-officedocument.presentationml.presentation", ".pptx"},
+	{"text/plain", ".txt"},
+	{"text/html", ".html"},
+}
+
+// mimeFromExt is the inverse of mimeExts (plus the .jpeg alias), used to pick
+// a Content-Type from a stored file's extension.
+var mimeFromExt = func() map[string]string {
+	m := make(map[string]string, len(mimeExts)+1)
+	for _, me := range mimeExts {
+		if _, dup := m[me.Ext]; !dup {
+			m[me.Ext] = me.Mime
+		}
 	}
+	m[".jpeg"] = "image/jpeg"
+	return m
+}()
+
+// getExtensionFromMimeType returns the canonical file extension for a media
+// MIME type, or "" when unknown.
+func getExtensionFromMimeType(mimeType string) string {
+	for _, me := range mimeExts {
+		if strings.HasPrefix(mimeType, me.Mime) {
+			return me.Ext
+		}
+	}
+	return ""
+}
+
+// sniffContentType returns the detected content type of data, examining at
+// most the first 512 bytes (the DetectContentType sniffing window).
+func sniffContentType(data []byte) string {
+	sniffLen := len(data)
+	if sniffLen > 512 {
+		sniffLen = 512
+	}
+	return http.DetectContentType(data[:sniffLen])
 }
 
 // DownloadAndSaveMedia downloads media from GOWA and saves it locally.
@@ -148,8 +164,9 @@ func (a *App) DownloadAndSaveMedia(ctx context.Context, mediaID string, mimeType
 			}
 			data, err = gowaClient.DownloadMedia(ctx, mediaID, "")
 		} else if strings.Contains(mediaID, "/") {
-			// Relative path — prepend base URL
-			baseURL := account.GowaBaseURL
+			// Relative path — prepend base URL. Server-side fetch: dial via
+			// the internal override when configured.
+			baseURL := GowaDialBaseURL(a.Config, account.GowaBaseURL)
 			if baseURL == "" {
 				baseURL = "http://localhost:3000"
 			}
@@ -210,11 +227,7 @@ func (a *App) writeMediaFile(data []byte, mimeType, ext string) (string, error) 
 func (a *App) saveMediaBytes(data []byte, mimeType string) (string, error) {
 	// Sniff the actual content type from the first 512 bytes. This catches
 	// wrong/missing MIME types from GOWA and uses the sniffed type instead.
-	sniffLen := 512
-	if len(data) < sniffLen {
-		sniffLen = len(data)
-	}
-	sniffType := http.DetectContentType(data[:sniffLen])
+	sniffType := sniffContentType(data)
 	// Use the sniffed type if the caller didn't provide a useful one. GOWA
 	// returns generic types ("image", "audio", "video", "document") without
 	// the slash subtype, which are NOT valid MIME types and break the frontend
@@ -237,6 +250,33 @@ func (a *App) saveMediaBytes(data []byte, mimeType string) (string, error) {
 	return relativePath, nil
 }
 
+// resolveWithinBase resolves a storage-relative path against baseDir with
+// directory-traversal protection: the cleaned, joined result must remain
+// beneath baseDir. It does not touch the filesystem — callers layer symlink
+// and existence checks on top (see resolveMediaPath / ServeMedia).
+func resolveWithinBase(baseDir, relPath string) (string, bool) {
+	fullPath, err := filepath.Abs(filepath.Join(baseDir, filepath.Clean(relPath)))
+	if err != nil || !strings.HasPrefix(fullPath, baseDir+string(os.PathSeparator)) {
+		return "", false
+	}
+	return fullPath, true
+}
+
+// resolveMediaPath validates a stored media path against the storage base
+// dir, rejecting directory traversal, missing files, and symlinks. Returns
+// the absolute path and true when the file is safe to read.
+func resolveMediaPath(baseDir, mediaURL string) (string, bool) {
+	fullPath, ok := resolveWithinBase(baseDir, mediaURL)
+	if !ok {
+		return "", false
+	}
+	info, err := os.Lstat(fullPath)
+	if err != nil || info.Mode()&os.ModeSymlink != 0 {
+		return "", false
+	}
+	return fullPath, true
+}
+
 // readLocalMedia resolves a storage-relative path against the media root with
 // directory-traversal and symlink protection, then reads and returns the file
 // bytes. ok is false when relPath is empty/invalid or the file is missing,
@@ -251,12 +291,8 @@ func (a *App) readLocalMedia(relPath string) ([]byte, bool) {
 		a.Log.Error("Storage configuration error", "error", err)
 		return nil, false
 	}
-	fullPath, err := filepath.Abs(filepath.Join(baseDir, filepath.Clean(relPath)))
-	if err != nil || !strings.HasPrefix(fullPath, baseDir+string(os.PathSeparator)) {
-		return nil, false
-	}
-	info, err := os.Lstat(fullPath)
-	if err != nil || info.Mode()&os.ModeSymlink != 0 {
+	fullPath, ok := resolveMediaPath(baseDir, relPath)
+	if !ok {
 		return nil, false
 	}
 	data, err := os.ReadFile(fullPath)
@@ -277,11 +313,8 @@ func (a *App) removeLocalMedia(relPath string) {
 	if err != nil {
 		return
 	}
-	fullPath, err := filepath.Abs(filepath.Join(baseDir, filepath.Clean(relPath)))
-	if err != nil || !strings.HasPrefix(fullPath, baseDir+string(os.PathSeparator)) {
-		return
-	}
-	if info, err := os.Lstat(fullPath); err != nil || info.Mode()&os.ModeSymlink != 0 {
+	fullPath, ok := resolveMediaPath(baseDir, relPath)
+	if !ok {
 		return
 	}
 	_ = os.Remove(fullPath)
@@ -364,8 +397,9 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 	} else {
 		// Security: prevent directory traversal and symlink attacks
 		filePath = filepath.Clean(message.MediaURL)
-		fullPath, err = filepath.Abs(filepath.Join(baseDir, filePath))
-		if err != nil || !strings.HasPrefix(fullPath, baseDir+string(os.PathSeparator)) {
+		var ok bool
+		fullPath, ok = resolveWithinBase(baseDir, filePath)
+		if !ok {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid file path", nil, "")
 		}
 
@@ -422,11 +456,7 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 						// Update the message in place. Sniff the real MIME
 						// type from the bytes (GOWA's mediaType is generic
 						// like "image", not a valid MIME type).
-						sniffLen := 512
-						if len(data) < sniffLen {
-							sniffLen = len(data)
-						}
-						sniffedType := http.DetectContentType(data[:sniffLen])
+						sniffedType := sniffContentType(data)
 						updates := map[string]any{
 							"media_url":       relativePath,
 							"media_mime_type": sniffedType,
@@ -466,49 +496,9 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 	// Determine content type: first try the file extension, then sniff the
 	// actual bytes if the extension is unknown (e.g. .bin from GOWA downloads).
 	ext := strings.ToLower(filepath.Ext(filePath))
-	contentType := "application/octet-stream"
-	switch ext {
-	case ".jpg", ".jpeg":
-		contentType = "image/jpeg"
-	case ".png":
-		contentType = "image/png"
-	case ".gif":
-		contentType = "image/gif"
-	case ".webp":
-		contentType = "image/webp"
-	case ".mp4":
-		contentType = "video/mp4"
-	case ".3gp":
-		contentType = "video/3gpp"
-	case ".mp3":
-		contentType = "audio/mpeg"
-	case ".aac":
-		contentType = "audio/aac"
-	case ".m4a":
-		contentType = "audio/mp4"
-	case ".ogg":
-		contentType = "audio/ogg"
-	case ".amr":
-		contentType = "audio/amr"
-	case ".pdf":
-		contentType = "application/pdf"
-	case ".doc":
-		contentType = "application/msword"
-	case ".docx":
-		contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-	case ".xls":
-		contentType = "application/vnd.ms-excel"
-	case ".xlsx":
-		contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-	case ".txt":
-		contentType = "text/plain"
-	default:
-		// Unknown extension (.bin, no extension, etc.) — sniff the first 512 bytes.
-		sniffLen := len(data)
-		if sniffLen > 512 {
-			sniffLen = 512
-		}
-		contentType = http.DetectContentType(data[:sniffLen])
+	contentType, knownExt := mimeFromExt[ext]
+	if !knownExt {
+		contentType = sniffContentType(data)
 	}
 
 	r.RequestCtx.Response.Header.Set("Content-Type", contentType)

@@ -2,21 +2,20 @@ package worker
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 	"github.com/compnew2006/gowa-ui/internal/config"
 	"github.com/compnew2006/gowa-ui/internal/contactutil"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/internal/queue"
 	"github.com/compnew2006/gowa-ui/internal/templateutil"
 	"github.com/compnew2006/gowa-ui/pkg/whatsapp"
+	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"github.com/zerodha/logf"
 	"gorm.io/gorm"
 )
@@ -83,6 +82,23 @@ func (w *Worker) HandleRecipientJob(ctx context.Context, job *queue.RecipientJob
 	if campaign.Status == models.CampaignStatusPaused || campaign.Status == models.CampaignStatusCancelled {
 		w.Log.Info("Campaign not active, skipping recipient", "campaign_id", job.CampaignID, "status", campaign.Status, "recipient_id", job.RecipientID)
 		return nil // Not an error, just skip
+	}
+
+	// Atomically claim the recipient (pending→sending). A paused-then-
+	// restarted campaign leaves the original jobs unread in the Redis Stream
+	// while StartCampaign enqueues a second copy — without this claim both
+	// jobs would send. RowsAffected==0 means another job already claimed (or
+	// finished) this recipient, so this one is a duplicate and must skip.
+	claim := w.DB.Model(&models.BulkMessageRecipient{}).
+		Where("id = ? AND status = ?", job.RecipientID, models.MessageStatusPending).
+		Update("status", models.MessageStatusSending)
+	if claim.Error != nil {
+		w.Log.Error("Failed to claim recipient", "error", claim.Error, "recipient_id", job.RecipientID)
+		return fmt.Errorf("failed to claim recipient: %w", claim.Error)
+	}
+	if claim.RowsAffected == 0 {
+		w.Log.Info("Recipient already claimed by another job, skipping duplicate", "campaign_id", job.CampaignID, "recipient_id", job.RecipientID)
+		return nil
 	}
 
 	// Get WhatsApp account
@@ -214,10 +230,12 @@ func (w *Worker) publishCampaignStats(ctx context.Context, campaignID, organizat
 
 // checkCampaignCompletion checks if all recipients are processed and marks campaign as completed
 func (w *Worker) checkCampaignCompletion(ctx context.Context, campaignID, organizationID uuid.UUID) {
-	// Count pending recipients
+	// Count recipients still awaiting an outcome. "sending" is the worker's
+	// in-flight claim state — the campaign is only complete once no recipient
+	// is pending OR being sent.
 	var pendingCount int64
 	w.DB.Model(&models.BulkMessageRecipient{}).
-		Where("campaign_id = ? AND status = ?", campaignID, models.MessageStatusPending).
+		Where("campaign_id = ? AND status IN (?, ?)", campaignID, models.MessageStatusPending, models.MessageStatusSending).
 		Count(&pendingCount)
 
 	// If no pending recipients, mark campaign as completed
@@ -257,117 +275,58 @@ func (w *Worker) checkCampaignCompletion(ctx context.Context, campaignID, organi
 }
 
 // sendTemplateMessage renders the template locally and sends it via GOWA as
-// text / media-with-caption / interactive buttons (same approach as the chat
-// template send path in internal/handlers).
+// text / media-with-caption / interactive buttons, using the shared render
+// engine in internal/templateutil (the same path as the chat template send in
+// internal/handlers).
 func (w *Worker) sendTemplateMessage(ctx context.Context, account *models.WhatsAppAccount, template *models.Template, recipient *models.BulkMessageRecipient, campaign *models.BulkMessageCampaign) (string, error) {
-	provider := w.resolveProvider(account)
-	waAccount := account.ToWAAccount()
-	rcpt := whatsapp.Recipient{Phone: recipient.PhoneNumber}
-
-	// Resolve body parameters into a map keyed by parameter name.
-	resolvedParams := templateutil.ResolveParams(template.BodyContent, recipient.TemplateParams)
-	bodyParams := make(map[string]string, len(resolvedParams))
-	paramNames := templateutil.ExtParamNames(template.BodyContent)
-	for i, val := range resolvedParams {
-		if i < len(paramNames) {
-			bodyParams[paramNames[i]] = val
-		} else {
-			bodyParams[fmt.Sprintf("%d", i+1)] = val
-		}
-	}
-	body := templateutil.ReplaceWithStringParams(template.BodyContent, bodyParams)
-
-	var parts []string
-	if template.HeaderType == "TEXT" && template.HeaderContent != "" {
-		// Resolve the header text parameter (if any). Prefer
-		// recipient.HeaderParams (new path, populated by AddRecipients) and
-		// fall back to a TemplateParams lookup for legacy recipient rows.
-		headerParams := bodyParams
-		if hNames := templateutil.ExtParamNames(template.HeaderContent); len(hNames) == 1 {
-			name := hNames[0]
-			if raw, ok := recipient.HeaderParams[name]; ok {
-				headerParams = map[string]string{name: fmt.Sprintf("%v", raw)}
-			} else if raw, ok := recipient.TemplateParams[name]; ok {
-				headerParams = map[string]string{name: fmt.Sprintf("%v", raw)}
-			}
-		}
-		if header := templateutil.ReplaceWithStringParams(template.HeaderContent, headerParams); header != "" {
-			parts = append(parts, "*"+header+"*")
-		}
-	}
-	if body != "" {
-		parts = append(parts, body)
-	}
-	if template.FooterContent != "" {
-		parts = append(parts, template.FooterContent)
+	if template == nil {
+		return "", fmt.Errorf("campaign template not found")
 	}
 
-	// Template buttons: quick replies become interactive buttons (when the
-	// provider supports them); URL buttons are appended as text lines.
-	var quickReplies []whatsapp.Button
-	for i, raw := range template.Buttons {
-		btn, ok := raw.(map[string]any)
-		if !ok {
-			continue
+	bodyParams := templateutil.ResolveNamedParams(template.BodyContent, recipient.TemplateParams)
+
+	// TEXT-header variables prefer recipient.HeaderParams (populated by
+	// AddRecipients) and fall back to TemplateParams for legacy recipient
+	// rows persisted before HeaderParams existed.
+	headerParams := make(map[string]string)
+	for _, name := range templateutil.ExtParamNames(template.HeaderContent) {
+		if raw, ok := recipient.HeaderParams[name]; ok {
+			headerParams[name] = fmt.Sprintf("%v", raw)
+		} else if raw, ok := recipient.TemplateParams[name]; ok {
+			headerParams[name] = fmt.Sprintf("%v", raw)
 		}
-		btnType, _ := btn["type"].(string)
-		label, _ := btn["text"].(string)
-		switch strings.ToUpper(btnType) {
-		case "QUICK_REPLY":
-			quickReplies = append(quickReplies, whatsapp.Button{ID: fmt.Sprintf("btn_%d", i), Title: label})
-		case "URL":
-			urlStr, _ := btn["url"].(string)
-			urlStr = templateutil.ReplaceWithStringParams(urlStr, bodyParams)
-			if urlStr != "" {
-				if label != "" {
-					parts = append(parts, label+": "+urlStr)
-				} else {
-					parts = append(parts, urlStr)
+	}
+
+	return templateutil.SendRenderedTemplate(ctx, templateutil.SendRequest{
+		Provider:  w.resolveProvider(account),
+		Account:   account.ToWAAccount(),
+		Recipient: whatsapp.Recipient{Phone: recipient.PhoneNumber},
+		Template:  template,
+		Params: templateutil.TemplateParams{
+			BodyParams:   bodyParams,
+			HeaderParams: headerParams,
+		},
+		Media: templateutil.TemplateMedia{
+			ID:       campaign.HeaderMediaID,
+			MimeType: campaign.HeaderMediaMimeType,
+			Filename: campaign.HeaderMediaFilename,
+			// Campaign header media lives on local disk; load it lazily so
+			// the file is only read when an upload is actually needed.
+			Load: func() []byte {
+				if campaign.HeaderMediaLocalPath == "" {
+					return nil
 				}
-			}
-		}
-	}
-
-	text := strings.Join(parts, "\n\n")
-
-	// Media header: upload the campaign's local file (falling back to the
-	// stored media reference) and send as media with the rendered caption.
-	if template.HeaderType == "IMAGE" || template.HeaderType == "VIDEO" || template.HeaderType == "DOCUMENT" {
-		mediaID := campaign.HeaderMediaID
-		if campaign.HeaderMediaLocalPath != "" {
-			basePath := "./media"
-			if w.Config != nil && w.Config.Storage.LocalPath != "" {
-				basePath = w.Config.Storage.LocalPath
-			}
-			mediaPath := filepath.Join(basePath, campaign.HeaderMediaLocalPath)
-			if fileData, readErr := os.ReadFile(mediaPath); readErr == nil && len(fileData) > 0 {
-				uploaded, upErr := provider.UploadMedia(ctx, waAccount, fileData, campaign.HeaderMediaMimeType, campaign.HeaderMediaFilename)
-				if upErr != nil {
-					return "", fmt.Errorf("failed to upload template header media: %w", upErr)
+				basePath := "./media"
+				if w.Config != nil && w.Config.Storage.LocalPath != "" {
+					basePath = w.Config.Storage.LocalPath
 				}
-				mediaID = uploaded
-			}
-		}
-		if mediaID != "" {
-			switch template.HeaderType {
-			case "IMAGE":
-				return provider.SendImageMessage(ctx, waAccount, rcpt, mediaID, text, "")
-			case "VIDEO":
-				return provider.SendVideoMessage(ctx, waAccount, rcpt, mediaID, text, "")
-			default:
-				return provider.SendDocumentMessage(ctx, waAccount, rcpt, mediaID, campaign.HeaderMediaFilename, text, "")
-			}
-		}
-	}
-
-	if len(quickReplies) > 0 {
-		wamid, err := provider.SendInteractiveButtons(ctx, waAccount, rcpt, text, quickReplies)
-		if err == nil || !errors.Is(err, whatsapp.ErrNotSupported) {
-			return wamid, err
-		}
-	}
-
-	return provider.SendTextMessage(ctx, waAccount, rcpt, text, "")
+				if fileData, err := os.ReadFile(filepath.Join(basePath, campaign.HeaderMediaLocalPath)); err == nil {
+					return fileData
+				}
+				return nil
+			},
+		},
+	})
 }
 
 // resolveProvider returns the WhatsApp provider (GOWA) for the given account.

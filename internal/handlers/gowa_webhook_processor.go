@@ -53,6 +53,12 @@ const (
 	// gowaWebhookErrMaxLen bounds the stored last_error so a huge error string
 	// can't bloat the row.
 	gowaWebhookErrMaxLen = 1000
+
+	// gowaWebhookRetryBaseDelay is the base of the exponential retry backoff:
+	// attempt N waits base << (N-1) — 5s, 10s, 20s, 40s. Without a backoff the
+	// drainAll loop re-claims a just-failed row immediately and burns all 5
+	// attempts in milliseconds.
+	gowaWebhookRetryBaseDelay = 5 * time.Second
 )
 
 // NewGowaWebhookProcessor creates the inbox drain processor. interval is the
@@ -156,8 +162,9 @@ func (p *GowaWebhookProcessor) ProcessBatch() int {
 	res := p.app.DB.Model(&batch).Clauses(clause.Returning{}).
 		Where(`id IN (SELECT id FROM gowa_webhook_events
 			WHERE status = ? AND deleted_at IS NULL
+			  AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
 			ORDER BY created_at LIMIT ? FOR UPDATE SKIP LOCKED)`,
-			models.GowaWebhookEventPending, gowaWebhookBatchSize).
+			models.GowaWebhookEventPending, time.Now(), gowaWebhookBatchSize).
 		Updates(map[string]any{
 			"status":   models.GowaWebhookEventProcessing,
 			"attempts": gorm.Expr("attempts + 1"),
@@ -276,8 +283,9 @@ func (p *GowaWebhookProcessor) finish(evt *models.GowaWebhookEvent, processErr e
 	}
 
 	if err := p.app.DB.Model(&models.GowaWebhookEvent{}).Where("id = ?", evt.ID).Updates(map[string]any{
-		"status":     models.GowaWebhookEventPending, // re-claimable on the next batch
-		"last_error": errStr,
+		"status":          models.GowaWebhookEventPending, // re-claimable once the backoff elapses
+		"last_error":      errStr,
+		"next_attempt_at": time.Now().Add(gowaWebhookRetryBaseDelay << uint(evt.Attempts-1)),
 	}).Error; err != nil {
 		p.app.Log.Error("Failed to requeue GOWA webhook event",
 			"error", err, "event_id", evt.ID)

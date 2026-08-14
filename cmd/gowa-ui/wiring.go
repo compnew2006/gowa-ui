@@ -148,7 +148,10 @@ func setupWARegistry(db *gorm.DB, cfg *config.Config, lo logf.Logger) *whatsapp.
 			return handlers.ResolveGowaCreds(db, cfg, orgID, baseURL)
 		},
 		func(baseURL, username, password string) whatsapp.Provider {
-			return gowa.New(baseURL, username, password)
+			// Registry keys and credential resolution stay on the public URL
+			// (so InvalidateGowa keys keep matching); only the dialed
+			// address is overridden.
+			return gowa.New(handlers.GowaDialBaseURL(cfg, baseURL), username, password)
 		},
 	)
 }

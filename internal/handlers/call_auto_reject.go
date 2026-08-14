@@ -5,11 +5,9 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/compnew2006/gowa-ui/internal/audit"
 	"github.com/compnew2006/gowa-ui/internal/contactutil"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/pkg/gowa"
-	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 )
 
@@ -186,18 +184,8 @@ type CallAutoRejectSettingsResponse struct {
 // GetCallAutoRejectSettings returns the effective call-auto-reject settings
 // for a WhatsApp account.
 func (a *App) GetCallAutoRejectSettings(r *fastglue.Request) error {
-	orgID, _, err := a.requireAuth(r, models.ResourceAccounts, models.ActionRead)
-	if err != nil {
-		return nil
-	}
-
-	id, err := parsePathUUID(r, "id", "account")
-	if err != nil {
-		return nil
-	}
-
-	account, err := findByIDAndOrg[models.WhatsAppAccount](a.DB, r, id, orgID, "Account")
-	if err != nil {
+	account, ok := a.getAccountSettingsBlock(r)
+	if !ok {
 		return nil
 	}
 
@@ -208,70 +196,36 @@ func (a *App) GetCallAutoRejectSettings(r *fastglue.Request) error {
 	})
 }
 
-// callAutoRejectSnapshot extracts the call_auto_reject block for audit diffing.
-func callAutoRejectSnapshot(settings models.JSONB) map[string]any {
-	block, _ := settings["call_auto_reject"].(map[string]any)
-	return map[string]any{"call_auto_reject": block}
-}
-
 // UpdateCallAutoRejectSettings replaces the account's call_auto_reject
 // settings block. The frontend always sends the full block, so this is a
 // full replacement — no per-field partial-update semantics.
 func (a *App) UpdateCallAutoRejectSettings(r *fastglue.Request) error {
-	orgID, userID, err := a.requireAuth(r, models.ResourceAccounts, models.ActionWrite)
-	if err != nil {
-		return nil
-	}
-
-	id, err := parsePathUUID(r, "id", "account")
-	if err != nil {
-		return nil
-	}
-
-	var req struct {
-		Enabled bool   `json:"enabled"`
-		Message string `json:"message"`
-	}
-	if err := json.Unmarshal(r.RequestCtx.PostBody(), &req); err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid request body", nil, "")
-	}
-
-	account, err := findByIDAndOrg[models.WhatsAppAccount](a.DB, r, id, orgID, "Account")
-	if err != nil {
-		return nil
-	}
-
-	if account.Settings == nil {
-		account.Settings = models.JSONB{}
-	}
-	oldSnapshot := callAutoRejectSnapshot(account.Settings)
-
-	// An explicit empty message disables the automated text; the rejection
-	// itself is governed solely by the enabled flag.
-	account.Settings["call_auto_reject"] = map[string]any{
-		"enabled": req.Enabled,
-		"message": strings.TrimSpace(req.Message),
-	}
-
-	if err := a.DB.Model(account).Update("settings", account.Settings).Error; err != nil {
-		a.Log.Error("Failed to update call-auto-reject settings", "error", err)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update settings", nil, "")
-	}
-
-	userName := audit.GetUserName(a.DB, userID)
-	audit.LogAudit(a.DB, orgID, userID, userName,
-		models.ResourceSettingsCallAutoReject, account.ID, models.AuditActionUpdated,
-		oldSnapshot, callAutoRejectSnapshot(account.Settings))
-
-	// Devices registered before call.offer existed keep their old webhook
-	// subscription on the GOWA server and never receive call events — repair
-	// the subscription whenever the feature is switched on.
-	if req.Enabled {
-		a.ensureCallOfferSubscription(account)
-	}
-
-	return r.SendEnvelope(map[string]any{
-		"message": "Settings updated successfully",
+	return a.updateAccountSettingsBlock(r, accountSettingsBlock{
+		Key:      "call_auto_reject",
+		Resource: models.ResourceSettingsCallAutoReject,
+		Decode: func(body []byte) (map[string]any, error) {
+			var req struct {
+				Enabled bool   `json:"enabled"`
+				Message string `json:"message"`
+			}
+			if err := decodeJSONSettingsBody(body, &req); err != nil {
+				return nil, err
+			}
+			// An explicit empty message disables the automated text; the
+			// rejection itself is governed solely by the enabled flag.
+			return map[string]any{
+				"enabled": req.Enabled,
+				"message": strings.TrimSpace(req.Message),
+			}, nil
+		},
+		AfterSave: func(a *App, account *models.WhatsAppAccount, block map[string]any) {
+			// Devices registered before call.offer existed keep their old
+			// webhook subscription on the GOWA server and never receive call
+			// events — repair the subscription whenever the feature is on.
+			if enabled, _ := block["enabled"].(bool); enabled {
+				a.ensureCallOfferSubscription(account)
+			}
+		},
 	})
 }
 

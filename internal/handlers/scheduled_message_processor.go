@@ -3,9 +3,11 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/compnew2006/gowa-ui/internal/models"
+	"github.com/compnew2006/gowa-ui/internal/templateutil"
 	"github.com/compnew2006/gowa-ui/internal/websocket"
 	"gorm.io/gorm/clause"
 )
@@ -126,10 +128,10 @@ func (p *ScheduledMessageProcessor) processOne(sm *models.ScheduledMessage) {
 		return
 	}
 
-	// Send synchronously so the outcome is known before the row is finalized.
-	// Attribute the message to the scheduling user, same as an agent send.
+	// Send synchronously (DefaultSendOptions) so the outcome is known before
+	// the row is finalized. Attribute the message to the scheduling user,
+	// same as an agent send.
 	opts := DefaultSendOptions()
-	opts.Async = false
 	opts.SentByUserID = &sm.CreatedBy
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -195,8 +197,38 @@ func (p *ScheduledMessageProcessor) buildOutgoingRequest(sm *models.ScheduledMes
 			First(&template).Error; err != nil {
 			return nil, fmt.Errorf("template not found")
 		}
+
+		// Re-check the validations the immediate send path (SendTemplateMessage)
+		// enforces. A contact may have opted out of marketing between
+		// scheduling and firing, and template params must still resolve.
+		if contact.MarketingOptOut && strings.EqualFold(template.Category, "MARKETING") {
+			return nil, fmt.Errorf("contact has opted out of marketing messages")
+		}
+		params := jsonbToStringMap(sm.TemplateParams)
+		paramNames := templateutil.ExtParamNames(template.BodyContent)
+		bodyParams := templateutil.ResolveParamsFromMap(paramNames, params)
+		var missingParams []string
+		for i, name := range paramNames {
+			if i >= len(bodyParams) || bodyParams[i] == "" {
+				missingParams = append(missingParams, name)
+			}
+		}
+		if len(missingParams) > 0 {
+			return nil, fmt.Errorf("missing template parameters: %s (expected: %v)",
+				strings.Join(missingParams, ", "), paramNames)
+		}
+		if template.HeaderType == "TEXT" {
+			headerNames := templateutil.ExtParamNames(template.HeaderContent)
+			if len(headerNames) > 1 {
+				return nil, fmt.Errorf("template header text contains %d variables; at most 1 is allowed", len(headerNames))
+			}
+			if len(headerNames) == 1 && params[headerNames[0]] == "" {
+				return nil, fmt.Errorf("missing header parameter %q", headerNames[0])
+			}
+		}
+
 		req.Template = &template
-		req.BodyParams = jsonbToStringMap(sm.TemplateParams)
+		req.BodyParams = params
 
 	default:
 		return nil, fmt.Errorf("unsupported message type: %s", sm.MessageType)

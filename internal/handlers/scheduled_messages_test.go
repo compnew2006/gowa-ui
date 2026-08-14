@@ -469,3 +469,87 @@ func TestScheduledMessageProcessor_RecoverStale(t *testing.T) {
 	require.NoError(t, app.DB.First(&storedFresh, "id = ?", fresh.ID).Error)
 	assert.Equal(t, models.ScheduledMessageStatusProcessing, storedFresh.Status, "recent processing row must be left alone")
 }
+
+// --- Scheduled template validation (parity with the immediate send path) ---
+
+// createScheduledTemplateFixture inserts a pending TEMPLATE-type scheduled
+// message due now.
+func createScheduledTemplateFixture(t *testing.T, app *handlers.App, orgID, contactID uuid.UUID, account string, userID uuid.UUID, templateID uuid.UUID, params models.JSONB) *models.ScheduledMessage {
+	t.Helper()
+
+	sm := &models.ScheduledMessage{
+		BaseModel:       models.BaseModel{ID: uuid.New()},
+		OrganizationID:  orgID,
+		WhatsAppAccount: account,
+		ContactID:       contactID,
+		MessageType:     models.MessageTypeTemplate,
+		TemplateID:      &templateID,
+		TemplateParams:  params,
+		ScheduledAt:     time.Now().Add(-time.Minute),
+		Status:          models.ScheduledMessageStatusPending,
+		CreatedBy:       userID,
+	}
+	require.NoError(t, app.DB.Create(sm).Error)
+	return sm
+}
+
+func TestScheduledMessageProcessor_ProcessDue_TemplateOptOutFails(t *testing.T) {
+	mock := newMockGowaServer()
+	defer mock.close()
+	app := newMsgTestApp(t, mock)
+
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("sched-tpl-optout")), testutil.WithPassword("password"))
+	account := createTestAccount(t, app, org.ID)
+	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name) // MARKETING, "Hello {{1}}"
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	// The contact opts out AFTER the message was scheduled — the processor
+	// must re-check at fire time, exactly like the immediate send path.
+	require.NoError(t, app.DB.Model(contact).Update("marketing_opt_out", true).Error)
+
+	sm := createScheduledTemplateFixture(t, app, org.ID, contact.ID, account.Name, user.ID, template.ID, models.JSONB{"1": "world"})
+
+	proc := handlers.NewScheduledMessageProcessor(app, time.Minute)
+	proc.ProcessDue(time.Now())
+
+	var stored models.ScheduledMessage
+	require.NoError(t, app.DB.First(&stored, "id = ?", sm.ID).Error)
+	assert.Equal(t, models.ScheduledMessageStatusFailed, stored.Status)
+	assert.Contains(t, stored.ErrorMessage, "opted out")
+
+	// Nothing was delivered to this contact. (Scoped on purpose: ProcessDue
+	// also drains due rows left over from earlier tests in the same process.)
+	var msgCount int64
+	app.DB.Model(&models.Message{}).Where("contact_id = ?", contact.ID).Count(&msgCount)
+	assert.Zero(t, msgCount)
+}
+
+func TestScheduledMessageProcessor_ProcessDue_TemplateMissingParamsFails(t *testing.T) {
+	mock := newMockGowaServer()
+	defer mock.close()
+	app := newMsgTestApp(t, mock)
+
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("sched-tpl-params")), testutil.WithPassword("password"))
+	account := createTestAccount(t, app, org.ID)
+	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name) // body needs {{1}}
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	// No parameters supplied — the immediate path 400s; the scheduled path
+	// must fail the row instead of sending "Hello ".
+	sm := createScheduledTemplateFixture(t, app, org.ID, contact.ID, account.Name, user.ID, template.ID, models.JSONB{})
+
+	proc := handlers.NewScheduledMessageProcessor(app, time.Minute)
+	proc.ProcessDue(time.Now())
+
+	var stored models.ScheduledMessage
+	require.NoError(t, app.DB.First(&stored, "id = ?", sm.ID).Error)
+	assert.Equal(t, models.ScheduledMessageStatusFailed, stored.Status)
+	assert.Contains(t, stored.ErrorMessage, "missing template parameters")
+
+	// Nothing was sent to this contact (scoped — see the opt-out test).
+	var msgCount int64
+	app.DB.Model(&models.Message{}).Where("contact_id = ?", contact.ID).Count(&msgCount)
+	assert.Zero(t, msgCount)
+}

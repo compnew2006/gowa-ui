@@ -5,8 +5,8 @@ import (
 	"encoding/hex"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/models"
+	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 	"golang.org/x/crypto/bcrypt"
@@ -236,7 +236,7 @@ func (a *App) CreateAPIKey(r *fastglue.Request) error {
 
 // DeleteAPIKey revokes an API key
 func (a *App) DeleteAPIKey(r *fastglue.Request) error {
-	orgID, _, err := a.requireAuth(r, models.ResourceAPIKeys, models.ActionDelete)
+	orgID, userID, err := a.requireAuth(r, models.ResourceAPIKeys, models.ActionDelete)
 	if err != nil {
 		return nil
 	}
@@ -244,6 +244,12 @@ func (a *App) DeleteAPIKey(r *fastglue.Request) error {
 	id, err := parsePathUUID(r, "id", "API key")
 	if err != nil {
 		return nil
+	}
+
+	// Load before deleting so the audit entry can identify what was revoked.
+	var apiKey models.APIKey
+	if err := a.DB.Where("id = ? AND organization_id = ?", id, orgID).First(&apiKey).Error; err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "API key not found", nil, "")
 	}
 
 	result := a.DB.Where("id = ? AND organization_id = ?", id, orgID).Delete(&models.APIKey{})
@@ -254,6 +260,11 @@ func (a *App) DeleteAPIKey(r *fastglue.Request) error {
 	if result.RowsAffected == 0 {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "API key not found", nil, "")
 	}
+
+	// Credential revocation is security-relevant and must be auditable.
+	a.logAudit(orgID, userID,
+		"api_key", apiKey.ID, models.AuditActionDeleted,
+		map[string]any{"name": apiKey.Name, "key_prefix": apiKey.KeyPrefix}, nil)
 
 	return r.SendEnvelope(map[string]string{"message": "API key deleted successfully"})
 }

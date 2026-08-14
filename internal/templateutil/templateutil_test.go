@@ -206,3 +206,46 @@ func TestValidateHeaderParamCount_TwoNamed(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "at most one variable")
 }
+
+func TestMergeParams_OverrideWins(t *testing.T) {
+	base := map[string]string{"1": "BODY-VAL", "name": "Alex"}
+	override := map[string]string{"1": "HEADER-VAL"}
+
+	merged := mergeParams(base, override)
+	assert.Equal(t, "HEADER-VAL", merged["1"], "override must win for shared keys")
+	assert.Equal(t, "Alex", merged["name"], "base keys must be preserved")
+}
+
+func TestMergeParams_EmptyOverrideReturnsBase(t *testing.T) {
+	base := map[string]string{"name": "Alex"}
+
+	assert.Equal(t, base, mergeParams(base, nil))
+	assert.Equal(t, base, mergeParams(base, map[string]string{}))
+}
+
+func TestReplaceAllParams(t *testing.T) {
+	assert.Equal(t,
+		"https://example.com/order/42?ref=42",
+		replaceAllParams("https://example.com/order/{{1}}?ref={{2}}", "42"))
+	// Values containing '$' must not undergo regexp expansion.
+	assert.Equal(t,
+		"https://example.com/?q=$1",
+		replaceAllParams("https://example.com/?q={{1}}", "$1"))
+	assert.Equal(t, "", replaceAllParams("", "42"))
+}
+
+func TestResolveNamedParams(t *testing.T) {
+	body := "Hi {{name}}, thanks for buying {{product}}!"
+	named := ResolveNamedParams(body, map[string]any{
+		"name":    "Alex",
+		"product": "Widget",
+		"unused":  "ignored",
+	})
+	assert.Equal(t, map[string]string{"name": "Alex", "product": "Widget"}, named)
+
+	// Missing values resolve to ""; empty sources return nil.
+	assert.Equal(t, map[string]string{"name": "", "product": "Widget"},
+		ResolveNamedParams(body, map[string]any{"product": "Widget"}))
+	assert.Nil(t, ResolveNamedParams(body, nil))
+	assert.Nil(t, ResolveNamedParams("no params here", map[string]any{"name": "Alex"}))
+}

@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { navigationSections } from '@/components/layout/navigation'
 
 // Permission-based route meta type
 declare module 'vue-router' {
@@ -243,30 +244,20 @@ const router = createRouter({
   ]
 })
 
-// Navigation items with permissions in priority order (matches AppLayout.vue)
-// Used to find the first accessible route for a user
-const navigationOrder = [
-  { path: '/', permission: 'analytics' },
-  { path: '/chat', permission: 'chat' },
-  { path: '/analytics/agents', permission: 'analytics.agents' },
-  { path: '/campaigns', permission: 'campaigns' },
-  { path: '/settings', permission: 'settings.general', childPaths: [
-    { path: '/settings', permission: 'settings.general' },
-    { path: '/settings/accounts', permission: 'accounts' },
-    { path: '/settings/canned-responses', permission: 'canned_responses' },
-    { path: '/settings/contacts', permission: 'contacts.manage' },
-    { path: '/settings/tags', permission: 'tags' },
-    { path: '/settings/templates', permission: 'templates' },
-    { path: '/settings/teams', permission: 'teams' },
-    { path: '/settings/users', permission: 'users' },
-    { path: '/settings/roles', permission: 'roles' },
-    { path: '/settings/api-keys', permission: 'api_keys' },
-    { path: '/settings/webhooks', permission: 'webhooks' },
-    { path: '/settings/custom-actions', permission: 'custom_actions' },
-    { path: '/settings/sso', permission: 'settings.sso' },
-    { path: '/settings/gowa-servers', permission: 'gowa_instances' }
-  ]}
-]
+// Navigation items with permissions in priority order, flattened from the
+// sidebar's navigation sections (AppLayout.vue) so the sidebar and the
+// first-accessible-route fallback can never drift apart. Used to find the
+// first accessible route for a user.
+const navigationOrder = navigationSections.flatMap((section) =>
+  section.items.map((item) => ({
+    path: item.path,
+    permission: item.permission ?? '',
+    childPaths: item.children?.map((child) => ({
+      path: child.path,
+      permission: child.permission ?? ''
+    }))
+  }))
+)
 
 // Find the first accessible route for the user
 function getFirstAccessibleRoute(authStore: ReturnType<typeof useAuthStore>): string {

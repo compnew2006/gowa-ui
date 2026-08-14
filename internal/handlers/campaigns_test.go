@@ -157,7 +157,10 @@ func TestApp_CreateCampaign_WithScheduledAt(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("create-scheduled")), testutil.WithPassword("password"))
+	// Roleless users cannot pass requireAuth (no default-role fallback), so
+	// HTTP-level campaign tests attach a role explicitly.
+	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "campaign-writer", []string{"campaigns:read", "campaigns:write", "campaigns:execute"})
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("create-scheduled")), testutil.WithPassword("password"), testutil.WithRoleID(&role.ID))
 	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("scheduled-account"))
 	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
 
@@ -181,6 +184,9 @@ func TestApp_CreateCampaign_WithScheduledAt(t *testing.T) {
 	err = json.Unmarshal(testutil.GetResponseBody(req), &resp)
 	require.NoError(t, err)
 	assert.NotNil(t, resp.Data.ScheduledAt)
+	// A campaign created with a schedule must land in "scheduled" so the
+	// CampaignSchedulerProcessor fires it when due.
+	assert.Equal(t, models.CampaignStatusScheduled, resp.Data.Status)
 }
 
 func TestApp_CreateCampaign_InvalidTemplateID(t *testing.T) {
@@ -1006,4 +1012,122 @@ func TestApp_Campaign_CrossOrgIsolation(t *testing.T) {
 	err := app.GetCampaign(req)
 	require.NoError(t, err)
 	assert.Equal(t, fasthttp.StatusNotFound, testutil.GetResponseStatusCode(req))
+}
+
+// --- Scheduled campaigns & scheduler processor ---
+
+func TestApp_UpdateCampaign_Reschedule(t *testing.T) {
+	mockQueue := testutil.NewMockQueue()
+	app := newTestApp(t, withQueue(mockQueue))
+	org := testutil.CreateTestOrganization(t, app.DB)
+	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "campaign-rescheduler", []string{"campaigns:read", "campaigns:write", "campaigns:execute"})
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("reschedule")), testutil.WithPassword("password"), testutil.WithRoleID(&role.ID))
+	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("reschedule-account"))
+	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
+	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, models.CampaignStatusScheduled)
+
+	// Reschedule: still scheduled, new timestamp sticks.
+	newTime := time.Now().Add(48 * time.Hour).Format(time.RFC3339)
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"name":             "Rescheduled",
+		"whatsapp_account": account.Name,
+		"template_id":      template.ID.String(),
+		"scheduled_at":     newTime,
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", campaign.ID.String())
+
+	require.NoError(t, app.UpdateCampaign(req))
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp struct {
+		Data handlers.CampaignResponse `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+	assert.Equal(t, models.CampaignStatusScheduled, resp.Data.Status)
+	require.NotNil(t, resp.Data.ScheduledAt)
+
+	// Clearing the schedule returns the campaign to a manual-start draft.
+	req2 := testutil.NewJSONRequest(t, map[string]any{
+		"name":             "Unscheduled",
+		"whatsapp_account": account.Name,
+		"template_id":      template.ID.String(),
+	})
+	testutil.SetAuthContext(req2, org.ID, user.ID)
+	testutil.SetPathParam(req2, "id", campaign.ID.String())
+
+	require.NoError(t, app.UpdateCampaign(req2))
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req2))
+	// Fresh struct: the response omits a null scheduled_at (omitempty), so
+	// unmarshalling into the previous struct would keep the stale timestamp.
+	var resp2 struct {
+		Data handlers.CampaignResponse `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req2), &resp2))
+	assert.Equal(t, models.CampaignStatusDraft, resp2.Data.Status)
+	assert.Nil(t, resp2.Data.ScheduledAt)
+}
+
+func TestCampaignSchedulerProcessor_ProcessDue_FiresDueCampaign(t *testing.T) {
+	mockQueue := testutil.NewMockQueue()
+	app := newTestApp(t, withQueue(mockQueue))
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("sched-fire")), testutil.WithPassword("password"))
+	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("sched-fire-account"))
+	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
+
+	due := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, models.CampaignStatusScheduled)
+	require.NoError(t, app.DB.Model(due).Update("scheduled_at", time.Now().Add(-time.Minute)).Error)
+	future := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, models.CampaignStatusScheduled)
+	require.NoError(t, app.DB.Model(future).Update("scheduled_at", time.Now().Add(time.Hour)).Error)
+
+	createTestRecipient(t, app, due.ID, "1111111111", models.MessageStatusPending)
+	createTestRecipient(t, app, due.ID, "2222222222", models.MessageStatusPending)
+
+	proc := handlers.NewCampaignSchedulerProcessor(app, time.Minute)
+	proc.ProcessDue(time.Now())
+
+	var stored models.BulkMessageCampaign
+	require.NoError(t, app.DB.First(&stored, "id = ?", due.ID).Error)
+	assert.Equal(t, models.CampaignStatusProcessing, stored.Status)
+	require.NotNil(t, stored.StartedAt)
+	assert.Equal(t, 2, mockQueue.JobCount(), "one job per pending recipient")
+
+	var storedFuture models.BulkMessageCampaign
+	require.NoError(t, app.DB.First(&storedFuture, "id = ?", future.ID).Error)
+	assert.Equal(t, models.CampaignStatusScheduled, storedFuture.Status)
+
+	// A second tick must not re-fire the claimed campaign (atomic claim) —
+	// re-enqueueing would double-send.
+	proc.ProcessDue(time.Now())
+	assert.Equal(t, 2, mockQueue.JobCount())
+	var storedAgain models.BulkMessageCampaign
+	require.NoError(t, app.DB.First(&storedAgain, "id = ?", due.ID).Error)
+	assert.Equal(t, models.CampaignStatusProcessing, storedAgain.Status)
+}
+
+func TestCampaignSchedulerProcessor_RecoverStaleRecipients(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("stale-rcpt")), testutil.WithPassword("password"))
+	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("stale-rcpt-account"))
+	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
+	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, models.CampaignStatusProcessing)
+
+	stale := createTestRecipient(t, app, campaign.ID, "1111111111", models.MessageStatusSending)
+	require.NoError(t, app.DB.Model(&models.BulkMessageRecipient{}).
+		Where("id = ?", stale.ID).
+		UpdateColumn("updated_at", time.Now().Add(-15*time.Minute)).Error)
+
+	proc := handlers.NewCampaignSchedulerProcessor(app, time.Minute)
+	proc.RecoverStaleRecipients(time.Now())
+
+	var stored models.BulkMessageRecipient
+	require.NoError(t, app.DB.First(&stored, "id = ?", stale.ID).Error)
+	assert.Equal(t, models.MessageStatusFailed, stored.Status)
+	assert.NotEmpty(t, stored.ErrorMessage)
+
+	var storedCampaign models.BulkMessageCampaign
+	require.NoError(t, app.DB.First(&storedCampaign, "id = ?", campaign.ID).Error)
+	assert.Equal(t, 1, storedCampaign.FailedCount)
 }

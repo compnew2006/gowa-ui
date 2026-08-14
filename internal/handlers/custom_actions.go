@@ -300,7 +300,9 @@ func (a *App) ExecuteCustomAction(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid contact ID", nil, "")
 	}
 
-	contact, err := findByIDAndOrg[models.Contact](a.DB, r, contactID, orgID, "Contact")
+	// Get contact details — scoped through scopeAssignedContact so actions
+	// only run on conversations the caller can see.
+	contact, err := a.findScopedContact(r, contactID, userID, orgID)
 	if err != nil {
 		return nil
 	}

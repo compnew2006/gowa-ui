@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/handlers"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/test/testutil"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
@@ -136,7 +136,10 @@ func TestApp_ReleaseChat_NonOwnerNonAdmin_Forbidden(t *testing.T) {
 	testutil.SetPathParam(req, "id", contact.ID.String())
 
 	_ = app.ReleaseChat(req)
-	testutil.AssertErrorResponse(t, req, fasthttp.StatusForbidden, "not allowed to release")
+	// loadContactByPath routes through scopeAssignedContact: an agent
+	// without contacts:read cannot even see another agent's chat, so the
+	// release is refused as "not found" (no existence leak).
+	testutil.AssertErrorResponse(t, req, fasthttp.StatusNotFound, "Contact not found")
 	// Contact must be untouched.
 	var updated models.Contact
 	require.NoError(t, app.DB.First(&updated, "id = ?", contact.ID).Error)
@@ -255,7 +258,10 @@ func TestApp_BulkReleaseChats_OwnerReleasesOwn(t *testing.T) {
 		"agent must be able to bulk-release their own chats")
 	require.Len(t, resp.Data.Failed, 1, "the other-agent chat must fail, not silently release")
 	assert.Equal(t, c3.ID.String(), resp.Data.Failed[0].ContactID)
-	assert.Equal(t, "not authorized", resp.Data.Failed[0].Reason)
+	// The handler pre-filters the batch through scopeAssignedContact: an
+	// agent without contacts:read cannot see another agent's chat, so it is
+	// reported as "not found" rather than "not authorized".
+	assert.Equal(t, "not found", resp.Data.Failed[0].Reason)
 
 	// c3 stays assigned to `other`.
 	var c3After models.Contact

@@ -228,7 +228,17 @@ export function useMessageFormat(options: UseMessageFormatOptions) {
   }
 
   function isMediaMessage(message: Message): boolean {
-    return ['image', 'video', 'audio', 'document'].includes(message.message_type)
+    if (!['image', 'video', 'audio', 'document'].includes(message.message_type)) {
+      return false
+    }
+    // Media that can render (file local or lazily recoverable from the
+    // provider) is drawn by the explicit per-type branches in ChatView.
+    // Returning true for it would ALSO match the "media unavailable"
+    // fallback card at the end of the chain, double-rendering the message
+    // (player + fallback). Only unreachable media — history-synced media in
+    // status/newsletter conversations — should report true so the fallback
+    // card renders instead of a broken player.
+    return !shouldRenderMedia(message)
   }
 
   // Revoked messages keep their media_url (the backend only flips status and

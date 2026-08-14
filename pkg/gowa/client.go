@@ -40,10 +40,22 @@ type Client struct {
 	idCounter  uint64
 }
 
+// gowaTransport is the shared connection pool behind every GOWA client.
+// Clients are built per instance/credentials — and ad hoc for instance
+// management endpoints and probes — so leaving them on http.DefaultTransport
+// (MaxIdleConnsPerHost=2) would churn connections under concurrent sends;
+// one shared tuned transport keeps idle connections warm across all of them.
+var gowaTransport = func() *http.Transport {
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.MaxIdleConnsPerHost = 32
+	return t
+}()
+
 // New creates a new GOWA client targeting the given REST API base URL.
 func New(baseURL, username, password string) *Client {
 	return &Client{
 		httpClient: &http.Client{
+			Transport: gowaTransport,
 			// No client-level Timeout: media sends/downloads set their own
 			// long deadline (MediaSendTimeout) via the request context, and
 			// doRequest applies DefaultTimeout to everything that doesn't

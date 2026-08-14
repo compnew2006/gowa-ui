@@ -165,6 +165,11 @@ func DefaultPermissions() []Permission {
 		{Resource: ResourceTags, Action: ActionRead, Description: "View tags"},
 		{Resource: ResourceTags, Action: ActionWrite, Description: "Create and edit tags"},
 		{Resource: ResourceTags, Action: ActionDelete, Description: "Delete tags"},
+		// Tag import/export — without these in the catalog the generic
+		// import/export endpoints' tags:import / tags:export checks could only
+		// ever pass for super admins.
+		{Resource: ResourceTags, Action: ActionImport, Description: "Import tags"},
+		{Resource: ResourceTags, Action: ActionExport, Description: "Export tags"},
 
 		// Analytics
 		{Resource: ResourceAnalytics, Action: ActionRead, Description: "View analytics dashboard"},
@@ -237,7 +242,7 @@ func SystemRolePermissions() map[string][]string {
 		"contacts:read", "contacts:write", "contacts:delete", "contacts:import", "contacts:export",
 		"contacts.manage:read",
 		// Tags
-		"tags:read", "tags:write", "tags:delete",
+		"tags:read", "tags:write", "tags:delete", "tags:import", "tags:export",
 		// Analytics
 		"analytics:read", "analytics:write", "analytics:delete", "analytics.agents:read",
 		// Webhooks

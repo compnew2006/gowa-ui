@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	appcrypto "github.com/compnew2006/gowa-ui/internal/crypto"
 	"github.com/compnew2006/gowa-ui/internal/models"
+	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 	"golang.org/x/oauth2"
@@ -133,6 +133,21 @@ func (a *App) GetPublicSSOProviders(r *fastglue.Request) error {
 	return r.SendEnvelope(result)
 }
 
+// userBelongsToOrg reports whether orgID is the user's home org or appears in
+// their user_organizations memberships. Super admins belong to every org,
+// mirroring SwitchOrg. It is the gate that keeps one org's SSO config from
+// minting sessions for another org's users.
+func (a *App) userBelongsToOrg(user *models.User, orgID uuid.UUID) bool {
+	if user.IsSuperAdmin || user.OrganizationID == orgID {
+		return true
+	}
+	var count int64
+	a.DB.Model(&models.UserOrganization{}).
+		Where("user_id = ? AND organization_id = ?", user.ID, orgID).
+		Count(&count)
+	return count > 0
+}
+
 // InitSSO initiates OAuth flow for a provider
 func (a *App) InitSSO(r *fastglue.Request) error {
 	provider := r.RequestCtx.UserValue("provider").(string)
@@ -144,9 +159,12 @@ func (a *App) InitSSO(r *fastglue.Request) error {
 		}
 	}
 
-	// Get first enabled SSO provider config for this provider type
-	var ssoConfig models.SSOProvider
-	if err := a.DB.Where("provider = ? AND is_enabled = ?", provider, true).First(&ssoConfig).Error; err != nil {
+	// Pick the enabled config for this provider. An optional email hint
+	// routes multi-org deployments to the user's own org when its
+	// allowed_domains covers the email domain; otherwise the first enabled
+	// config is used (single-org deployments).
+	ssoConfig, ok := a.selectSSOConfig(provider, string(r.RequestCtx.QueryArgs().Peek("email")))
+	if !ok {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "SSO provider not configured or disabled", nil, "")
 	}
 
@@ -179,6 +197,40 @@ func (a *App) InitSSO(r *fastglue.Request) error {
 	authURL := oauthConfig.AuthCodeURL(nonce, oauth2.AccessTypeOffline)
 	r.RequestCtx.Redirect(authURL, fasthttp.StatusTemporaryRedirect)
 	return nil
+}
+
+// selectSSOConfig picks which org's provider config to use for an SSO
+// initiation. When an email hint is supplied and several orgs configure the
+// same provider, the config whose allowed_domains contains the email's
+// domain wins; without a usable hint it falls back to the first enabled
+// config (single-org deployments, and pre-hint clients).
+func (a *App) selectSSOConfig(provider, emailHint string) (models.SSOProvider, bool) {
+	var providers []models.SSOProvider
+	if err := a.DB.Where("provider = ? AND is_enabled = ?", provider, true).
+		Order("created_at ASC").
+		Find(&providers).Error; err != nil || len(providers) == 0 {
+		return models.SSOProvider{}, false
+	}
+	if domain := emailDomain(emailHint); domain != "" {
+		for _, p := range providers {
+			for _, d := range strings.Split(p.AllowedDomains, ",") {
+				if strings.EqualFold(strings.TrimSpace(d), domain) {
+					return p, true
+				}
+			}
+		}
+	}
+	return providers[0], true
+}
+
+// emailDomain extracts and lowercases the domain of an email address,
+// returning "" when there is none.
+func emailDomain(email string) string {
+	at := strings.LastIndex(email, "@")
+	if at < 0 || at == len(email)-1 {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSpace(email[at+1:]))
 }
 
 // CallbackSSO handles OAuth callback
@@ -279,7 +331,7 @@ func (a *App) CallbackSSO(r *fastglue.Request) error {
 		}
 	}
 
-	// Find user by email (across all orgs, like regular login)
+	// Find user by email (emails are globally unique; org fit is verified below)
 	var user models.User
 	if err := a.DB.Where("email = ?", userInfo.Email).First(&user).Error; err != nil {
 		// User doesn't exist - check if auto-create is enabled
@@ -332,18 +384,62 @@ func (a *App) CallbackSSO(r *fastglue.Request) error {
 		}
 
 		a.Log.Info("Created SSO user", "user_id", user.ID, "email", user.Email, "provider", provider)
+		a.logAudit(orgID, user.ID,
+			"user", user.ID, models.AuditActionCreated, nil,
+			map[string]any{"sso_provider": provider, "auto_created": true})
 	} else {
-		// User exists - update SSO info if not set
-		if user.SSOProvider == "" {
-			user.SSOProvider = provider
-			user.SSOProviderID = userInfo.ID
-			a.DB.Save(&user)
+		// Existing user. The SSO config's org must actually be one of the
+		// user's orgs — emails are looked up globally, so without this check
+		// any org's IdP could mint a session for any user of any other org
+		// (cross-org account takeover).
+		if !a.userBelongsToOrg(&user, orgID) {
+			a.Log.Warn("SSO login rejected: user is not a member of the SSO organization",
+				"user_id", user.ID, "org_id", orgID, "provider", provider)
+			a.redirectWithError(r, "User not found. Contact your administrator.")
+			return nil
 		}
 
-		// Check if user is active
+		// Check if user is active (before linkage checks — a disabled account
+		// is rejected as disabled regardless of its SSO linkage state).
 		if !user.IsActive {
 			a.redirectWithError(r, "Account is disabled")
 			return nil
+		}
+
+		if user.SSOProvider == "" {
+			// Auto-link is only safe for providers that verify email
+			// ownership themselves (google/microsoft/github/facebook). A
+			// "custom" IdP asserts whatever email its admin configures, so
+			// linking a password-only account from one would let that admin
+			// take the account over.
+			if provider == "custom" {
+				a.Log.Warn("SSO login rejected: refusing to auto-link password-only account via custom IdP",
+					"user_id", user.ID, "org_id", orgID)
+				a.redirectWithError(r, "This account uses password sign-in. Ask your administrator to enable SSO for it.")
+				return nil
+			}
+			user.SSOProvider = provider
+			user.SSOProviderID = userInfo.ID
+			a.DB.Save(&user)
+			a.logAudit(orgID, user.ID,
+				"user", user.ID, models.AuditActionUpdated, nil,
+				map[string]any{"sso_linked_provider": provider})
+		} else {
+			// Already linked: the provider and the provider-side subject must
+			// both match, otherwise a different IdP (or a different account at
+			// the same provider) is asserting this email.
+			if user.SSOProvider != provider {
+				a.Log.Warn("SSO login rejected: account linked to a different provider",
+					"user_id", user.ID, "linked", user.SSOProvider, "attempted", provider)
+				a.redirectWithError(r, "This account is linked to a different sign-in method. Contact your administrator.")
+				return nil
+			}
+			if user.SSOProviderID != "" && userInfo.ID != "" && user.SSOProviderID != userInfo.ID {
+				a.Log.Warn("SSO login rejected: provider subject ID mismatch",
+					"user_id", user.ID, "provider", provider)
+				a.redirectWithError(r, "This sign-in does not match your account. Contact your administrator.")
+				return nil
+			}
 		}
 	}
 
@@ -408,7 +504,7 @@ func (a *App) GetSSOSettings(r *fastglue.Request) error {
 
 // UpdateSSOProvider creates or updates an SSO provider config (admin only)
 func (a *App) UpdateSSOProvider(r *fastglue.Request) error {
-	orgID, _, err := a.requireAuth(r, models.ResourceSettingsSSO, models.ActionWrite)
+	orgID, userID, err := a.requireAuth(r, models.ResourceSettingsSSO, models.ActionWrite)
 	if err != nil {
 		return nil
 	}
@@ -454,6 +550,7 @@ func (a *App) UpdateSSOProvider(r *fastglue.Request) error {
 
 	// Update fields
 	ssoConfig.ClientID = req.ClientID
+	secretRotated := false
 	if req.ClientSecret != "" {
 		enc, err := appcrypto.Encrypt(req.ClientSecret, a.Config.App.EncryptionKey)
 		if err != nil {
@@ -461,6 +558,7 @@ func (a *App) UpdateSSOProvider(r *fastglue.Request) error {
 			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to save SSO configuration", nil, "")
 		}
 		ssoConfig.ClientSecret = enc
+		secretRotated = true
 	}
 	ssoConfig.IsEnabled = req.IsEnabled
 	ssoConfig.AllowAutoCreate = req.AllowAutoCreate
@@ -476,6 +574,14 @@ func (a *App) UpdateSSOProvider(r *fastglue.Request) error {
 	if err := a.DB.Save(&ssoConfig).Error; err != nil {
 		a.Log.Error("Failed to save SSO provider", "error", err, "provider", provider)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to save SSO settings", nil, "")
+	}
+
+	// Secret rotations are security-relevant: a rotated client secret can
+	// redirect the org's SSO trust to a different IdP tenant.
+	if secretRotated {
+		a.logAudit(orgID, userID,
+			models.ResourceSettingsSSO, ssoConfig.ID, models.AuditActionUpdated, nil,
+			map[string]any{"client_secret_rotated": true, "provider": provider})
 	}
 
 	return r.SendEnvelope(SSOProviderResponse{

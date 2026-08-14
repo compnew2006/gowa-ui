@@ -40,6 +40,24 @@ type RefreshRequest struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
+// minPasswordLength is the enforced minimum for every path that sets a
+// password (self-register, admin create/update, self change). Login does not
+// enforce it — existing users with shorter passwords must keep signing in.
+// The `validate:"min=12"` struct tags are not wired to a validator, so this
+// constant is where the policy actually lives.
+const minPasswordLength = 12
+
+// validateNewPassword enforces the password policy for password-setting
+// paths. Returns false (and sends the 400 envelope) when too short.
+func validateNewPassword(r *fastglue.Request, password string) bool {
+	if len(password) < minPasswordLength {
+		_ = r.SendErrorEnvelope(fasthttp.StatusBadRequest,
+			fmt.Sprintf("Password must be at least %d characters", minPasswordLength), nil, "")
+		return false
+	}
+	return true
+}
+
 // Login authenticates a user and returns tokens
 func (a *App) Login(r *fastglue.Request) error {
 	var req LoginRequest
@@ -93,6 +111,10 @@ func (a *App) Login(r *fastglue.Request) error {
 func (a *App) Register(r *fastglue.Request) error {
 	var req RegisterRequest
 	if err := a.decodeRequest(r, &req); err != nil {
+		return nil
+	}
+
+	if !validateNewPassword(r, req.Password) {
 		return nil
 	}
 
@@ -150,6 +172,9 @@ func (a *App) Register(r *fastglue.Request) error {
 		}
 
 		a.Log.Info("Existing user joined organization", "user_id", existingUser.ID, "org_id", req.OrganizationID)
+		a.logAudit(req.OrganizationID, existingUser.ID,
+			"user", existingUser.ID, models.AuditActionUpdated, nil,
+			map[string]any{"joined_organization": req.OrganizationID.String()})
 
 		// Set org context to the new org for token generation
 		existingUser.OrganizationID = req.OrganizationID
@@ -240,15 +265,24 @@ func (a *App) RefreshToken(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid token claims", nil, "")
 	}
 
+	// Token-type confusion: only refresh tokens may mint new tokens — a
+	// stolen access token must not be replayable here. Access and WS tokens
+	// carry no JTI, so requiring the JTI also rejects legacy access tokens
+	// issued before token_type existed (legacy refresh tokens keep theirs).
+	if claims.TokenType != middleware.TokenTypeRefresh && claims.TokenType != "" {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid refresh token", nil, "")
+	}
+	if claims.ID == "" {
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid refresh token", nil, "")
+	}
+
 	// Validate JTI in Redis (single-use: delete on consumption)
-	if claims.ID != "" {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		deleted, err := a.Redis.Del(ctx, refreshTokenKey(claims.ID)).Result()
-		if err != nil || deleted == 0 {
-			// Token was already used or revoked
-			return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Refresh token has been revoked", nil, "")
-		}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	deleted, err := a.Redis.Del(ctx, refreshTokenKey(claims.ID)).Result()
+	if err != nil || deleted == 0 {
+		// Token was already used or revoked
+		return r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Refresh token has been revoked", nil, "")
 	}
 
 	// Get user
@@ -296,6 +330,7 @@ func (a *App) generateAccessToken(user *models.User) (string, error) {
 		// H3: stamp the current revocation version so a later bump invalidates
 		// this token via middleware.AuthWithDBAndRedis.
 		TokenVersion: a.currentTokenVersion(user.ID),
+		TokenType:    middleware.TokenTypeAccess,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Duration(a.Config.JWT.AccessExpiryMins) * time.Minute)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -320,6 +355,7 @@ func (a *App) generateRefreshToken(user *models.User) (string, error) {
 		// H3: version the refresh token too so bumpTokenVersion revokes it
 		// alongside access tokens (defense-in-depth on top of the JTI denylist).
 		TokenVersion: a.currentTokenVersion(user.ID),
+		TokenType:    middleware.TokenTypeRefresh,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        jti,
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiry)),
@@ -593,6 +629,7 @@ func (a *App) GetWSToken(r *fastglue.Request) error {
 	claims := middleware.JWTClaims{
 		UserID:         userID,
 		OrganizationID: orgID,
+		TokenType:      middleware.TokenTypeWS,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(30 * time.Second)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

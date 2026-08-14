@@ -47,6 +47,9 @@ type processorHandles struct {
 
 	gowaWebhook     *handlers.GowaWebhookProcessor
 	gowaWebhookStop context.CancelFunc
+
+	campaignScheduler     *handlers.CampaignSchedulerProcessor
+	campaignSchedulerStop context.CancelFunc
 }
 
 // startProcessors starts the three periodic background processors (chat-reset
@@ -88,6 +91,14 @@ func startProcessors(app *handlers.App, lo logf.Logger) *processorHandles {
 	go gowaWebhookProcessor.Start(gowaWebhookCtx)
 	lo.Info("GOWA webhook inbox processor started")
 
+	// Start the scheduled-campaign processor (polls every minute, claims due
+	// scheduled campaigns and enqueues their recipients; also recovers
+	// recipients stranded in "sending" by a crashed worker).
+	campaignSchedulerProcessor := handlers.NewCampaignSchedulerProcessor(app, time.Minute)
+	campaignSchedulerCtx, campaignSchedulerCancel := context.WithCancel(context.Background())
+	go campaignSchedulerProcessor.Start(campaignSchedulerCtx)
+	lo.Info("Campaign scheduler processor started")
+
 	return &processorHandles{
 		chatReset:     chatResetProcessor,
 		chatResetStop: chatResetCancel,
@@ -100,6 +111,9 @@ func startProcessors(app *handlers.App, lo logf.Logger) *processorHandles {
 
 		gowaWebhook:     gowaWebhookProcessor,
 		gowaWebhookStop: gowaWebhookCancel,
+
+		campaignScheduler:     campaignSchedulerProcessor,
+		campaignSchedulerStop: campaignSchedulerCancel,
 	}
 }
 
@@ -185,6 +199,12 @@ func gracefulShutdown(
 	procs.gowaWebhookStop()
 	procs.gowaWebhook.Stop()
 	lo.Info("GOWA webhook inbox processor stopped")
+
+	// Stop campaign scheduler processor
+	lo.Info("Stopping campaign scheduler processor...")
+	procs.campaignSchedulerStop()
+	procs.campaignScheduler.Stop()
+	lo.Info("Campaign scheduler processor stopped")
 
 	// Stop workers first
 	if workerCancel != nil {

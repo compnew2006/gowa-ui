@@ -1,6 +1,7 @@
 package handlers_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -104,6 +105,14 @@ func (m *mockGowaServer) setError(msg string) {
 	defer m.mu.Unlock()
 	m.returnError = true
 	m.errorMessage = msg
+}
+
+// clearError restores the mock server's default success envelope.
+func (m *mockGowaServer) clearError() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.returnError = false
+	m.errorMessage = ""
 }
 
 // setDevicesResponse makes GET /devices return the given devices. Passing nil
@@ -628,9 +637,9 @@ func TestApp_SendOutgoingMessage_AsyncOption(t *testing.T) {
 		Content: "Async message",
 	}
 
-	// Use async options
+	// Use async options (opt-in: the default is sync per the wamid invariant)
 	opts := handlers.DefaultSendOptions()
-	assert.True(t, opts.Async)
+	opts.Async = true
 
 	msg, err := app.SendOutgoingMessage(ctx, req, opts)
 
@@ -766,7 +775,7 @@ func TestDefaultSendOptions(t *testing.T) {
 
 	assert.True(t, opts.BroadcastWebSocket)
 	assert.True(t, opts.DispatchWebhook)
-	assert.True(t, opts.Async)
+	assert.False(t, opts.Async)
 	assert.Nil(t, opts.SentByUserID)
 }
 
@@ -784,7 +793,7 @@ func TestAPISendOptions(t *testing.T) {
 
 	assert.False(t, opts.BroadcastWebSocket)
 	assert.True(t, opts.DispatchWebhook)
-	assert.True(t, opts.Async)
+	assert.False(t, opts.Async)
 	assert.Nil(t, opts.SentByUserID)
 }
 
@@ -1077,4 +1086,48 @@ func TestApp_SendOutgoingMessage_SyncFailedCarriesError(t *testing.T) {
 	require.NotNil(t, msg)
 	assert.Equal(t, models.MessageStatusFailed, msg.Status)
 	assert.Contains(t, msg.ErrorMessage, "send rejected")
+}
+
+func TestSendOutgoingMessage_PreviewOnlyBumpedOnSuccess(t *testing.T) {
+	mock := newMockGowaServer()
+	defer mock.close()
+	app := newMsgTestApp(t, mock)
+
+	org := testutil.CreateTestOrganization(t, app.DB)
+	account := createTestAccount(t, app, org.ID)
+	failedContact := testutil.CreateTestContact(t, app.DB, org.ID)
+	sentContact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	opts := handlers.DefaultSendOptions()
+	opts.Async = false // know the outcome synchronously
+
+	// Failed send: GOWA rejects.
+	mock.setError("device disconnected")
+	_, err := app.SendOutgoingMessage(context.Background(), handlers.OutgoingMessageRequest{
+		Account: account,
+		Contact: failedContact,
+		Type:    models.MessageTypeText,
+		Content: "this will fail",
+	}, opts)
+	require.NoError(t, err) // send errors are recorded on the Message row, not returned
+
+	// Successful send.
+	mock.clearError()
+	_, err = app.SendOutgoingMessage(context.Background(), handlers.OutgoingMessageRequest{
+		Account: account,
+		Contact: sentContact,
+		Type:    models.MessageTypeText,
+		Content: "this will go",
+	}, opts)
+	require.NoError(t, err)
+
+	var freshFailed models.Contact
+	require.NoError(t, app.DB.First(&freshFailed, "id = ?", failedContact.ID).Error)
+	assert.Empty(t, freshFailed.LastMessagePreview, "failed send must not bump the sidebar preview")
+	assert.Nil(t, freshFailed.LastMessageAt)
+
+	var freshSent models.Contact
+	require.NoError(t, app.DB.First(&freshSent, "id = ?", sentContact.ID).Error)
+	assert.Equal(t, "this will go", freshSent.LastMessagePreview)
+	require.NotNil(t, freshSent.LastMessageAt)
 }

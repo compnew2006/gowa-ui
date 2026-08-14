@@ -1,10 +1,9 @@
 package handlers
 
 import (
-	"encoding/json"
+	"errors"
 	"strings"
 
-	"github.com/compnew2006/gowa-ui/internal/audit"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
@@ -24,18 +23,8 @@ type CloseRatingSettingsResponse struct {
 // WhatsApp account. Per-account because each number belongs to a different
 // branch with its own staff, wording and address.
 func (a *App) GetCloseRatingSettings(r *fastglue.Request) error {
-	orgID, _, err := a.requireAuth(r, models.ResourceAccounts, models.ActionRead)
-	if err != nil {
-		return nil
-	}
-
-	id, err := parsePathUUID(r, "id", "account")
-	if err != nil {
-		return nil
-	}
-
-	account, err := findByIDAndOrg[models.WhatsAppAccount](a.DB, r, id, orgID, "Account")
-	if err != nil {
+	account, ok := a.getAccountSettingsBlock(r)
+	if !ok {
 		return nil
 	}
 
@@ -53,82 +42,49 @@ func (a *App) GetCloseRatingSettings(r *fastglue.Request) error {
 	})
 }
 
-// closeRatingSnapshot extracts the close_rating block for audit diffing.
-func closeRatingSnapshot(settings models.JSONB) map[string]any {
-	block, _ := settings["close_rating"].(map[string]any)
-	return map[string]any{"close_rating": block}
-}
-
 // UpdateCloseRatingSettings replaces the account's close_rating settings
 // block. The frontend always sends the full block, so this is a full
 // replacement — no per-field partial-update semantics.
 func (a *App) UpdateCloseRatingSettings(r *fastglue.Request) error {
-	orgID, userID, err := a.requireAuth(r, models.ResourceAccounts, models.ActionWrite)
-	if err != nil {
-		return nil
-	}
+	return a.updateAccountSettingsBlock(r, accountSettingsBlock{
+		Key:      "close_rating",
+		Resource: models.ResourceSettingsCloseRating,
+		Decode: func(body []byte) (map[string]any, error) {
+			var req struct {
+				Enabled     bool           `json:"enabled"`
+				WindowHours int            `json:"window_hours"`
+				Prompt      string         `json:"prompt"`
+				Thanks      string         `json:"thanks"`
+				Lexicon     map[string]int `json:"lexicon"`
+			}
+			if err := decodeJSONSettingsBody(body, &req); err != nil {
+				return nil, err
+			}
 
-	id, err := parsePathUUID(r, "id", "account")
-	if err != nil {
-		return nil
-	}
+			if req.WindowHours < 1 || req.WindowHours > maxCloseRatingWindowHours {
+				return nil, errors.New("window_hours must be between 1 and 720")
+			}
+			lexicon := map[string]any{}
+			for word, rating := range req.Lexicon {
+				if rating < 1 || rating > 5 {
+					return nil, errors.New("Lexicon ratings must be between 1 and 5")
+				}
+				if w := strings.TrimSpace(word); w != "" {
+					lexicon[w] = rating
+				}
+			}
 
-	var req struct {
-		Enabled     bool           `json:"enabled"`
-		WindowHours int            `json:"window_hours"`
-		Prompt      string         `json:"prompt"`
-		Thanks      string         `json:"thanks"`
-		Lexicon     map[string]int `json:"lexicon"`
-	}
-	if err := json.Unmarshal(r.RequestCtx.PostBody(), &req); err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid request body", nil, "")
-	}
-
-	if req.WindowHours < 1 || req.WindowHours > maxCloseRatingWindowHours {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "window_hours must be between 1 and 720", nil, "")
-	}
-	lexicon := map[string]any{}
-	for word, rating := range req.Lexicon {
-		if rating < 1 || rating > 5 {
-			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Lexicon ratings must be between 1 and 5", nil, "")
-		}
-		if w := strings.TrimSpace(word); w != "" {
-			lexicon[w] = rating
-		}
-	}
-
-	account, err := findByIDAndOrg[models.WhatsAppAccount](a.DB, r, id, orgID, "Account")
-	if err != nil {
-		return nil
-	}
-
-	if account.Settings == nil {
-		account.Settings = models.JSONB{}
-	}
-	oldSnapshot := closeRatingSnapshot(account.Settings)
-
-	// Empty prompt falls back to the built-in default at send time; an empty
-	// thanks explicitly disables the thank-you message (parse-side contract).
-	account.Settings["close_rating"] = map[string]any{
-		"enabled":      req.Enabled,
-		"window_hours": req.WindowHours,
-		"prompt":       strings.TrimSpace(req.Prompt),
-		"thanks":       strings.TrimSpace(req.Thanks),
-		"lexicon":      lexicon,
-	}
-
-	if err := a.DB.Model(account).Update("settings", account.Settings).Error; err != nil {
-		a.Log.Error("Failed to update close-rating settings", "error", err)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update settings", nil, "")
-	}
-
-	userName := audit.GetUserName(a.DB, userID)
-	audit.LogAudit(a.DB, orgID, userID, userName,
-		models.ResourceSettingsCloseRating, account.ID, models.AuditActionUpdated,
-		oldSnapshot, closeRatingSnapshot(account.Settings))
-
-	return r.SendEnvelope(map[string]any{
-		"message": "Settings updated successfully",
+			// Empty prompt falls back to the built-in default at send time;
+			// an empty thanks explicitly disables the thank-you message
+			// (parse-side contract).
+			return map[string]any{
+				"enabled":      req.Enabled,
+				"window_hours": req.WindowHours,
+				"prompt":       strings.TrimSpace(req.Prompt),
+				"thanks":       strings.TrimSpace(req.Thanks),
+				"lexicon":      lexicon,
+			}, nil
+		},
 	})
 }
 

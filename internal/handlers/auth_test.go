@@ -1,6 +1,7 @@
 package handlers_test
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 	"time"
@@ -16,6 +17,17 @@ import (
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 )
+
+// seedRefreshJTI registers the deterministic JTI used by
+// testutil.GenerateTestRefreshToken in Redis so the token passes the
+// single-use consumption check.
+func seedRefreshJTI(t *testing.T, app *handlers.App, user *models.User) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	require.NoError(t, app.Redis.Set(ctx,
+		"refresh:"+testutil.TestRefreshJTI(user), user.ID.String(), time.Hour).Err())
+}
 
 func TestApp_Login_Success(t *testing.T) {
 	app := newTestApp(t)
@@ -227,7 +239,7 @@ func TestApp_Register_ExistingUser_JoinsNewOrg(t *testing.T) {
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
 	email := testutil.UniqueEmail("multiorg")
-	testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(email), testutil.WithPassword("password123"))
+	testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(email), testutil.WithPassword("password-123456"))
 
 	// Create a second org with a default role
 	org2 := testutil.CreateTestOrganization(t, app.DB)
@@ -235,7 +247,7 @@ func TestApp_Register_ExistingUser_JoinsNewOrg(t *testing.T) {
 
 	req := testutil.NewJSONRequest(t, map[string]any{
 		"email":           email,
-		"password":        "password123",
+		"password":        "password-123456",
 		"full_name":       "Same User",
 		"organization_id": org2.ID.String(),
 	})
@@ -265,6 +277,7 @@ func TestApp_RefreshToken_Success(t *testing.T) {
 	org := testutil.CreateTestOrganization(t, app.DB)
 	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("refresh")), testutil.WithPassword("password123"))
 	refreshToken := testutil.GenerateTestRefreshToken(t, user, testutil.TestJWTSecret, 7*24*time.Hour)
+	seedRefreshJTI(t, app, user)
 
 	req := testutil.NewJSONRequest(t, map[string]string{
 		"refresh_token": refreshToken,
@@ -331,6 +344,7 @@ func TestApp_RefreshToken_UserNotFound(t *testing.T) {
 		Email:          "fake@example.com",
 	}
 	token := testutil.GenerateTestRefreshToken(t, fakeUser, testutil.TestJWTSecret, 7*24*time.Hour)
+	seedRefreshJTI(t, app, fakeUser)
 
 	req := testutil.NewJSONRequest(t, map[string]string{
 		"refresh_token": token,
@@ -346,6 +360,7 @@ func TestApp_RefreshToken_DisabledUser(t *testing.T) {
 	org := testutil.CreateTestOrganization(t, app.DB)
 	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("disabled")), testutil.WithPassword("password123"), testutil.WithInactive())
 	token := testutil.GenerateTestRefreshToken(t, user, testutil.TestJWTSecret, 7*24*time.Hour)
+	seedRefreshJTI(t, app, user)
 
 	req := testutil.NewJSONRequest(t, map[string]string{
 		"refresh_token": token,

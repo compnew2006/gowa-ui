@@ -11,6 +11,7 @@ import (
 
 	"github.com/compnew2006/gowa-ui/internal/contactutil"
 	"github.com/compnew2006/gowa-ui/internal/models"
+	"github.com/compnew2006/gowa-ui/internal/websocket"
 	"github.com/compnew2006/gowa-ui/pkg/gowa"
 	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
@@ -86,7 +87,7 @@ func (a *App) resolveGowaInstance(r *fastglue.Request, orgID uuid.UUID) (gowaIns
 		return gowaInstanceBundle{}, false
 	}
 	instance.DecryptCredentials(a.Config.App.EncryptionKey)
-	client := gowa.New(instance.BaseURL, instance.Username, instance.Password)
+	client := gowa.New(GowaDialBaseURL(a.Config, instance.BaseURL), instance.Username, instance.Password)
 	return gowaInstanceBundle{instance: instance, client: client}, true
 }
 
@@ -155,8 +156,10 @@ func (a *App) CreateGowaInstance(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "name and base_url are required", nil, "")
 	}
 
-	// Probe the GOWA server before saving — validate URL + auth work.
-	probe := gowa.New(in.BaseURL, in.Username, in.Password)
+	// Probe the GOWA server before saving — validate URL + auth work. Dial
+	// via the internal override when configured, matching what runtime API
+	// calls will actually use.
+	probe := gowa.New(GowaDialBaseURL(a.Config, in.BaseURL), in.Username, in.Password)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if _, err := probe.ListDevices(ctx); err != nil {
@@ -1011,6 +1014,46 @@ func (a *App) cleanupGowaDeviceAccounts(orgID uuid.UUID, baseURL, deviceID strin
 	}
 }
 
+// updateGowaDeviceAccountStatus syncs WhatsAppAccount.Status for every
+// account bound to a GOWA device after an API-triggered lifecycle action
+// (logout / reconnect). The connection-webhook path does this in
+// processGowaConnection, but API actions that succeed without GOWA emitting
+// a webhook would otherwise leave a stale "active" status in the UI. Also
+// broadcasts the same gowa_connection event the webhook path sends.
+func (a *App) updateGowaDeviceAccountStatus(orgID uuid.UUID, baseURL, deviceID, newStatus string, connected bool) {
+	normalized := strings.TrimRight(baseURL, "/")
+	var accounts []models.WhatsAppAccount
+	if err := a.DB.Where("organization_id = ? AND gowa_device_id = ?", orgID, deviceID).Find(&accounts).Error; err != nil {
+		a.Log.Error("updateGowaDeviceAccountStatus: lookup failed", "device_id", deviceID, "error", err)
+		return
+	}
+	for i := range accounts {
+		acc := accounts[i]
+		if strings.TrimRight(acc.GowaBaseURL, "/") != normalized {
+			// Same device id on a different server — leave it alone.
+			continue
+		}
+		if err := a.DB.Model(&models.WhatsAppAccount{}).
+			Where("id = ?", acc.ID).
+			Update("status", newStatus).Error; err != nil {
+			a.Log.Error("Failed to update account status after device lifecycle action",
+				"account_id", acc.ID, "device_id", deviceID, "new_status", newStatus, "error", err)
+			continue
+		}
+		if a.WSHub != nil {
+			a.WSHub.BroadcastToOrg(acc.OrganizationID, websocket.WSMessage{
+				Type: "gowa_connection",
+				Payload: map[string]any{
+					"account_id": acc.ID,
+					"device_id":  deviceID,
+					"status":     newStatus,
+					"connected":  connected,
+				},
+			})
+		}
+	}
+}
+
 // GowaInstanceDeviceQR fetches a login QR (as a base64 data URI) for a device.
 // GET /api/gowa/servers/{id}/devices/{deviceId}/qr
 func (a *App) GowaInstanceDeviceQR(r *fastglue.Request) error {
@@ -1156,6 +1199,9 @@ func (a *App) GowaInstanceDeviceLogout(r *fastglue.Request) error {
 		a.Log.Error("Failed to logout GOWA device", "error", err, "device", deviceID)
 		return r.SendErrorEnvelope(fasthttp.StatusBadGateway, "Failed to logout device on GOWA", nil, "")
 	}
+	// GOWA may not emit a connection webhook for an API-triggered logout —
+	// sync the account status directly so the UI reflects the session ending.
+	a.updateGowaDeviceAccountStatus(orgID, bundle.instance.BaseURL, deviceID, "disconnected", false)
 	a.logAudit(orgID, userID, "devices", uuid.Nil, models.AuditActionUpdated, nil, map[string]any{
 		"device_id": deviceID, "action": "logout",
 	})
@@ -1181,6 +1227,9 @@ func (a *App) GowaInstanceDeviceReconnect(r *fastglue.Request) error {
 		a.Log.Error("Failed to reconnect GOWA device", "error", err, "device", deviceID)
 		return r.SendErrorEnvelope(fasthttp.StatusBadGateway, "Failed to reconnect device on GOWA", nil, "")
 	}
+	// A reconnect is an attempt in progress — mark reconnecting now; the
+	// "active" status lands via the connection webhook once it completes.
+	a.updateGowaDeviceAccountStatus(orgID, bundle.instance.BaseURL, deviceID, "reconnecting", false)
 	a.logAudit(orgID, userID, "devices", uuid.Nil, models.AuditActionUpdated, nil, map[string]any{
 		"device_id": deviceID, "action": "reconnect",
 	})

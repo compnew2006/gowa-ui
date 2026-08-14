@@ -73,3 +73,11 @@ docker/.env
 gowa/.env
 
 testsprite_tests/tmp/config.json
+
+# Secrets and build artifacts that must never be tracked
+*.env
+!docker/.env.example
+!frontend/.env.example
+!gowa/.env.example
+!gowa copy/.env.example
+/gowa-ui-linux

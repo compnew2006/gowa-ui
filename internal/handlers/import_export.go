@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/internal/utils"
+	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 	"gorm.io/gorm"
@@ -107,15 +107,16 @@ var exportConfigs = map[string]ExportConfig{
 		},
 	},
 	"tags": {
+		// models.Tag has no description column — only name/color/created_at
+		// exist. Listing a nonexistent column breaks the export SQL.
 		Model:          &models.Tag{},
 		Resource:       "tags",
-		AllowedColumns: []string{"name", "color", "description", "created_at"},
-		DefaultColumns: []string{"name", "color", "description"},
+		AllowedColumns: []string{"name", "color", "created_at"},
+		DefaultColumns: []string{"name", "color"},
 		ColumnLabels: map[string]string{
-			"name":        "Name",
-			"color":       "Color",
-			"description": "Description",
-			"created_at":  "Created At",
+			"name":       "Name",
+			"color":      "Color",
+			"created_at": "Created At",
 		},
 	},
 }
@@ -170,7 +171,7 @@ var importConfigs = map[string]ImportConfig{
 		Model:           &models.Tag{},
 		Resource:        "tags",
 		RequiredColumns: []string{"name"},
-		OptionalColumns: []string{"color", "description"},
+		OptionalColumns: []string{"color"},
 		UniqueColumn:    "name",
 	},
 }
@@ -191,8 +192,8 @@ func (a *App) ExportData(r *fastglue.Request) error {
 	}
 
 	var req ExportRequest
-	if err := json.Unmarshal(r.RequestCtx.PostBody(), &req); err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid request body", nil, "")
+	if err := a.decodeRequest(r, &req); err != nil {
+		return nil
 	}
 
 	// Get export config
@@ -236,7 +237,8 @@ func (a *App) ExportData(r *fastglue.Request) error {
 			// Use ILIKE for case-insensitive search on profile_name
 			query = query.Where("phone_number LIKE ? OR profile_name ILIKE ?", searchPattern, searchPattern)
 		case "tags":
-			query = query.Where("name ILIKE ? OR description ILIKE ?", searchPattern, searchPattern)
+			// models.Tag has no description column — search on name only.
+			query = query.Where("name ILIKE ?", searchPattern)
 		}
 	}
 
@@ -258,7 +260,7 @@ func (a *App) ExportData(r *fastglue.Request) error {
 		}
 	}
 
-	// Select only needed columns plus id for scoping.
+	// Select only needed columns.
 	// Build the list from server-controlled AllowedColumns to prevent SQL injection.
 	// This ensures only server-defined strings are passed to GORM, not user input.
 	safeColumns := make([]string, 0, len(columns))
@@ -267,8 +269,9 @@ func (a *App) ExportData(r *fastglue.Request) error {
 			safeColumns = append(safeColumns, col)
 		}
 	}
-	selectCols := append([]string{"id"}, safeColumns...)
-	query = query.Select(selectCols)
+	// No surrogate "id" is prepended to the select: composite-key models
+	// (tags) have no id column, and the row loop below never reads one.
+	query = query.Select(safeColumns)
 
 	// Execute query
 	rows, err := query.Rows()
@@ -296,8 +299,8 @@ func (a *App) ExportData(r *fastglue.Request) error {
 	// Write rows
 	for rows.Next() {
 		// Create a slice of any to scan into
-		values := make([]any, len(selectCols))
-		valuePtrs := make([]any, len(selectCols))
+		values := make([]any, len(safeColumns))
+		valuePtrs := make([]any, len(safeColumns))
 		for i := range values {
 			valuePtrs[i] = &values[i]
 		}
@@ -306,10 +309,10 @@ func (a *App) ExportData(r *fastglue.Request) error {
 			continue
 		}
 
-		// Convert to CSV row (skip id column which is at index 0)
+		// Convert to CSV row
 		csvRow := make([]string, len(safeColumns))
 		for i, col := range safeColumns {
-			val := values[i+1] // +1 to skip id
+			val := values[i]
 
 			// Apply transform if available
 			if transform, ok := config.ColumnTransform[col]; ok {

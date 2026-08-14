@@ -62,6 +62,10 @@ type GowaWebhookEvent struct {
 	Status GowaWebhookEventStatus `gorm:"size:20;default:pending;index" json:"status"`
 	// Attempts increments on each claim; compared against MaxAttempts.
 	Attempts int `gorm:"default:0" json:"attempts"`
+	// NextAttemptAt is the retry backoff gate set on failure: the claim
+	// query skips pending rows whose next attempt is still in the future.
+	// NULL (or past) means claimable now.
+	NextAttemptAt *time.Time `json:"next_attempt_at,omitempty"`
 	// LastError captures the most recent processing failure (dead-letter cause).
 	LastError string `gorm:"type:text" json:"last_error,omitempty"`
 	// ProcessedAt is set when Status flips to processed.

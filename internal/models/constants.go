@@ -49,6 +49,12 @@ const (
 	MessageStatusFailed    MessageStatus = "failed"
 	MessageStatusReceived  MessageStatus = "received"
 
+	// MessageStatusSending marks a campaign recipient claimed by a worker
+	// (pending→sending claim in HandleRecipientJob). Used only on
+	// BulkMessageRecipient.Status — chat messages go straight to a terminal
+	// status in finalizeMessageSend.
+	MessageStatusSending MessageStatus = "sending"
+
 	// MessageStatusRevoked marks a message that was unsent/deleted for
 	// everyone (GOWA revoke, "delete for everyone"). Both the inbound
 	// message.revoked webhook and the outbound revoke handler set this so

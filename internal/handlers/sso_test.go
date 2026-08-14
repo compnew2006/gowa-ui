@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/config"
 	"github.com/compnew2006/gowa-ui/internal/handlers"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/test/testutil"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
@@ -479,8 +479,14 @@ func TestApp_CallbackSSO_CustomProvider_ExistingUser_LoginSuccess(t *testing.T) 
 		p.AllowAutoCreate = false
 	})
 
-	// Pre-create the user matching the userinfo response.
+	// Pre-create the user matching the userinfo response, already linked to
+	// this provider+subject. (Password-only accounts are no longer auto-linked
+	// from a custom IdP — see the takeover tests in security_audit_fixes_test.go.)
 	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(email))
+	require.NoError(t, app.DB.Model(user).Updates(map[string]any{
+		"sso_provider":    "custom",
+		"sso_provider_id": fake.UserID,
+	}).Error)
 
 	nonce := "good-nonce"
 	state := handlers.SSOState{
@@ -509,7 +515,7 @@ func TestApp_CallbackSSO_CustomProvider_ExistingUser_LoginSuccess(t *testing.T) 
 	assert.Contains(t, loc, "/auth/sso/callback")
 	assert.NotContains(t, loc, "access_token", "token must not be exposed in URL")
 
-	// Existing user got SSO fields populated.
+	// Linked user keeps SSO fields.
 	var refreshed models.User
 	require.NoError(t, app.DB.Where("id = ?", user.ID).First(&refreshed).Error)
 	assert.Equal(t, "custom", refreshed.SSOProvider)

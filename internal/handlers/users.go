@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"fmt"
 	"net/mail"
 	"time"
 
@@ -22,6 +23,9 @@ type UserRequest struct {
 	FullName string     `json:"full_name"`
 	RoleID   *uuid.UUID `json:"role_id"`
 	IsActive *bool      `json:"is_active"`
+	// CurrentPassword is required when a user changes their OWN password via
+	// this endpoint (admins changing someone else's password are exempt).
+	CurrentPassword string `json:"current_password"`
 	// WhatsAppAccountIDs replaces the user's account assignments when present.
 	// nil = leave assignments untouched; empty slice = clear all assignments
 	// (restoring full org visibility).
@@ -288,9 +292,10 @@ func (a *App) findOrgUserWithRole(r *fastglue.Request, orgID, id uuid.UUID) (mod
 	return user, user.OrganizationID != orgID, nil
 }
 
-// GetUser returns a single user
+// GetUser returns a single user. Users may always read their own record;
+// reading anyone else's requires users:read.
 func (a *App) GetUser(r *fastglue.Request) error {
-	orgID, err := a.requireOrgID(r)
+	orgID, userID, err := a.requireOrgAndUserID(r)
 	if err != nil {
 		return nil
 	}
@@ -298,6 +303,10 @@ func (a *App) GetUser(r *fastglue.Request) error {
 	id, err := parsePathUUID(r, "id", "user")
 	if err != nil {
 		return nil
+	}
+
+	if userID != id && !a.HasPermission(userID, models.ResourceUsers, models.ActionRead, orgID) {
+		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Insufficient permissions", nil, "")
 	}
 
 	// Query via user_organizations to find both native and cross-org members.
@@ -341,6 +350,10 @@ func (a *App) CreateUser(r *fastglue.Request) error {
 	// Validate required fields
 	if req.Email == "" || req.Password == "" || req.FullName == "" {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Email, password, and full_name are required", nil, "")
+	}
+
+	if !validateNewPassword(r, req.Password) {
+		return nil
 	}
 
 	// Validate email format
@@ -607,6 +620,19 @@ func (a *App) UpdateUser(r *fastglue.Request) error {
 		user.FullName = req.FullName
 	}
 	if req.Password != "" {
+		// A user changing their own password via this endpoint must prove
+		// knowledge of the current one — same policy as ChangePassword.
+		if currentUserID == id {
+			if req.CurrentPassword == "" {
+				return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "current_password is required to change your own password", nil, "")
+			}
+			if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.CurrentPassword)); err != nil {
+				return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Current password is incorrect", nil, "")
+			}
+		}
+		if !validateNewPassword(r, req.Password) {
+			return nil
+		}
 		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 		if err != nil {
 			a.Log.Error("Failed to hash password", "error", err)
@@ -634,11 +660,13 @@ func (a *App) UpdateUser(r *fastglue.Request) error {
 		user.Role = nil // Clear the preloaded role to prevent GORM from using the old association
 	}
 
+	deactivated := false
 	if req.IsActive != nil {
 		// Prevent user from deactivating themselves
 		if currentUserID == id && !*req.IsActive {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Cannot deactivate yourself", nil, "")
 		}
+		deactivated = !*req.IsActive && user.IsActive
 		user.IsActive = *req.IsActive
 	}
 
@@ -657,6 +685,16 @@ func (a *App) UpdateUser(r *fastglue.Request) error {
 	if err := a.DB.Save(&user).Error; err != nil {
 		a.Log.Error("Failed to update user", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update user", nil, "")
+	}
+
+	// Deactivation must take effect immediately: kill outstanding sessions
+	// and API keys, not just block new logins.
+	if deactivated {
+		a.revokeUserAccess(user.ID)
+	}
+	// Password resets invalidate other sessions too (mirrors ChangePassword).
+	if req.Password != "" {
+		a.bumpTokenVersion(user.ID)
 	}
 
 	// Replace account assignments if provided (nil leaves them untouched)
@@ -766,10 +804,28 @@ func (a *App) DeleteUser(r *fastglue.Request) error {
 	// Delete all account assignments for this user
 	a.DB.Where("user_id = ?", id).Delete(&models.UserWhatsAppAccount{})
 
+	// A deleted user must lose access immediately — soft-deleted rows keep
+	// is_active=true, so neither Login nor validateAPIKey would reject them.
+	a.revokeUserAccess(id)
+
 	a.logAudit(orgID, currentUserID,
 		"user", id, models.AuditActionDeleted, userAuditSnapshot(&user), nil)
 
 	return r.SendEnvelope(map[string]string{"message": "User deleted successfully"})
+}
+
+// revokeUserAccess invalidates a user's outstanding sessions (token-version
+// bump, H3) and deactivates all of their API keys. Used by the deactivate and
+// delete paths so a locked-out user loses API access immediately instead of
+// at token expiry. Best-effort: failures are logged, not fatal — the caller's
+// primary effect (deactivation/deletion) has already succeeded.
+func (a *App) revokeUserAccess(userID uuid.UUID) {
+	a.bumpTokenVersion(userID)
+	if err := a.DB.Model(&models.APIKey{}).
+		Where("user_id = ? AND is_active = ?", userID, true).
+		Update("is_active", false).Error; err != nil {
+		a.Log.Error("Failed to deactivate API keys for user", "error", err, "user_id", userID)
+	}
 }
 
 // GetCurrentUser returns the current authenticated user's details
@@ -911,8 +967,9 @@ func (a *App) ChangePassword(r *fastglue.Request) error {
 	}
 
 	// Validate new password length
-	if len(req.NewPassword) < 6 {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "New password must be at least 6 characters", nil, "")
+	if len(req.NewPassword) < minPasswordLength {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest,
+			fmt.Sprintf("New password must be at least %d characters", minPasswordLength), nil, "")
 	}
 
 	// Verify current password

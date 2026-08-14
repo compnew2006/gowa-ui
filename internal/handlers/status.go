@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
 	"strings"
@@ -35,9 +34,9 @@ const statusSendTimeout = 60 * time.Second
 
 // SendStatusRequest is the JSON body for posting a text status.
 type SendStatusRequest struct {
-	Message        string `json:"message"`                  // Required for type=text
-	Type           string `json:"type"`                     // "text" (default). image/video arrive via multipart.
-	WhatsAppAccount string `json:"whatsapp_account"`        // Optional: specific WhatsApp account
+	Message         string `json:"message"`          // Required for type=text
+	Type            string `json:"type"`             // "text" (default). image/video arrive via multipart.
+	WhatsAppAccount string `json:"whatsapp_account"` // Optional: specific WhatsApp account
 }
 
 // statusResponse is returned on a successful status post.
@@ -63,13 +62,13 @@ func (a *App) SendStatus(r *fastglue.Request) error {
 	contentType := string(r.RequestCtx.Request.Header.ContentType())
 
 	var (
-		statusType    string
-		text          string
-		caption       string
-		accountName   string
-		fileData      []byte
-		fileMime      string
-		fileFilename  string
+		statusType   string
+		text         string
+		caption      string
+		accountName  string
+		fileData     []byte
+		fileMime     string
+		fileFilename string
 	)
 
 	if strings.HasPrefix(contentType, "multipart/form-data") {
@@ -108,8 +107,8 @@ func (a *App) SendStatus(r *fastglue.Request) error {
 	} else {
 		// JSON body — text status only.
 		var req SendStatusRequest
-		if err := json.Unmarshal(r.RequestCtx.PostBody(), &req); err != nil {
-			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid request body", nil, "")
+		if err := a.decodeRequest(r, &req); err != nil {
+			return nil
 		}
 		statusType = req.Type
 		if statusType == "" {
@@ -144,7 +143,7 @@ func (a *App) SendStatus(r *fastglue.Request) error {
 	defer cancel()
 
 	var (
-		wamid string
+		wamid   string
 		sendErr error
 	)
 	switch statusType {

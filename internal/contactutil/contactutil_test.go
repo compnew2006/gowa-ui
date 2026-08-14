@@ -3,9 +3,9 @@ package contactutil
 import (
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/test/testutil"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

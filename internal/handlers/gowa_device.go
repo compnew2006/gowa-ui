@@ -22,8 +22,9 @@ type gowaAccount struct {
 // account, and type-asserts the provider to *gowa.Client. On error it sends the
 // HTTP response and returns ok=false — callers should `return nil` immediately.
 // Callers must have already authenticated (and authorized) via requireAuth and
-// pass the resulting orgID here — this helper does NOT re-check permissions.
-func (a *App) resolveGowaAccount(r *fastglue.Request, orgID uuid.UUID) (gowaAccount, bool) {
+// pass the resulting orgID/userID here — this helper enforces the account
+// assignment gate (canAccessAccount) but does NOT re-check RBAC permissions.
+func (a *App) resolveGowaAccount(r *fastglue.Request, orgID, userID uuid.UUID) (gowaAccount, bool) {
 	id, err := parsePathUUID(r, "id", "account")
 	if err != nil {
 		return gowaAccount{}, false
@@ -31,6 +32,15 @@ func (a *App) resolveGowaAccount(r *fastglue.Request, orgID uuid.UUID) (gowaAcco
 
 	account, err := a.resolveWhatsAppAccountByID(r, id, orgID)
 	if err != nil {
+		return gowaAccount{}, false
+	}
+
+	// Per-account endpoints must respect account assignments: a user
+	// restricted to specific accounts must not reach QR/pair-code/status for
+	// other accounts by guessing their UUIDs (the account list already hides
+	// them — this closes the by-ID hole).
+	if !a.canAccessAccount(userID, orgID, account.ID) {
+		_ = r.SendErrorEnvelope(fasthttp.StatusForbidden, "You do not have access to this account", nil, "")
 		return gowaAccount{}, false
 	}
 
@@ -56,12 +66,12 @@ func (a *App) resolveGowaAccount(r *fastglue.Request, orgID uuid.UUID) (gowaAcco
 // browser can render it directly without needing Basic Auth credentials.
 // GET /api/accounts/{id}/gowa/qr
 func (a *App) GowaLoginQR(r *fastglue.Request) error {
-	orgID, _, err := a.requireAuth(r, models.ResourceDevices, models.ActionWrite)
+	orgID, userID, err := a.requireAuth(r, models.ResourceDevices, models.ActionWrite)
 	if err != nil {
 		return nil
 	}
 
-	ga, ok := a.resolveGowaAccount(r, orgID)
+	ga, ok := a.resolveGowaAccount(r, orgID, userID)
 	if !ok {
 		return nil
 	}
@@ -108,12 +118,12 @@ func (a *App) GowaLoginQR(r *fastglue.Request) error {
 // GowaPairCode requests a phone-code pairing for a GOWA device.
 // POST /api/accounts/{id}/gowa/pair-code  body: {"phone": "16505551234"}
 func (a *App) GowaPairCode(r *fastglue.Request) error {
-	orgID, _, err := a.requireAuth(r, models.ResourceDevices, models.ActionWrite)
+	orgID, userID, err := a.requireAuth(r, models.ResourceDevices, models.ActionWrite)
 	if err != nil {
 		return nil
 	}
 
-	ga, ok := a.resolveGowaAccount(r, orgID)
+	ga, ok := a.resolveGowaAccount(r, orgID, userID)
 	if !ok {
 		return nil
 	}
@@ -252,12 +262,12 @@ func (a *App) GowaCreateDevice(r *fastglue.Request) error {
 // GowaStatus retrieves the connection status of a GOWA device.
 // GET /api/accounts/{id}/gowa/status
 func (a *App) GowaStatus(r *fastglue.Request) error {
-	orgID, _, err := a.requireAuth(r, models.ResourceDevices, models.ActionRead)
+	orgID, userID, err := a.requireAuth(r, models.ResourceDevices, models.ActionRead)
 	if err != nil {
 		return nil
 	}
 
-	ga, ok := a.resolveGowaAccount(r, orgID)
+	ga, ok := a.resolveGowaAccount(r, orgID, userID)
 	if !ok {
 		return nil
 	}

@@ -3,9 +3,9 @@ package handlers
 import (
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/internal/websocket"
+	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 )
@@ -28,15 +28,19 @@ type ConversationNoteResponse struct {
 
 // ListConversationNotes returns paginated notes for a contact (latest at bottom).
 func (a *App) ListConversationNotes(r *fastglue.Request) error {
-	orgID, _, err := a.requireAuth(r, models.ResourceChat, models.ActionRead)
+	orgID, userID, err := a.requireAuth(r, models.ResourceChat, models.ActionRead)
 	if err != nil {
 		return nil
 	}
 
-	contactID, err := parsePathUUID(r, "id", "contact")
-	if err != nil {
+	// Load the contact through scopeAssignedContact first — notes are only
+	// visible for conversations the caller can see (assigned accounts /
+	// assignment scoping), matching the chat itself.
+	contact, ok := a.loadContactByPath(r, orgID, userID)
+	if !ok {
 		return nil
 	}
+	contactID := contact.ID
 
 	pg := parsePaginationWithDefaults(r, 30, 100)
 	limit := pg.Limit
@@ -94,9 +98,10 @@ func (a *App) CreateConversationNote(r *fastglue.Request) error {
 		return nil
 	}
 
-	// Verify the contact belongs to the caller's org before writing (M1).
-	// loadContactByPath parses {id}, scopes by org, and sends 404 on miss.
-	contact, ok := a.loadContactByPath(r, orgID)
+	// Verify the contact is visible to the caller before writing.
+	// loadContactByPath parses {id}, applies scopeAssignedContact, and sends
+	// 404 on miss.
+	contact, ok := a.loadContactByPath(r, orgID, userID)
 	if !ok {
 		return nil
 	}
@@ -142,12 +147,15 @@ func (a *App) CreateConversationNote(r *fastglue.Request) error {
 	return r.SendEnvelope(resp)
 }
 
-// resolveOwnedNote validates the {id} contact path param, loads the {note_id}
-// note scoped to orgID, and verifies the caller (userID) is its creator. On any
-// failure it sends the HTTP response and returns ok=false — callers should
-// `return nil`. verb is used in the forbidden message (e.g. "edit"/"delete").
+// resolveOwnedNote validates the {id} contact path param (through
+// scopeAssignedContact, so notes can only be touched on conversations the
+// caller can see), loads the {note_id} note scoped to orgID, and verifies the
+// caller (userID) is its creator. On any failure it sends the HTTP response
+// and returns ok=false — callers should `return nil`. verb is used in the
+// forbidden message (e.g. "edit"/"delete").
 func (a *App) resolveOwnedNote(r *fastglue.Request, orgID, userID uuid.UUID, verb string) (*models.ConversationNote, bool) {
-	if _, err := parsePathUUID(r, "id", "contact"); err != nil {
+	contact, ok := a.loadContactByPath(r, orgID, userID)
+	if !ok {
 		return nil, false
 	}
 
@@ -158,6 +166,12 @@ func (a *App) resolveOwnedNote(r *fastglue.Request, orgID, userID uuid.UUID, ver
 
 	note, err := findByIDAndOrg[models.ConversationNote](a.DB, r, noteID, orgID, "Note")
 	if err != nil {
+		return nil, false
+	}
+	// The note must belong to the contact in the path — a note ID from a
+	// different conversation is a 404, not a 403 (no existence leak).
+	if note.ContactID != contact.ID {
+		_ = r.SendErrorEnvelope(fasthttp.StatusNotFound, "Note not found", nil, "")
 		return nil, false
 	}
 

@@ -1,11 +1,11 @@
 package handlers
 
 import (
+	"github.com/compnew2006/gowa-ui/internal/middleware"
+	ws "github.com/compnew2006/gowa-ui/internal/websocket"
 	"github.com/fasthttp/websocket"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"github.com/compnew2006/gowa-ui/internal/middleware"
-	ws "github.com/compnew2006/gowa-ui/internal/websocket"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 )
@@ -65,6 +65,14 @@ func (a *App) validateWSTokenFn() ws.AuthenticateFn {
 
 		claims, ok := token.Claims.(*middleware.JWTClaims)
 		if !ok {
+			return uuid.Nil, uuid.Nil, jwt.ErrTokenInvalidClaims
+		}
+
+		// Reject refresh tokens: they are long-lived and single-use (JTI) —
+		// the socket must authenticate with the short-lived access/WS token.
+		// JTI presence also catches legacy refresh tokens issued before
+		// token_type existed.
+		if claims.TokenType == middleware.TokenTypeRefresh || claims.ID != "" {
 			return uuid.Nil, uuid.Nil, jwt.ErrTokenInvalidClaims
 		}
 

@@ -1,14 +1,13 @@
 package handlers
 
 import (
-	"encoding/json"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/audit"
 	"github.com/compnew2006/gowa-ui/internal/database"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/internal/utils"
+	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 )
@@ -83,8 +82,8 @@ func (a *App) UpdateOrganizationSettings(r *fastglue.Request) error {
 		Name             *string `json:"name"`
 	}
 
-	if err := json.Unmarshal(r.RequestCtx.PostBody(), &req); err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid request body", nil, "")
+	if err := a.decodeRequest(r, &req); err != nil {
+		return nil
 	}
 
 	var org models.Organization
