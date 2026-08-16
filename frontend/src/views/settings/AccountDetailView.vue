@@ -15,6 +15,8 @@ import UnsavedChangesDialog from '@/components/shared/UnsavedChangesDialog.vue'
 import AccountCloseRatingPanel from '@/components/settings/AccountCloseRatingPanel.vue'
 import AccountCallRejectPanel from '@/components/settings/AccountCallRejectPanel.vue'
 import AccountChatResetPanel from '@/components/settings/AccountChatResetPanel.vue'
+import AccountSendPacingPanel from '@/components/settings/AccountSendPacingPanel.vue'
+import AccountBusinessHoursPanel from '@/components/settings/AccountBusinessHoursPanel.vue'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -615,6 +617,16 @@ onMounted(async () => {
             @saved="bumpAccountLog"
           />
           <AccountChatResetPanel
+            :account-id="account.id"
+            :can-write="canWrite"
+            @saved="bumpAccountLog"
+          />
+          <AccountBusinessHoursPanel
+            :account-id="account.id"
+            :can-write="canWrite"
+            @saved="bumpAccountLog"
+          />
+          <AccountSendPacingPanel
             :account-id="account.id"
             :can-write="canWrite"
             @saved="bumpAccountLog"

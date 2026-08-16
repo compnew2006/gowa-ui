@@ -120,3 +120,32 @@ The account list and detail pages show live connection state from GOWA (best-eff
 | `active` | Account is connected and working |
 | `pending` | Account created, awaiting QR pairing |
 | `disconnected` | Connection lost, needs reconnection |
+
+## Business Hours & Auto-Reply
+
+Each account can define when it is open for business. Inbound 1:1 messages that arrive **outside** the window automatically receive the account's away message — once per contact per 12-hour cooldown, so customers who write at night know when to expect an answer without being spammed.
+
+- **Window**: `Opens` / `Closes` times in the account's local timezone (a close time earlier than open spans midnight, e.g. 18:00 → 06:00).
+- **Open days**: any combination of weekdays (defaults to Sunday–Thursday).
+- **UTC offset**: the account's local offset in minutes (Egypt: 120 winter / 180 summer).
+- **Away message**: free text shown to customers while closed.
+
+Groups and newsletters never receive away replies. A misconfigured window fails silent (no replies) rather than replying around the clock.
+
+## Campaign Send Pacing
+
+WhatsApp flags numbers that burst hundreds of messages in minutes — the fastest way to lose a business number. Pacing gives each account a **messages-per-minute budget** the campaign worker enforces before every send.
+
+- Set it per account here, or leave it to the server-wide `default_pacing_per_minute` config.
+- `20–60/min` is a safe range for most numbers; brand-new numbers should start lower.
+- Sending is never lost: when the budget is full the worker waits for the next window (bounded at 10 minutes), then proceeds.
+
+## Device Health Alerts
+
+When a connected number **logs out** (QR expired, logged out from the phone), the platform:
+
+1. Records an audit-log entry under the account,
+2. Pushes a live in-app alert (toast) with a shortcut to **Settings → Accounts** for the QR re-scan,
+3. Optionally sends a Telegram message to the configured admin chat (see the `[alerts]` config section).
+
+A recovery notice fires when the number comes back online. Repeat alerts are rate-limited to one per account per 15 minutes so reconnect storms don't spam.

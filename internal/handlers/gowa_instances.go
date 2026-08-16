@@ -1051,6 +1051,9 @@ func (a *App) updateGowaDeviceAccountStatus(orgID uuid.UUID, baseURL, deviceID, 
 				},
 			})
 		}
+		// Same durable alerting as the webhook path (logout via the API must
+		// not be quieter than a GOWA-initiated logout).
+		a.notifyDeviceStatusChange(&acc, deviceID, newStatus, "")
 	}
 }
 

@@ -136,6 +136,11 @@ func (w *Worker) HandleRecipientJob(ctx context.Context, job *queue.RecipientJob
 		HeaderParams:   job.HeaderParams,
 	}
 
+	// Pace the send: WhatsApp flags accounts that burst, so reserve a slot
+	// from the account's per-minute budget before touching the provider.
+	// No-ops when pacing is not configured (0 = unlimited, historical behavior).
+	w.paceCampaignSend(ctx, job.OrganizationID, account.Name, w.accountPacePerMinute(account.Settings))
+
 	// Send template message
 	waMessageID, err := w.sendTemplateMessage(ctx, &account, campaign.Template, recipient, &campaign)
 

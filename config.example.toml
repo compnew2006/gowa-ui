@@ -53,6 +53,21 @@ webhook_path = "/api/gowa/webhook"
 # especially when running multiple GOWA instances at different hosts.
 #internal_base_url = "http://127.0.0.1:3000"
 
+# Campaign send pacing. WhatsApp flags accounts that burst messages, so
+# campaign sends can be capped per account. This is the FALLBACK budget
+# (messages/minute); per-account overrides live in Settings -> Accounts.
+# 0 = unlimited (pacing off) — enable on the accounts you send campaigns from.
+[campaigns]
+default_pacing_per_minute = 0
+
+# Device-health alerts. When a WhatsApp account disconnects (logged out), the
+# server writes an audit entry, pushes a device_alert over WebSocket, and —
+# when these Telegram credentials are set — sends a message to the chat.
+# Leave both empty to disable the Telegram push (audit + WS always stay on).
+[alerts]
+telegram_bot_token = ""
+telegram_chat_id = ""
+
 [storage]
 type = "local"
 local_path = "./uploads"

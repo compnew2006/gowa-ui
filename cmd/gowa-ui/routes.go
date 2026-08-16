@@ -296,6 +296,14 @@ func setupAccountRoutes(g *fastglue.Fastglue, app *handlers.App) {
 	g.GET("/api/accounts/{id}/daily-reset", app.GetChatResetSettings)
 	g.PUT("/api/accounts/{id}/daily-reset", app.UpdateChatResetSettings)
 
+	// Per-account campaign send pacing (ban shield: messages/minute budget)
+	g.GET("/api/accounts/{id}/send-pacing", app.GetSendPacingSettings)
+	g.PUT("/api/accounts/{id}/send-pacing", app.UpdateSendPacingSettings)
+
+	// Per-account business hours + outside-hours auto-reply
+	g.GET("/api/accounts/{id}/business-hours", app.GetBusinessHoursSettings)
+	g.PUT("/api/accounts/{id}/business-hours", app.UpdateBusinessHoursSettings)
+
 	// GOWA device management (QR code, pair code, connection status)
 	g.GET("/api/accounts/{id}/gowa/qr", app.GowaLoginQR)
 	g.GET("/api/accounts/{id}/gowa/status", app.GowaStatus)

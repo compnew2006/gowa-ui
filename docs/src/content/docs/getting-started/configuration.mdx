@@ -152,6 +152,23 @@ Off by default. Turn on with `enabled = true` for any internet-facing deployment
 
 Implemented as Redis fixed-window counters; failures hit Redis, so leaving rate limits enabled with Redis down will block all auth.
 
+### `[campaigns]`
+
+| Field | Notes |
+|---|---|
+| `default_pacing_per_minute` | Fallback campaign-send budget (messages/minute per account). `0` = unlimited (off). Per-account overrides live in **Settings → Accounts → Campaign Send Pacing**. |
+
+Implemented as a Redis fixed-window counter per account; if Redis is unavailable the worker sends unpaced rather than stalling campaigns.
+
+### `[alerts]`
+
+Device-health alerting (disconnect/reconnect of connected WhatsApp numbers). The audit-log entry and WebSocket push are always on; these keys only enable the Telegram push.
+
+| Field | Notes |
+|---|---|
+| `telegram_bot_token` | Bot token from @BotFather. Both fields must be set to enable. |
+| `telegram_chat_id` | Target chat (user/group) that receives the alerts. |
+
 ### `[default_admin]`
 
 The credentials seeded the first time `Gowa-UI server -migrate` runs against an empty user table. Subsequent runs are no-ops. Always change these on first login.

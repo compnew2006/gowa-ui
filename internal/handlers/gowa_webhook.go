@@ -521,6 +521,13 @@ func (a *App) processGowaMessage(account *models.WhatsAppAccount, envelope *gowa
 		profileName = ""
 	}
 	a.processIncomingMessage(account, envelope.DeviceID, incoming, profileName, isGroup, isNewsletter, senderName, senderJID)
+
+	// Outside business hours, 1:1 chats get the account's away reply (once
+	// per contact per cooldown window). Groups/newsletters never do — the
+	// window applies to customer conversations only.
+	if !isGroup && !isNewsletter {
+		a.maybeSendAwayReply(account, fromPhone, profileName)
+	}
 }
 
 // processGowaOutgoingMessage handles messages sent from the connected phone
@@ -910,6 +917,10 @@ func (a *App) processGowaConnection(account *models.WhatsAppAccount, envelope *g
 			},
 		})
 	}
+
+	// Durable alerting (audit log + optional Telegram push) for outages and
+	// recoveries. No-op for intermediate states; cooldown-protected.
+	a.notifyDeviceStatusChange(account, envelope.DeviceID, newStatus, conn.Reason)
 
 	// A (re)connected device has just completed GOWA's own history sync, and
 	// GOWA never replays that history via webhook — pull it into the messages

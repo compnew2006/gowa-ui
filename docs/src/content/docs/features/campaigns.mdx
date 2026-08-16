@@ -37,6 +37,10 @@ Campaigns allow you to send bulk WhatsApp messages to multiple contacts at once.
 
 </Steps>
 
+## Send Pacing
+
+Campaigns respect each account's **messages-per-minute budget** (Settings → Accounts → Campaign Send Pacing, or the server-wide default). The worker spaces sends to stay inside the budget, protecting the number from WhatsApp ban waves. Recipients are never dropped — only delayed (at most 10 minutes past their claim) when the budget is exhausted.
+
 ## Adding Recipients
 
 You can add recipients to your campaign in two ways:

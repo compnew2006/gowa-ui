@@ -39,6 +39,13 @@ responsibility. Do not re-merge these.
   - `messages.go` — message list/send/revoke/react/typing + read-state +
     the WhatsApp account/provider resolvers + `gowaChatJID`.
   - `contacts_avatars.go` — contact profile-picture fetch/cache/serve.
+  - `business_hours.go` — per-account business-hours block + outside-hours
+    away reply (hooked at the end of `processGowaMessage`; cooldown-guarded).
+  - `device_alerts.go` — device disconnect/recovery alerting (audit + WS +
+    optional Telegram), hooked from `processGowaConnection` and
+    `updateGowaDeviceAccountStatus`.
+  - `campaign_pacing_settings.go` — per-account send-pacing block (the
+    worker side lives in `internal/worker/pacing.go`).
 - **Frontend views (`frontend/src/views/`)** — a view stays an orchestration
   shell (route/contacts/messages watchers + lifecycle + simple view state).
   Domain logic lives in a composable under `frontend/src/composables/`.

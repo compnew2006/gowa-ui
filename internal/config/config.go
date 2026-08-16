@@ -23,6 +23,8 @@ type Config struct {
 	DefaultAdmin  DefaultAdminConfig `koanf:"default_admin"`
 	RateLimit     RateLimitConfig    `koanf:"rate_limit"`
 	Cookie        CookieConfig       `koanf:"cookie"`
+	Campaigns     CampaignsConfig    `koanf:"campaigns"`
+	Alerts        AlertsConfig       `koanf:"alerts"`
 }
 
 type AppConfig struct {
@@ -172,6 +174,24 @@ type DefaultAdminConfig struct {
 type CookieConfig struct {
 	Domain string `koanf:"domain"` // Cookie domain (e.g., ".example.com"). Empty = current host.
 	Secure bool   `koanf:"secure"` // Set Secure flag. Auto-set true when environment=production.
+}
+
+// CampaignsConfig holds campaign-sending behavior. Pacing is the ban shield:
+// the unofficial WhatsApp device API flags numbers that burst, so campaign
+// sends can be spaced per account.
+type CampaignsConfig struct {
+	// DefaultPacingPerMinute is the fallback send budget (messages/minute)
+	// for accounts without a send_pacing settings block. 0 = unlimited
+	// (historical behavior — pacing is opt-in).
+	DefaultPacingPerMinute int `koanf:"default_pacing_per_minute"`
+}
+
+// AlertsConfig configures outbound device-health alerts. With Telegram
+// credentials set, device disconnects are pushed to the configured chat in
+// addition to the in-app audit log and WebSocket broadcast.
+type AlertsConfig struct {
+	TelegramBotToken string `koanf:"telegram_bot_token"`
+	TelegramChatID   string `koanf:"telegram_chat_id"`
 }
 
 type RateLimitConfig struct {

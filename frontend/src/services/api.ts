@@ -648,6 +648,35 @@ export interface ChatResetSettings {
   timezone: string
 }
 
+export interface SendPacingSettings {
+  messages_per_minute: number
+}
+
+// Per-account campaign send pacing (ban shield: messages/minute budget)
+export const sendPacingService = {
+  getSettings: (accountId: string) =>
+    api.get<{ data: SendPacingSettings }>(`/accounts/${accountId}/send-pacing`),
+  updateSettings: (accountId: string, data: SendPacingSettings) =>
+    api.put(`/accounts/${accountId}/send-pacing`, data)
+}
+
+export interface BusinessHoursSettings {
+  enabled: boolean
+  start_time: string
+  end_time: string
+  days: number[]
+  utc_offset_min: number
+  away_message: string
+}
+
+// Per-account business hours + outside-hours auto-reply
+export const businessHoursService = {
+  getSettings: (accountId: string) =>
+    api.get<{ data: BusinessHoursSettings }>(`/accounts/${accountId}/business-hours`),
+  updateSettings: (accountId: string, data: BusinessHoursSettings) =>
+    api.put(`/accounts/${accountId}/business-hours`, data)
+}
+
 // Per-account daily assigned-chat reset schedule (settings live on the WhatsApp account)
 export const dailyResetService = {
   getSettings: (accountId: string) =>

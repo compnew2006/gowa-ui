@@ -27,6 +27,15 @@ Modern, open-source WhatsApp Business Platform. Single binary app.
 - **Bulk Campaigns**
   Send campaigns to multiple contacts with retry support for failed messages.
 
+- **Campaign Send Pacing**
+  Per-account messages/minute budget enforced before every campaign send, protecting numbers from WhatsApp ban waves that target bursting accounts.
+
+- **Business Hours & Auto-Reply**
+  Each account can define its working window (with overnight spans and open days); inbound messages arriving while closed get your away message once per contact — no reply loops, groups excluded.
+
+- **Device Health Alerts**
+  When a connected number logs out or reconnects, the platform writes an audit entry, pushes a live in-app alert, and can notify an admin Telegram chat — no more silently-dead numbers.
+
 - **WhatsApp Account Management**
   Connect and manage multiple WhatsApp accounts via GOWA (WhatsApp Web protocol) with user-specific visibility controls and granular device management.
 

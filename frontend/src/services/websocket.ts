@@ -76,6 +76,7 @@ const WS_TYPE_SCHEDULED_MESSAGE_UPDATED = 'scheduled_message_updated'
 const WS_TYPE_CHAT_CLAIMED = 'chat_claimed'
 const WS_TYPE_CHAT_CLOSED = 'chat_closed'
 const WS_TYPE_CHAT_REOPENED = 'chat_reopened'
+const WS_TYPE_DEVICE_ALERT = 'device_alert'
 const WS_TYPE_CHAT_RELEASED = 'chat_released'
 const WS_TYPE_COLLABORATOR_JOINED = 'collaborator_joined'
 const WS_TYPE_COLLABORATOR_LEFT = 'collaborator_left'
@@ -204,6 +205,9 @@ class WebSocketService {
           break
         case WS_TYPE_SCHEDULED_MESSAGE_UPDATED:
           useScheduledMessagesStore().onUpdated(message.payload)
+          break
+        case WS_TYPE_DEVICE_ALERT:
+          this.handleDeviceAlert(message.payload)
           break
         case WS_TYPE_CHAT_CLAIMED:
           this.handleChatClaimed(store, message.payload)
@@ -391,6 +395,38 @@ class WebSocketService {
         this.campaignStatsCallbacks.splice(index, 1)
       }
     }
+  }
+
+  // Device-health alert from the server: an account disconnected (outage) or
+  // came back online (recovery). Surfaced as a toast with a shortcut to the
+  // accounts page where the QR re-scan lives.
+  private handleDeviceAlert(payload: {
+    account_name?: string
+    device_id?: string
+    outage?: boolean
+    reason?: string
+  }) {
+    const name = payload.account_name || 'WhatsApp account'
+    if (payload.outage) {
+      toast.error(`${name} is DISCONNECTED`, {
+        description: payload.reason
+          ? `Reason: ${payload.reason} — re-scan the QR code from Settings → Accounts.`
+          : 'Re-scan the QR code from Settings → Accounts to bring it back online.',
+        duration: 10000,
+        action: {
+          label: 'Accounts',
+          onClick: () => router.push('/settings/accounts'),
+          actionButtonStyle: {
+            background: 'transparent',
+            border: '1px solid #e5e7eb',
+            color: '#ef4444',
+            fontWeight: '500'
+          }
+        }
+      })
+      return
+    }
+    toast.success(`${name} is back online`, { duration: 5000 })
   }
 
   private handleChatClaimed(store: ReturnType<typeof useContactsStore>, payload: any) {
