@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 import type { Ref } from 'vue'
 import { toast } from 'vue-sonner'
-import { getRequestHeaders } from '@/services/api'
+import { api, getRequestHeaders } from '@/services/api'
 import { getErrorMessage } from '@/lib/api-utils'
 import type { Message } from '@/stores/contacts'
 
@@ -52,6 +52,13 @@ export function useChatMedia(options: UseChatMediaOptions) {
   const isMediaDialogOpen = ref(false)
   const mediaCaption = ref('')
   const isUploadingMedia = ref(false)
+  // 0..100 upload progress (bytes sent to the server). Reaches 100 while the
+  // server still processes (GOWA send), during which isUploadingMedia keeps
+  // the "sending" state on the button.
+  const uploadProgress = ref(0)
+  // Aborts the in-flight upload when the user cancels mid-transfer. Non-null
+  // only while an upload request is running.
+  let uploadAbort: AbortController | null = null
 
   // Messages whose media failed to load in the DOM (video error, image error).
   // Keyed by message id so the "Retry download" affordance only shows on broken bubbles.
@@ -178,6 +185,13 @@ export function useChatMedia(options: UseChatMediaOptions) {
   }
 
   function closeMediaDialog() {
+    // Cancel during an active upload aborts the transfer itself — the dialog
+    // must not stay hostage until the last byte lands (large files can take
+    // minutes on slow links).
+    if (uploadAbort) {
+      uploadAbort.abort()
+      uploadAbort = null
+    }
     isMediaDialogOpen.value = false
     if (filePreviewUrl.value) {
       URL.revokeObjectURL(filePreviewUrl.value)
@@ -197,6 +211,8 @@ export function useChatMedia(options: UseChatMediaOptions) {
     }
 
     isUploadingMedia.value = true
+    uploadProgress.value = 0
+    uploadAbort = new AbortController()
     try {
       const formData = new FormData()
       formData.append('file', selectedFile.value)
@@ -209,20 +225,27 @@ export function useChatMedia(options: UseChatMediaOptions) {
         formData.append('whatsapp_account', selectedAccount.value)
       }
 
-      const basePath = ((window as any).__BASE_PATH__ ?? '').replace(/\/$/, '')
-      const response = await fetch(`${basePath}/api/messages/media`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: getRequestHeaders({ csrf: true }),
-        body: formData
+      // axios (XHR) instead of raw fetch: only XHR reports upload progress,
+      // which the media dialog's progress bar renders. Same credentials/CSRF
+      // contract as the fetch path it replaces. The explicit multipart
+      // Content-Type is REQUIRED with this axios instance: its default is
+      // application/json, and axios converts FormData to a JSON string when
+      // that default wins (utils.formDataToJSON) — fasthttp then rejects the
+      // body with "Invalid multipart form". The manual header disables the
+      // JSON path and the browser adapter swaps in the real boundary (same
+      // pattern as importData/uploadMedia/sendTemplate). The signal lets the
+      // Cancel button abort a long upload mid-transfer.
+      const response = await api.post('/messages/media', formData, {
+        signal: uploadAbort.signal,
+        headers: { ...getRequestHeaders({ csrf: true }), 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: (e) => {
+          if (e.total) {
+            uploadProgress.value = Math.min(100, Math.round((e.loaded / e.total) * 100))
+          }
+        }
       })
 
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.message || 'Failed to send media')
-      }
-
-      const result = await response.json()
+      const result = response.data
 
       // Add the message to the store (addMessage has duplicate checking for WebSocket)
       if (result.data) {
@@ -233,11 +256,18 @@ export function useChatMedia(options: UseChatMediaOptions) {
       toast.success(t('chat.mediaSent'))
       closeMediaDialog()
     } catch (error: any) {
+      // A user-initiated abort is not a failure — closeMediaDialog already
+      // reset the dialog; an error toast for it would be noise.
+      if (error?.code === 'ERR_CANCELED' || error?.name === 'CanceledError') {
+        return
+      }
       toast.error(t('chat.mediaFailed'), {
-        description: error.message || getErrorMessage(error, t('chat.mediaFailedDesc'))
+        description: error?.response?.data?.message || error.message || getErrorMessage(error, t('chat.mediaFailedDesc'))
       })
     } finally {
       isUploadingMedia.value = false
+      uploadProgress.value = 0
+      uploadAbort = null
     }
   }
 
@@ -248,6 +278,7 @@ export function useChatMedia(options: UseChatMediaOptions) {
     isMediaDialogOpen,
     mediaCaption,
     isUploadingMedia,
+    uploadProgress,
     // Broken-media / redownload
     brokenMediaIds,
     retryMediaDownload,

@@ -1364,14 +1364,22 @@ func (a *App) MarkContactRead(r *fastglue.Request) error {
 	return r.SendEnvelope(map[string]any{"status": "ok"})
 }
 
-// markMessagesAsRead marks messages as read and sends read receipts
+// markMessagesAsRead marks messages as read and sends read receipts.
+// Terminal statuses (revoked/failed) are excluded: a revoked message must
+// survive chat opens and refreshes — sweeping it to "read" made the deleted
+// message render with its original content again (content is preserved on
+// revoke for the overlay view).
 func (a *App) markMessagesAsRead(orgID uuid.UUID, contactID uuid.UUID, contact *models.Contact) {
 	var unreadMessages []models.Message
-	a.DB.Where("contact_id = ? AND direction = ? AND status != ?", contactID, models.DirectionIncoming, models.MessageStatusRead).
+	a.DB.Where("contact_id = ? AND direction = ? AND status NOT IN ?",
+		contactID, models.DirectionIncoming,
+		[]models.MessageStatus{models.MessageStatusRead, models.MessageStatusRevoked, models.MessageStatusFailed}).
 		Find(&unreadMessages)
 
 	a.DB.Model(&models.Message{}).
-		Where("contact_id = ? AND direction = ?", contactID, models.DirectionIncoming).
+		Where("contact_id = ? AND direction = ? AND status NOT IN ?",
+			contactID, models.DirectionIncoming,
+			[]models.MessageStatus{models.MessageStatusRead, models.MessageStatusRevoked, models.MessageStatusFailed}).
 		Update("status", models.MessageStatusRead)
 
 	a.DB.Model(contact).Update("is_read", true)

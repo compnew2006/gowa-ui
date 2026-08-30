@@ -16,6 +16,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Spinner } from '@/components/ui/spinner'
+import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
 import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -326,6 +327,7 @@ const {
   isMediaDialogOpen,
   mediaCaption,
   isUploadingMedia,
+  uploadProgress,
   brokenMediaIds,
   retryMediaDownload,
   markMediaBroken,
@@ -2197,9 +2199,16 @@ onUnmounted(() => {
             />
           </div>
 
+          <!-- Upload progress: bytes-to-server percentage. Sitting at 100% is
+               expected while the server finishes the synchronous GOWA send. -->
+          <div v-if="isUploadingMedia" class="space-y-1.5" data-testid="upload-progress">
+            <Progress :model-value="uploadProgress" class="h-2" />
+            <p class="text-center text-xs text-muted-foreground">{{ uploadProgress }}%</p>
+          </div>
+
           <!-- Actions -->
           <div class="flex justify-end gap-2">
-            <Button variant="outline" @click="closeMediaDialog" :disabled="isUploadingMedia">
+            <Button variant="outline" @click="closeMediaDialog">
               {{ $t('common.cancel') }}
             </Button>
             <Button @click="sendMediaMessage" :disabled="isUploadingMedia">

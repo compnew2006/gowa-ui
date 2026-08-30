@@ -163,6 +163,12 @@ type StorageConfig struct {
 	// since eager download of large histories can fill the disk (each device
 	// pulls up to 50 msgs × every chat).
 	EagerHistoryMedia bool `koanf:"eager_history_media"`
+	// MaxMediaDownloadMB caps streamed media recovery downloads (ServeMedia's
+	// lazy path) in megabytes. Large files are written directly to disk while
+	// streaming (never buffered in RAM), so this is a disk policy, not a
+	// memory guard. 0 defaults to 1024 (WhatsApp documents go up to 2GB; pick
+	// a value that leaves disk headroom for the host).
+	MaxMediaDownloadMB int `koanf:"max_media_download_mb"`
 }
 
 type DefaultAdminConfig struct {
@@ -312,6 +318,9 @@ func setDefaults(cfg *Config) {
 	}
 	if cfg.Storage.LocalPath == "" {
 		cfg.Storage.LocalPath = "./uploads"
+	}
+	if cfg.Storage.MaxMediaDownloadMB <= 0 {
+		cfg.Storage.MaxMediaDownloadMB = 1024
 	}
 	// Default admin credentials (only used during initial setup)
 	if cfg.DefaultAdmin.Email == "" {

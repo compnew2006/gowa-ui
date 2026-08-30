@@ -71,6 +71,10 @@ telegram_chat_id = ""
 [storage]
 type = "local"
 local_path = "./uploads"
+# Cap (MB) for streamed media downloads when an agent first opens a large
+# customer file (100MB+ WhatsApp documents). Files stream GOWA → disk and are
+# never buffered in RAM, so this is a disk policy. Default 1024.
+# max_media_download_mb = 1024
 
 # Auth cookie settings (tokens are stored in httpOnly cookies)
 [cookie]

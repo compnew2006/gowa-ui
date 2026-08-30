@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 
 	"github.com/compnew2006/gowa-ui/pkg/whatsapp"
@@ -38,8 +39,11 @@ func (c *Client) GetMediaURL(ctx context.Context, mediaID string, account *whats
 
 // MaxMediaDownloadSize caps how many bytes DownloadMedia will read into memory.
 // Bounds memory use so a runaway or malicious media URL can't exhaust the
-// process (gap #7).
-const MaxMediaDownloadSize = 25 * 1024 * 1024 // 25 MiB
+// process (gap #7). 50 MiB matches GOWA's own document limit (app info
+// max_file_size=50MB), so anything GOWA would serve fits. Larger media is
+// rejected with an explicit error until the streaming download path replaces
+// the in-memory buffer.
+const MaxMediaDownloadSize = 50 * 1024 * 1024 // 50 MiB
 
 // URLMatchesBase reports whether rawURL is an absolute HTTP(S) URL whose
 // scheme+host(+port) match baseURL. Used as the SSRF gate before fetching a
@@ -134,23 +138,117 @@ func (c *Client) DownloadMedia(ctx context.Context, mediaURL string, accessToken
 }
 
 // DownloadMessageMedia is a GOWA-specific helper that downloads media for
-// a given message ID and chat JID in a single call. This is the preferred
-// download path for GOWA since the whatsapp.Provider interface signature
-// for GetMediaURL lacks the phone/JID parameter.
+// a given message ID and chat JID in a single call, buffering the result in
+// memory (capped at MaxMediaDownloadSize). Prefer this only for small inline
+// media; large files must use DownloadMessageMediaToPath, which streams to
+// disk without buffering.
 func (c *Client) DownloadMessageMedia(ctx context.Context, account *whatsapp.Account, messageID, chatJID string) ([]byte, string, error) {
+	fileURL, mediaType, err := c.mediaFileURL(ctx, account, messageID, chatJID)
+	if err != nil {
+		return nil, "", err
+	}
+	data, err := c.DownloadMedia(ctx, fileURL, "")
+	if err != nil {
+		return nil, "", err
+	}
+	return data, mediaType, nil
+}
+
+// DownloadMessageMediaToPath streams media for a message directly to destPath
+// on disk. Memory use is a fixed copy buffer regardless of file size, so the
+// cap (maxBytes) is a disk policy rather than a memory guard: the copy aborts
+// and the partial file is removed once maxBytes is exceeded. The file is
+// written to destPath+".part" and atomically renamed on success, so a crashed
+// download never leaves a truncated file under the real name.
+func (c *Client) DownloadMessageMediaToPath(ctx context.Context, account *whatsapp.Account, messageID, chatJID, destPath string, maxBytes int64) (mediaType string, written int64, err error) {
+	fileURL, mediaType, err := c.mediaFileURL(ctx, account, messageID, chatJID)
+	if err != nil {
+		return "", 0, err
+	}
+
+	parsed, err := url.Parse(fileURL)
+	if err != nil {
+		return "", 0, fmt.Errorf("parse media url: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, "GET", fileURL, nil)
+	if err != nil {
+		return "", 0, fmt.Errorf("create download request: %w", err)
+	}
+	// Same SSRF/auth contract as DownloadMedia: credentials only to GOWA itself.
+	if sameOrigin(parsed, c.baseURL) {
+		c.setAuth(req)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
+		return "", 0, fmt.Errorf("download media: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return "", 0, fmt.Errorf("download returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	partPath := destPath + ".part"
+	f, err := os.Create(partPath)
+	if err != nil {
+		return "", 0, fmt.Errorf("create media file: %w", err)
+	}
+	written, err = io.Copy(f, &cappedReader{r: resp.Body, limit: maxBytes, remaining: maxBytes})
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		_ = os.Remove(partPath)
+		return "", 0, fmt.Errorf("stream media to disk: %w", err)
+	}
+	if err := os.Rename(partPath, destPath); err != nil {
+		_ = os.Remove(partPath)
+		return "", 0, fmt.Errorf("finalize media file: %w", err)
+	}
+	return mediaType, written, nil
+}
+
+// cappedReader passes bytes through while a byte budget remains and fails the
+// read (terminating io.Copy) once the budget is exhausted, so oversized media
+// aborts mid-stream instead of landing on disk.
+type cappedReader struct {
+	r         io.Reader
+	limit     int64
+	remaining int64
+}
+
+func (cr *cappedReader) Read(p []byte) (int, error) {
+	if cr.remaining <= 0 {
+		return 0, fmt.Errorf("media exceeds max download size (%d bytes)", cr.limit)
+	}
+	if int64(len(p)) > cr.remaining {
+		p = p[:cr.remaining]
+	}
+	n, err := cr.r.Read(p)
+	cr.remaining -= int64(n)
+	return n, err
+}
+
+// mediaFileURL resolves the fetchable GOWA URL (and media type) for a message's
+// media: the small /message/{id}/download call GOWA answers with a JSON
+// pointing at the file it already persisted to its own storage.
+func (c *Client) mediaFileURL(ctx context.Context, account *whatsapp.Account, messageID, chatJID string) (fileURL, mediaType string, err error) {
 	path := fmt.Sprintf("/message/%s/download?phone=%s", messageID, chatJID)
 	rawBody, err := c.doRaw(ctx, "GET", path, deviceID(account))
 	if err != nil {
-		return nil, "", err
+		return "", "", err
 	}
 
 	var dlResp downloadResponse
 	if err := json.Unmarshal(rawBody, &dlResp); err != nil {
-		return nil, "", fmt.Errorf("parse download response: %w", err)
+		return "", "", fmt.Errorf("parse download response: %w", err)
 	}
 
 	if dlResp.Results.FileURL == "" && dlResp.Results.FilePath == "" {
-		return nil, "", fmt.Errorf("no file URL in download response")
+		return "", "", fmt.Errorf("no file URL in download response")
 	}
 
 	// GOWA returns file_url with its OWN hostname but often WITHOUT the port
@@ -159,15 +257,7 @@ func (c *Client) DownloadMessageMedia(ctx context.Context, account *whatsapp.Acc
 	// on :80). Resolve the URL against the client's known base URL: prefer the
 	// relative file_path joined to the base URL, and only fall back to file_url
 	// if file_path is absent and file_url is absolute with an explicit port.
-	fileURL := resolveGowaFileURL(c.baseURL, dlResp.Results.FilePath, dlResp.Results.FileURL)
-
-	// Fetch the actual bytes from the file URL.
-	data, err := c.DownloadMedia(ctx, fileURL, "")
-	if err != nil {
-		return nil, "", err
-	}
-
-	return data, dlResp.Results.MediaType, nil
+	return resolveGowaFileURL(c.baseURL, dlResp.Results.FilePath, dlResp.Results.FileURL), dlResp.Results.MediaType, nil
 }
 
 // resolveGowaFileURL builds a fetchable URL for a GOWA-downloaded media file.

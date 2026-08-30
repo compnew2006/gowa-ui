@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -71,7 +72,7 @@ func (a *App) ensureMediaDir(subdir string) error {
 // mimeExts is the single source of truth mapping media MIME types to their
 // canonical file extensions, matched by prefix so parameterized types like
 // "image/jpeg; charset=..." still resolve. The serving direction
-// (extension→MIME, see mimeFromExt) is derived from this table.
+// is derived from this table.
 var mimeExts = []struct {
 	Mime string
 	Ext  string
@@ -97,19 +98,6 @@ var mimeExts = []struct {
 	{"text/plain", ".txt"},
 	{"text/html", ".html"},
 }
-
-// mimeFromExt is the inverse of mimeExts (plus the .jpeg alias), used to pick
-// a Content-Type from a stored file's extension.
-var mimeFromExt = func() map[string]string {
-	m := make(map[string]string, len(mimeExts)+1)
-	for _, me := range mimeExts {
-		if _, dup := m[me.Ext]; !dup {
-			m[me.Ext] = me.Mime
-		}
-	}
-	m[".jpeg"] = "image/jpeg"
-	return m
-}()
 
 // getExtensionFromMimeType returns the canonical file extension for a media
 // MIME type, or "" when unknown.
@@ -193,6 +181,69 @@ func (a *App) DownloadAndSaveMedia(ctx context.Context, mediaID string, mimeType
 // relative to the media storage root (suitable for Message.MediaURL). Shared
 // by saveMediaBytes (downloaded bytes) and saveMediaLocally (uploaded bytes)
 // so the subdir/write rule lives in one place.
+// recoverMediaToDisk streams a message's media from GOWA straight to the
+// media storage, bounded by Storage.MaxMediaDownloadMB. It exists so
+// ServeMedia's lazy recovery never holds a whole file in RAM — customers
+// send 100MB+ WhatsApp documents, and the previous buffer-at-all-costs path
+// capped recovery at MaxMediaDownloadSize (50MiB) purely as a memory guard.
+// The extension is taken from the message's original filename when present
+// (preserves ".pdf" etc. and keeps ServeFile's MIME inference correct); the
+// MIME stored in the DB is sniffed from the saved file's first bytes.
+func (a *App) recoverMediaToDisk(client *gowa.Client, waAccount *whatsapp.Account, message models.Message, chatJID string) (relativePath, mimeType string, err error) {
+	ext := strings.ToLower(filepath.Ext(message.MediaFilename))
+	if ext == "" {
+		ext = ".bin"
+	}
+	subdir := mediaSubdirForType(message.MessageType)
+	if err := a.ensureMediaDir(subdir); err != nil {
+		return "", "", fmt.Errorf("failed to create media directory: %w", err)
+	}
+
+	filename := uuid.New().String() + ext
+	relativePath = filepath.Join(subdir, filename)
+	destPath := filepath.Join(a.getMediaStoragePath(), relativePath)
+
+	maxBytes := int64(1024) * 1024 * 1024
+	if a.Config != nil && a.Config.Storage.MaxMediaDownloadMB > 0 {
+		maxBytes = int64(a.Config.Storage.MaxMediaDownloadMB) * 1024 * 1024
+	}
+	// Transfer budget sized for the cap: ~10 minutes covers 1GB at ~1.7MB/s
+	// through GOWA; fast links finish far sooner.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	_, _, err = client.DownloadMessageMediaToPath(ctx, waAccount, message.WhatsAppMessageID, chatJID, destPath, maxBytes)
+	if err != nil {
+		return "", "", err
+	}
+
+	// Sniff the stored MIME from the saved bytes (GOWA's mediaType is generic
+	// like "document", not a real MIME) so the frontend type checks keep working.
+	f, err := os.Open(destPath)
+	if err != nil {
+		return relativePath, "", nil // file saved; MIME stays empty on this unlikely path
+	}
+	head := make([]byte, 512)
+	n, _ := io.ReadFull(f, head)
+	_ = f.Close()
+	return relativePath, sniffContentType(head[:n]), nil
+}
+
+// mediaSubdirForType maps a message type to its storage subdir, mirroring
+// writeMediaFile's layout so streamed and buffered saves coexist.
+func mediaSubdirForType(messageType models.MessageType) string {
+	switch messageType {
+	case models.MessageTypeImage:
+		return "images"
+	case models.MessageTypeVideo:
+		return "videos"
+	case models.MessageTypeAudio:
+		return "audio"
+	default:
+		return "documents"
+	}
+}
+
 func (a *App) writeMediaFile(data []byte, mimeType, ext string) (string, error) {
 	var subdir string
 	switch {
@@ -444,36 +495,32 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 				a.Log.Info("Media missing from disk, attempting auto-recovery", "message_id", message.ID, "path", fullPath)
 				// Build the chat JID (handles group @g.us vs 1:1 suffix).
 				chatJID := gowaChatJID(&contact)
-				ctx, cancel := context.WithTimeout(r.RequestCtx, 30*time.Second)
-				data, mediaType, derr := gowaClient.DownloadMessageMedia(ctx, waAccount, message.WhatsAppMessageID, chatJID)
-				cancel()
+				// Streamed recovery: bytes go GOWA → disk directly (fixed
+				// copy buffer, never whole-file in RAM), bounded by the
+				// configurable disk cap rather than the in-memory 50MiB
+				// guard — huge customer documents (100MB+) recover the same
+				// way as small images. The transfer budget inside is sized
+				// for the bytes, not a small-media guess.
+				relativePath, sniffedType, derr := a.recoverMediaToDisk(gowaClient, waAccount, *message, chatJID)
 				if derr != nil {
 					a.Log.Warn("GOWA media recovery failed", "message_id", message.ID, "wa_message_id", message.WhatsAppMessageID, "error", derr)
-				}
-				if derr == nil && len(data) > 0 {
-					relativePath, serr := a.saveMediaBytes(data, mediaType)
-					if serr == nil {
-						// Update the message in place. Sniff the real MIME
-						// type from the bytes (GOWA's mediaType is generic
-						// like "image", not a valid MIME type).
-						sniffedType := sniffContentType(data)
-						updates := map[string]any{
-							"media_url":       relativePath,
-							"media_mime_type": sniffedType,
-							// Re-link the message to the account that actually
-							// owns it, so future fetches find the account on the
-							// first lookup and ServeMedia no longer has to fall
-							// back. Only set when the recovery account differs.
-							"whats_app_account": account.Name,
-						}
-						a.DB.Model(&models.Message{}).Where("id = ?", message.ID).Updates(updates)
+				} else {
+					updates := map[string]any{
+						"media_url":       relativePath,
+						"media_mime_type": sniffedType,
+						// Re-link the message to the account that actually
+						// owns it, so future fetches find the account on the
+						// first lookup and ServeMedia no longer has to fall
+						// back. Only set when the recovery account differs.
+						"whats_app_account": account.Name,
+					}
+					a.DB.Model(&models.Message{}).Where("id = ?", message.ID).Updates(updates)
 
-						// Re-evaluate full path
-						filePath = filepath.Clean(relativePath)
-						fullPath, err = filepath.Abs(filepath.Join(baseDir, filePath))
-						if err == nil {
-							info, err = os.Lstat(fullPath)
-						}
+					// Re-evaluate full path
+					filePath = filepath.Clean(relativePath)
+					fullPath, err = filepath.Abs(filepath.Join(baseDir, filePath))
+					if err == nil {
+						info, err = os.Lstat(fullPath)
 					}
 				}
 			}
@@ -486,24 +533,14 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid file path", nil, "")
 	}
 
-	// Read file
-	data, err := os.ReadFile(fullPath)
-	if err != nil {
-		a.Log.Error("Failed to read media file", "path", fullPath, "error", err)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to read file", nil, "")
-	}
-
-	// Determine content type: first try the file extension, then sniff the
-	// actual bytes if the extension is unknown (e.g. .bin from GOWA downloads).
-	ext := strings.ToLower(filepath.Ext(filePath))
-	contentType, knownExt := mimeFromExt[ext]
-	if !knownExt {
-		contentType = sniffContentType(data)
-	}
-
-	r.RequestCtx.Response.Header.Set("Content-Type", contentType)
+	// Stream the file from disk. ServeFile answers with the extension's MIME
+	// type and — critically for large customer files — speaks HTTP Range, so
+	// interrupted downloads resume from where they stopped instead of
+	// restarting from byte zero. It also never buffers the whole file in
+	// memory, unlike the previous os.ReadFile + SetBody path which spiked
+	// RAM by the full file size on every view.
 	r.RequestCtx.Response.Header.Set("Cache-Control", "private, max-age=3600") // Cache for 1 hour, private
-	r.RequestCtx.SetBody(data)
+	fasthttp.ServeFile(r.RequestCtx, fullPath)
 
 	return nil
 }
