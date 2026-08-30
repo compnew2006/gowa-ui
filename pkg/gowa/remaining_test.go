@@ -21,11 +21,11 @@ func TestLoginWithCode_ReturnsPairCode(t *testing.T) {
 	resp, err := c.LoginWithCode(context.Background(), "dev1", "628123456789")
 	require.NoError(t, err)
 	assert.Equal(t, "ABCD-1234", resp.PairCode)
-	assert.Equal(t, "/app/login-with-code", mock.lastPath)
+	assert.Equal(t, "/devices/dev1/login/code", mock.lastPath)
 	// The phone is sent as a query param, not in the path.
 	// The mock captures r.URL.Path only (no query string), so we verify
-	// the body wasn't sent (it's a GET with query params).
-	assert.Equal(t, "GET", mock.lastMethod)
+	// the body wasn't sent (POST with query params only).
+	assert.Equal(t, "POST", mock.lastMethod)
 }
 
 func TestGetPasskeyStatus_ParsesStatusField(t *testing.T) {

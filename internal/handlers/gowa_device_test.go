@@ -54,7 +54,7 @@ func newMockGowaDeviceAPI() *mockGowaDeviceAPI {
 		}
 
 		switch r.URL.Path {
-		case "/app/login":
+		case "/devices/dev-1/login":
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"results": map[string]any{
@@ -65,7 +65,7 @@ func newMockGowaDeviceAPI() *mockGowaDeviceAPI {
 		case "/app/status":
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]any{"results": m.appStatus})
-		case "/app/login-with-code":
+		case "/devices/dev-1/login/code":
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"results": map[string]any{"pair_code": "12345678"},

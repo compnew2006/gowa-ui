@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/test/testutil"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
@@ -322,4 +322,108 @@ func TestAutoSyncGowaHistory(t *testing.T) {
 		Count(&count)
 	assert.Equal(t, int64(0), count,
 		"accounts without a GOWA device must not be synced")
+}
+
+// TestSyncGowaInstanceMessages_BackfillsEditedContent pins the edit-detection
+// contract of the history sync: a message whose GOWA copy carries
+// updated_at > created_at is an EDIT, and a re-sync must converge the stored
+// content even when the message.edited webhook was lost — the same gap the
+// safety-net probe + periodic reconciler close at the view layer.
+func TestSyncGowaInstanceMessages_BackfillsEditedContent(t *testing.T) {
+	t.Parallel()
+
+	// Mutable message state: the first sync serves the original text, then the
+	// test flips it to an edited copy with a newer updated_at.
+	content := "original text"
+	createdAt := "2026-08-28T10:00:00Z"
+	updatedAt := createdAt
+	msgID := "HIST_EDIT_MSG_" + uuid.New().String()[:8]
+
+	mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/chats":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"results": map[string]any{
+					"data": []map[string]any{{
+						"jid":               "15551234567@s.whatsapp.net",
+						"name":              "Editor",
+						"last_message_time": updatedAt,
+					}},
+					"pagination": map[string]any{"total": 1, "limit": 100, "offset": 0},
+				},
+			})
+		default: // /chat/{jid}/messages
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"results": map[string]any{
+					"data": []map[string]any{{
+						"id":         msgID,
+						"chat_jid":   "15551234567@s.whatsapp.net",
+						"content":    content,
+						"timestamp":  createdAt,
+						"created_at": createdAt,
+						"updated_at": updatedAt,
+						"media_type": "",
+						"is_from_me": false,
+					}},
+					"pagination": map[string]any{"total": 1, "limit": 100, "offset": 0},
+				},
+			})
+		}
+	}))
+	defer mock.Close()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	admin := createAdminUser(t, app, org.ID)
+
+	inst := &models.GowaInstance{
+		OrganizationID: org.ID,
+		Name:           "edit-sync-server-" + uuid.New().String()[:8],
+		BaseURL:        mock.URL,
+		IsActive:       true,
+	}
+	require.NoError(t, app.DB.Create(inst).Error)
+
+	deviceID := "dev-edit-sync-" + uuid.New().String()[:8]
+	accountName := "gowa-edit-sync-" + uuid.New().String()[:8]
+	acc := &models.WhatsAppAccount{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		Name:           accountName,
+		GowaDeviceID:   deviceID,
+		Status:         "active",
+	}
+	require.NoError(t, app.DB.Create(acc).Error)
+
+	syncNow := func() {
+		req := testutil.NewJSONRequest(t, nil)
+		testutil.SetAuthContext(req, org.ID, admin.ID)
+		testutil.SetPathParam(req, "id", inst.ID.String())
+		testutil.SetPathParam(req, "deviceId", deviceID)
+		require.NoError(t, app.SyncGowaInstanceMessages(req))
+		require.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req),
+			"want 200, body=%s", string(testutil.GetResponseBody(req)))
+	}
+
+	// First sync: the original text lands.
+	syncNow()
+	var msg models.Message
+	require.NoError(t, app.DB.Where("whats_app_message_id = ?", msgID).First(&msg).Error)
+	assert.Equal(t, "original text", msg.Content)
+
+	// GOWA now holds an edited copy (updated_at newer than created_at).
+	content = "edited later"
+	updatedAt = "2026-08-29T12:00:00Z"
+
+	// A re-sync must converge the stored content onto the edit.
+	syncNow()
+	require.NoError(t, app.DB.Where("whats_app_message_id = ?", msgID).First(&msg).Error)
+	assert.Equal(t, "edited later", msg.Content,
+		"a re-sync must backfill an edited message (updated_at > created_at)")
+
+	// And it must not have duplicated the row.
+	var count int64
+	app.DB.Model(&models.Message{}).Where("whats_app_message_id = ?", msgID).Count(&count)
+	assert.Equal(t, int64(1), count, "edit backfill must not duplicate the message row")
 }

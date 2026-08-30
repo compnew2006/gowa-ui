@@ -177,3 +177,16 @@ func (m *gowaExtMock) url() string { return m.Server.URL }
 
 // Alias for test naming consistency.
 func newGowaExtMockServer() *gowaExtMock { return newGowaExtMock() }
+
+func TestStarMessage_PostsToStarEndpoint(t *testing.T) {
+	t.Parallel()
+	mock := newGowaExtMockServer()
+	defer mock.close()
+
+	c := gowa.New(mock.url(), "", "")
+	account := &whatsapp.Account{GowaDeviceID: "dev1"}
+
+	err := c.StarMessage(context.Background(), account, "MSG001", "628123@s.whatsapp.net")
+	require.NoError(t, err)
+	assert.Equal(t, "/message/MSG001/star", mock.lastPath)
+}

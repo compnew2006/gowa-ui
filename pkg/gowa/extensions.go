@@ -37,6 +37,11 @@ type MessageExtensions interface {
 	// Body: { phone: chatJID }
 	UnstarMessage(ctx context.Context, account *whatsapp.Account, messageID, chatJID string) error
 
+	// StarMessage stars a message.
+	// GOWA endpoint: POST /message/{message_id}/star
+	// Body: { phone: chatJID }
+	StarMessage(ctx context.Context, account *whatsapp.Account, messageID, chatJID string) error
+
 	// MarkMessageReadWithJID marks a message as read, providing the chat JID
 	// that GOWA requires. This is the preferred read-receipt method for GOWA
 	// since the Provider interface's MarkMessageRead lacks the JID parameter.
@@ -80,6 +85,14 @@ func (c *Client) SendChatPresence(ctx context.Context, account *whatsapp.Account
 // UnstarMessage removes a star from a message.
 func (c *Client) UnstarMessage(ctx context.Context, account *whatsapp.Account, messageID, chatJID string) error {
 	path := fmt.Sprintf("/message/%s/unstar", messageID)
+	body := map[string]any{"phone": toJID(chatJID)}
+	_, err := c.doJSON(ctx, "POST", path, deviceID(account), body)
+	return err
+}
+
+// StarMessage stars a message.
+func (c *Client) StarMessage(ctx context.Context, account *whatsapp.Account, messageID, chatJID string) error {
+	path := fmt.Sprintf("/message/%s/star", messageID)
 	body := map[string]any{"phone": toJID(chatJID)}
 	_, err := c.doJSON(ctx, "POST", path, deviceID(account), body)
 	return err

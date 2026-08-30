@@ -137,7 +137,26 @@ func (a *App) syncGowaHistory(ctx context.Context, client *gowa.Client, account 
 
 		var newest models.Message
 		for _, m := range msgs {
-			if m.ID == "" || existing[m.ID] {
+			if m.ID == "" {
+				continue
+			}
+			if existing[m.ID] {
+				// The row already exists, but GOWA stamps an edited message
+				// with updated_at > created_at. Backfill that edit so a lost
+				// message.edited webhook still converges on re-sync — same
+				// org+account scoping as processGowaEdited (shared wamids
+				// across two org accounts must not cross-patch).
+				if upd, cre := gowa.ParseTimestamp(m.UpdatedAt), gowa.ParseTimestamp(m.CreatedAt); !upd.IsZero() && upd.After(cre) {
+					if res := a.DB.Model(&models.Message{}).
+						Where("whats_app_message_id = ? AND organization_id = ? AND whats_app_account = ?",
+							m.ID, orgID, account.Name).
+						Update("content", m.Content); res.Error != nil {
+						a.Log.Error("Failed to backfill edited GOWA message content",
+							"error", res.Error, "msg_id", m.ID)
+					} else if res.RowsAffected > 0 {
+						stats.MessagesStored++
+					}
+				}
 				continue
 			}
 			ts := gowa.ParseTimestamp(m.Timestamp)

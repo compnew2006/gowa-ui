@@ -176,6 +176,14 @@ func statusPriority(status models.MessageStatus) int {
 		return 3
 	case models.MessageStatusFailed:
 		return 4 // Failed can override any status
+	case models.MessageStatusRevoked:
+		// Terminal: a revoked (unsent) message must never be un-revoked by a
+		// late delivered/read receipt. GOWA replays receipt batches on
+		// reconnect, so without this guard any ack arriving after the revoke
+		// would flip the row back to sent/delivered/read and the chat would
+		// render the deleted message as if it were never unsent (content is
+		// intentionally preserved on revoke for the overlay view).
+		return 5
 	default:
 		return -1
 	}

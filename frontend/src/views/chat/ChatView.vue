@@ -115,6 +115,7 @@ import { useChatCannedTemplates } from '@/composables/useChatCannedTemplates'
 import { useChatMessaging } from '@/composables/useChatMessaging'
 import { useChatLifecycle } from '@/composables/useChatLifecycle'
 import { useChatContactsList } from '@/composables/useChatContactsList'
+import { useChatLiveProbe } from '@/composables/useChatLiveProbe'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -484,6 +485,10 @@ const {
   resetUnreadOnSwitch: resetOnContactSwitch,
   scrollToBottom,
 })
+
+// Safety-net probe: reconciles the open conversation when the webhook → WS
+// pipeline drops a message silently (see composable doc for cadence).
+useChatLiveProbe({ contactsStore, selectedAccount })
 
 // Emoji insertion needs to mutate the messaging-owned messageInput ref.
 function insertEmoji(emoji: string) {

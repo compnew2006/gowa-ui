@@ -43,10 +43,11 @@ type WebAuthnAssertion struct {
 }
 
 // LoginWithCode initiates a phone-code pairing (alternative to QR).
-// GOWA endpoint: GET /app/login-with-code?phone={phone}
+// GOWA endpoint: POST /devices/{device_id}/login/code?phone={phone}
+// (the legacy GET /app/login-with-code still works but is deprecated).
 func (c *Client) LoginWithCode(ctx context.Context, deviceID, phone string) (*LoginWithCodeResponse, error) {
-	path := fmt.Sprintf("/app/login-with-code?phone=%s", url.QueryEscape(phone))
-	rawBody, err := c.doRaw(ctx, "GET", path, deviceID)
+	path := fmt.Sprintf("/devices/%s/login/code?phone=%s", url.PathEscape(deviceID), url.QueryEscape(phone))
+	rawBody, err := c.doRaw(ctx, "POST", path, "")
 	if err != nil {
 		return nil, err
 	}

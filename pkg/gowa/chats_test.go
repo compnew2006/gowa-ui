@@ -133,3 +133,41 @@ func TestListChats_GroupAndRegularJIDsPreserved(t *testing.T) {
 	assert.Equal(t, "16505551234@s.whatsapp.net", chats[0].JID)
 	assert.Equal(t, "Team Group", chats[1].Name)
 }
+
+func TestListChats_HasMediaFilter(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "true", r.URL.Query().Get("has_media"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"results":{"data":[{"jid":"1@s.whatsapp.net","name":"A"}],"pagination":{"total":1,"limit":25,"offset":0}}}`))
+	}))
+	defer server.Close()
+
+	c := gowa.New(server.URL, "", "")
+	mediaOnly := true
+	_, _, err := c.ListChats(context.Background(), "dev1", gowa.ListChatsOptions{HasMedia: &mediaOnly})
+	require.NoError(t, err)
+}
+
+func TestGetChatMessages_SendsFilterQueryParams(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		assert.Equal(t, "true", q.Get("media_only"))
+		assert.Equal(t, "false", q.Get("is_from_me"))
+		assert.Equal(t, "2026-08-01T00:00:00Z", q.Get("start_time"))
+		assert.Equal(t, "2026-08-30T00:00:00Z", q.Get("end_time"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"results":{"data":[{"id":"m1"}],"pagination":{"total":1,"limit":50,"offset":0}}}`))
+	}))
+	defer server.Close()
+
+	c := gowa.New(server.URL, "", "")
+	fromMe := false
+	msgs, _, err := c.GetChatMessages(context.Background(), "dev1", "628123@s.whatsapp.net", gowa.ChatMessagesOptions{
+		Limit: 1, MediaOnly: true, IsFromMe: &fromMe,
+		StartTime: "2026-08-01T00:00:00Z", EndTime: "2026-08-30T00:00:00Z",
+	})
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"time"
 )
 
@@ -157,10 +158,10 @@ func (c *Client) SetDeviceWebhook(ctx context.Context, deviceID string, cfg Webh
 }
 
 // GetLoginQR retrieves a QR code for pairing a device.
-// Uses the recommended GET /app/login with X-Device-Id header.
-// GOWA endpoint: GET /app/login
+// GOWA endpoint: GET /devices/{device_id}/login (the legacy GET /app/login
+// with X-Device-Id still works but is deprecated).
 func (c *Client) GetLoginQR(ctx context.Context, deviceID string) (*LoginResponse, error) {
-	rawBody, err := c.doRaw(ctx, "GET", "/app/login", deviceID)
+	rawBody, err := c.doRaw(ctx, "GET", fmt.Sprintf("/devices/%s/login", url.PathEscape(deviceID)), "")
 	if err != nil {
 		return nil, err
 	}

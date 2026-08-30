@@ -25,6 +25,7 @@ type ListChatsOptions struct {
 	Offset   int    // Starting offset for the first request.
 	Search   string // Filter chats by name.
 	Archived *bool  // nil = all, true = archived only, false = non-archived only.
+	HasMedia *bool  // nil = all, true = only chats containing media.
 }
 
 // MaxChats caps the total number of chats ListChats will fetch across pages,
@@ -63,7 +64,7 @@ func (c *Client) ListChats(ctx context.Context, deviceID string, opts ListChatsO
 			break
 		}
 
-		rawBody, err := c.doRaw(ctx, "GET", buildChatsPath(opts.Search, pageSize, offset, opts.Archived), deviceID)
+		rawBody, err := c.doRaw(ctx, "GET", buildChatsPath(opts.Search, pageSize, offset, opts.Archived, opts.HasMedia), deviceID)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -110,7 +111,7 @@ func (c *Client) ListChats(ctx context.Context, deviceID string, opts ListChatsO
 
 // buildChatsPath assembles the GET /chats query string from the options.
 // Empty/zero options are omitted so GOWA applies its own defaults.
-func buildChatsPath(search string, limit, offset int, archived *bool) string {
+func buildChatsPath(search string, limit, offset int, archived, hasMedia *bool) string {
 	q := url.Values{}
 	if search != "" {
 		q.Set("search", search)
@@ -123,6 +124,9 @@ func buildChatsPath(search string, limit, offset int, archived *bool) string {
 	}
 	if archived != nil {
 		q.Set("archived", fmt.Sprintf("%t", *archived))
+	}
+	if hasMedia != nil {
+		q.Set("has_media", fmt.Sprintf("%t", *hasMedia))
 	}
 	if encoded := q.Encode(); encoded != "" {
 		return "/chats?" + encoded
@@ -146,11 +150,18 @@ type ChatMessage struct {
 	UpdatedAt  string `json:"updated_at"`
 }
 
-// ChatMessagesOptions parameterizes GetChatMessages.
+// ChatMessagesOptions parameterizes GetChatMessages. Zero values are omitted
+// from the query string so GOWA applies its own defaults.
 type ChatMessagesOptions struct {
-	Limit  int // max 100 per GOWA spec
-	Offset int
-	Search string
+	Limit     int // max 100 per GOWA spec
+	Offset    int
+	Search    string
+	MediaOnly bool  // true = only messages with media
+	IsFromMe  *bool // nil = all, true = outgoing only, false = incoming only
+	// StartTime/EndTime bound the fetch window (RFC3339, e.g.
+	// "2026-01-02T15:04:05Z"). Empty = unbounded on that side.
+	StartTime string
+	EndTime   string
 }
 
 // GetChatMessages retrieves the message history for a specific chat from a
@@ -188,6 +199,18 @@ func (c *Client) GetChatMessages(ctx context.Context, deviceID, chatJID string, 
 		}
 		if opts.Search != "" {
 			q.Set("search", opts.Search)
+		}
+		if opts.MediaOnly {
+			q.Set("media_only", "true")
+		}
+		if opts.IsFromMe != nil {
+			q.Set("is_from_me", fmt.Sprintf("%t", *opts.IsFromMe))
+		}
+		if opts.StartTime != "" {
+			q.Set("start_time", opts.StartTime)
+		}
+		if opts.EndTime != "" {
+			q.Set("end_time", opts.EndTime)
 		}
 		path := fmt.Sprintf("/chat/%s/messages?%s", encodedJID, q.Encode())
 
