@@ -89,14 +89,26 @@ interface WSMessage {
 class WebSocketService {
   private ws: WebSocket | null = null
   private reconnectAttempts = 0
-  private maxReconnectAttempts = 5
   private reconnectDelay = 1000
   private pingInterval: number | null = null
   private hasConnectedBefore = false
+  // Liveness: timestamp of the last message RECEIVED from the server (pong
+  // counts). A half-open TCP socket accepts send() silently, so sent pings
+  // prove nothing — only server traffic does.
+  private lastServerActivityAt = 0
+  // Consider the connection dead after this long without any server traffic
+  // (2.5× the 30s ping interval; also survives background-tab timer
+  // throttling, which slows the check to ~1/min).
+  private static readonly STALE_AFTER_MS = 75_000
+  // disconnect() must still win over the now-infinite reconnect loop.
+  private intentionallyDisconnected = false
+  private wakeListenersBound = false
   private campaignStatsCallbacks: ((payload: any) => void)[] = []
   private getTokenFn: (() => Promise<string | null>) | null = null
 
   async connect(getToken?: () => Promise<string | null>) {
+    this.bindWakeListeners()
+    this.intentionallyDisconnected = false
     if (this.ws?.readyState === WebSocket.OPEN) {
       return
     }
@@ -109,6 +121,11 @@ class WebSocketService {
     // Get a fresh short-lived WS token
     const token = this.getTokenFn ? await this.getTokenFn() : null
     if (!token) {
+      // A transient auth/refresh blip must not kill real-time forever —
+      // without this the service sat dead (silently) until a manual reload.
+      if (!this.intentionallyDisconnected && this.hasConnectedBefore) {
+        this.handleReconnect()
+      }
       return
     }
 
@@ -118,9 +135,15 @@ class WebSocketService {
     const url = `${protocol}//${host}${basePath}/ws`
 
     try {
-      this.ws = new WebSocket(url)
+      const socket = new WebSocket(url)
+      this.ws = socket
 
-      this.ws.onopen = () => {
+      socket.onopen = () => {
+        if (this.ws !== socket) return
+        // Any server message (starting with the auth response) refreshes the
+        // liveness clock; seeded here so a slow first response isn't read as
+        // staleness.
+        this.lastServerActivityAt = Date.now()
         // Send auth message as the first message (token not in URL for security)
         this.send({ type: WS_TYPE_AUTH, payload: { token } })
 
@@ -135,16 +158,21 @@ class WebSocketService {
         }
       }
 
-      this.ws.onmessage = (event) => {
+      socket.onmessage = (event) => {
+        if (this.ws !== socket) return
+        this.lastServerActivityAt = Date.now()
         this.handleMessage(event.data)
       }
 
-      this.ws.onclose = () => {
+      socket.onclose = () => {
+        // A replacement socket already exists (or this one was closed as
+        // stale) — its handlers are retired; the live one owns reconnection.
+        if (this.ws !== socket) return
         this.stopPing()
         this.handleReconnect()
       }
 
-      this.ws.onerror = () => {
+      socket.onerror = () => {
         // Error handled by onclose
       }
     } catch {
@@ -153,12 +181,66 @@ class WebSocketService {
   }
 
   disconnect() {
+    this.intentionallyDisconnected = true
     this.stopPing()
-    if (this.ws) {
-      this.ws.close()
-      this.ws = null
+    const socket = this.ws
+    this.ws = null
+    if (socket) {
+      // Detach handlers first: onclose must not fire reconnect (the guard
+      // would already ignore it, but skipping the handler entirely is cleaner).
+      socket.onclose = null
+      socket.onmessage = null
+      socket.onerror = null
+      try { socket.close() } catch { /* already closed */ }
     }
-    this.reconnectAttempts = this.maxReconnectAttempts // Prevent reconnect
+  }
+
+  // Tears down a dead/stale socket and reconnects immediately. Nulled before
+  // close() so the (possibly delayed) onclose is ignored by the guard.
+  private forceReconnect() {
+    this.stopPing()
+    const dead = this.ws
+    this.ws = null
+    if (dead) {
+      dead.onclose = null
+      dead.onmessage = null
+      dead.onerror = null
+      try { dead.close() } catch { /* already dead */ }
+    }
+    this.reconnectAttempts = 0 // stale death is not a server problem; retry fast
+    this.handleReconnect()
+  }
+
+  // Wake triggers: laptop sleep/wake and network interface changes do NOT
+  // reliably fire ws.onclose — these events are the recovery paths.
+  private bindWakeListeners() {
+    if (this.wakeListenersBound) return
+    this.wakeListenersBound = true
+
+    window.addEventListener('online', () => {
+      // Network is back: if the socket isn't confirmed alive, rebuild it now
+      // instead of waiting for the staleness watchdog.
+      if (this.intentionallyDisconnected) return
+      if (this.ws?.readyState !== WebSocket.OPEN || this.isStale()) {
+        this.forceReconnect()
+      }
+    })
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') return
+      if (this.intentionallyDisconnected) return
+      // Returning to a long-idle tab: a silently dead connection looks OPEN
+      // but has no fresh server traffic. Rebuild + refreshStaleData covers it.
+      if (this.ws?.readyState !== WebSocket.OPEN || this.isStale()) {
+        this.forceReconnect()
+      } else {
+        this.send({ type: WS_TYPE_PING, payload: {} }) // freshness check while user watches
+      }
+    })
+  }
+
+  private isStale(): boolean {
+    return Date.now() - this.lastServerActivityAt > WebSocketService.STALE_AFTER_MS
   }
 
   private handleMessage(data: string) {
@@ -560,17 +642,22 @@ class WebSocketService {
     }
   }
 
+  // Reconnects forever with capped exponential backoff + jitter: an agent
+  // tab lives for days (sleep/wake, network flaps), so giving up after N
+  // attempts — the old behavior — froze the UI silently until a manual F5.
+  // disconnect() is the only thing that stops this loop.
   private handleReconnect() {
-    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+    if (this.intentionallyDisconnected) {
       return
     }
 
     this.reconnectAttempts++
-    const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1)
+    const exponential = Math.min(this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1), 30_000)
+    const jitter = exponential * (0.8 + Math.random() * 0.4)
 
     setTimeout(() => {
       this.connect()
-    }, delay)
+    }, jitter)
   }
 
   setCurrentContact(contactId: string | null) {
@@ -589,6 +676,16 @@ class WebSocketService {
   private startPing() {
     this.stopPing()
     this.pingInterval = window.setInterval(() => {
+      // Liveness watchdog: a half-open socket swallows send() without error,
+      // so the ONLY reliable liveness signal is server traffic. No pong (or
+      // any message) within STALE_AFTER_MS means the connection is dead even
+      // though the browser still reports OPEN — force it closed so onclose →
+      // handleReconnect can build a fresh one (which refreshes missed data).
+      if (Date.now() - this.lastServerActivityAt > WebSocketService.STALE_AFTER_MS) {
+        console.warn('[ws] stale connection detected (no server traffic), reconnecting')
+        this.forceReconnect()
+        return
+      }
       this.send({ type: WS_TYPE_PING, payload: {} })
     }, 30000) // Ping every 30 seconds
   }
