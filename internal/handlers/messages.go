@@ -1103,8 +1103,9 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 	if !canViewContent && contact.EffectiveStatus() == models.ChatStatusPending {
 		var pendingCount int64
 		a.DB.Model(&models.Message{}).
-			Where("contact_id = ? AND direction = ? AND status != ?",
-				contactID, models.DirectionIncoming, models.MessageStatusRead).
+			Where("contact_id = ? AND direction = ? AND status NOT IN ?",
+				contactID, models.DirectionIncoming,
+				[]models.MessageStatus{models.MessageStatusRead, models.MessageStatusRevoked, models.MessageStatusFailed}).
 			Count(&pendingCount)
 		return r.SendErrorEnvelope(fasthttp.StatusForbidden,
 			"Claim this chat to view messages",

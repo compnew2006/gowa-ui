@@ -266,9 +266,17 @@ export const useContactsStore = defineStore('contacts', () => {
   const pendingContacts = computed(() =>
     sortedContacts.value.filter(c => !c.assigned_user_id && c.chat_status !== 'closed')
   )
-  const myContacts = computed(() =>
-    sortedContacts.value.filter(c => c.assigned_user_id === authStore.user?.id)
-  )
+  // Supervisors (contacts:write — the admin/manager marker everywhere else)
+  // get the "Me" tab as a follow-up surface: EVERY assigned conversation in
+  // the org, not just their own — admins monitor agents' queues and don't
+  // claim chats, so a strictly-mine filter left the tab permanently empty
+  // for them. Regular agents keep the strictly-mine view.
+  const myContacts = computed(() => {
+    if (canSeeSupervisorTabs.value) {
+      return sortedContacts.value.filter(c => c.assigned_user_id)
+    }
+    return sortedContacts.value.filter(c => c.assigned_user_id === authStore.user?.id)
+  })
   const closedContacts = computed(() =>
     sortedContacts.value.filter(c => c.chat_status === 'closed')
   )

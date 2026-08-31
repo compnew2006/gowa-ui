@@ -709,10 +709,16 @@ func (a *App) buildContactResponse(contact *models.Contact, orgID, viewerUserID 
 // decision supplied by the caller, so list endpoints can resolve it once per
 // page instead of once per contact.
 func (a *App) buildContactResponseMasked(contact *models.Contact, orgID, viewerUserID uuid.UUID, shouldMask bool) ContactResponse {
-	// Count unread messages
+	// Count unread messages. Terminal statuses (revoked/failed) are excluded:
+	// markMessagesAsRead deliberately never sweeps them (a revoked message
+	// must stay revoked), so counting them here made the badge reappear on
+	// every refresh forever for any conversation containing one deleted
+	// message. They are not "awaiting a read" — the read sweep skips them.
 	var unreadCount int64
 	a.DB.Model(&models.Message{}).
-		Where("contact_id = ? AND direction = ? AND status != ?", contact.ID, models.DirectionIncoming, models.MessageStatusRead).
+		Where("contact_id = ? AND direction = ? AND status NOT IN ?",
+			contact.ID, models.DirectionIncoming,
+			[]models.MessageStatus{models.MessageStatusRead, models.MessageStatusRevoked, models.MessageStatusFailed}).
 		Count(&unreadCount)
 
 	tags := []string{}

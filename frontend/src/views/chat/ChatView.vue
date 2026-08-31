@@ -478,10 +478,13 @@ const {
       notesStore.fetchNotes(id),
       scheduledStore.fetchForContact(id),
     ])
-    setTimeout(() => {
-      scrollToBottom(true)
-      messagesScroll.setup()
-    }, 50)
+    scrollToBottom(true)
+    messagesScroll.setup()
+    // Re-assert after the layout settles: media bubbles and virtual rows
+    // change height after first paint, which drifts the initial scroll up.
+    // The second instant pass guarantees the LATEST message is in view on
+    // open, not wherever the first scroll landed pre-settling.
+    setTimeout(() => scrollToBottom(true), 350)
   },
   messagesScroll,
   resetUnreadOnSwitch: resetOnContactSwitch,

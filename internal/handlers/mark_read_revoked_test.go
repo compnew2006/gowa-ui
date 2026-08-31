@@ -60,3 +60,41 @@ func TestMarkMessagesAsRead_PreservesRevoked(t *testing.T) {
 	assert.Equal(t, models.MessageStatusFailed, statusOf("MR-FAIL-1"), "failed must survive the read sweep")
 	assert.Equal(t, models.MessageStatusRead, statusOf("MR-RECV-1"), "normal incoming must still become read")
 }
+
+// TestUnreadCount_ExcludesRevokedAndFailed pins the badge semantics: the
+// unread counter (sidebar badge) must not count revoked/failed messages.
+// markMessagesAsRead never sweeps those (revoked stays revoked by design),
+// so counting them made the badge reappear on every refresh forever for any
+// conversation containing one deleted message.
+func TestUnreadCount_ExcludesRevokedAndFailed(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	app := &App{DB: db}
+	org := testutil.CreateTestOrganization(t, db)
+	contact := &models.Contact{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+	}
+	require.NoError(t, db.Create(contact).Error)
+
+	for _, tc := range []struct{ wamid, status string }{
+		{"UR-RECV", "received"},
+		{"UR-REV", "revoked"},
+		{"UR-FAIL", "failed"},
+		{"UR-READ", "read"},
+	} {
+		require.NoError(t, db.Create(&models.Message{
+			BaseModel:         models.BaseModel{ID: uuid.New()},
+			OrganizationID:    org.ID,
+			ContactID:         contact.ID,
+			WhatsAppMessageID: tc.wamid,
+			Direction:         models.DirectionIncoming,
+			MessageType:       models.MessageTypeText,
+			Content:           "x",
+			Status:            models.MessageStatus(tc.status),
+		}).Error)
+	}
+
+	resp := app.buildContactResponse(contact, org.ID, uuid.New())
+	assert.Equal(t, 1, resp.UnreadCount,
+		"only the plain 'received' message counts as unread")
+}
