@@ -438,16 +438,9 @@
     "urlButtonParam": "URL بٹن \"{button}\" - متغیر قدر",
     "urlButtonParamPlaceholder": "متغیر URL قدر درج کریں",
     "preview": "پیش منظر",
-    "collectFiles": "فائلیں جمع کریں",
-    "filesJustIn": "{count} فائلیں ابھی آئیں",
-    "collectTimeWindow": "وقت ونڈو",
     "minutes": "منٹ",
-    "printFile": "پرنٹ",
-    "mediaBurstTitle": "آمد فائلیں جمع کریں",
-    "mediaBurstDesc": "ان فائلوں کو ایک ساتھ ZIP کے طور پر یا علیحدہ ڈاؤن لوڈ کریں۔",
     "downloadZip": "ZIP کے طور پر ڈاؤن لوڈ",
     "downloadSeparately": "علیحدہ ڈاؤن لوڈ",
-    "downloadingBurst": "{total} میں سے {current} تیار ہو رہا ہے…",
     "mediaMissing": "میڈیا دستیاب نہیں",
     "retryDownload": "ڈاؤن لوڈ دوبارہ کوشش",
     "retrySuccess": "میڈیا کامیابی سے ڈاؤن لوڈ ہوا",
@@ -491,7 +484,12 @@
       "collaborator_joined": "{agent} گفتگو میں شامل ہوئے",
       "collaborator_left": "{agent} گفتگو چھوڑ گئے",
       "rating_received": "⭐ گاہک نے گفتگو کو {rating}/5 ریٹ کیا"
-    }
+    },
+    "selectFiles": "فائلیں منتخب کریں",
+    "selectedFiles": "{count} منتخب",
+    "downloadFailed": "ڈاؤن لوڈ ناکام",
+    "filesDownloaded": "فائلیں ڈاؤن لوڈ ہو گئیں",
+    "tryAgain": "براہ کرم دوبارہ کوشش کریں"
   },
   "contacts": {
     "title": "روابط",

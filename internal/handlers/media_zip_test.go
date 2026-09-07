@@ -3,7 +3,6 @@ package handlers_test
 import (
 	"archive/zip"
 	"bytes"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -89,11 +88,11 @@ func TestServeMediaZip_OrgIsolation(t *testing.T) {
 	zr, err := zip.NewReader(bytes.NewReader(testutil.GetResponseBody(req)), int64(len(testutil.GetResponseBody(req))))
 	require.NoError(t, err)
 
-	// Exactly two entries: the one image + _manifest.txt.
+	// Exactly one entry: the one image. No manifest, no orgB's message.
 	names := zipEntryNames(zr)
 	assert.Contains(t, names, "shared.jpg")
-	assert.Contains(t, names, "_manifest.txt")
-	assert.Len(t, names, 2, "orgB's message must be excluded")
+	assert.NotContains(t, names, "_manifest.txt")
+	assert.Len(t, names, 1, "orgB's message must be excluded")
 }
 
 func TestServeMediaZip_FilenameCollision(t *testing.T) {
@@ -203,7 +202,7 @@ func TestServeMediaZip_PathTraversalSkipped(t *testing.T) {
 	}
 }
 
-func TestServeMediaZip_Manifest(t *testing.T) {
+func TestServeMediaZip_NoManifestEntry(t *testing.T) {
 	t.Parallel()
 	app := newTestApp(t)
 	mediaDir := t.TempDir()
@@ -235,11 +234,11 @@ func TestServeMediaZip_Manifest(t *testing.T) {
 	zr, err := zip.NewReader(bytes.NewReader(testutil.GetResponseBody(req)), int64(len(testutil.GetResponseBody(req))))
 	require.NoError(t, err)
 
-	manifest := readZipEntry(t, zr, "_manifest.txt")
-	assert.Contains(t, manifest, "message_id: "+msg.ID.String())
-	assert.Contains(t, manifest, "direction:  incoming")
-	assert.Contains(t, manifest, "type:       image")
-	assert.Contains(t, manifest, "mime:       image/png")
+	// The archive must contain only the media file — no _manifest.txt entry.
+	names := zipEntryNames(zr)
+	assert.Contains(t, names, "a.png")
+	assert.NotContains(t, names, "_manifest.txt", "manifest entry was removed — zips carry media only")
+	assert.Len(t, names, 1)
 }
 
 // An agent (contacts:read, no contacts:export) must be able to collect a
@@ -302,23 +301,6 @@ func filterPrefix(in []string, prefix string) []string {
 		}
 	}
 	return out
-}
-
-func readZipEntry(t *testing.T, zr *zip.Reader, name string) string {
-	t.Helper()
-	for _, f := range zr.File {
-		if f.Name != name {
-			continue
-		}
-		rc, err := f.Open()
-		require.NoError(t, err)
-		defer rc.Close()
-		b, err := io.ReadAll(rc)
-		require.NoError(t, err)
-		return string(b)
-	}
-	require.Fail(t, "entry not found in zip: "+name)
-	return ""
 }
 
 // traversalRel returns a media_url value that, when joined to mediaDir, would

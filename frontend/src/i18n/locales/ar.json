@@ -438,16 +438,9 @@
     "urlButtonParam": "زر الرابط \"{button}\" - قيمة متغيرة",
     "urlButtonParamPlaceholder": "أدخل قيمة الرابط المتغيرة",
     "preview": "معاينة",
-    "collectFiles": "جمع الملفات",
-    "filesJustIn": "وصلت {count} ملفات",
-    "collectTimeWindow": "الإطار الزمني",
     "minutes": "دقيقة",
-    "printFile": "طباعة",
-    "mediaBurstTitle": "جمع الملفات الواردة",
-    "mediaBurstDesc": "حمّل هذه الملفات معًا كملف مضغوط أو بشكل منفصل.",
     "downloadZip": "تحميل كملف مضغوط",
     "downloadSeparately": "تحميل منفصل",
-    "downloadingBurst": "جارٍ التحضير {current} من {total}…",
     "mediaMissing": "الوسائط غير متاحة",
     "retryDownload": "إعادة التحميل",
     "retrySuccess": "تم تحميل الوسائط بنجاح",
@@ -491,7 +484,12 @@
       "collaborator_joined": "{agent} انضم إلى المحادثة",
       "collaborator_left": "{agent} غادر المحادثة",
       "rating_received": "⭐ قيّم العميل المحادثة {rating}/5"
-    }
+    },
+    "selectFiles": "تحديد الملفات",
+    "selectedFiles": "تم تحديد {count}",
+    "downloadFailed": "فشل التحميل",
+    "filesDownloaded": "تم تنزيل الملفات",
+    "tryAgain": "يرجى المحاولة مرة أخرى"
   },
   "contacts": {
     "title": "جهات الاتصال",

@@ -1,15 +1,17 @@
 package handlers_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/config"
 	"github.com/compnew2006/gowa-ui/internal/handlers"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/test/testutil"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
@@ -162,6 +164,129 @@ func TestApp_ServeMedia_FileMissingOnDisk(t *testing.T) {
 	assert.Equal(t, fasthttp.StatusNotFound, testutil.GetResponseStatusCode(req))
 }
 
+// --- ServeMedia: Content-Disposition names the transfer after the file ---
+// Without this header the browser saves downloads under the URL's message
+// UUID (e.g. 8313dffa-….jpg), because both the on-disk name and the serving
+// path are UUIDs.
+
+// setMediaFields patches a message's media filename/mime after creation.
+func setMediaFields(t *testing.T, app *handlers.App, msg *models.Message, filename, mimeType string, msgType models.MessageType) {
+	t.Helper()
+	require.NoError(t, app.DB.Model(msg).Updates(map[string]any{
+		"media_filename":  filename,
+		"media_mime_type": mimeType,
+		"message_type":    msgType,
+	}).Error)
+}
+
+func TestApp_ServeMedia_InlineDispositionUsesStoredFilename(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "media-cd-1", []string{"contacts:read"})
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&role.ID))
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	rel := withStorageDir(t, app, "images/photo.jpg", []byte("\xFF\xD8\xFF\xE0jpeg-bytes"))
+	msg := makeMediaMessage(t, app, org.ID, contact.ID, rel)
+	setMediaFields(t, app, msg, "cat photo.jpg", "image/jpeg", models.MessageTypeImage)
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "message_id", msg.ID.String())
+
+	require.NoError(t, app.ServeMedia(req))
+	require.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+	assert.Equal(t, `inline; filename="cat photo.jpg"`,
+		string(req.RequestCtx.Response.Header.Peek("Content-Disposition")))
+}
+
+func TestApp_ServeMedia_ImageWithoutFilenameFallsBackToTypedName(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "media-cd-2", []string{"contacts:read"})
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&role.ID))
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	rel := withStorageDir(t, app, "images/no-name.jpg", []byte("\xFF\xD8\xFF\xE0jpeg-bytes"))
+	msg := makeMediaMessage(t, app, org.ID, contact.ID, rel)
+	setMediaFields(t, app, msg, "", "image/jpeg", models.MessageTypeImage)
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "message_id", msg.ID.String())
+
+	require.NoError(t, app.ServeMedia(req))
+	require.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+	assert.Equal(t, fmt.Sprintf(`inline; filename="image_%s.jpg"`, msg.ID.String()[:8]),
+		string(req.RequestCtx.Response.Header.Peek("Content-Disposition")))
+}
+
+func TestApp_ServeMedia_DocumentDownloadsAsAttachment(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "media-cd-3", []string{"contacts:read"})
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&role.ID))
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	rel := withStorageDir(t, app, "documents/invoice.pdf", []byte("%PDF-1.4"))
+	msg := makeMediaMessage(t, app, org.ID, contact.ID, rel)
+	setMediaFields(t, app, msg, "invoice.pdf", "application/pdf", models.MessageTypeDocument)
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "message_id", msg.ID.String())
+
+	require.NoError(t, app.ServeMedia(req))
+	require.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+	assert.Equal(t, `attachment; filename="invoice.pdf"`,
+		string(req.RequestCtx.Response.Header.Peek("Content-Disposition")))
+}
+
+func TestApp_ServeMedia_DownloadQueryForcesAttachment(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "media-cd-4", []string{"contacts:read"})
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&role.ID))
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	rel := withStorageDir(t, app, "images/forced.jpg", []byte("\xFF\xD8\xFF\xE0jpeg-bytes"))
+	msg := makeMediaMessage(t, app, org.ID, contact.ID, rel)
+
+	req := testutil.NewGETRequest(t)
+	req.RequestCtx.Request.SetRequestURI("/api/media/" + msg.ID.String() + "?download=1")
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "message_id", msg.ID.String())
+
+	require.NoError(t, app.ServeMedia(req))
+	require.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+	assert.True(t, strings.HasPrefix(string(req.RequestCtx.Response.Header.Peek("Content-Disposition")), "attachment;"),
+		"?download must force an attachment disposition")
+}
+
+func TestApp_ServeMedia_NonASCIIFilenameGetsRFC5987Form(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "media-cd-5", []string{"contacts:read"})
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&role.ID))
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	rel := withStorageDir(t, app, "documents/arabic.pdf", []byte("%PDF-1.4"))
+	msg := makeMediaMessage(t, app, org.ID, contact.ID, rel)
+	setMediaFields(t, app, msg, "فاتورة.pdf", "application/pdf", models.MessageTypeDocument)
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "message_id", msg.ID.String())
+
+	require.NoError(t, app.ServeMedia(req))
+	require.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+	cd := string(req.RequestCtx.Response.Header.Peek("Content-Disposition"))
+	assert.Contains(t, cd, `filename*=UTF-8''`, "non-ASCII names need the RFC 5987 parameter")
+	assert.Contains(t, cd, "attachment;", "documents stay attachments")
+	// The plain fallback strips to the ASCII suffix; the extension survives.
+	assert.Contains(t, cd, `filename=".pdf"`)
+}
+
 // --- ServeMedia: cross-org isolation ---
 
 func TestApp_ServeMedia_CrossOrgIsolation(t *testing.T) {
@@ -285,14 +410,14 @@ func TestApp_ServeMedia_EmptyMediaURL_TextStillBails(t *testing.T) {
 	// recoverable media type, so this must still 404 "No media found" without
 	// attempting a download.
 	msg := &models.Message{
-		BaseModel:        models.BaseModel{ID: uuid.New()},
-		OrganizationID:   org.ID,
-		ContactID:        contact.ID,
-		Direction:        models.DirectionIncoming,
-		MessageType:      models.MessageTypeText,
-		MediaURL:         "",
+		BaseModel:         models.BaseModel{ID: uuid.New()},
+		OrganizationID:    org.ID,
+		ContactID:         contact.ID,
+		Direction:         models.DirectionIncoming,
+		MessageType:       models.MessageTypeText,
+		MediaURL:          "",
 		WhatsAppMessageID: "MSG_TEXT_001",
-		Status:           models.MessageStatusDelivered,
+		Status:            models.MessageStatusDelivered,
 	}
 	require.NoError(t, app.DB.Create(msg).Error)
 
@@ -326,14 +451,14 @@ func TestApp_ServeMedia_EmptyMediaURL_ImageWithWAMIDReachesRecovery(t *testing.T
 	// only the download fails. We assert the response is 404 (recovery failed)
 	// AND that media_url was NOT mutated (no spurious write).
 	msg := &models.Message{
-		BaseModel:        models.BaseModel{ID: uuid.New()},
-		OrganizationID:   org.ID,
-		ContactID:        contact.ID,
-		Direction:        models.DirectionIncoming,
-		MessageType:      models.MessageTypeImage,
-		MediaURL:         "",
+		BaseModel:         models.BaseModel{ID: uuid.New()},
+		OrganizationID:    org.ID,
+		ContactID:         contact.ID,
+		Direction:         models.DirectionIncoming,
+		MessageType:       models.MessageTypeImage,
+		MediaURL:          "",
 		WhatsAppMessageID: "HIST_IMG_RECOVERY_001",
-		Status:           models.MessageStatusDelivered,
+		Status:            models.MessageStatusDelivered,
 	}
 	require.NoError(t, app.DB.Create(msg).Error)
 

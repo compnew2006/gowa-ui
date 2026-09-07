@@ -3,6 +3,7 @@ import { toast } from 'vue-sonner'
 import { useI18n } from 'vue-i18n'
 import type { Message } from '@/stores/contacts'
 import { getRequestHeaders } from '@/services/api'
+import { mediaDisplayName, mediaUrl, saveBlob } from '@/lib/media'
 
 interface RedownloadResult {
   ok: boolean
@@ -60,9 +61,9 @@ export function useMediaExport(): UseMediaExportResult {
       const blob = await res.blob()
       progress.value = { current: eligible.length, total: eligible.length }
       saveBlob(blob, zipFilename())
-      toast.success('Files downloaded')
+      toast.success(t('chat.filesDownloaded'))
     } catch (e: any) {
-      toast.error('Download failed', { description: e?.message || 'Please try again' })
+      toast.error(t('chat.downloadFailed'), { description: e?.message || t('chat.tryAgain') })
     } finally {
       isDownloading.value = false
     }
@@ -77,21 +78,21 @@ export function useMediaExport(): UseMediaExportResult {
     try {
       for (let i = 0; i < eligible.length; i++) {
         const message = eligible[i]
-        const url = mediaUrlFor(message)
+        const url = mediaUrl(message)
         const res = await fetch(url, { credentials: 'include' })
         if (!res.ok) {
           throw new Error(`Server responded ${res.status}`)
         }
         const blob = await res.blob()
-        saveBlob(blob, message.media_filename || defaultFilenameFor(message))
+        saveBlob(blob, mediaDisplayName(message))
         progress.value = { current: i + 1, total: eligible.length }
         if (i < eligible.length - 1) {
           await delay(SEPARATE_DOWNLOAD_GAP_MS)
         }
       }
-      toast.success('Files downloaded')
+      toast.success(t('chat.filesDownloaded'))
     } catch (e: any) {
-      toast.error('Download failed', { description: e?.message || 'Please try again' })
+      toast.error(t('chat.downloadFailed'), { description: e?.message || t('chat.tryAgain') })
     } finally {
       isDownloading.value = false
     }
@@ -140,31 +141,9 @@ function getBasePath(): string {
   return ((window as any).__BASE_PATH__ ?? '').replace(/\/$/, '')
 }
 
-/** Per-file authenticated media URL (identical to ChatView.getMediaUrl). */
-function mediaUrlFor(message: Message): string {
-  return `${getBasePath()}/api/media/${message.id}`
-}
-
-/** Trigger a browser download from a Blob (the app's standard idiom). */
-function saveBlob(blob: Blob, filename: string): void {
-  const url = window.URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-  window.URL.revokeObjectURL(url)
-}
-
 function zipFilename(): string {
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
   return `files_${stamp}.zip`
-}
-
-function defaultFilenameFor(message: Message): string {
-  const type = message.message_type || 'file'
-  return `${type}_${message.id.slice(0, 8)}`
 }
 
 function delay(ms: number): Promise<void> {

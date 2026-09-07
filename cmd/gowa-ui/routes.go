@@ -427,6 +427,11 @@ func setupConversationNoteRoutes(g *fastglue.Fastglue, app *handlers.App) {
 func setupMediaRoutes(g *fastglue.Fastglue, app *handlers.App) {
 	// Media (serves media files for messages, auth-protected)
 	g.GET("/api/media/{message_id}", app.ServeMedia)
+	// Same endpoint with a decorative filename as the last segment (e.g.
+	// /api/media/{id}/photo.jpg). ServeMedia keys off message_id only; the
+	// name exists so browser "save" flows (preview-tab Save Image As, drag-out)
+	// derive a real filename from the URL basename instead of the message UUID.
+	g.GET("/api/media/{message_id}/{filename}", app.ServeMedia)
 	// Media burst download — zips the media of the given message IDs together
 	g.GET("/api/media/zip", app.ServeMediaZip)
 	// Re-download a message's media from its provider (e.g. after a failed fetch)

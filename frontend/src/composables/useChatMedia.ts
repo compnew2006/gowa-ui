@@ -3,6 +3,7 @@ import type { Ref } from 'vue'
 import { toast } from 'vue-sonner'
 import { api, getRequestHeaders } from '@/services/api'
 import { getErrorMessage } from '@/lib/api-utils'
+import { mediaDisplayName, mediaUrl, saveBlob } from '@/lib/media'
 import type { Message } from '@/stores/contacts'
 
 export interface UseChatMediaOptions {
@@ -64,6 +65,10 @@ export function useChatMedia(options: UseChatMediaOptions) {
   // Keyed by message id so the "Retry download" affordance only shows on broken bubbles.
   const brokenMediaIds = ref(new Set<string>())
 
+  // Messages whose file a per-bubble Download click is currently fetching.
+  // Keyed by message id — drives the button spinner and blocks double clicks.
+  const downloadingMessageIds = ref(new Set<string>())
+
   const {
     redownloading: redownloadingIds,
     redownload
@@ -113,10 +118,46 @@ export function useChatMedia(options: UseChatMediaOptions) {
   }
 
   function openMediaPreview(message: Message) {
-    const basePath = ((window as any).__BASE_PATH__ ?? '').replace(/\/$/, '')
-    const url = `${basePath}/api/media/${message.id}`
-    if (url) {
-      window.open(url, '_blank')
+    // The URL carries the display filename as its last segment so the opened
+    // tab — and any save/drag-out from it — proposes a real file name instead
+    // of the message UUID.
+    window.open(mediaUrl(message), '_blank')
+  }
+
+  /** Message types that carry a downloadable media file (mirrors the chat
+   * renderer's media bubbles; sticker included since it renders as media). */
+  function canDownloadMedia(message: Message): boolean {
+    return ['image', 'video', 'audio', 'document', 'sticker'].includes(message.message_type)
+      || (message.message_type === 'template' && !!message.media_url)
+  }
+
+  function isDownloadingMedia(message: Message): boolean {
+    return downloadingMessageIds.value.has(message.id)
+  }
+
+  /**
+   * Per-bubble Download action: fetch the message's media over the
+   * authenticated endpoint (which also triggers lazy recovery for
+   * history-synced files) and save it under its display filename.
+   */
+  async function downloadMessageFile(message: Message) {
+    if (downloadingMessageIds.value.has(message.id)) return
+    const next = new Set(downloadingMessageIds.value)
+    next.add(message.id)
+    downloadingMessageIds.value = next
+    try {
+      const res = await fetch(mediaUrl(message), { credentials: 'include' })
+      if (!res.ok) {
+        throw new Error(`Server responded ${res.status}`)
+      }
+      const blob = await res.blob()
+      saveBlob(blob, mediaDisplayName(message))
+    } catch (e: any) {
+      toast.error(t('chat.downloadFailed'), { description: e?.message || t('chat.tryAgain') })
+    } finally {
+      const after = new Set(downloadingMessageIds.value)
+      after.delete(message.id)
+      downloadingMessageIds.value = after
     }
   }
 
@@ -284,6 +325,10 @@ export function useChatMedia(options: UseChatMediaOptions) {
     retryMediaDownload,
     markMediaBroken,
     isRedownloading,
+    // Per-bubble file download
+    canDownloadMedia,
+    isDownloadingMedia,
+    downloadMessageFile,
     // Actions
     openFilePicker,
     handleFileSelect,

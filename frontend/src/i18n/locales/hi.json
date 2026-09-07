@@ -436,16 +436,9 @@
     "urlButtonParam": "URL बटन \"{button}\" - गतिशील मान",
     "urlButtonParamPlaceholder": "गतिशील URL मान दर्ज करें",
     "preview": "पूर्वावलोकन",
-    "collectFiles": "फ़ाइलें एकत्र करें",
-    "filesJustIn": "{count} फ़ाइलें अभी आईं",
-    "collectTimeWindow": "समय विंडो",
     "minutes": "मिनट",
-    "printFile": "प्रिंट",
-    "mediaBurstTitle": "आने वाली फ़ाइलें एकत्र करें",
-    "mediaBurstDesc": "इन फ़ाइलों को एक साथ ZIP के रूप में या अलग-अलग डाउनलोड करें।",
     "downloadZip": "ZIP के रूप में डाउनलोड",
     "downloadSeparately": "अलग-अलग डाउनलोड",
-    "downloadingBurst": "{total} में से {current} तैयार हो रहा है…",
     "mediaMissing": "मीडिया अनुपलब्ध",
     "retryDownload": "डाउनलोड पुनः प्रयास",
     "retrySuccess": "मीडिया सफलतापूर्वक डाउनलोड हुआ",
@@ -489,7 +482,12 @@
       "collaborator_joined": "{agent} बातचीत में शामिल हुए",
       "collaborator_left": "{agent} बातचीत छोड़ गए",
       "rating_received": "⭐ ग्राहक ने बातचीत को {rating}/5 रेट किया"
-    }
+    },
+    "selectFiles": "फ़ाइलें चुनें",
+    "selectedFiles": "{count} चयनित",
+    "downloadFailed": "डाउनलोड विफल",
+    "filesDownloaded": "फ़ाइलें डाउनलोड हो गईं",
+    "tryAgain": "कृपया पुनः प्रयास करें"
   },
   "contacts": {
     "title": "संपर्क",

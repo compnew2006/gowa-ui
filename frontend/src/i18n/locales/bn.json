@@ -438,16 +438,9 @@
     "urlButtonParam": "URL বোতাম \"{button}\" - ডায়নামিক মান",
     "urlButtonParamPlaceholder": "ডায়নামিক URL মান লিখুন",
     "preview": "প্রিভিউ",
-    "collectFiles": "ফাইল সংগ্রহ করুন",
-    "filesJustIn": "{count}টি ফাইল এইমাত্র এসেছে",
-    "collectTimeWindow": "সময় উইন্ডো",
     "minutes": "মিনিট",
-    "printFile": "প্রিন্ট",
-    "mediaBurstTitle": "আগত ফাইল সংগ্রহ করুন",
-    "mediaBurstDesc": "এই ফাইলগুলো একসাথে ZIP হিসেবে বা আলাদাভাবে ডাউনলোড করুন।",
     "downloadZip": "ZIP হিসেবে ডাউনলোড",
     "downloadSeparately": "আলাদাভাবে ডাউনলোড",
-    "downloadingBurst": "{total} এর মধ্যে {current} প্রস্তুত হচ্ছে…",
     "mediaMissing": "মিডিয়া অনুপলব্ধ",
     "retryDownload": "ডাউনলোড পুনঃচেষ্টা",
     "retrySuccess": "মিডিয়া সফলভাবে ডাউনলোড হয়েছে",
@@ -491,7 +484,12 @@
       "collaborator_joined": "{agent} কথোপকথনে যোগ দিয়েছেন",
       "collaborator_left": "{agent} কথোপকথন ত্যাগ করেছেন",
       "rating_received": "⭐ গ্রাহক কথোপকথন মূল্যায়ন করেছেন {rating}/5"
-    }
+    },
+    "selectFiles": "ফাইল নির্বাচন করুন",
+    "selectedFiles": "{count}টি নির্বাচিত",
+    "downloadFailed": "ডাউনলোড ব্যর্থ হয়েছে",
+    "filesDownloaded": "ফাইল ডাউনলোড হয়েছে",
+    "tryAgain": "অনুগ্রহ করে আবার চেষ্টা করুন"
   },
   "contacts": {
     "title": "পরিচিতি",

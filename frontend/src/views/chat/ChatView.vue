@@ -2,13 +2,14 @@
 import { ref, watch, onMounted, onUnmounted, nextTick, computed, defineAsyncComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { useContactsStore, type Contact } from '@/stores/contacts'
+import { useContactsStore, type Contact, type Message } from '@/stores/contacts'
 import { useAuthStore } from '@/stores/auth'
 import { useUsersStore } from '@/stores/users'
 import { wsService } from '@/services/websocket'
 import { useTagsStore } from '@/stores/tags'
 import { TagBadge } from '@/components/ui/tag-badge'
 import { getTagColorClass } from '@/lib/constants'
+import { mediaDisplayName } from '@/lib/media'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -87,7 +88,9 @@ import {
   LogOut,
   Ghost,
   Megaphone,
-  RotateCcw
+  RotateCcw,
+  ListChecks,
+  Package
 } from 'lucide-vue-next'
 import { getInitials, getAvatarGradient, avatarSrc, linkifySegments } from '@/lib/utils'
 import { useColorMode } from '@/composables/useColorMode'
@@ -102,9 +105,7 @@ import { useScheduledMessagesStore } from '@/stores/scheduledMessages'
 import { CreateContactDialog, ConfirmDialog } from '@/components/shared'
 import HeaderMediaUpload from '@/components/shared/HeaderMediaUpload.vue'
 import { Download } from 'lucide-vue-next'
-import MediaBurstDialog from '@/components/chat/MediaBurstDialog.vue'
 import MediaRetryButton from '@/components/chat/MediaRetryButton.vue'
-import { useMediaBurst } from '@/composables/useMediaBurst'
 import { useMediaExport } from '@/composables/useMediaExport'
 import { isStatusContact } from '@/lib/status'
 // Extracted chat composables (keep ChatView a thin orchestration shell)
@@ -200,25 +201,82 @@ const isNotesPanelOpen = ref(false)
 const isScheduledPanelOpen = ref(false)
 const isScheduleDialogOpen = ref(false)
 
-// ─── Media burst: detect a flurry of incoming files and offer to collect them ───
-const burstTimeMs = ref(1_800_000) // 30 minutes default, reactive — UI can adjust
-const {
-  recentBurst,
-  isCollectible,
-  burstCount
-} = useMediaBurst(computed(() => contactsStore.messages), { maxGapMs: burstTimeMs })
+// ─── Media multi-select: check file messages, download them together ───
+const mediaSelectMode = ref(false)
+const selectedMessageIds = ref(new Set<string>())
+const selectedMediaMessages = computed(() =>
+  contactsStore.messages.filter((m) => selectedMessageIds.value.has(m.id))
+)
+const selectedMediaCount = computed(() => selectedMediaMessages.value.length)
 
 // Shared media-export instance: drives both the per-message "retry download"
-// (inside useChatMedia) and the burst "download as zip / separately" below.
-// One instance so a single in-flight download tracks progress in one place.
+// (inside useChatMedia) and the selected-files "download as zip / separately"
+// below. One instance so a single in-flight download tracks progress in one place.
 const mediaExport = useMediaExport()
 const {
-  isDownloading: isBurstDownloading,
-  progress: burstProgress,
+  isDownloading: isMediaDownloading,
   downloadAsZip,
   downloadSeparately,
 } = mediaExport
-const isBurstDialogOpen = ref(false)
+
+function toggleMediaSelectMode() {
+  mediaSelectMode.value = !mediaSelectMode.value
+  if (!mediaSelectMode.value) {
+    selectedMessageIds.value = new Set()
+  }
+}
+
+function toggleMessageSelect(messageId: string) {
+  const next = new Set(selectedMessageIds.value)
+  if (next.has(messageId)) {
+    next.delete(messageId)
+  } else {
+    next.add(messageId)
+  }
+  selectedMessageIds.value = next
+}
+
+// In select mode clicking the media bubble itself toggles its selection;
+// outside select mode images/stickers open the preview tab as before.
+function handleMediaBubbleClick(message: Message) {
+  if (mediaSelectMode.value) {
+    toggleMessageSelect(message.id)
+  } else {
+    openMediaPreview(message)
+  }
+}
+
+// Document cards are download links — in select mode the click must not
+// trigger the download, only toggle selection.
+function handleMediaDocClick(message: Message, event: Event) {
+  if (!mediaSelectMode.value) return
+  event.preventDefault()
+  toggleMessageSelect(message.id)
+}
+
+// video/audio elements keep their native play/pause; in select mode the
+// click additionally toggles selection.
+function toggleSelectInSelectMode(message: Message) {
+  if (mediaSelectMode.value) toggleMessageSelect(message.id)
+}
+
+async function downloadSelectedZip() {
+  await downloadAsZip(selectedMediaMessages.value)
+  mediaSelectMode.value = false
+  selectedMessageIds.value = new Set()
+}
+
+async function downloadSelectedSeparately() {
+  await downloadSeparately(selectedMediaMessages.value)
+  mediaSelectMode.value = false
+  selectedMessageIds.value = new Set()
+}
+
+// Switching conversations always leaves select mode with a clean slate.
+watch(() => contactsStore.currentContact?.id, () => {
+  mediaSelectMode.value = false
+  selectedMessageIds.value = new Set()
+})
 
 // ─── Add-contact dialog (pure view state) ───
 const isAddContactOpen = ref(false)
@@ -331,6 +389,9 @@ const {
   retryMediaDownload,
   markMediaBroken,
   isRedownloading,
+  canDownloadMedia,
+  isDownloadingMedia,
+  downloadMessageFile,
   openFilePicker,
   handleFileSelect,
   closeMediaDialog,
@@ -1096,6 +1157,32 @@ onUnmounted(() => {
               </TooltipTrigger>
               <TooltipContent>{{ action.name }}</TooltipContent>
             </Tooltip>
+            <!-- Multi-select files for bulk download. Labeled (not a bare icon)
+                 so it's findable, and placed first in the action group. Hidden
+                 for unclaimed chats; in closed chats only managers/admins (who
+                 bypass the closed screen and can still read content) get it. -->
+            <Tooltip v-if="!contactsStore.isPendingClaim && (!contactsStore.isChatClosed || contactsStore.canManageAllChats)">
+              <TooltipTrigger as-child>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  id="select-files-button"
+                  class="h-8 gap-1.5 px-2.5 text-xs font-medium whitespace-nowrap shrink-0 bg-white/[0.04] border-white/[0.12] text-white/70 hover:text-white hover:bg-white/[0.08] light:bg-white light:border-gray-300 light:text-gray-700 light:hover:bg-gray-100"
+                  :class="mediaSelectMode && 'bg-primary text-primary-foreground border-primary hover:bg-primary/90 hover:text-primary-foreground light:bg-primary light:border-primary light:text-primary-foreground'"
+                  @click="toggleMediaSelectMode"
+                >
+                  <ListChecks class="h-3.5 w-3.5" />
+                  {{ $t('chat.selectFiles') }}
+                  <span
+                    v-if="mediaSelectMode && selectedMediaCount > 0"
+                    class="ml-0.5 h-4 min-w-[16px] rounded-full bg-background/20 text-[10px] flex items-center justify-center px-1 tabular-nums"
+                  >
+                    {{ selectedMediaCount }}
+                  </span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{{ $t('chat.selectFiles') }}</TooltipContent>
+            </Tooltip>
             <Tooltip>
               <TooltipTrigger as-child>
                 <Button
@@ -1139,28 +1226,6 @@ onUnmounted(() => {
                 </Button>
               </TooltipTrigger>
               <TooltipContent>{{ $t('chat.scheduledMessages') }}</TooltipContent>
-            </Tooltip>
-            <!-- Collect a burst of incoming files (ZIP or separate) — hidden for unclaimed/closed chats -->
-            <Tooltip v-if="!contactsStore.isPendingClaim && !contactsStore.isChatClosed">
-              <TooltipTrigger as-child>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  id="collect-files-button"
-                  class="relative h-8 w-8 text-white/50 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100"
-                  :disabled="!isCollectible"
-                  @click="isBurstDialogOpen = true"
-                >
-                  <Download class="h-4 w-4" />
-                  <span
-                    v-if="burstCount > 0"
-                    class="absolute -top-0.5 -right-0.5 h-4 min-w-[16px] rounded-full bg-primary text-[10px] text-white flex items-center justify-center px-1"
-                  >
-                    {{ burstCount }}
-                  </span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{{ $t('chat.collectFiles') }}</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger as-child>
@@ -1239,17 +1304,46 @@ onUnmounted(() => {
             </div>
           </Transition>
 
-          <!-- Floating "files just in" chip — appears when a burst is collectible (hidden for unclaimed chats) -->
+          <!-- Selection action bar — appears while in select mode with files
+               checked: count + bulk download actions + exit. -->
           <Transition name="sticky-date">
-            <button
-              v-if="isCollectible && !contactsStore.isPendingClaim && !contactsStore.isChatClosed"
-              type="button"
-              class="absolute top-12 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary text-primary-foreground text-xs font-medium shadow-lg hover:opacity-90 animate-pulse"
-              @click="isBurstDialogOpen = true"
+            <div
+              v-if="mediaSelectMode && selectedMediaCount > 0"
+              class="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-3 py-2 rounded-full bg-background/95 backdrop-blur border border-border shadow-lg"
             >
-              <Download class="h-3.5 w-3.5" />
-              {{ $t('chat.filesJustIn', { count: burstCount }) }}
-            </button>
+              <span class="text-xs font-medium text-muted-foreground px-1 whitespace-nowrap">
+                {{ $t('chat.selectedFiles', { count: selectedMediaCount }) }}
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                class="h-7 gap-1.5 rounded-full"
+                :disabled="isMediaDownloading"
+                @click="downloadSelectedSeparately"
+              >
+                <Download class="h-3.5 w-3.5" />
+                {{ $t('chat.downloadSeparately') }}
+              </Button>
+              <Button
+                size="sm"
+                class="h-7 gap-1.5 rounded-full"
+                :disabled="isMediaDownloading"
+                @click="downloadSelectedZip"
+              >
+                <Loader2 v-if="isMediaDownloading" class="h-3.5 w-3.5 animate-spin" />
+                <Package v-else class="h-3.5 w-3.5" />
+                {{ $t('chat.downloadZip') }}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                class="h-7 w-7 p-0 rounded-full"
+                :title="$t('common.cancel')"
+                @click="toggleMediaSelectMode"
+              >
+                <X class="h-3.5 w-3.5" />
+              </Button>
+            </div>
           </Transition>
 
           <!-- Claim screen: pending unassigned conversation -->
@@ -1355,6 +1449,15 @@ onUnmounted(() => {
                   message.direction === 'outgoing' ? 'justify-end' : 'justify-start'
                 ]"
               >
+              <!-- Select-mode checkbox (media messages only). Incoming rows put
+                   it left of the bubble, outgoing rows right — WhatsApp-style. -->
+              <Checkbox
+                v-if="mediaSelectMode && canDownloadMedia(message) && message.direction === 'incoming'"
+                :model-value="selectedMessageIds.has(message.id)"
+                class="h-4 w-4 self-center mr-1.5 shrink-0"
+                @update:model-value="toggleMessageSelect(message.id)"
+                @click.stop
+              />
               <div
                 :class="[
                   'chat-bubble',
@@ -1392,7 +1495,7 @@ onUnmounted(() => {
                       :src="getMediaUrl(message)"
                       :alt="message.media_filename || 'media'"
                       class="max-w-[280px] max-h-[300px] rounded-lg cursor-pointer object-cover"
-                      @click="openMediaPreview(message)"
+                      @click="handleMediaBubbleClick(message)"
                       @error="handleImageError($event)"
                     />
                     <video
@@ -1400,17 +1503,20 @@ onUnmounted(() => {
                       :src="getMediaUrl(message)"
                       controls
                       class="max-w-[280px] max-h-[300px] rounded-lg"
+                      @click="toggleSelectInSelectMode(message)"
                     />
                     <audio
                       v-else-if="message.message_type === 'audio'"
                       :src="getMediaUrl(message)"
                       controls
                       class="max-w-[280px]"
+                      @click="toggleSelectInSelectMode(message)"
                     />
                     <a
                       v-else-if="hasRevokedMedia(message)"
                       :href="getMediaUrl(message)"
-                      :download="message.media_filename || 'document'"
+                      :download="mediaDisplayName(message)"
+                      @click="handleMediaDocClick(message, $event)"
                       class="flex items-center gap-2 px-3 py-2 bg-background/50 rounded-lg hover:bg-background/80 transition-colors"
                     >
                       <FileText class="h-5 w-5 text-muted-foreground" />
@@ -1443,7 +1549,7 @@ onUnmounted(() => {
                     :src="getMediaUrl(message)"
                     alt="Template header"
                     class="max-w-[280px] max-h-[300px] rounded-lg cursor-pointer object-cover"
-                    @click="openMediaPreview(message)"
+                    @click="handleMediaBubbleClick(message)"
                     @error="handleImageError($event)"
                   />
                   <video
@@ -1451,11 +1557,13 @@ onUnmounted(() => {
                     :src="getMediaUrl(message)"
                     controls
                     class="max-w-[280px] max-h-[300px] rounded-lg"
+                    @click="toggleSelectInSelectMode(message)"
                   />
                   <a
                     v-else
                     :href="getMediaUrl(message)"
-                    :download="message.media_filename || 'document'"
+                    :download="mediaDisplayName(message)"
+                    @click="handleMediaDocClick(message, $event)"
                     class="flex items-center gap-2 px-3 py-2 bg-background/50 rounded-lg hover:bg-background/80 transition-colors"
                   >
                     <FileText class="h-5 w-5 text-muted-foreground" />
@@ -1473,7 +1581,7 @@ onUnmounted(() => {
                     :src="getMediaUrl(message)"
                     :alt="message.content?.body || 'Image'"
                     class="max-w-[280px] max-h-[300px] rounded-lg cursor-pointer object-cover"
-                    @click="openMediaPreview(message)"
+                    @click="handleMediaBubbleClick(message)"
                     @error="markMediaBroken(message)"
                   />
                   <MediaRetryButton
@@ -1490,7 +1598,7 @@ onUnmounted(() => {
                     :src="getMediaUrl(message)"
                     alt="Sticker"
                     class="max-w-[128px] max-h-[128px] cursor-pointer"
-                    @click="openMediaPreview(message)"
+                    @click="handleMediaBubbleClick(message)"
                     @error="markMediaBroken(message)"
                   />
                   <MediaRetryButton
@@ -1509,6 +1617,7 @@ onUnmounted(() => {
                     :src="getMediaUrl(message)"
                     controls
                     class="max-w-[280px] max-h-[300px] rounded-lg"
+                    @click="toggleSelectInSelectMode(message)"
                     @error="markMediaBroken(message)"
                   />
                   <MediaRetryButton
@@ -1526,6 +1635,7 @@ onUnmounted(() => {
                     :src="getMediaUrl(message)"
                     controls
                     class="max-w-[280px]"
+                    @click="toggleSelectInSelectMode(message)"
                     @error="handleMediaError($event, 'audio')"
                   />
                 </div>
@@ -1534,7 +1644,8 @@ onUnmounted(() => {
                 <div v-else-if="message.message_type === 'document'" class="mb-2">
                   <a
                     :href="getMediaUrl(message)"
-                    :download="message.media_filename || 'document'"
+                    :download="mediaDisplayName(message)"
+                    @click="handleMediaDocClick(message, $event)"
                     class="flex items-center gap-2 px-3 py-2 bg-background/50 rounded-lg hover:bg-background/80 transition-colors"
                   >
                     <FileText class="h-5 w-5 text-muted-foreground" />
@@ -1724,6 +1835,21 @@ onUnmounted(() => {
                 >
                   <Reply class="h-3 w-3" />
                 </Button>
+                <!-- Download this bubble's media file under its display
+                     filename. Media messages only; history-synced files are
+                     lazily recovered by the fetch on the server side. -->
+                <Button
+                  v-if="canDownloadMedia(message)"
+                  variant="ghost"
+                  size="icon"
+                  class="h-6 w-6"
+                  :disabled="isDownloadingMedia(message)"
+                  :title="$t('common.download')"
+                  @click="downloadMessageFile(message)"
+                >
+                  <Loader2 v-if="isDownloadingMedia(message)" class="h-3 w-3 animate-spin" />
+                  <Download v-else class="h-3 w-3" />
+                </Button>
                 <Button
                   v-if="message.direction === 'outgoing' && message.status === 'failed' && message.message_type !== 'template'"
                   variant="ghost"
@@ -1753,6 +1879,14 @@ onUnmounted(() => {
                   <Trash2 v-else class="h-3 w-3" />
                 </Button>
               </div>
+              <!-- Outgoing rows get their select checkbox right of the bubble -->
+              <Checkbox
+                v-if="mediaSelectMode && canDownloadMedia(message) && message.direction === 'outgoing'"
+                :model-value="selectedMessageIds.has(message.id)"
+                class="h-4 w-4 self-center ml-1.5 shrink-0"
+                @update:model-value="toggleMessageSelect(message.id)"
+                @click.stop
+              />
             </div>
             </template>
             <div ref="messagesEndRef" />
@@ -2240,17 +2374,6 @@ onUnmounted(() => {
     >
       <template #description>{{ $t('chat.revokeConfirm') }}</template>
     </ConfirmDialog>
-
-    <!-- Media burst download dialog -->
-    <MediaBurstDialog
-      v-model:open="isBurstDialogOpen"
-      v-model:burst-time-ms="burstTimeMs"
-      :messages="recentBurst"
-      :is-downloading="isBurstDownloading"
-      :progress="burstProgress"
-      @zip="downloadAsZip(recentBurst)"
-      @separate="downloadSeparately(recentBurst)"
-    />
   </div>
 </template>
 

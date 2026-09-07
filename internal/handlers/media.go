@@ -389,6 +389,78 @@ func isRecoverableMediaType(t models.MessageType) bool {
 	}
 }
 
+// mediaContentDisposition builds the Content-Disposition value for ServeMedia.
+// The stored filename and the serving URL are both message UUIDs, so without
+// this header the browser saves downloads under the bare message id. The name
+// comes from defaultZipEntryName (original WhatsApp filename when stored,
+// else type + short id + extension). Renderable media (image/video/audio/
+// sticker) is inline so the preview tab keeps rendering while Save-as still
+// picks up the filename; documents and anything unknown download directly,
+// matching the chat bubble's download links. `?download` forces attachment.
+func mediaContentDisposition(msg *models.Message, forceDownload bool) string {
+	disposition := "attachment"
+	if !forceDownload {
+		switch msg.MessageType {
+		case models.MessageTypeImage, models.MessageTypeVideo,
+			models.MessageTypeAudio, "sticker":
+			disposition = "inline"
+		}
+	}
+	original := defaultZipEntryName(msg)
+	value := fmt.Sprintf(`%s; filename="%s"`, disposition, sanitizeHeaderFilename(original))
+	// RFC 5987 form preserves non-ASCII names (e.g. Arabic documents) for
+	// modern browsers via the extended parameter; the plain quoted fallback
+	// above stays pure ASCII.
+	if encoded := rfc5987Filename(original); encoded != "" {
+		value += fmt.Sprintf("; filename*=UTF-8''%s", encoded)
+	}
+	return value
+}
+
+// sanitizeHeaderFilename keeps only printable ASCII so the value is safe
+// inside a quoted Content-Disposition parameter; empty when nothing survives.
+func sanitizeHeaderFilename(name string) string {
+	var b strings.Builder
+	for _, r := range strings.TrimSpace(name) {
+		if r >= 0x20 && r <= 0x7E && r != '"' && r != '\\' {
+			b.WriteRune(r)
+		}
+	}
+	s := b.String()
+	if len(s) > 180 {
+		s = s[:180]
+	}
+	return s
+}
+
+// rfc5987Filename percent-encodes a filename for the extended (RFC 5987)
+// filename parameter; "" when the name is pure ASCII and the plain
+// parameter already carries it.
+func rfc5987Filename(name string) string {
+	needsEncoding := false
+	for _, r := range name {
+		if r < 0x20 || r > 0x7E {
+			needsEncoding = true
+			break
+		}
+	}
+	if !needsEncoding {
+		return ""
+	}
+	var b strings.Builder
+	for i := 0; i < len(name); i++ {
+		c := name[i]
+		isAttrChar := (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
+			strings.IndexByte("!#$&+-.^_`|~", c) >= 0
+		if isAttrChar {
+			b.WriteByte(c)
+		} else {
+			fmt.Fprintf(&b, "%%%02X", c)
+		}
+	}
+	return b.String()
+}
+
 // ServeMedia serves media files from local storage
 // Only authorized users who have access to the message can view the media
 func (a *App) ServeMedia(r *fastglue.Request) error {
@@ -540,6 +612,10 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 	// memory, unlike the previous os.ReadFile + SetBody path which spiked
 	// RAM by the full file size on every view.
 	r.RequestCtx.Response.Header.Set("Cache-Control", "private, max-age=3600") // Cache for 1 hour, private
+	// Name the transfer after the original file — ServeFile alone would leave
+	// the browser to derive the name from the URL's message UUID.
+	r.RequestCtx.Response.Header.Set("Content-Disposition",
+		mediaContentDisposition(message, r.RequestCtx.QueryArgs().Has("download")))
 	fasthttp.ServeFile(r.RequestCtx, fullPath)
 
 	return nil

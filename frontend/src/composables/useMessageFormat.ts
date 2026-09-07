@@ -2,6 +2,7 @@ import { Check, CheckCheck, Clock, AlertCircle } from 'lucide-vue-next'
 import type { MaybeRefOrGetter } from 'vue'
 import { toValue } from 'vue'
 import type { Message } from '@/stores/contacts'
+import { mediaUrl } from '@/lib/media'
 
 /** Decoded location payload stored in a `location` message. */
 export interface LocationData {
@@ -250,13 +251,14 @@ export function useMessageFormat(options: UseMessageFormatOptions) {
   }
 
   function getMediaUrl(message: Message): string {
-    // Always point at the per-message media endpoint. History-synced messages
-    // store media_url="" by design (no local file) — the backend lazily
-    // downloads the bytes from the provider on first view via WhatsAppMessageID,
-    // so the URL is valid even when media_url is empty. Gating on media_url
-    // here would suppress the request and starve the recovery path.
-    const basePath = ((window as any).__BASE_PATH__ ?? '').replace(/\/$/, '')
-    return `${basePath}/api/media/${message.id}`
+    // Always point at the per-message media endpoint (with the display
+    // filename as the last segment — see lib/media.ts). History-synced
+    // messages store media_url="" by design (no local file) — the backend
+    // lazily downloads the bytes from the provider on first view via
+    // WhatsAppMessageID, so the URL is valid even when media_url is empty.
+    // Gating on media_url here would suppress the request and starve the
+    // recovery path.
+    return mediaUrl(message)
   }
 
   /**

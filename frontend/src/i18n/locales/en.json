@@ -438,16 +438,9 @@
     "urlButtonParam": "URL Button \"{button}\" - dynamic value",
     "urlButtonParamPlaceholder": "Enter dynamic URL value",
     "preview": "Preview",
-    "collectFiles": "Collect files",
-    "filesJustIn": "{count} files just in",
-    "collectTimeWindow": "Time window",
     "minutes": "min",
-    "printFile": "Print",
-    "mediaBurstTitle": "Collect incoming files",
-    "mediaBurstDesc": "Download these files together as a ZIP or separately.",
     "downloadZip": "Download as ZIP",
     "downloadSeparately": "Download separately",
-    "downloadingBurst": "Preparing {current} of {total}…",
     "mediaMissing": "Media unavailable",
     "retryDownload": "Retry download",
     "retrySuccess": "Media downloaded successfully",
@@ -491,7 +484,12 @@
       "collaborator_joined": "{agent} joined the conversation",
       "collaborator_left": "{agent} left the conversation",
       "rating_received": "⭐ Customer rated the conversation {rating}/5"
-    }
+    },
+    "selectFiles": "Select files",
+    "selectedFiles": "{count} selected",
+    "downloadFailed": "Download failed",
+    "filesDownloaded": "Files downloaded",
+    "tryAgain": "Please try again"
   },
   "contacts": {
     "title": "Contacts",

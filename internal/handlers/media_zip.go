@@ -112,8 +112,6 @@ func (a *App) ServeMediaZip(r *fastglue.Request) error {
 	buf := &bytes.Buffer{}
 	zw := zip.NewWriter(buf)
 	usedNames := make(map[string]bool)
-	manifest := &strings.Builder{}
-	manifest.WriteString(fmt.Sprintf("Archive generated %s\n\n", time.Now().UTC().Format(time.RFC3339)))
 
 	wroteAtLeastOne := false
 	var totalSize int64
@@ -142,20 +140,6 @@ func (a *App) ServeMediaZip(r *fastglue.Request) error {
 			continue
 		}
 		wroteAtLeastOne = true
-		fmt.Fprintf(manifest, "- %s\n", entryName)
-		fmt.Fprintf(manifest, "    message_id: %s\n", msg.ID)
-		fmt.Fprintf(manifest, "    direction:  %s\n", msg.Direction)
-		fmt.Fprintf(manifest, "    type:       %s\n", msg.MessageType)
-		if msg.MediaMimeType != "" {
-			fmt.Fprintf(manifest, "    mime:       %s\n", msg.MediaMimeType)
-		}
-		fmt.Fprintf(manifest, "    received:   %s\n", msg.CreatedAt.UTC().Format(time.RFC3339))
-		manifest.WriteByte('\n')
-	}
-
-	// Self-documenting manifest entry.
-	if mw, err := zw.Create("_manifest.txt"); err == nil {
-		_, _ = io.WriteString(mw, manifest.String())
 	}
 
 	if err := zw.Close(); err != nil {
