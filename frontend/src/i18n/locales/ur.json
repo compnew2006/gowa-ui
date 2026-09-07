@@ -368,6 +368,8 @@
     "messagesWaiting": "آپ کے لیے انتظار میں پیغامات",
     "claimChat": "گفتگو کلیم کریں",
     "claimedSuccessfully": "گفتگو کامیابی سے کلیم کی گئی",
+    "claimConflict": "یہ گفتگو پہلے ہی {name} نے کلیم کر لی ہے",
+    "claimFailed": "گفتگو کلیم نہیں ہو سکی",
     "assignedToAnother": "یہ گفتگو کسی اور ایجنٹ کو تفویض کی گئی",
     "joinAsCollaborator": "تعاون کار کے طور پر شامل ہوں",
     "joinAsCollaboratorHint": "مدد کے لیے آپ تعاون کار کے طور پر شامل ہو سکتے ہیں",

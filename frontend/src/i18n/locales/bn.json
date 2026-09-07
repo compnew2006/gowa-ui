@@ -368,6 +368,8 @@
     "messagesWaiting": "আপনার জন্য অপেক্ষমাণ বার্তা",
     "claimChat": "কথোপকথন ক্লেইম করুন",
     "claimedSuccessfully": "কথোপকথন সফলভাবে ক্লেইম করা হয়েছে",
+    "claimConflict": "এই কথোপকথনটি ইতিমধ্যে {name} ক্লেইম করেছেন",
+    "claimFailed": "কথোপকথন ক্লেইম করা যায়নি",
     "assignedToAnother": "এই কথোপকথনটি অন্য এজেন্টকে অ্যাসাইন করা হয়েছে",
     "joinAsCollaborator": "সহযোগী হিসেবে যোগ দিন",
     "joinAsCollaboratorHint": "সাহায্য করতে আপনি সহযোগী হিসেবে যোগ দিতে পারেন",

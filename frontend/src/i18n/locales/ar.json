@@ -368,6 +368,8 @@
     "messagesWaiting": "رسالة بانتظارك",
     "claimChat": "استلام المحادثة",
     "claimedSuccessfully": "تم استلام المحادثة بنجاح",
+    "claimConflict": "تم استلام هذه المحادثة بالفعل بواسطة {name}",
+    "claimFailed": "تعذّر استلام المحادثة",
     "assignedToAnother": "هذه المحادثة مخصصة لوكيل آخر",
     "joinAsCollaborator": "انضمام كمساعد",
     "joinAsCollaboratorHint": "يمكنك الانضمام كمساعد للتعاون",

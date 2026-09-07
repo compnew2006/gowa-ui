@@ -11,6 +11,8 @@ export interface UseChatLifecycleOptions {
     selectedContactIds: Set<string>
     setCurrentContact: (c: any) => void
     fetchContacts: () => Promise<void>
+    fetchContact: (id: string) => Promise<any>
+    fetchMessages: (id: string) => Promise<void>
     claimChat: (id: string) => Promise<void>
     joinChat: (id: string) => Promise<void>
     leaveChat: (id: string) => Promise<void>
@@ -63,7 +65,29 @@ export function useChatLifecycle(options: UseChatLifecycleOptions) {
       await contactsStore.claimChat(contactsStore.currentContact.id)
     } catch (error: any) {
       if (error.response?.status === 409) {
+        // Lost the race: another agent claimed (or was assigned) this
+        // conversation between our list fetch and this click. Tell the user,
+        // then resync — without this the claim screen stays up forever and
+        // every retry 409s again.
         console.error('Chat already assigned:', error.response.data?.message)
+        const other = error.response.data?.data?.current_agent
+          || error.response.data?.message
+        toast.error(t('chat.claimConflict', { name: other }))
+        const id = contactsStore.currentContact?.id
+        if (id) {
+          const fresh = await contactsStore.fetchContact(id).catch(() => null)
+          if (fresh) {
+            // fetchContact already installed it as currentContact; if the
+            // conversation is no longer pending-unclaimed, load its messages
+            // (they were skipped while the claim screen was showing).
+            if (fresh.assigned_user_id || fresh.chat_status !== 'pending') {
+              await contactsStore.fetchMessages(id).catch(() => {})
+            }
+          }
+          contactsStore.fetchContacts().catch(() => {})
+        }
+      } else {
+        toast.error(t('chat.claimFailed'))
       }
     } finally {
       isClaiming.value = false

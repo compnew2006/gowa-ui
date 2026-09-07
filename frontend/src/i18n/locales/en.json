@@ -368,6 +368,8 @@
     "messagesWaiting": "messages waiting for you",
     "claimChat": "Claim Conversation",
     "claimedSuccessfully": "Conversation claimed successfully",
+    "claimConflict": "This conversation was just claimed by {name}",
+    "claimFailed": "Failed to claim conversation",
     "assignedToAnother": "This conversation is assigned to another agent",
     "joinAsCollaborator": "Join as Collaborator",
     "joinAsCollaboratorHint": "You can join as a collaborator to help",
