@@ -26,23 +26,22 @@ const maxZipMessageIDs = 50
 const maxZipTotalSize = 250 * 1024 * 1024 // 250 MB
 
 // ServeMediaZip streams a ZIP archive containing the media of the requested
-// message IDs. It mirrors ServeMedia's auth preamble: the caller's org is
-// enforced via the DB query, and per-user contact ownership is gated through
+// message IDs. Authorization mirrors ServeMedia exactly: the caller's org is
+// enforced via the DB query, and per-user contact visibility is gated through
 // scopeAssignedContact for agents without contacts:read. The client's ID list
 // is never trusted — any ID that doesn't resolve to an org-owned,
 // media-bearing, accessible message is silently dropped from the archive.
+//
+// Note: this is a chat-workflow convenience (collect a burst of incoming
+// files), not a bulk data export — the same files are downloadable one by one
+// via ServeMedia, so an export permission here would only block the ZIP
+// button for agents without adding any real restriction.
 //
 // Example: GET /api/media/zip?ids=<uuid>,<uuid>,...
 func (a *App) ServeMediaZip(r *fastglue.Request) error {
 	orgID, userID, err := a.requireOrgAndUserID(r)
 	if err != nil {
 		return nil
-	}
-
-	// ZIP download requires contacts:export permission (FR-013).
-	// This is a bulk data export, not a single-item read.
-	if !a.HasPermission(userID, models.ResourceContacts, models.ActionExport, orgID) {
-		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Insufficient permissions", nil, "")
 	}
 
 	// Parse the comma-separated message IDs from the query string.
@@ -85,12 +84,9 @@ func (a *App) ServeMediaZip(r *fastglue.Request) error {
 	}
 
 	// Agents without contacts:read may only access media from contacts
-	// assigned to them (or under an active team/agent transfer they belong
-	// to). Drop any message whose contact they can't reach.
-	// Note: ZIP download requires contacts:export (FR-013), but the per-contact
-	// ownership check below still uses contacts:read to determine assignment
-	// scope — export permission grants access to all org media, while non-export
-	// users are filtered by assignment (same as single-media access).
+	// assigned to them (or where they are a collaborator) — identical to the
+	// per-file gate in ServeMedia. Messages from contacts the caller can't
+	// reach are dropped from the archive.
 	canReadAll := a.HasPermission(userID, models.ResourceContacts, models.ActionRead, orgID)
 	access := messages[:0]
 	for i := range messages {

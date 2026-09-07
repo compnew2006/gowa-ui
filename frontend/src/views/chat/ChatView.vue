@@ -130,7 +130,6 @@ const scheduledStore = useScheduledMessagesStore()
 const { isDark } = useColorMode()
 
 const canWriteContacts = authStore.hasPermission('contacts', 'write')
-const canExportMedia = authStore.hasPermission('contacts', 'export')
 const canRevokeMessages = authStore.hasPermission('chat.revoke', 'write')
 
 const contactId = computed(() => route.params.contactId as string | undefined)
@@ -1142,7 +1141,7 @@ onUnmounted(() => {
               <TooltipContent>{{ $t('chat.scheduledMessages') }}</TooltipContent>
             </Tooltip>
             <!-- Collect a burst of incoming files (ZIP or separate) — hidden for unclaimed/closed chats -->
-            <Tooltip v-if="canExportMedia && !contactsStore.isPendingClaim && !contactsStore.isChatClosed">
+            <Tooltip v-if="!contactsStore.isPendingClaim && !contactsStore.isChatClosed">
               <TooltipTrigger as-child>
                 <Button
                   variant="ghost"

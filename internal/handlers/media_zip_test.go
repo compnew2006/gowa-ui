@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/test/testutil"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
@@ -142,9 +142,11 @@ func TestServeMediaZip_FilenameCollision(t *testing.T) {
 
 	names := zipEntryNames(zr)
 	// One keeps the original name, the other is suffixed — both must be present
-	// and distinct.
-	imgEntries := filterPrefix(names, "image.jpg")
+	// and distinct. uniqueZipName suffixes as "<base>_<id>.<ext>", so filter on
+	// the stem, not the full original filename.
+	imgEntries := filterPrefix(names, "image")
 	require.Len(t, imgEntries, 2, "expected two distinct entries for colliding names, got %v", names)
+	assert.Contains(t, imgEntries, "image.jpg")
 	assert.NotEqual(t, imgEntries[0], imgEntries[1])
 }
 
@@ -238,6 +240,48 @@ func TestServeMediaZip_Manifest(t *testing.T) {
 	assert.Contains(t, manifest, "direction:  incoming")
 	assert.Contains(t, manifest, "type:       image")
 	assert.Contains(t, manifest, "mime:       image/png")
+}
+
+// An agent (contacts:read, no contacts:export) must be able to collect a
+// burst of incoming files as a ZIP — the archive bundles the same files the
+// per-message ServeMedia endpoint already serves them, so gating it on an
+// export permission only blocked the feature for its target users.
+func TestServeMediaZip_AgentWithoutExport(t *testing.T) {
+	t.Parallel()
+	app := newTestApp(t)
+	mediaDir := t.TempDir()
+	app.Config.Storage.LocalPath = mediaDir
+
+	org := testutil.CreateTestOrganization(t, app.DB)
+	agentRole := testutil.CreateAgentRole(t, app.DB, org.ID)
+	agent := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithRoleID(&agentRole.ID))
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	require.NoError(t, os.MkdirAll(filepath.Join(mediaDir, "images"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(mediaDir, "images", "doc.png"), []byte("png"), 0644))
+
+	msg := &models.Message{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID, ContactID: contact.ID,
+		Direction: models.DirectionIncoming, MessageType: models.MessageTypeImage,
+		MediaURL: filepath.Join("images", "doc.png"), MediaFilename: "doc.png", MediaMimeType: "image/png",
+		Status: models.MessageStatusDelivered,
+	}
+	require.NoError(t, app.DB.Create(msg).Error)
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, agent.ID)
+	testutil.SetQueryParam(req, "ids", msg.ID.String())
+
+	err := app.ServeMediaZip(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req),
+		"agent must download the burst ZIP without contacts:export; body: %s", string(testutil.GetResponseBody(req)))
+
+	zr, err := zip.NewReader(bytes.NewReader(testutil.GetResponseBody(req)), int64(len(testutil.GetResponseBody(req))))
+	require.NoError(t, err)
+	assert.Contains(t, zipEntryNames(zr), "doc.png")
 }
 
 // --- helpers ---

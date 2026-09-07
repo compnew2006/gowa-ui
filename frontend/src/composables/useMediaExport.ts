@@ -3,7 +3,6 @@ import { toast } from 'vue-sonner'
 import { useI18n } from 'vue-i18n'
 import type { Message } from '@/stores/contacts'
 import { getRequestHeaders } from '@/services/api'
-import { useAuthStore } from '@/stores/auth'
 
 interface RedownloadResult {
   ok: boolean
@@ -39,18 +38,13 @@ const SEPARATE_DOWNLOAD_GAP_MS = 450
  */
 export function useMediaExport(): UseMediaExportResult {
   const { t } = useI18n()
-  const authStore = useAuthStore()
   const isDownloading = ref(false)
   const progress = ref({ current: 0, total: 0 })
   const redownloading = ref(new Set<string>())
   async function downloadAsZip(messages: Message[]): Promise<void> {
-    // Defense-in-depth: verify export permission before fetching (FR-013).
-    // The backend also gates on contacts:export, but this prevents a wasted
-    // round-trip and shows a toast immediately.
-    if (!authStore.hasPermission('contacts', 'export')) {
-      toast.error('You do not have permission to export media')
-      return
-    }
+    // No export-permission pre-check here: the ZIP bundles the same files the
+    // per-message endpoint already serves to anyone who can view the chat —
+    // the backend enforces identical org + visibility scoping on /api/media/zip.
     const eligible = messages.filter((m) => !!m.media_url)
     if (eligible.length === 0) return
 
