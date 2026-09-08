@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/compnew2006/gowa-ui/internal/models"
@@ -174,18 +173,9 @@ func (a *App) RedownloadMedia(r *fastglue.Request) error {
 //     belong", purge, not-found) → the file is permanently unrecoverable.
 //   - otherwise: a transient/auth/provider issue → worth retrying later.
 func classifyRedownloadError(err error) (int, string) {
-	msg := err.Error()
-	low := strings.ToLower(msg)
-
-	// Signals that the media is gone from the provider for good.
-	mediaGone := strings.Contains(low, "does not belong") ||
-		strings.Contains(low, "not found") ||
-		strings.Contains(low, "no longer available") ||
-		strings.Contains(low, "expired") ||
-		strings.Contains(low, "deleted") ||
-		strings.Contains(low, "status 404")
-
-	if mediaGone {
+	// Signals that the media is gone from the provider for good (shared
+	// classifier — also drives the backfill worker's permanent-failure mark).
+	if isMediaGoneError(err) {
 		return fasthttp.StatusNotFound,
 			"This file is no longer available on the provider and cannot be recovered"
 	}

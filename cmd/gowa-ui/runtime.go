@@ -45,6 +45,9 @@ type processorHandles struct {
 	gowaHistory     *handlers.GowaHistorySyncProcessor
 	gowaHistoryStop context.CancelFunc
 
+	gowaMediaBackfill     *handlers.GowaMediaBackfillProcessor
+	gowaMediaBackfillStop context.CancelFunc
+
 	gowaWebhook     *handlers.GowaWebhookProcessor
 	gowaWebhookStop context.CancelFunc
 
@@ -81,6 +84,16 @@ func startProcessors(app *handlers.App, lo logf.Logger) *processorHandles {
 	go gowaHistoryProcessor.Start(gowaHistoryCtx)
 	lo.Info("GOWA history sync processor started")
 
+	// Start the pending-media backfill processor. Messages whose media could
+	// not be downloaded at receipt time (size cap over 50MiB, transient GOWA
+	// error) keep media_url="" until someone views them — but the provider
+	// expires media, so unviewed files are eventually lost. This worker
+	// proactively streams the oldest pending rows to disk before that happens.
+	gowaMediaBackfillProcessor := handlers.NewGowaMediaBackfillProcessor(app, 10*time.Minute)
+	gowaMediaBackfillCtx, gowaMediaBackfillCancel := context.WithCancel(context.Background())
+	go gowaMediaBackfillProcessor.Start(gowaMediaBackfillCtx)
+	lo.Info("GOWA media backfill processor started")
+
 	// Start the durable GOWA webhook inbox processor. The webhook handler
 	// persists every inbound event before 2xx and calls app.GowaWebhookNotify
 	// (wired here) to wake this processor for near-real-time dispatch; the
@@ -108,6 +121,9 @@ func startProcessors(app *handlers.App, lo logf.Logger) *processorHandles {
 
 		gowaHistory:     gowaHistoryProcessor,
 		gowaHistoryStop: gowaHistoryCancel,
+
+		gowaMediaBackfill:     gowaMediaBackfillProcessor,
+		gowaMediaBackfillStop: gowaMediaBackfillCancel,
 
 		gowaWebhook:     gowaWebhookProcessor,
 		gowaWebhookStop: gowaWebhookCancel,
@@ -193,6 +209,12 @@ func gracefulShutdown(
 	procs.gowaHistoryStop()
 	procs.gowaHistory.Stop()
 	lo.Info("GOWA history sync processor stopped")
+
+	// Stop GOWA media backfill processor
+	lo.Info("Stopping GOWA media backfill processor...")
+	procs.gowaMediaBackfillStop()
+	procs.gowaMediaBackfill.Stop()
+	lo.Info("GOWA media backfill processor stopped")
 
 	// Stop GOWA webhook inbox processor
 	lo.Info("Stopping GOWA webhook inbox processor...")
