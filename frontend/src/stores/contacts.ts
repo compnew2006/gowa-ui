@@ -31,6 +31,10 @@ export interface Contact {
   assigned_user_id?: string
   assigned_user_name?: string
   whatsapp_account?: string
+  /** Account of the most recent real message (backend-computed); the sidebar
+   *  badge prefers it over whatsapp_account, which goes stale for contacts
+   *  messaged on several accounts. */
+  last_message_account?: string
   marketing_opt_out?: boolean
   is_group_chat?: boolean
   is_newsletter?: boolean
@@ -258,7 +262,10 @@ export const useContactsStore = defineStore('contacts', () => {
   // filter on `chat_status === 'pending'` alone would hide most legacy
   // unassigned chats. We therefore treat "pending" as `!assigned && !closed`.
   //   pending → not assigned to anyone AND not closed (awaiting a claim)
-  //   me      → assigned to the current user (closed or not — owner sees their own)
+  //   me      → assigned and NOT closed. Closing releases ownership (backend
+  //             Close clears the assignment), so closed chats leave Me and live
+  //             in the Closed tab only — including legacy closed-but-assigned
+  //             rows written before close released.
   //   closed  → chat_status === 'closed' (supervisors only; legacy rows without
   //             chat_status default to open and correctly stay out of here)
   //   all     → every loaded chat, no filter (supervisors only — the backend
@@ -270,12 +277,14 @@ export const useContactsStore = defineStore('contacts', () => {
   // get the "Me" tab as a follow-up surface: EVERY assigned conversation in
   // the org, not just their own — admins monitor agents' queues and don't
   // claim chats, so a strictly-mine filter left the tab permanently empty
-  // for them. Regular agents keep the strictly-mine view.
+  // for them. Regular agents keep the strictly-mine view. Closed chats are
+  // excluded in both branches — they belong to the Closed tab.
   const myContacts = computed(() => {
     if (canSeeSupervisorTabs.value) {
-      return sortedContacts.value.filter(c => c.assigned_user_id)
+      return sortedContacts.value.filter(c => c.assigned_user_id && c.chat_status !== 'closed')
     }
-    return sortedContacts.value.filter(c => c.assigned_user_id === authStore.user?.id)
+    return sortedContacts.value.filter(c =>
+      c.assigned_user_id === authStore.user?.id && c.chat_status !== 'closed')
   })
   const closedContacts = computed(() =>
     sortedContacts.value.filter(c => c.chat_status === 'closed')
@@ -342,7 +351,7 @@ export const useContactsStore = defineStore('contacts', () => {
     const r = searchResultsAcrossTabs.value ?? []
     if (!r.length) return null
     const inPending = r.some(c => !c.assigned_user_id && c.chat_status !== 'closed')
-    const inMe = r.some(c => c.assigned_user_id === authStore.user?.id)
+    const inMe = r.some(c => c.assigned_user_id === authStore.user?.id && c.chat_status !== 'closed')
     const inClosed = canSeeSupervisorTabs.value && r.some(c => c.chat_status === 'closed')
     const current = activeListTab.value
     const currentHasHits =
@@ -923,13 +932,22 @@ export const useContactsStore = defineStore('contacts', () => {
 
   async function closeChat(contactId: string) {
     await api.put(`/contacts/${contactId}/close`)
-    // Update locally
+    // Update locally. Closing releases ownership server-side (backend Close
+    // clears the assignment + collaborators), so mirror that here — the row
+    // must drop its assignee tag and leave the Me tab immediately, without
+    // waiting for the WS broadcast or a refetch.
     const contact = contacts.value.find(c => c.id === contactId)
     if (contact) {
       contact.chat_status = 'closed'
+      contact.assigned_user_id = undefined
+      contact.assigned_user_name = undefined
+      contact.collaborators = []
     }
     if (currentContact.value?.id === contactId) {
       currentContact.value.chat_status = 'closed'
+      currentContact.value.assigned_user_id = undefined
+      currentContact.value.assigned_user_name = undefined
+      currentContact.value.collaborators = []
       // Re-fetch messages to show the system message immediately
       await fetchMessages(contactId)
     }

@@ -1669,6 +1669,58 @@ func TestApp_ListContacts_UnknownSortKeyFallsBackToDefault(t *testing.T) {
 	assert.Len(t, resp.Data.Contacts, 3)
 }
 
+// TestApp_ListContacts_LastMessageAccount pins the sidebar badge fix: the
+// badge must reflect the account of the contact's most recent real message,
+// not the stale whats_app_account column (only some write paths stamp it).
+// A trailing system event (no account) must not blank the field.
+func TestApp_ListContacts_LastMessageAccount(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+
+	// Contact stamped with a stale owning account.
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount("Adv-1926"))
+
+	mk := func(account string, created time.Time) *models.Message {
+		return &models.Message{
+			BaseModel:       models.BaseModel{ID: uuid.New(), CreatedAt: created},
+			OrganizationID:  org.ID,
+			WhatsAppAccount: account,
+			ContactID:       contact.ID,
+			Direction:       models.DirectionIncoming,
+			MessageType:     models.MessageTypeText,
+			Content:         "hi",
+			Status:          models.MessageStatusDelivered,
+		}
+	}
+	base := time.Date(2026, 9, 8, 10, 0, 0, 0, time.UTC)
+	require.NoError(t, app.DB.Create(mk("Adv-1926", base)).Error)
+	require.NoError(t, app.DB.Create(mk("Print-Aser-6208", base.Add(time.Minute))).Error)
+	// Trailing close-notice system message carries no account — must be skipped.
+	sys := mk("", base.Add(2*time.Minute))
+	sys.Direction = models.DirectionOutgoing
+	sys.Metadata = models.JSONB{"is_system_message": true}
+	require.NoError(t, app.DB.Create(sys).Error)
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	require.NoError(t, app.ListContacts(req))
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp struct {
+		Data struct {
+			Contacts []handlers.ContactResponse `json:"contacts"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+	require.Len(t, resp.Data.Contacts, 1)
+	assert.Equal(t, "Print-Aser-6208", resp.Data.Contacts[0].LastMessageAccount,
+		"badge source must be the account of the most recent real message")
+}
+
 // TestApp_ListContacts_ScopedByAssignedAccounts pins the fix for scoped users
 // seeing every account's conversations in /chat: a user assigned a subset of
 // WhatsApp accounts must only see conversations under those accounts, while

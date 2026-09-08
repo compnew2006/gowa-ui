@@ -16,20 +16,26 @@ import (
 
 // ContactResponse represents a contact with additional fields for the frontend
 type ContactResponse struct {
-	ID                 uuid.UUID             `json:"id"`
-	PhoneNumber        string                `json:"phone_number"`
-	Name               string                `json:"name"`
-	ProfileName        string                `json:"profile_name"`
-	AvatarURL          string                `json:"avatar_url"`
-	Status             string                `json:"status"`
-	Tags               []string              `json:"tags"`
-	Metadata           any                   `json:"metadata"`
-	LastMessageAt      *time.Time            `json:"last_message_at"`
-	LastMessagePreview string                `json:"last_message_preview"`
-	UnreadCount        int                   `json:"unread_count"`
-	AssignedUserID     *uuid.UUID            `json:"assigned_user_id,omitempty"`
-	AssignedUserName   string                `json:"assigned_user_name,omitempty"`
-	WhatsAppAccount    string                `json:"whatsapp_account,omitempty"`
+	ID                 uuid.UUID  `json:"id"`
+	PhoneNumber        string     `json:"phone_number"`
+	Name               string     `json:"name"`
+	ProfileName        string     `json:"profile_name"`
+	AvatarURL          string     `json:"avatar_url"`
+	Status             string     `json:"status"`
+	Tags               []string   `json:"tags"`
+	Metadata           any        `json:"metadata"`
+	LastMessageAt      *time.Time `json:"last_message_at"`
+	LastMessagePreview string     `json:"last_message_preview"`
+	UnreadCount        int        `json:"unread_count"`
+	AssignedUserID     *uuid.UUID `json:"assigned_user_id,omitempty"`
+	AssignedUserName   string     `json:"assigned_user_name,omitempty"`
+	WhatsAppAccount    string     `json:"whatsapp_account,omitempty"`
+	// LastMessageAccount is the account of the contact's most recent real
+	// message (system messages carry none), read fresh from the messages
+	// table. whats_app_account is a single "owning account" column that only
+	// some write paths stamp, so for contacts messaged on several accounts it
+	// goes stale — the chat sidebar badge shows this field instead.
+	LastMessageAccount string                `json:"last_message_account,omitempty"`
 	LastInboundAt      *time.Time            `json:"last_inbound_at,omitempty"`
 	ServiceWindowOpen  bool                  `json:"service_window_open"`
 	MarketingOptOut    bool                  `json:"marketing_opt_out"`
@@ -721,6 +727,18 @@ func (a *App) buildContactResponseMasked(contact *models.Contact, orgID, viewerU
 			[]models.MessageStatus{models.MessageStatusRead, models.MessageStatusRevoked, models.MessageStatusFailed}).
 		Count(&unreadCount)
 
+	// Account of the most recent real message. System messages (claim/close/
+	// release events) carry no account, hence the <> '' filter — a chat whose
+	// latest event is a close notice must fall back to whats_app_account, not
+	// blank out the badge.
+	var lastMessageAccount string
+	a.DB.Model(&models.Message{}).
+		Select("whats_app_account").
+		Where("contact_id = ? AND whats_app_account <> ''", contact.ID).
+		Order("created_at DESC").
+		Limit(1).
+		Scan(&lastMessageAccount)
+
 	tags := []string{}
 	if contact.Tags != nil {
 		for _, t := range contact.Tags {
@@ -764,6 +782,7 @@ func (a *App) buildContactResponseMasked(contact *models.Contact, orgID, viewerU
 		AssignedUserID:     contact.AssignedUserID,
 		AssignedUserName:   assignedUserName,
 		WhatsAppAccount:    contact.WhatsAppAccount,
+		LastMessageAccount: lastMessageAccount,
 		LastInboundAt:      contact.LastInboundAt,
 		ServiceWindowOpen:  serviceWindowOpen,
 		MarketingOptOut:    contact.MarketingOptOut,

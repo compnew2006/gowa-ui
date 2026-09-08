@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/chatlifecycle"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/test/testutil"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -319,7 +319,9 @@ func TestService_Claim_OtherAssignee_ReroutesToJoin(t *testing.T) {
 }
 
 // TestService_Close_SetsClosedAndBroadcasts: closing an open chat flips status
-// to closed. Idempotency: closing an already-closed chat returns ErrAlreadyClosed.
+// to closed AND releases ownership — the row drops assigned_user_id and
+// collaborators so the chat leaves the assignee's Me tab. Idempotency: closing
+// an already-closed chat returns ErrAlreadyClosed.
 func TestService_Close_SetsClosedAndBroadcasts(t *testing.T) {
 	svc, db, org := newService(t)
 	agent := testutil.CreateTestUser(t, db, org.ID)
@@ -330,6 +332,8 @@ func TestService_Close_SetsClosedAndBroadcasts(t *testing.T) {
 	var updated models.Contact
 	require.NoError(t, db.First(&updated, "id = ?", contact.ID).Error)
 	assert.Equal(t, models.ChatStatusClosed, updated.EffectiveStatus())
+	assert.Nil(t, updated.AssignedUserID, "closing must release the assignment")
+	assert.Empty(t, updated.GetCollaborators(), "closing must clear collaborators")
 
 	// Idempotent: second close returns ErrAlreadyClosed, no second system msg.
 	err := svc.Close(context.Background(), org.ID, agent.ID, &updated)

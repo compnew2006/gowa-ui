@@ -20,10 +20,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/audit"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/internal/websocket"
+	"github.com/google/uuid"
 	"github.com/zerodha/logf"
 	"gorm.io/gorm"
 )
@@ -684,9 +684,12 @@ func (s *Service) Leave(ctx context.Context, orgID, userID uuid.UUID, contact *m
 			s.broadcast(orgID, websocket.WSMessage{
 				Type: websocket.TypeChatClosed,
 				Payload: map[string]any{
-					"contact_id":  contact.ID.String(),
-					"chat_status": string(models.ChatStatusClosed),
-					"closed":      true,
+					"contact_id":       contact.ID.String(),
+					"chat_status":      string(models.ChatStatusClosed),
+					"closed":           true,
+					"assigned_user_id": "", // released on close — see Close
+					"assigned_to":      "",
+					"collaborators":    []any{},
 				},
 			})
 
@@ -797,22 +800,34 @@ func (s *Service) RemoveCollaborator(ctx context.Context, orgID, actorID, target
 	return RemoveCollaboratorResult{TargetName: targetName, ManagerName: managerName}, nil
 }
 
-// Close closes an open conversation. Idempotent: returns ErrAlreadyClosed if
-// the chat is already closed (no system message).
+// ErrAlreadyClosed is returned by Close when the chat is already closed.
 var ErrAlreadyClosed = errors.New("chat: conversation already closed")
 
-// Close sets the conversation status to closed and emits the chat_closed
-// system message + broadcast. Authorization (owner / collaborator /
-// chat.collaborate:write / contacts:read) is checked in the handler; this
-// method just performs the transition.
+// Close sets the conversation status to closed and releases ownership: the
+// row drops assigned_user_id and collaborators, so a closed chat leaves the
+// assignee's Me tab and loses its sidebar assignee tag (the chat_closed
+// broadcast already declared the assignment cleared — the row now matches it).
+// Emits the chat_closed system message + broadcast. Authorization (owner /
+// collaborator / chat.collaborate:write / contacts:read) is checked in the
+// handler; this method just performs the transition. Idempotent: returns
+// ErrAlreadyClosed if the chat is already closed (no system message).
 func (s *Service) Close(ctx context.Context, orgID, userID uuid.UUID, contact *models.Contact) error {
 	if contact.EffectiveStatus() == models.ChatStatusClosed {
 		return ErrAlreadyClosed
 	}
 
+	// Capture pre-mutation values for the audit log BEFORE mutation (Metadata
+	// is a shared JSONB map aliased by struct snapshots — see Release).
+	oldStatus := string(contact.EffectiveStatus())
+	oldAssigned := contact.AssignedUserID
+
 	contact.SetStatus(models.ChatStatusClosed)
-	if err := s.db.Model(&models.Contact{}).Where("id = ?", contact.ID).
-		Update("metadata", contact.Metadata).Error; err != nil {
+	contact.AssignedUserID = nil
+	contact.ClearCollaborators()
+	if err := s.db.Model(&models.Contact{}).Where("id = ?", contact.ID).Updates(map[string]any{
+		"assigned_user_id": nil,
+		"metadata":         contact.Metadata,
+	}).Error; err != nil {
 		s.log.Error("Failed to close chat", "error", err, "contact_id", contact.ID)
 		return fmt.Errorf("chat: failed to close: %w", err)
 	}
@@ -823,6 +838,15 @@ func (s *Service) Close(ctx context.Context, orgID, userID uuid.UUID, contact *m
 		fmt.Sprintf("🔔 %s closed this conversation", agentName),
 		models.JSONB{"system_type": "chat_closed", "agent_id": userID.String()})
 
+	// Audit with explicit old→new (audit.LogAudit no-ops on an empty diff and
+	// the differ does not deeply compare JSONB — see Release).
+	audit.LogAudit(s.db, orgID, userID, agentName,
+		"contact", contact.ID, models.AuditActionUpdated, nil, contact,
+		map[string]any{
+			"chat_status":      map[string]any{"old": oldStatus, "new": string(models.ChatStatusClosed)},
+			"assigned_user_id": map[string]any{"old": oldAssigned, "new": nil},
+		})
+
 	s.broadcast(orgID, websocket.WSMessage{
 		Type: websocket.TypeChatClosed,
 		Payload: map[string]any{
@@ -831,6 +855,7 @@ func (s *Service) Close(ctx context.Context, orgID, userID uuid.UUID, contact *m
 			"closed":           true,
 			"assigned_user_id": "",
 			"assigned_to":      "",
+			"collaborators":    []any{}, // cleared server-side — include so clients drop stale collabs
 		},
 	})
 

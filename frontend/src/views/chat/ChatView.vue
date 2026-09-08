@@ -947,8 +947,8 @@ onUnmounted(() => {
                     <span class="truncate">{{ contact.assigned_user_name }}</span>
                   </span>
                 </p>
-                <Badge v-if="contact.whatsapp_account" class="flex-shrink-0 h-4 text-[9px] bg-violet-500/20 text-violet-400 light:bg-violet-100 light:text-violet-700">
-                  {{ contact.whatsapp_account }}
+                <Badge v-if="contact.last_message_account || contact.whatsapp_account" class="flex-shrink-0 h-4 text-[9px] bg-violet-500/20 text-violet-400 light:bg-violet-100 light:text-violet-700">
+                  {{ contact.last_message_account || contact.whatsapp_account }}
                 </Badge>
                 <Badge v-if="contact.unread_count > 0" class="flex-shrink-0 h-5 text-[10px] tabular-nums bg-emerald-500 text-white light:bg-emerald-600 light:text-white">
                   {{ contact.unread_count }}

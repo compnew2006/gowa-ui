@@ -533,11 +533,12 @@ class WebSocketService {
   }
 
   private handleChatClosed(store: ReturnType<typeof useContactsStore>, payload: any) {
-    // The backend broadcasts cleared assignment on close (assigned_user_id: "")
-    // so the UI reflects that the chat is no longer owned — even though the DB
-    // row keeps assigned_user_id for the audit trail.
+    // Closing releases ownership: the backend's Close clears the assignment
+    // and the collaborators on the contact row and declares both in the
+    // payload (assigned_user_id: "", collaborators: []).
     const assignedTo = payload.assigned_user_id ?? payload.assigned_to
     const clearAssignment = assignedTo === '' || assignedTo === null
+    const clearCollaborators = Array.isArray(payload.collaborators) && payload.collaborators.length === 0
     // Mark the conversation as closed in the contacts list
     const c = store.contacts.find(c => c.id === payload.contact_id)
     if (c) {
@@ -546,6 +547,7 @@ class WebSocketService {
         c.assigned_user_id = undefined
         c.assigned_user_name = ''
       }
+      if (clearCollaborators) c.collaborators = []
     }
     // Update currentContact so the UI locks instantly without a page refresh
     const current = store.currentContact
@@ -555,6 +557,7 @@ class WebSocketService {
         current.assigned_user_id = undefined
         current.assigned_user_name = ''
       }
+      if (clearCollaborators) current.collaborators = []
       // Re-fetch messages to show the system message immediately
       store.fetchMessages(payload.contact_id)
     }
