@@ -90,7 +90,8 @@ import {
   Megaphone,
   RotateCcw,
   ListChecks,
-  Package
+  Package,
+  Play
 } from 'lucide-vue-next'
 import { getInitials, getAvatarGradient, avatarSrc, linkifySegments } from '@/lib/utils'
 import { useColorMode } from '@/composables/useColorMode'
@@ -113,6 +114,7 @@ import { useMessageFormat } from '@/composables/useMessageFormat'
 import { useChatScroll } from '@/composables/useChatScroll'
 import { useChatTyping } from '@/composables/useChatTyping'
 import { useChatMedia } from '@/composables/useChatMedia'
+import { useChatAlbums, type AlbumGroup } from '@/composables/useChatAlbums'
 import { useChatCannedTemplates } from '@/composables/useChatCannedTemplates'
 import { useChatMessaging } from '@/composables/useChatMessaging'
 import { useChatLifecycle } from '@/composables/useChatLifecycle'
@@ -400,6 +402,55 @@ const {
   handleImageError,
   handleMediaError,
 } = media
+
+// 4b) WhatsApp-style media albums: consecutive caption-less image/video runs
+// fold into ONE grid bubble at render time. Presentation-only — every member
+// keeps its own message row/id/media URL, so per-photo anchors, select-mode
+// downloads and lazy media recovery are untouched.
+const { renderItems: albumRenderItems } = useChatAlbums(
+  computed(() => contactsStore.messages),
+  { shouldRenderMedia }
+)
+const albumByMessageId = computed(() => {
+  const map = new Map<string, AlbumGroup>()
+  for (const item of albumRenderItems.value) {
+    if (item.kind === 'album') {
+      for (const m of item.messages) map.set(m.id, item)
+    }
+  }
+  return map
+})
+const albumStartIds = computed(() => {
+  const ids = new Set<string>()
+  for (const album of albumByMessageId.value.values()) ids.add(album.messages[0].id)
+  return ids
+})
+function isAlbumContinuation(message: Message): boolean {
+  return albumByMessageId.value.has(message.id) && !albumStartIds.value.has(message.id)
+}
+function isAlbumStart(message: Message): boolean {
+  return albumStartIds.value.has(message.id)
+}
+function getAlbum(message: Message): AlbumGroup {
+  return albumByMessageId.value.get(message.id)!
+}
+/** Runs longer than 4 tiles collapse the tail into a "+N" tile (WhatsApp). */
+function albumOverflowCount(album: AlbumGroup): number {
+  return Math.max(0, album.messages.length - 4)
+}
+function handleAlbumTileClick(message: Message) {
+  if (mediaSelectMode.value) {
+    toggleMessageSelect(message.id)
+  } else {
+    openMediaPreview(message)
+  }
+}
+async function downloadAlbumSeparately(album: AlbumGroup) {
+  await downloadSeparately(album.messages)
+}
+async function downloadAlbumZip(album: AlbumGroup) {
+  await downloadAsZip(album.messages)
+}
 
 // 5) Messaging (send / retry / revoke / reply + status paths)
 const {
@@ -1437,6 +1488,162 @@ onUnmounted(() => {
               >
                 <div class="px-3.5 py-1 bg-white/[0.04] light:bg-gray-200/60 rounded-full text-[11px] text-white/45 light:text-gray-500 font-medium max-w-[85%] text-center select-none border-none shadow-none">
                   {{ getSystemMessageText(message) }}
+                </div>
+              </div>
+
+              <!-- Album continuation member: its bubble is rendered by the
+                   run's first message above (anchor included there). -->
+              <template v-else-if="isAlbumContinuation(message)" />
+
+              <!-- Media album bubble: ONE grid bubble for a run of consecutive
+                   caption-less photos/videos (WhatsApp-style). Members keep
+                   their own message ids — per-photo anchors, tile selection
+                   and per-photo downloads stay intact. -->
+              <div
+                v-else-if="isAlbumStart(message)"
+                :id="`message-${message.id}`"
+                :class="[
+                  'flex group',
+                  message.direction === 'outgoing' ? 'justify-end' : 'justify-start'
+                ]"
+              >
+                <div
+                  :class="[
+                    'chat-bubble',
+                    message.direction === 'outgoing' ? 'chat-bubble-outgoing' : 'chat-bubble-incoming'
+                  ]"
+                >
+                  <!-- Anchors for continuation members so scroll-to-message and
+                       the unread jump still resolve inside the album. -->
+                  <span
+                    v-for="m in getAlbum(message).messages.slice(1)"
+                    :id="`message-${m.id}`"
+                    :key="m.id"
+                    class="block h-0 overflow-hidden"
+                    aria-hidden="true"
+                  />
+                  <!-- Sender name for group messages (mirrors single bubbles) -->
+                  <span
+                    v-if="message.direction === 'incoming' && contactsStore.currentContact?.is_group_chat && (message.sender_push_name || message.sender_phone)"
+                    class="block text-xs font-medium mb-1 text-blue-400"
+                  >
+                    {{ message.sender_push_name || message.sender_phone }}
+                  </span>
+                  <!-- Album grid: 2 columns; a 3-item run spans the first tile
+                       wide (WhatsApp layout); runs > 4 collapse into "+N". -->
+                  <div class="grid grid-cols-2 gap-[2px] overflow-hidden rounded-lg w-[300px] max-w-full" data-album>
+                    <div
+                      v-for="(m, i) in getAlbum(message).messages.slice(0, 4)"
+                      :key="m.id"
+                      :class="[
+                        'relative aspect-square overflow-hidden bg-black/20',
+                        getAlbum(message).messages.length === 3 && i === 0 && 'col-span-2'
+                      ]"
+                      :data-message-id="m.id"
+                    >
+                      <img
+                        v-if="m.message_type === 'image' && !brokenMediaIds.has(m.id)"
+                        :src="getMediaUrl(m)"
+                        :alt="m.media_filename || 'Image'"
+                        class="w-full h-full object-cover cursor-pointer"
+                        @click="handleAlbumTileClick(m)"
+                        @error="markMediaBroken(m)"
+                      />
+                      <video
+                        v-else-if="m.message_type === 'video' && !brokenMediaIds.has(m.id)"
+                        :src="getMediaUrl(m)"
+                        class="w-full h-full object-cover cursor-pointer"
+                        preload="metadata"
+                        muted
+                        playsinline
+                        @click="handleAlbumTileClick(m)"
+                        @error="markMediaBroken(m)"
+                      />
+                      <div v-else class="w-full h-full flex items-center justify-center">
+                        <MediaRetryButton
+                          :message="m"
+                          :is-redownloading="isRedownloading(m)"
+                          @retry="retryMediaDownload(m)"
+                        />
+                      </div>
+                      <!-- Play affordance on video tiles (tap opens the video) -->
+                      <div
+                        v-if="m.message_type === 'video' && !brokenMediaIds.has(m.id)"
+                        class="absolute inset-0 flex items-center justify-center pointer-events-none"
+                      >
+                        <span class="flex h-9 w-9 items-center justify-center rounded-full bg-black/50">
+                          <Play class="h-4 w-4 text-white" />
+                        </span>
+                      </div>
+                      <!-- "+N" overflow on the last visible tile: opens the
+                           first hidden item's preview. -->
+                      <div
+                        v-if="i === 3 && albumOverflowCount(getAlbum(message)) > 0"
+                        class="absolute inset-0 flex items-center justify-center bg-black/60 cursor-pointer"
+                        @click="handleAlbumTileClick(getAlbum(message).messages[4])"
+                      >
+                        <span class="text-white text-xl font-semibold tabular-nums">
+                          +{{ albumOverflowCount(getAlbum(message)) }}
+                        </span>
+                      </div>
+                      <!-- Per-tile checkbox in media select mode: each tile is
+                           still its own selectable message. -->
+                      <Checkbox
+                        v-if="mediaSelectMode"
+                        :model-value="selectedMessageIds.has(m.id)"
+                        class="absolute top-1 right-1 h-4 w-4 bg-background/80 rounded"
+                        @update:model-value="toggleMessageSelect(m.id)"
+                        @click.stop
+                      />
+                    </div>
+                  </div>
+                  <!-- Timestamp of the LAST member (the album completes when
+                       its final photo lands). -->
+                  <span class="chat-bubble-time block clear-both">
+                    <span>{{ formatMessageTime(getAlbum(message).messages[getAlbum(message).messages.length - 1].created_at) }}</span>
+                    <component
+                      v-if="message.direction === 'outgoing'"
+                      :is="getMessageStatusIcon(message.status)"
+                      :class="['h-4 w-4 status-icon', getMessageStatusClass(message.status)]"
+                    />
+                  </span>
+                </div>
+                <!-- Album hover actions: reply to the album's first message +
+                     download the whole album (separate files / one ZIP). -->
+                <div class="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity self-center ml-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    class="h-6 w-6"
+                    :title="$t('chat.reply')"
+                    @click="replyToMessage(message)"
+                  >
+                    <Reply class="h-3 w-3" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    class="h-6 w-6"
+                    :disabled="isMediaDownloading"
+                    :title="$t('chat.downloadSeparately')"
+                    data-album-sep
+                    @click="downloadAlbumSeparately(getAlbum(message))"
+                  >
+                    <Loader2 v-if="isMediaDownloading" class="h-3 w-3 animate-spin" />
+                    <Download v-else class="h-3 w-3" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    class="h-6 w-6"
+                    :disabled="isMediaDownloading"
+                    :title="$t('chat.downloadZip')"
+                    data-album-zip
+                    @click="downloadAlbumZip(getAlbum(message))"
+                  >
+                    <Loader2 v-if="isMediaDownloading" class="h-3 w-3 animate-spin" />
+                    <Package v-else class="h-3 w-3" />
+                  </Button>
                 </div>
               </div>
 
