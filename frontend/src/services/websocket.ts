@@ -80,6 +80,7 @@ const WS_TYPE_DEVICE_ALERT = 'device_alert'
 const WS_TYPE_CHAT_RELEASED = 'chat_released'
 const WS_TYPE_COLLABORATOR_JOINED = 'collaborator_joined'
 const WS_TYPE_COLLABORATOR_LEFT = 'collaborator_left'
+const WS_TYPE_CHAT_ACCESS_REVOKED = 'chat_access_revoked'
 
 interface WSMessage {
   type: string
@@ -308,6 +309,9 @@ class WebSocketService {
           break
         case WS_TYPE_COLLABORATOR_LEFT:
           this.handleCollaboratorLeft(store, message.payload)
+          break
+        case WS_TYPE_CHAT_ACCESS_REVOKED:
+          this.handleChatAccessRevoked(store, message.payload)
           break
         default:
           // Unknown message type, ignore
@@ -577,6 +581,16 @@ class WebSocketService {
       current.chat_status = payload.chat_status || 'open'
       store.fetchMessages(payload.contact_id)
     }
+  }
+
+  // An assignment access grant was Released. Only the released user loses
+  // access — everyone else keeps theirs (own account / own grants), so only
+  // their client drops the conversation. The server scope stays the authority.
+  private handleChatAccessRevoked(store: ReturnType<typeof useContactsStore>, payload: any) {
+    const authStore = useAuthStore()
+    if (!payload?.contact_id || !payload?.user_id) return
+    if (authStore.user?.id !== payload.user_id) return
+    store.removeContactById(payload.contact_id)
   }
 
   private handleChatReleased(store: ReturnType<typeof useContactsStore>, payload: any) {

@@ -76,6 +76,9 @@ func (a *App) CreateScheduledMessage(r *fastglue.Request) error {
 	if err := query.First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
 	}
+	if a.rejectHistoricalAssignmentAccess(r, &contact, userID, orgID) {
+		return nil
+	}
 
 	// Resolve the WhatsApp account now so a bad account fails at schedule
 	// time, not at fire time. Prefer request override over contact default.

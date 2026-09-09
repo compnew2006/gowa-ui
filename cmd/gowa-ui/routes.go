@@ -375,8 +375,12 @@ func setupChatLifecycleRoutes(g *fastglue.Fastglue, app *handlers.App) {
 	g.PUT("/api/contacts/{id}/reopen", app.ReopenChat)
 	g.POST("/api/contacts/{id}/join", app.JoinChat)
 	g.DELETE("/api/contacts/{id}/join", app.LeaveChat)
-	g.DELETE("/api/contacts/{id}/collaborators/{user_id}", app.RemoveCollaborator)
-	g.POST("/api/contacts/{id}/collaborators/{user_id}", app.InviteCollaborator)
+	g.DELETE("/api/contacts/{id}/collaborators/{target_user_id}", app.RemoveCollaborator)
+	g.POST("/api/contacts/{id}/collaborators/{target_user_id}", app.InviteCollaborator)
+
+	// Assignment access grants (previous-access management + Release)
+	g.GET("/api/contacts/{id}/access-grants", app.ListAccessGrants)
+	g.DELETE("/api/contacts/{id}/access-grants/{target_user_id}", app.RevokeAccessGrant)
 }
 
 // setupImportExportRoutes registers the generic import/export config + data endpoints.

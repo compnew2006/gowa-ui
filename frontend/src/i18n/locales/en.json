@@ -489,7 +489,16 @@
     "selectedFiles": "{count} selected",
     "downloadFailed": "Download failed",
     "filesDownloaded": "Files downloaded",
-    "tryAgain": "Please try again"
+    "tryAgain": "Please try again",
+    "readOnlyBadge": "Read-only — previous assignment. You can search and read this conversation, but replying and closing are disabled.",
+    "readOnlyPlaceholder": "Read-only (previous assignment)",
+    "previousAccessTitle": "Previous access permissions",
+    "currentAssignee": "Current assignee",
+    "previousAssignee": "Read-only (previous assignment)",
+    "releaseAccess": "Release",
+    "confirmRelease": "Confirm release?",
+    "accessReleased": "Access released",
+    "accessReleaseFailed": "Failed to release access"
   },
   "contacts": {
     "title": "Contacts",

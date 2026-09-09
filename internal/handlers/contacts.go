@@ -43,8 +43,16 @@ type ContactResponse struct {
 	IsNewsletter       bool                  `json:"is_newsletter"`
 	ChatStatus         string                `json:"chat_status,omitempty"`
 	Collaborators      []models.Collaborator `json:"collaborators,omitempty"`
-	CreatedAt          time.Time             `json:"created_at"`
-	UpdatedAt          time.Time             `json:"updated_at"`
+	// AccessMode explains how the VIEWER reaches this conversation
+	// (standard | current_assignee | historical_assignment_read_only) so the
+	// UI can render the read-only state precisely. CanReply/CanClose are
+	// server-computed convenience flags for the same purpose — the server
+	// re-checks on every write regardless.
+	AccessMode string    `json:"access_mode,omitempty"`
+	CanReply   bool      `json:"can_reply"`
+	CanClose   bool      `json:"can_close"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
 
 // MessageResponse represents a message for the frontend
@@ -186,8 +194,92 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 	for i := range contacts {
 		response[i] = a.buildContactResponseMasked(&contacts[i], orgID, userID, shouldMask)
 	}
+	a.decorateAccessModes(response, contacts, userID, orgID)
 
 	return r.SendEnvelope(listEnvelope("contacts", response, total, pg))
+}
+
+// Conversation access modes — how the viewing user reaches this conversation.
+const (
+	// AccessModeStandard: the conversation belongs to one of the user's
+	// assigned WhatsApp accounts (or the user has org-wide visibility) —
+	// normal access, gated only by role permissions.
+	AccessModeStandard = "standard"
+	// AccessModeCurrentAssignee: cross-account, reached via being the current
+	// assignee — full access to reply/close for the duration of the
+	// assignment (plus the grant that outlives it).
+	AccessModeCurrentAssignee = "current_assignee"
+	// AccessModeHistoricalReadOnly: cross-account, reached via an assignment
+	// access grant (or closed_by) while the assignment has moved on — search
+	// and read only; every write/lifecycle action is refused server-side.
+	AccessModeHistoricalReadOnly = "historical_assignment_read_only"
+)
+
+// activeGrantExists reports whether the user holds an ACTIVE (non-revoked)
+// assignment access grant for the contact.
+func (a *App) activeGrantExists(contactID, userID, orgID uuid.UUID) bool {
+	var n int64
+	if err := a.DB.Model(&models.ContactAssignmentAccessGrant{}).
+		Where("contact_id = ? AND user_id = ? AND organization_id = ? AND revoked_at IS NULL",
+			contactID, userID, orgID).
+		Count(&n).Error; err != nil {
+		return false
+	}
+	return n > 0
+}
+
+// hasAccountAccess reports whether the contact's WhatsApp account is within
+// the user's account visibility (assigned subset, no-assignment fallback, or
+// super admin). Users with account access are never read-only on it.
+func (a *App) hasAccountAccess(contact *models.Contact, userID, orgID uuid.UUID) bool {
+	if a.IsSuperAdmin(userID) {
+		return true
+	}
+	ids, err := a.assignedAccountIDs(userID, orgID)
+	if err != nil || len(ids) == 0 {
+		// No assignments (or load error) = full org visibility fallback.
+		return true
+	}
+	var n int64
+	if err := a.DB.Model(&models.WhatsAppAccount{}).
+		Where("id IN ? AND organization_id = ? AND name = ?", ids, orgID, contact.WhatsAppAccount).
+		Count(&n).Error; err != nil {
+		return false
+	}
+	return n > 0
+}
+
+// conversationAccessMode classifies how the user reaches this contact. Only
+// meaningful for contacts that already passed scopeAssignedContact (visible);
+// for those, it never returns an empty mode. Defaults fail CLOSED to
+// read-only: an unclassified viewer must never gain write access.
+func (a *App) conversationAccessMode(contact *models.Contact, userID, orgID uuid.UUID) string {
+	if a.hasAccountAccess(contact, userID, orgID) {
+		return AccessModeStandard
+	}
+	if contact.AssignedUserID != nil && *contact.AssignedUserID == userID {
+		return AccessModeCurrentAssignee
+	}
+	if a.activeGrantExists(contact.ID, userID, orgID) || contact.ClosedByUserID() == userID.String() {
+		return AccessModeHistoricalReadOnly
+	}
+	return AccessModeHistoricalReadOnly
+}
+
+// rejectHistoricalAssignmentAccess enforces the READ-ONLY rule for holders of
+// historical assignment access: after the assignment moves on, the
+// conversation is search+read only — no reply, media send, reactions, typing,
+// notes, claim, close, reopen, or any other write/lifecycle action. Returns
+// true when it rejected the request (envelope already sent).
+func (a *App) rejectHistoricalAssignmentAccess(r *fastglue.Request, contact *models.Contact, userID, orgID uuid.UUID) bool {
+	if a.conversationAccessMode(contact, userID, orgID) != AccessModeHistoricalReadOnly {
+		return false
+	}
+	_ = r.SendErrorEnvelope(fasthttp.StatusForbidden,
+		"Read-only access: this conversation was previously assigned to you. Only search and reading are allowed.",
+		map[string]any{"access_mode": AccessModeHistoricalReadOnly, "read_only": true},
+		"historical_assignment_read_only")
+	return true
 }
 
 // scopeAssignedContact narrows a contact query to what the user may see.
@@ -219,11 +311,16 @@ func (a *App) scopeAssignedContact(query *gorm.DB, userID, orgID uuid.UUID) *gor
 	}
 
 	// Involvement grant: assigned_user_id or the metadata JSONB keys
-	// collaborators/closed_by. @> containment reuses the same GIN-indexed
+	// collaborators/closed_by, or an ACTIVE assignment access grant (the
+	// permanent per-conversation grant created by direct admin assignment —
+	// see upsertAssignmentGrant). @> containment reuses the same GIN-indexed
 	// pattern as the tags filter above.
 	collaboratorJSON := fmt.Sprintf(`{"collaborators":[{"user_id":"%s"}]}`, userID.String())
 	closedByJSON := fmt.Sprintf(`{"closed_by":{"user_id":"%s"}}`, userID.String())
-	involvement := "assigned_user_id = ? OR metadata @> ?::jsonb OR metadata @> ?::jsonb"
+	activeGrant := fmt.Sprintf(
+		`EXISTS (SELECT 1 FROM contact_assignment_access_grants gag WHERE gag.contact_id = contacts.id AND gag.user_id = '%s' AND gag.revoked_at IS NULL)`,
+		userID.String())
+	involvement := "assigned_user_id = ? OR metadata @> ?::jsonb OR metadata @> ?::jsonb OR " + activeGrant
 	involvementArgs := []any{userID, collaboratorJSON, closedByJSON}
 
 	if !a.HasPermission(userID, models.ResourceContacts, models.ActionRead, orgID) {
@@ -280,6 +377,22 @@ func (a *App) findScopedContact(r *fastglue.Request, id, userID, orgID uuid.UUID
 	return &contact, nil
 }
 
+// findScopedMutableContact is findScopedContact plus the historical-assignment
+// READ-ONLY refusal — for endpoints that mutate the contact or its
+// collaboration set. AssignContact deliberately uses plain findScopedContact
+// (reassignment is the admin action that MANAGES these grants) and carries its
+// own self-assignment guard instead.
+func (a *App) findScopedMutableContact(r *fastglue.Request, id, userID, orgID uuid.UUID) (*models.Contact, error) {
+	contact, err := a.findScopedContact(r, id, userID, orgID)
+	if err != nil {
+		return nil, err
+	}
+	if a.rejectHistoricalAssignmentAccess(r, contact, userID, orgID) {
+		return nil, errEnvelopeSent
+	}
+	return contact, nil
+}
+
 // GetContact returns a single contact
 // Users without contacts:read permission can only access contacts assigned to them
 func (a *App) GetContact(r *fastglue.Request) error {
@@ -304,8 +417,10 @@ func (a *App) GetContact(r *fastglue.Request) error {
 	}
 
 	response := a.buildContactResponse(&contact, orgID, userID)
+	resps := []ContactResponse{response}
+	a.decorateAccessModes(resps, []models.Contact{contact}, userID, orgID)
 
-	return r.SendEnvelope(response)
+	return r.SendEnvelope(resps[0])
 }
 
 // GetMessages returns messages for a contact
@@ -352,6 +467,14 @@ func (a *App) AssignContact(r *fastglue.Request) error {
 		if err := a.DB.Where("id = ? AND organization_id = ?", req.UserID, orgID).First(&user).Error; err != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "User not found", nil, "")
 		}
+		// A historical-grant holder must not regain write access by assigning
+		// the conversation to themselves — that would bypass the read-only
+		// rule. Assigning to OTHER users remains the legitimate admin action.
+		if *req.UserID == userID && a.conversationAccessMode(contact, userID, orgID) == AccessModeHistoricalReadOnly {
+			return r.SendErrorEnvelope(fasthttp.StatusForbidden,
+				"You hold read-only access to this conversation and cannot assign it to yourself",
+				nil, "")
+		}
 	}
 
 	// Delegate to the lifecycle service: it persists the assignment, keeps
@@ -397,7 +520,7 @@ func (a *App) UpdateContactTags(r *fastglue.Request) error {
 	}
 
 	// Get contact (scoped to the user's visible accounts — see AssignContact)
-	contact, err := a.findScopedContact(r, contactID, userID, orgID)
+	contact, err := a.findScopedMutableContact(r, contactID, userID, orgID)
 	if err != nil {
 		return nil
 	}
@@ -574,7 +697,7 @@ func (a *App) UpdateContact(r *fastglue.Request) error {
 	}
 
 	// Get contact (scoped to the user's visible accounts — see AssignContact)
-	contact, err := a.findScopedContact(r, contactID, userID, orgID)
+	contact, err := a.findScopedMutableContact(r, contactID, userID, orgID)
 	if err != nil {
 		return nil
 	}
@@ -645,7 +768,7 @@ func (a *App) DeleteContact(r *fastglue.Request) error {
 	}
 
 	// Get contact (scoped to the user's visible accounts — see AssignContact)
-	contact, err := a.findScopedContact(r, contactID, userID, orgID)
+	contact, err := a.findScopedMutableContact(r, contactID, userID, orgID)
 	if err != nil {
 		return nil
 	}
@@ -697,6 +820,63 @@ func (a *App) filterCollaboratorsForViewer(collabs []models.Collaborator, viewer
 		filtered = append(filtered, c)
 	}
 	return filtered
+}
+
+// decorateAccessModes fills AccessMode/CanReply/CanClose on a page of contact
+// responses in bulk: account access is resolved once for the viewer, and the
+// viewer's active grants are fetched in a single query for the whole page —
+// no per-contact grant lookups.
+func (a *App) decorateAccessModes(responses []ContactResponse, contacts []models.Contact, userID, orgID uuid.UUID) {
+	if len(responses) == 0 {
+		return
+	}
+	superAdmin := a.IsSuperAdmin(userID)
+	var accountNames []string
+	hasAssignments := false
+	if !superAdmin {
+		ids, err := a.assignedAccountIDs(userID, orgID)
+		if err == nil && len(ids) > 0 {
+			hasAssignments = true
+			a.DB.Model(&models.WhatsAppAccount{}).
+				Where("id IN ? AND organization_id = ?", ids, orgID).
+				Pluck("name", &accountNames)
+		}
+	}
+	granted := make(map[uuid.UUID]bool, len(contacts))
+	contactIDs := make([]uuid.UUID, 0, len(contacts))
+	for _, c := range contacts {
+		contactIDs = append(contactIDs, c.ID)
+	}
+	if len(contactIDs) > 0 {
+		var grantedIDs []uuid.UUID
+		a.DB.Model(&models.ContactAssignmentAccessGrant{}).
+			Where("contact_id IN ? AND user_id = ? AND organization_id = ? AND revoked_at IS NULL",
+				contactIDs, userID, orgID).
+			Pluck("contact_id", &grantedIDs)
+		for _, id := range grantedIDs {
+			granted[id] = true
+		}
+	}
+	accountSet := make(map[string]bool, len(accountNames))
+	for _, n := range accountNames {
+		accountSet[n] = true
+	}
+
+	for i := range responses {
+		c := &contacts[i]
+		mode := AccessModeStandard
+		switch {
+		case superAdmin || !hasAssignments || accountSet[c.WhatsAppAccount]:
+			mode = AccessModeStandard
+		case c.AssignedUserID != nil && *c.AssignedUserID == userID:
+			mode = AccessModeCurrentAssignee
+		case granted[c.ID] || c.ClosedByUserID() == userID.String():
+			mode = AccessModeHistoricalReadOnly
+		}
+		responses[i].AccessMode = mode
+		responses[i].CanReply = mode != AccessModeHistoricalReadOnly
+		responses[i].CanClose = mode != AccessModeHistoricalReadOnly
+	}
 }
 
 // buildContactResponse creates a ContactResponse from a Contact model.

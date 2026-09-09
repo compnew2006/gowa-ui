@@ -36,9 +36,12 @@ func (a *App) ensureClaimableChatStatus(orgID uuid.UUID, contact *models.Contact
 // through scopeAssignedContact, so lifecycle actions (claim/release/close/
 // join/leave/reopen, notes) enforce the same visibility as the chat list —
 // account-scoped agents cannot act on conversations outside their assigned
-// accounts. On error it sends the HTTP response and returns ok=false —
-// callers should `return nil`. It returns a value (not a pointer) so callers
-// keep passing &contact to the lifecycle service unchanged.
+// accounts. It also enforces the historical-assignment READ-ONLY rule: a
+// user holding only a grant (or closed_by) on a cross-account conversation
+// may search and read, never mutate. On error it sends the HTTP response and
+// returns ok=false — callers should `return nil`. It returns a value (not a
+// pointer) so callers keep passing &contact to the lifecycle service
+// unchanged.
 func (a *App) loadContactByPath(r *fastglue.Request, orgID, userID uuid.UUID) (models.Contact, bool) {
 	var contact models.Contact
 	contactID, err := parsePathUUID(r, "id", "contact")
@@ -48,6 +51,9 @@ func (a *App) loadContactByPath(r *fastglue.Request, orgID, userID uuid.UUID) (m
 	query := a.scopeAssignedContact(a.DB.Where("id = ? AND organization_id = ?", contactID, orgID), userID, orgID)
 	if err := query.First(&contact).Error; err != nil {
 		_ = r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
+		return contact, false
+	}
+	if a.rejectHistoricalAssignmentAccess(r, &contact, userID, orgID) {
 		return contact, false
 	}
 	return contact, true
@@ -214,14 +220,14 @@ func (a *App) InviteCollaborator(r *fastglue.Request) error {
 		return nil
 	}
 
-	targetUserIDStr, _ := r.RequestCtx.UserValue("user_id").(string)
+	targetUserIDStr, _ := r.RequestCtx.UserValue("target_user_id").(string)
 	targetUserID, err := uuid.Parse(targetUserIDStr)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid user ID", nil, "")
 	}
 
 	// Scoped load: only act on conversations the caller can see.
-	contact, err := a.findScopedContact(r, contactID, userID, orgID)
+	contact, err := a.findScopedMutableContact(r, contactID, userID, orgID)
 	if err != nil {
 		return nil
 	}
@@ -315,14 +321,14 @@ func (a *App) RemoveCollaborator(r *fastglue.Request) error {
 		return nil
 	}
 
-	targetUserIDStr, _ := r.RequestCtx.UserValue("user_id").(string)
+	targetUserIDStr, _ := r.RequestCtx.UserValue("target_user_id").(string)
 	targetUserID, err := uuid.Parse(targetUserIDStr)
 	if err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid user ID", nil, "")
 	}
 
 	// Scoped load: only act on conversations the caller can see.
-	contact, err := a.findScopedContact(r, contactID, userID, orgID)
+	contact, err := a.findScopedMutableContact(r, contactID, userID, orgID)
 	if err != nil {
 		return nil
 	}

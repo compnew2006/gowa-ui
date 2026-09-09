@@ -39,6 +39,14 @@ export interface Contact {
   is_group_chat?: boolean
   is_newsletter?: boolean
   chat_status?: 'pending' | 'open' | 'closed'
+  /** How the VIEWER reaches this conversation: standard (own account),
+   *  current_assignee (cross-account via current assignment — full access),
+   *  historical_assignment_read_only (cross-account via an old assignment
+   *  grant — search/read only; server refuses every write). */
+  access_mode?: 'standard' | 'current_assignee' | 'historical_assignment_read_only'
+  /** Server-computed write flags mirroring access_mode. */
+  can_reply?: boolean
+  can_close?: boolean
   collaborators?: Collaborator[]
   created_at: string
   updated_at: string
@@ -691,6 +699,19 @@ export const useContactsStore = defineStore('contacts', () => {
     }
   }
 
+  /** Drop a conversation from the local list entirely — used when the
+   *  viewer's access was Released (chat_access_revoked WS event): the server
+   *  scope already refuses it, so the UI must not keep showing it. If it is
+   *  the open conversation, clear it so the view falls back to the empty
+   *  state instead of a zombie panel. */
+  function removeContactById(contactId: string) {
+    contacts.value = contacts.value.filter(c => c.id !== contactId)
+    if (currentContact.value?.id === contactId) {
+      currentContact.value = null
+      messages.value = []
+    }
+  }
+
   function setCurrentContact(contact: Contact | null) {
     currentContact.value = contact
     replyingTo.value = null // Clear reply state when switching contacts
@@ -1058,6 +1079,7 @@ export const useContactsStore = defineStore('contacts', () => {
     statusMessages,
     updateMessageStatus,
     setCurrentContact,
+    removeContactById,
     refreshAvatar,
     clearMessages,
     setAccountFilter,

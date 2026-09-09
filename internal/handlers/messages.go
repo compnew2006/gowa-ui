@@ -1479,6 +1479,9 @@ func (a *App) SendMessage(r *fastglue.Request) error {
 	if err := query.First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
 	}
+	if a.rejectHistoricalAssignmentAccess(r, &contact, userID, orgID) {
+		return nil
+	}
 
 	// Get WhatsApp account - prefer request-specified account over contact default
 	accountName := contact.WhatsAppAccount
@@ -1724,6 +1727,9 @@ func (a *App) SendMediaMessage(r *fastglue.Request) error {
 	if err := query.First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
 	}
+	if a.rejectHistoricalAssignmentAccess(r, &contact, userID, orgID) {
+		return nil
+	}
 
 	// Get WhatsApp account - prefer form-specified account over contact default
 	mediaAccountName := contact.WhatsAppAccount
@@ -1847,6 +1853,9 @@ func (a *App) SendReaction(r *fastglue.Request) error {
 	query = a.scopeAssignedContact(query, userID, orgID)
 	if err := query.First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
+	}
+	if a.rejectHistoricalAssignmentAccess(r, &contact, userID, orgID) {
+		return nil
 	}
 
 	// Get message
@@ -2023,6 +2032,9 @@ func (a *App) SendTypingIndicator(r *fastglue.Request) error {
 	if err := query.First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
 	}
+	if a.rejectHistoricalAssignmentAccess(r, &contact, userID, orgID) {
+		return nil
+	}
 
 	account, err := a.resolveWhatsAppAccount(orgID, contact.WhatsAppAccount)
 	if err != nil {
@@ -2078,6 +2090,9 @@ func (a *App) RevokeMessage(r *fastglue.Request) error {
 	query = a.scopeAssignedContact(query, userID, orgID)
 	if err := query.First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
+	}
+	if a.rejectHistoricalAssignmentAccess(r, &contact, userID, orgID) {
+		return nil
 	}
 
 	// Load the message scoped to the contact (mirrors SendReaction).

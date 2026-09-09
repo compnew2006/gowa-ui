@@ -1,6 +1,6 @@
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { toast } from 'vue-sonner'
-import { contactsService } from '@/services/api'
+import { api, contactsService } from '@/services/api'
 
 export interface UseChatLifecycleOptions {
   /** i18n translator. */
@@ -46,6 +46,16 @@ export interface UseChatLifecycleOptions {
  * const life = useChatLifecycle({ contactsStore, authStore, usersStore, t })
  * ```
  */
+/** One row of GET /contacts/{id}/access-grants. */
+interface AccessGrantRow {
+  user_id: string
+  user_name: string
+  granted_by: string
+  granted_by_name: string
+  granted_at: string
+  is_current_assignee: boolean
+}
+
 export function useChatLifecycle(options: UseChatLifecycleOptions) {
   const { t, contactsStore, authStore } = options
 
@@ -57,6 +67,46 @@ export function useChatLifecycle(options: UseChatLifecycleOptions) {
 
   // Search state for assignment dialog
   const assignSearchQuery = ref('')
+
+  // ─── Assignment access grants ("previous access" section of the assign
+  // dialog): permanent read access minted by direct assignment; Release
+  // (revoke) is the only way to end it.
+  const accessGrants = ref<AccessGrantRow[]>([])
+  const isLoadingAccessGrants = ref(false)
+
+  async function loadAccessGrants(contactId: string) {
+    isLoadingAccessGrants.value = true
+    try {
+      const response = await api.get(`/contacts/${contactId}/access-grants`)
+      const data = response.data?.data || response.data
+      accessGrants.value = data?.access_grants || []
+    } catch {
+      accessGrants.value = []
+    } finally {
+      isLoadingAccessGrants.value = false
+    }
+  }
+
+  async function releaseAccessGrant(contactId: string, userId: string) {
+    try {
+      await api.delete(`/contacts/${contactId}/access-grants/${userId}`)
+      toast.success(t('chat.accessReleased'))
+      await loadAccessGrants(contactId)
+      // If the released user was the assignee, the conversation may have left
+      // our own view (released to pending) — resync both surfaces.
+      await contactsStore.fetchContacts().catch(() => {})
+      const fresh = await contactsStore.fetchContact(contactId).catch(() => null)
+      if (fresh) contactsStore.setCurrentContact(fresh)
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || t('chat.accessReleaseFailed'))
+    }
+  }
+
+  // Grants load every time the assign dialog opens for the open conversation.
+  watch(isAssignDialogOpen, (open) => {
+    const id = contactsStore.currentContact?.id
+    if (open && id) loadAccessGrants(id)
+  })
 
   async function handleClaim() {
     if (!contactsStore.currentContact) return
@@ -230,6 +280,10 @@ export function useChatLifecycle(options: UseChatLifecycleOptions) {
     // State
     isClaiming,
     isJoining,
+    accessGrants,
+    isLoadingAccessGrants,
+    loadAccessGrants,
+    releaseAccessGrant,
     isAssignDialogOpen,
     isInviteDialogOpen,
     assignSearchQuery,

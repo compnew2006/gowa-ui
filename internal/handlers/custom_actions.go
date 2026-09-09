@@ -302,7 +302,7 @@ func (a *App) ExecuteCustomAction(r *fastglue.Request) error {
 
 	// Get contact details — scoped through scopeAssignedContact so actions
 	// only run on conversations the caller can see.
-	contact, err := a.findScopedContact(r, contactID, userID, orgID)
+	contact, err := a.findScopedMutableContact(r, contactID, userID, orgID)
 	if err != nil {
 		return nil
 	}

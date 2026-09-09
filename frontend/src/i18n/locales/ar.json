@@ -489,7 +489,16 @@
     "selectedFiles": "تم تحديد {count}",
     "downloadFailed": "فشل التحميل",
     "filesDownloaded": "تم تنزيل الملفات",
-    "tryAgain": "يرجى المحاولة مرة أخرى"
+    "tryAgain": "يرجى المحاولة مرة أخرى",
+    "readOnlyBadge": "قراءة فقط بسبب إسناد سابق — يمكنك البحث والقراءة فقط، والرد والإغلاق معطّلان.",
+    "readOnlyPlaceholder": "قراءة فقط (إسناد سابق)",
+    "previousAccessTitle": "صلاحيات الوصول السابقة",
+    "currentAssignee": "المسؤول الحالي",
+    "previousAssignee": "قراءة فقط (إسناد سابق)",
+    "releaseAccess": "إلغاء الوصول",
+    "confirmRelease": "تأكيد الإلغاء؟",
+    "accessReleased": "تم إلغاء الوصول",
+    "accessReleaseFailed": "فشل إلغاء الوصول"
   },
   "contacts": {
     "title": "جهات الاتصال",

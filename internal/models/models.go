@@ -167,6 +167,35 @@ func (UserWhatsAppAccount) TableName() string {
 	return "user_whatsapp_accounts"
 }
 
+// ContactAssignmentAccessGrant is the permanent per-conversation access grant
+// created when a manager/admin directly assigns a conversation to a user who
+// is not on the conversation's WhatsApp account. While the user is the current
+// assignee they keep full access; after the assignment moves on (reassign or
+// close) the grant degrades to READ-ONLY (search + read) and only a Release
+// (revoke) removes it entirely. Deliberately separate from the collaborators
+// system: invites/collaboration are live participation, grants are durable
+// assignment history. One row per (contact, user): re-granting after a revoke
+// resets the revocation fields in place.
+type ContactAssignmentAccessGrant struct {
+	ID             uuid.UUID `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	OrganizationID uuid.UUID `gorm:"type:uuid;index;not null" json:"organization_id"`
+	ContactID      uuid.UUID `gorm:"type:uuid;uniqueIndex:idx_grant_contact_user;not null" json:"contact_id"`
+	UserID         uuid.UUID `gorm:"type:uuid;uniqueIndex:idx_grant_contact_user;not null" json:"user_id"`
+	GrantedBy      uuid.UUID `gorm:"type:uuid;not null" json:"granted_by"`
+	GrantedAt      time.Time `gorm:"autoCreateTime" json:"granted_at"`
+	// Revocation (Release). NULL revocation = active grant.
+	RevokedBy *uuid.UUID `gorm:"type:uuid" json:"revoked_by,omitempty"`
+	RevokedAt *time.Time `gorm:"" json:"revoked_at,omitempty"`
+
+	// Relations
+	Contact *Contact `gorm:"foreignKey:ContactID" json:"contact,omitempty"`
+	User    *User    `gorm:"foreignKey:UserID" json:"user,omitempty"`
+}
+
+func (ContactAssignmentAccessGrant) TableName() string {
+	return "contact_assignment_access_grants"
+}
+
 // UserAvailabilityLog tracks user availability changes for break time calculation
 type UserAvailabilityLog struct {
 	ID             uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`

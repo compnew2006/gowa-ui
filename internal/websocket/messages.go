@@ -43,6 +43,11 @@ const (
 	TypeCollaboratorJoined = "collaborator_joined"
 	TypeCollaboratorLeft   = "collaborator_left"
 
+	// TypeChatAccessRevoked: an assignment access grant was released. Payload
+	// carries {contact_id, user_id} — the released user's clients drop the
+	// conversation immediately (server-side scope remains the authority).
+	TypeChatAccessRevoked = "chat_access_revoked"
+
 	// Scheduled maintenance types
 	TypeDailyChatReset = "daily_chat_reset"
 

@@ -207,7 +207,10 @@ func (s *Service) Assign(ctx context.Context, orgID, adminID uuid.UUID, contact 
 
 	if contact.AssignedUserID != nil && *contact.AssignedUserID == *targetID &&
 		contact.EffectiveStatus() == models.ChatStatusOpen {
-		return nil
+		// No state change, but still (re)ensure the access grant: re-assigning
+		// the same user after a Release must reactivate their permanent access.
+		// The upsert is duplicate-safe by construction.
+		return upsertAssignmentGrant(s.db, orgID, adminID, contact.ID, *targetID)
 	}
 
 	// Capture pre-mutation values for the audit log BEFORE mutation (see
@@ -217,10 +220,20 @@ func (s *Service) Assign(ctx context.Context, orgID, adminID uuid.UUID, contact 
 
 	contact.AssignedUserID = targetID
 	contact.SetStatus(models.ChatStatusOpen)
-	if err := s.db.Model(&models.Contact{}).Where("id = ?", contact.ID).Updates(map[string]any{
-		"assigned_user_id": targetID,
-		"metadata":         contact.Metadata,
-	}).Error; err != nil {
+	// Assignment update + permanent access grant land in ONE transaction: a
+	// crash between them would leave a cross-account assignee who cannot see
+	// the conversation they were just made responsible for. The grant is
+	// idempotent (upsert on contact+user), and this is the ONLY path that
+	// creates grants — Claim/auto-routing never does (see Service.Claim).
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&models.Contact{}).Where("id = ?", contact.ID).Updates(map[string]any{
+			"assigned_user_id": targetID,
+			"metadata":         contact.Metadata,
+		}).Error; err != nil {
+			return err
+		}
+		return upsertAssignmentGrant(tx, orgID, adminID, contact.ID, *targetID)
+	}); err != nil {
 		s.log.Error("Failed to assign chat", "error", err, "contact_id", contact.ID)
 		return fmt.Errorf("chat: failed to assign: %w", err)
 	}
@@ -262,6 +275,31 @@ func (s *Service) Assign(ctx context.Context, orgID, adminID uuid.UUID, contact 
 	})
 
 	return nil
+}
+
+// upsertAssignmentGrant creates (or re-activates) the permanent access grant
+// for a direct administrative assignment. Idempotent: re-assigning a user who
+// already holds an active grant is a no-op, and re-assigning after a Release
+// (revoked row) resets the revocation fields in place so the unique
+// (contact_id, user_id) index is never violated.
+func upsertAssignmentGrant(tx *gorm.DB, orgID, adminID, contactID, targetID uuid.UUID) error {
+	now := time.Now()
+	res := tx.Where(&models.ContactAssignmentAccessGrant{
+		ContactID: contactID,
+		UserID:    targetID,
+	}).Assign(map[string]any{
+		"organization_id": orgID,
+		"granted_by":      adminID,
+		"granted_at":      now,
+		"revoked_by":      nil,
+		"revoked_at":      nil,
+	}).FirstOrCreate(&models.ContactAssignmentAccessGrant{
+		OrganizationID: orgID,
+		ContactID:      contactID,
+		UserID:         targetID,
+		GrantedBy:      adminID,
+	})
+	return res.Error
 }
 
 // releaseOne is the per-item body of BulkRelease. It shares Release's logic
