@@ -614,7 +614,7 @@ func (a *App) processGowaOutgoingMessage(account *models.WhatsAppAccount, msg *g
 		msgType = models.MessageTypeImage
 		content = mf.Caption
 		mediaMime = "image/jpeg"
-		if localPath, err := a.DownloadAndSaveMedia(ctx, mf.URL, mediaMime, waAccount); err != nil {
+		if localPath, err := a.DownloadAndSaveMediaForMessage(ctx, mf.URL, mediaMime, waAccount, msg.ID, msg.ChatID); err != nil {
 			a.Log.Error("Failed to download outgoing image", "error", err)
 		} else {
 			mediaURL = localPath
@@ -624,7 +624,7 @@ func (a *App) processGowaOutgoingMessage(account *models.WhatsAppAccount, msg *g
 		msgType = models.MessageTypeVideo
 		content = mf.Caption
 		mediaMime = "video/mp4"
-		if localPath, err := a.DownloadAndSaveMedia(ctx, mf.URL, mediaMime, waAccount); err != nil {
+		if localPath, err := a.DownloadAndSaveMediaForMessage(ctx, mf.URL, mediaMime, waAccount, msg.ID, msg.ChatID); err != nil {
 			a.Log.Error("Failed to download outgoing video", "error", err)
 		} else {
 			mediaURL = localPath
@@ -633,7 +633,7 @@ func (a *App) processGowaOutgoingMessage(account *models.WhatsAppAccount, msg *g
 		mf := gowa.ResolveMediaField(msg.Audio)
 		msgType = models.MessageTypeAudio
 		mediaMime = "audio/mpeg"
-		if localPath, err := a.DownloadAndSaveMedia(ctx, mf.URL, mediaMime, waAccount); err != nil {
+		if localPath, err := a.DownloadAndSaveMediaForMessage(ctx, mf.URL, mediaMime, waAccount, msg.ID, msg.ChatID); err != nil {
 			a.Log.Error("Failed to download outgoing audio", "error", err)
 		} else {
 			mediaURL = localPath
@@ -644,7 +644,7 @@ func (a *App) processGowaOutgoingMessage(account *models.WhatsAppAccount, msg *g
 		content = mf.Caption
 		mediaFilename = mf.Filename
 		mediaMime = "application/octet-stream"
-		if localPath, err := a.DownloadAndSaveMedia(ctx, mf.URL, mediaMime, waAccount); err != nil {
+		if localPath, err := a.DownloadAndSaveMediaForMessage(ctx, mf.URL, mediaMime, waAccount, msg.ID, msg.ChatID); err != nil {
 			a.Log.Error("Failed to download outgoing document", "error", err)
 		} else {
 			mediaURL = localPath
@@ -653,7 +653,7 @@ func (a *App) processGowaOutgoingMessage(account *models.WhatsAppAccount, msg *g
 		mf := gowa.ResolveMediaField(msg.Sticker)
 		msgType = models.MessageTypeImage // stickers render as images
 		mediaMime = "image/webp"
-		if localPath, err := a.DownloadAndSaveMedia(ctx, mf.URL, mediaMime, waAccount); err != nil {
+		if localPath, err := a.DownloadAndSaveMediaForMessage(ctx, mf.URL, mediaMime, waAccount, msg.ID, msg.ChatID); err != nil {
 			a.Log.Error("Failed to download outgoing sticker", "error", err)
 		} else {
 			mediaURL = localPath
@@ -664,7 +664,7 @@ func (a *App) processGowaOutgoingMessage(account *models.WhatsAppAccount, msg *g
 		msgType = models.MessageTypeVideo
 		content = vnf.Caption
 		mediaMime = "video/mp4"
-		if localPath, err := a.DownloadAndSaveMedia(ctx, vnf.URL, mediaMime, waAccount); err != nil {
+		if localPath, err := a.DownloadAndSaveMediaForMessage(ctx, vnf.URL, mediaMime, waAccount, msg.ID, msg.ChatID); err != nil {
 			a.Log.Error("Failed to download outgoing video note", "error", err)
 		} else {
 			mediaURL = localPath

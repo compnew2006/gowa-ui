@@ -124,6 +124,34 @@ func sniffContentType(data []byte) string {
 // mediaID may be a full URL, a relative server path, or a GOWA message ID.
 // Returns the local file path (relative to media storage) or error
 func (a *App) DownloadAndSaveMedia(ctx context.Context, mediaID string, mimeType string, account *whatsapp.Account) (string, error) {
+	return a.downloadAndSaveMedia(ctx, mediaID, mimeType, account, "", "")
+}
+
+// DownloadAndSaveMediaForMessage is DownloadAndSaveMedia with a fallback for
+// GOWA v9.3+ webhooks: those carry absolute WhatsApp CDN URLs (mmg.whatsapp.net)
+// in the media fields. CDN payloads are encrypted and the SSRF policy rightly
+// refuses to fetch them off-host, so when messageID is provided the download
+// retries through the engine's decrypting /message/{id}/download endpoint,
+// which serves the already-decrypted file from GOWA's own storage.
+func (a *App) DownloadAndSaveMediaForMessage(ctx context.Context, mediaID, mimeType string, account *whatsapp.Account, messageID, chatJID string) (string, error) {
+	return a.downloadAndSaveMedia(ctx, mediaID, mimeType, account, messageID, chatJID)
+}
+
+// normalizeChatJID turns the bare identifiers carried by webhook messages
+// (phone digits, or a bare group id) into the full JID form GOWA's
+// /message/{id}/download?phone= parameter expects. Values that already carry
+// a domain pass through unchanged.
+func normalizeChatJID(jid string) string {
+	if jid == "" || strings.Contains(jid, "@") {
+		return jid
+	}
+	if strings.HasPrefix(jid, "120362") || strings.HasPrefix(jid, "120363") {
+		return jid + "@g.us"
+	}
+	return jid + "@s.whatsapp.net"
+}
+
+func (a *App) downloadAndSaveMedia(ctx context.Context, mediaID string, mimeType string, account *whatsapp.Account, messageID, chatJID string) (string, error) {
 	var provider whatsapp.Provider
 	if a.WARegistry != nil {
 		provider = a.WARegistry.Get(account)
@@ -148,6 +176,32 @@ func (a *App) DownloadAndSaveMedia(ctx context.Context, mediaID string, mimeType
 			// hardened as defense-in-depth: no cross-origin auth, no cross-host
 			// redirects, size-capped.)
 			if !gowa.URLMatchesBase(mediaID, account.GowaBaseURL) {
+				// GOWA v9.3+ sends absolute WhatsApp CDN URLs in the media
+				// fields; those are encrypted media descriptors, not fetchable
+				// files. When the caller knows the message identity, retry via
+				// the engine's decrypting download endpoint instead. A very
+				// fresh message can race the engine's own CDN fetch (403 on
+				// the first attempt), so one delayed retry is attempted before
+				// giving up.
+				if messageID != "" {
+					chatJID = normalizeChatJID(chatJID)
+					for attempt := 0; attempt < 2; attempt++ {
+						if attempt > 0 {
+							select {
+							case <-ctx.Done():
+								return "", fmt.Errorf("refusing media URL not on the GOWA base host: %w", ctx.Err())
+							case <-time.After(3 * time.Second):
+							}
+						}
+						data, mediaType, dlErr := gowaClient.DownloadMessageMedia(ctx, account, messageID, chatJID)
+						if dlErr == nil {
+							if mimeType == "" {
+								mimeType = mediaType
+							}
+							return a.saveMediaBytes(data, mimeType)
+						}
+					}
+				}
 				return "", fmt.Errorf("refusing media URL not on the GOWA base host")
 			}
 			data, err = gowaClient.DownloadMedia(ctx, mediaID, "")
