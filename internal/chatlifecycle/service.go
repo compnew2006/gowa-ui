@@ -669,6 +669,9 @@ func (s *Service) Leave(ctx context.Context, orgID, userID uuid.UUID, contact *m
 			contact.AssignedUserID = nil
 			contact.ClearCollaborators()
 			contact.SetStatus(models.ChatStatusClosed)
+			// Same closer stamp as Service.Close — keep the conversation
+			// searchable for the agent who handled it (see SetClosedBy).
+			contact.SetClosedBy(userID.String(), userName)
 			if err := s.db.Model(&models.Contact{}).Where("id = ?", contact.ID).Updates(map[string]any{
 				"assigned_user_id": nil,
 				"metadata":         contact.Metadata,
@@ -821,9 +824,15 @@ func (s *Service) Close(ctx context.Context, orgID, userID uuid.UUID, contact *m
 	oldStatus := string(contact.EffectiveStatus())
 	oldAssigned := contact.AssignedUserID
 
+	agentName := audit.GetUserName(s.db, userID)
+
 	contact.SetStatus(models.ChatStatusClosed)
 	contact.AssignedUserID = nil
 	contact.ClearCollaborators()
+	// Stamp the closer BEFORE persisting: close releases the assignment, so
+	// metadata.closed_by is what keeps the conversation visible (searchable)
+	// for the agent who handled it — see models.Contact.SetClosedBy.
+	contact.SetClosedBy(userID.String(), agentName)
 	if err := s.db.Model(&models.Contact{}).Where("id = ?", contact.ID).Updates(map[string]any{
 		"assigned_user_id": nil,
 		"metadata":         contact.Metadata,
@@ -831,8 +840,6 @@ func (s *Service) Close(ctx context.Context, orgID, userID uuid.UUID, contact *m
 		s.log.Error("Failed to close chat", "error", err, "contact_id", contact.ID)
 		return fmt.Errorf("chat: failed to close: %w", err)
 	}
-
-	agentName := audit.GetUserName(s.db, userID)
 
 	s.CreateSystemMessage(orgID, contact.ID,
 		fmt.Sprintf("🔔 %s closed this conversation", agentName),

@@ -76,21 +76,28 @@ responsibility. Do not re-merge these.
 ## Contact visibility scoping
 
 - **`scopeAssignedContact` (`internal/handlers/contacts.go`) is the single
-  gate for contact/conversation visibility.** It AND-combines two gates and is
+  gate for contact/conversation visibility.** It OR-combines two grants and is
   applied at every contact endpoint (ListContacts, GetMessages, media serving,
   scheduled messages — ~17 call sites). New contact endpoints must route their
   query through it, never scope by hand.
-- **Account scoping lives inside `scopeAssignedContact`** via
-  `scopeContactsByAssignedAccounts`: a user assigned a subset of WhatsApp
-  accounts (`user_whatsapp_accounts`) only sees conversations under those
-  accounts; super admins and users with **no** assignment fall back to full org
-  visibility. This mirrors `scopeAccountsToUser` (accounts.go, used by
-  `/settings/accounts`) so `/chat` and `/settings/contacts` stay consistent.
+- **Grant 1 — account scoping:** a user assigned a subset of WhatsApp accounts
+  (`user_whatsapp_accounts`) sees conversations under those accounts; super
+  admins and users with **no** assignment fall back to full org visibility.
   Because contacts key off `whats_app_account` (the account **Name** string),
-  the helper resolves assigned account IDs → names before filtering.
+  the assigned account IDs → names are resolved before filtering. (Contacts
+  mirror of `scopeAccountsToUser` in accounts.go, used by
+  `/settings/accounts`.)
+- **Grant 2 — involvement:** being the assignee, a collaborator, or the agent
+  who closed the conversation (`metadata.closed_by`, stamped by
+  `chatlifecycle.Service.Close`/`Leave`) makes that ONE conversation visible
+  even under an account the user is NOT assigned to. This is how a manager
+  hands a single cross-account conversation to an agent, and how a closed
+  conversation stays searchable for the agent who handled it after close
+  releases the assignment.
 - **`contacts:read` (chat visibility) ≠ `contacts.manage:read` (settings page).**
   `contacts:read` drives chat-list scoping inside `scopeAssignedContact`
-  (users with it see all conversations; without it, only assigned ones). The
+  (users with it see their accounts' conversations plus any they are involved
+  in; without it, involvement only). The
   `/settings/contacts` management page (and its Import/Export) is gated
   separately on the `contacts.manage` resource (`router/index.ts` route meta +
   `navigation.ts`, checked with the `read` action). This lets a role see

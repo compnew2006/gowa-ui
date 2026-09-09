@@ -334,6 +334,10 @@ func TestService_Close_SetsClosedAndBroadcasts(t *testing.T) {
 	assert.Equal(t, models.ChatStatusClosed, updated.EffectiveStatus())
 	assert.Nil(t, updated.AssignedUserID, "closing must release the assignment")
 	assert.Empty(t, updated.GetCollaborators(), "closing must clear collaborators")
+	// Close releases the assignment; metadata.closed_by is what keeps the
+	// conversation searchable for the agent who handled it.
+	assert.Equal(t, agent.ID.String(), updated.ClosedByUserID(),
+		"closing must stamp metadata.closed_by with the closing agent")
 
 	// Idempotent: second close returns ErrAlreadyClosed, no second system msg.
 	err := svc.Close(context.Background(), org.ID, agent.ID, &updated)

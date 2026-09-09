@@ -190,64 +190,55 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 	return r.SendEnvelope(listEnvelope("contacts", response, total, pg))
 }
 
-// scopeAssignedContact narrows a contact query to what the user may see. It
-// combines two independent gates, AND-combined:
+// scopeAssignedContact narrows a contact query to what the user may see.
+// Visibility is OR-composed from two independent grants:
 //
-//  1. Account scoping (scopeContactsByAssignedAccounts): users who have been
-//     assigned specific WhatsApp accounts (user_whatsapp_accounts) only see
-//     conversations belonging to those accounts. Super admins and users with
-//     no assignments keep full org visibility (fallback). This is the fix for
-//     scoped users seeing every account's conversations in /chat.
+//  1. Account grant: users who have been assigned specific WhatsApp accounts
+//     (user_whatsapp_accounts) see those accounts' conversations. Super admins
+//     and users with no assignments keep full org visibility (fallback). This
+//     is the fix for scoped users seeing every account's conversations in /chat.
 //
-//  2. Assignment/collaborator scoping: users who lack the contacts:read
-//     permission may only access contacts assigned to them
-//     (assigned_user_id) or where they are a collaborator.
+//  2. Involvement grant: direct participation in ONE conversation — being the
+//     assignee, a collaborator, or the agent who closed it — makes that
+//     conversation visible (and actionable) even when it belongs to an account
+//     the user is not assigned to. This is what lets a manager hand a single
+//     cross-account conversation to an agent without opening the whole account
+//     to them, and what keeps a closed conversation searchable for the agent
+//     who handled it after close releases the assignment.
+//
+// Users holding contacts:read see (account grant OR involvement grant). Users
+// without it see the involvement grant only — involvement is their sole source
+// of access, on any account.
 //
 // Keeping this in one place ensures every contact endpoint enforces the same
 // visibility (ListContacts, GetMessages, media serving, scheduled messages,
-// … — every call site that already applied scopeAssignedContact).
+// lifecycle actions, … — every call site that already applied scopeAssignedContact).
 func (a *App) scopeAssignedContact(query *gorm.DB, userID, orgID uuid.UUID) *gorm.DB {
-	// Account scoping applies regardless of permissions: a user assigned to a
-	// subset of accounts must not see other accounts' conversations even with
-	// contacts:read.
-	query = a.scopeContactsByAssignedAccounts(query, userID, orgID)
-
-	if a.HasPermission(userID, models.ResourceContacts, models.ActionRead, orgID) {
-		return query
-	}
-	// Agents (users without contacts:read) can only access contacts:
-	//   1. assigned to them (assigned_user_id), OR
-	//   2. where they are listed as a collaborator in the contact's metadata.
-	// Collaborators are stored in metadata.collaborators as a JSON array of
-	// {user_id, name, role, joined_at}. The @> containment operator reuses the
-	// same pattern as the tags filter above and leverages the GIN index.
-	collaboratorJSON := fmt.Sprintf(`{"collaborators":[{"user_id":"%s"}]}`, userID.String())
-	return query.Where(
-		"assigned_user_id = ? OR metadata @> ?::jsonb",
-		userID,
-		collaboratorJSON,
-	)
-}
-
-// scopeContactsByAssignedAccounts narrows a contacts query to the WhatsApp
-// accounts explicitly assigned to the user via user_whatsapp_accounts. It is
-// the contacts-table mirror of scopeAccountsToUser (accounts.go), which scopes
-// the /settings/accounts picker. Because contacts reference accounts by Name
-// (a soft string, not a FK — see AGENTS.md), the assigned account IDs are
-// resolved to names before filtering.
-//
-// Bypass rules (identical to scopeAccountsToUser):
-//   - super admins see every account;
-//   - users with NO assignments fall back to full org visibility (so org
-//     owners and pre-assignment users are unaffected).
-//
-// A load error fails CLOSED (returns a query that matches nothing): this is a
-// visibility gate, and leaking every account's conversations during a DB
-// hiccup is worse than showing an empty list until the error clears.
-func (a *App) scopeContactsByAssignedAccounts(query *gorm.DB, userID, orgID uuid.UUID) *gorm.DB {
 	if a.IsSuperAdmin(userID) {
 		return query
 	}
+
+	// Involvement grant: assigned_user_id or the metadata JSONB keys
+	// collaborators/closed_by. @> containment reuses the same GIN-indexed
+	// pattern as the tags filter above.
+	collaboratorJSON := fmt.Sprintf(`{"collaborators":[{"user_id":"%s"}]}`, userID.String())
+	closedByJSON := fmt.Sprintf(`{"closed_by":{"user_id":"%s"}}`, userID.String())
+	involvement := "assigned_user_id = ? OR metadata @> ?::jsonb OR metadata @> ?::jsonb"
+	involvementArgs := []any{userID, collaboratorJSON, closedByJSON}
+
+	if !a.HasPermission(userID, models.ResourceContacts, models.ActionRead, orgID) {
+		// Agents without contacts:read can only access conversations they are
+		// involved in — on any account.
+		return query.Where("("+involvement+")", involvementArgs...)
+	}
+
+	// contacts:read: own accounts OR involvement. Because contacts reference
+	// accounts by Name (a soft string, not a FK — see AGENTS.md), the assigned
+	// account IDs are resolved to names before filtering.
+	//
+	// A load error fails CLOSED (returns a query that matches nothing): this is
+	// a visibility gate, and leaking every account's conversations during a DB
+	// hiccup is worse than showing an empty list until the error clears.
 	ids, err := a.assignedAccountIDs(userID, orgID)
 	if err != nil {
 		a.Log.Error("Failed to load account assignments for contact scoping",
@@ -266,11 +257,13 @@ func (a *App) scopeContactsByAssignedAccounts(query *gorm.DB, userID, orgID uuid
 		return query.Where("1 = 0")
 	}
 	if len(names) == 0 {
-		// Assigned to accounts that no longer exist in this org — show nothing
-		// rather than leaking unrelated conversations.
-		return query.Where("1 = 0")
+		// Assigned only to accounts that no longer exist in this org — the
+		// account grant matches nothing, but explicit involvement still applies.
+		return query.Where("("+involvement+")", involvementArgs...)
 	}
-	return query.Where("whats_app_account IN ?", names)
+	return query.Where(
+		"(whats_app_account IN ? OR "+involvement+")",
+		append([]any{names}, involvementArgs...)...)
 }
 
 // findScopedContact loads a contact by ID through scopeAssignedContact so

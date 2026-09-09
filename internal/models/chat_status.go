@@ -184,6 +184,38 @@ func (c *Contact) ClearCollaborators() {
 	delete(c.Metadata, "collaborators")
 }
 
+// SetClosedBy records the agent who closed the conversation. Closing releases
+// the assignment and clears collaborators (chatlifecycle Service.Close/Leave),
+// so this stamp is what keeps the conversation reachable for the agent who
+// handled it: the contact visibility scope treats it as an involvement grant
+// that survives close — the closer can still find the conversation by search
+// even when it belongs to a WhatsApp account they are not assigned to.
+func (c *Contact) SetClosedBy(userID, name string) {
+	if c.Metadata == nil {
+		c.Metadata = JSONB{}
+	}
+	c.Metadata["closed_by"] = map[string]any{
+		"user_id":   userID,
+		"name":      name,
+		"closed_at": time.Now().Format(time.RFC3339),
+	}
+}
+
+// ClosedByUserID returns the user ID of the agent who last closed the
+// conversation, or "" when it was never closed (or was closed before the
+// stamp existed).
+func (c *Contact) ClosedByUserID() string {
+	if c.Metadata == nil {
+		return ""
+	}
+	m, ok := c.Metadata["closed_by"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	id, _ := m["user_id"].(string)
+	return id
+}
+
 // HasParticipants returns true if the conversation has an owner or any collaborators.
 func (c *Contact) HasParticipants() bool {
 	return c.AssignedUserID != nil || len(c.GetCollaborators()) > 0
