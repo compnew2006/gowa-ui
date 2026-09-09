@@ -221,13 +221,16 @@ func (a *App) ListScheduledMessages(r *fastglue.Request) error {
 		baseQuery = baseQuery.Where("whats_app_account = ?", accountName)
 	}
 
-	// Restrict to visible contacts for callers without contacts:read.
-	if !a.HasPermission(userID, models.ResourceContacts, models.ActionRead, orgID) {
-		scopedContacts := a.scopeAssignedContact(
-			a.DB.Model(&models.Contact{}).Select("id").Where("organization_id = ?", orgID),
-			userID, orgID)
-		baseQuery = baseQuery.Where("contact_id IN (?)", scopedContacts)
-	}
+	// Restrict to contacts the caller can actually see, for EVERY caller —
+	// scopeAssignedContact resolves each class correctly (super admin and
+	// contacts:read users with no account assignments see all; a contacts:read
+	// user assigned an account subset sees only that subset plus involvement;
+	// users without contacts:read see involvement only). The old contacts:read
+	// shortcut here let subset users list every account's scheduled messages.
+	scopedContacts := a.scopeAssignedContact(
+		a.DB.Model(&models.Contact{}).Select("id").Where("organization_id = ?", orgID),
+		userID, orgID)
+	baseQuery = baseQuery.Where("contact_id IN (?)", scopedContacts)
 
 	var total int64
 	baseQuery.Count(&total)

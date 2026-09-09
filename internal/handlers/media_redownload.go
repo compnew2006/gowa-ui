@@ -50,23 +50,20 @@ func (a *App) RedownloadMedia(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Message not found", nil, "")
 	}
 
-	// Ownership gate — same logic as ServeMedia (media.go:212-228).
-	if !a.HasPermission(userID, models.ResourceContacts, models.ActionRead, orgID) {
-		if !a.canAccessContactMedia(userID, orgID, message.ContactID) {
-			return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Access denied", nil, "")
-		}
+	// Ownership gate — the contact must be visible through the single
+	// contact-visibility gate (account subset + involvement), mirroring
+	// ServeMedia. contacts:read alone is NOT org-wide access.
+	var contact models.Contact
+	if err := a.scopeAssignedContact(
+		a.DB.Where("id = ? AND organization_id = ?", message.ContactID, orgID), userID, orgID,
+	).First(&contact).Error; err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Access denied", nil, "")
 	}
 
 	// Must be a media message with a provider message ID to re-fetch.
 	if message.WhatsAppMessageID == "" {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest,
 			"This message has no provider message ID to re-download from", nil, "")
-	}
-
-	// The contact's phone is the chat JID for the GOWA download call.
-	var contact models.Contact
-	if err := a.DB.Where("id = ? AND organization_id = ?", message.ContactID, orgID).First(&contact).Error; err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
 	}
 
 	// Resolve the account. A message may reference an account that was renamed

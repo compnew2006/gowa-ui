@@ -470,15 +470,17 @@ func (a *App) finalizeMessageSend(msg *models.Message, req OutgoingMessageReques
 
 		// Broadcast failure status via WebSocket so frontend updates immediately
 		if opts.BroadcastWebSocket && a.WSHub != nil {
-			a.WSHub.BroadcastToOrg(req.Account.OrganizationID, websocket.WSMessage{
-				Type: websocket.TypeStatusUpdate,
-				Payload: map[string]any{
-					"message_id":    msg.ID,
-					"contact_id":    req.Contact.ID,
-					"status":        models.MessageStatusFailed,
-					"error_message": errMsg,
-				},
-			})
+			a.WSHub.BroadcastToUsers(req.Account.OrganizationID,
+				a.wsContactRecipients(req.Contact, req.Account.OrganizationID),
+				websocket.WSMessage{
+					Type: websocket.TypeStatusUpdate,
+					Payload: map[string]any{
+						"message_id":    msg.ID,
+						"contact_id":    req.Contact.ID,
+						"status":        models.MessageStatusFailed,
+						"error_message": errMsg,
+					},
+				})
 		}
 		return
 	}
@@ -503,15 +505,17 @@ func (a *App) finalizeMessageSend(msg *models.Message, req OutgoingMessageReques
 
 	// Broadcast status update via WebSocket
 	if opts.BroadcastWebSocket && a.WSHub != nil {
-		a.WSHub.BroadcastToOrg(req.Account.OrganizationID, websocket.WSMessage{
-			Type: websocket.TypeStatusUpdate,
-			Payload: map[string]any{
-				"message_id": msg.ID,
-				"contact_id": req.Contact.ID,
-				"status":     models.MessageStatusSent,
-				"wamid":      wamid,
-			},
-		})
+		a.WSHub.BroadcastToUsers(req.Account.OrganizationID,
+			a.wsContactRecipients(req.Contact, req.Account.OrganizationID),
+			websocket.WSMessage{
+				Type: websocket.TypeStatusUpdate,
+				Payload: map[string]any{
+					"message_id": msg.ID,
+					"contact_id": req.Contact.ID,
+					"status":     models.MessageStatusSent,
+					"wamid":      wamid,
+				},
+			})
 	}
 
 	// Mark the contact's incoming messages as read once an automated reply has
@@ -593,7 +597,10 @@ func (a *App) broadcastNewMessage(orgID uuid.UUID, msg *models.Message, contact 
 		}
 	}
 
-	a.WSHub.BroadcastToOrg(orgID, websocket.WSMessage{
+	// Scope to users who may see this conversation (see ws_scoping.go) —
+	// message body/media must never reach accounts the contact's account
+	// scope excludes.
+	a.WSHub.BroadcastToUsers(orgID, a.wsContactRecipients(contact, orgID), websocket.WSMessage{
 		Type:    websocket.TypeNewMessage,
 		Payload: payload,
 	})
@@ -604,7 +611,7 @@ func (a *App) broadcastReactionUpdate(orgID uuid.UUID, messageID, contactID uuid
 	if a.WSHub == nil {
 		return
 	}
-	a.WSHub.BroadcastToOrg(orgID, websocket.WSMessage{
+	a.WSHub.BroadcastToUsers(orgID, a.wsContactRecipientsByID(orgID, contactID), websocket.WSMessage{
 		Type: "reaction_update",
 		Payload: map[string]any{
 			"message_id": messageID.String(),
@@ -623,7 +630,7 @@ func (a *App) broadcastMessageEdited(orgID, messageID, contactID uuid.UUID, newC
 	if a.WSHub == nil {
 		return
 	}
-	a.WSHub.BroadcastToOrg(orgID, websocket.WSMessage{
+	a.WSHub.BroadcastToUsers(orgID, a.wsContactRecipientsByID(orgID, contactID), websocket.WSMessage{
 		Type: websocket.TypeMessageEdited,
 		Payload: map[string]any{
 			"message_id": messageID.String(),
@@ -2168,7 +2175,7 @@ func (a *App) RevokeMessage(r *fastglue.Request) error {
 	// Broadcast a status_update so every open client swaps the bubble for the
 	// revoked placeholder in real time.
 	if a.WSHub != nil {
-		a.WSHub.BroadcastToOrg(orgID, websocket.WSMessage{
+		a.WSHub.BroadcastToUsers(orgID, a.wsContactRecipients(&contact, orgID), websocket.WSMessage{
 			Type: websocket.TypeStatusUpdate,
 			Payload: map[string]any{
 				"message_id": message.ID,

@@ -303,7 +303,8 @@ func (a *App) updateMessageStatus(orgID uuid.UUID, accountName, whatsappMsgID, s
 		}
 	}
 
-	// Broadcast status update via WebSocket
+	// Broadcast status update via WebSocket (scoped like every other
+	// conversation event — see ws_scoping.go)
 	if a.WSHub != nil {
 		wsPayload := map[string]any{
 			"message_id": message.ID.String(),
@@ -312,9 +313,11 @@ func (a *App) updateMessageStatus(orgID uuid.UUID, accountName, whatsappMsgID, s
 		if errMsg, ok := updates["error_message"].(string); ok && errMsg != "" {
 			wsPayload["error_message"] = errMsg
 		}
-		a.WSHub.BroadcastToOrg(message.OrganizationID, websocket.WSMessage{
-			Type:    websocket.TypeStatusUpdate,
-			Payload: wsPayload,
-		})
+		a.WSHub.BroadcastToUsers(message.OrganizationID,
+			a.wsContactRecipientsByID(message.OrganizationID, message.ContactID),
+			websocket.WSMessage{
+				Type:    websocket.TypeStatusUpdate,
+				Payload: wsPayload,
+			})
 	}
 }

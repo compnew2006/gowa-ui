@@ -209,9 +209,15 @@ const (
 	// assignee — full access to reply/close for the duration of the
 	// assignment (plus the grant that outlives it).
 	AccessModeCurrentAssignee = "current_assignee"
+	// AccessModeCollaborator: cross-account, reached via being an ACTIVE
+	// collaborator on the open conversation — a current participant, so full
+	// reply/close access exactly like other collaboration members. Distinct
+	// from the grant-only historical viewer below, whose assignment has
+	// already moved on.
+	AccessModeCollaborator = "collaborator"
 	// AccessModeHistoricalReadOnly: cross-account, reached via an assignment
-	// access grant (or closed_by) while the assignment has moved on — search
-	// and read only; every write/lifecycle action is refused server-side.
+	// access grant while the assignment has moved on — search and read only;
+	// every write/lifecycle action is refused server-side.
 	AccessModeHistoricalReadOnly = "historical_assignment_read_only"
 )
 
@@ -249,6 +255,19 @@ func (a *App) hasAccountAccess(contact *models.Contact, userID, orgID uuid.UUID)
 	return n > 0
 }
 
+// isCurrentCollaborator reports whether userID is an ACTIVE collaborator on
+// the contact (present in the metadata.collaborators set). Shared by
+// conversationAccessMode and decorateAccessModes so both classification
+// paths agree.
+func isCurrentCollaborator(contact *models.Contact, userID uuid.UUID) bool {
+	for _, c := range contact.GetCollaborators() {
+		if c.UserID == userID.String() {
+			return true
+		}
+	}
+	return false
+}
+
 // conversationAccessMode classifies how the user reaches this contact. Only
 // meaningful for contacts that already passed scopeAssignedContact (visible);
 // for those, it never returns an empty mode. Defaults fail CLOSED to
@@ -259,6 +278,13 @@ func (a *App) conversationAccessMode(contact *models.Contact, userID, orgID uuid
 	}
 	if contact.AssignedUserID != nil && *contact.AssignedUserID == userID {
 		return AccessModeCurrentAssignee
+	}
+	// An ACTIVE collaborator is a current participant of the open
+	// conversation, not a historical viewer — full access while they remain
+	// in the collaborators set (review fix: they were being collapsed into
+	// the read-only historical bucket below).
+	if isCurrentCollaborator(contact, userID) {
+		return AccessModeCollaborator
 	}
 	// closed_by is audit-only (see scope comment) — the grant is the sole
 	// durable access, so its revocation always ends the access.
@@ -717,27 +743,44 @@ func (a *App) UpdateContact(r *fastglue.Request) error {
 	if req.Metadata != nil {
 		updates["metadata"] = models.JSONB(*req.Metadata)
 	}
-	if req.ClearAssignedAgent != nil && *req.ClearAssignedAgent {
-		updates["assigned_user_id"] = nil
-	} else if req.AssignedUserID != nil {
+
+	// Assignment changes never write assigned_user_id directly: they go
+	// through ChatLifecycle.Assign so the status stays consistent, the
+	// system message + audit entry are written, the WS event fires, and —
+	// critically — the durable access grant is minted in the same
+	// transaction (review fix: the raw write created invisible assignments
+	// with no grant). nil target delegates to Release, same as AssignContact.
+	assignmentRequested := (req.ClearAssignedAgent != nil && *req.ClearAssignedAgent) || req.AssignedUserID != nil
+	var assignmentTarget *uuid.UUID
+	if assignmentRequested && req.AssignedUserID != nil && !(req.ClearAssignedAgent != nil && *req.ClearAssignedAgent) {
 		var user models.User
 		if err := a.DB.Where("id = ? AND organization_id = ?", req.AssignedUserID, orgID).First(&user).Error; err != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Assigned user not found", nil, "")
 		}
-		updates["assigned_user_id"] = req.AssignedUserID
+		assignmentTarget = req.AssignedUserID
 	}
 
-	if len(updates) == 0 {
+	if len(updates) == 0 && !assignmentRequested {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "No fields to update", nil, "")
 	}
 
-	if err := a.DB.Model(contact).Updates(updates).Error; err != nil {
-		a.Log.Error("Failed to update contact", "error", err)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update contact", nil, "")
+	if len(updates) > 0 {
+		if err := a.DB.Model(contact).Updates(updates).Error; err != nil {
+			a.Log.Error("Failed to update contact", "error", err)
+			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update contact", nil, "")
+		}
 	}
 
-	// Reload contact
+	// Reload so the lifecycle service sees the persisted field values.
 	a.DB.First(contact, contactID)
+
+	if assignmentRequested {
+		if err := a.ChatLifecycle.Assign(r.RequestCtx, orgID, userID, contact, assignmentTarget); err != nil {
+			a.Log.Error("Failed to assign contact via update", "error", err, "contact_id", contact.ID)
+			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update contact", nil, "")
+		}
+		a.DB.First(contact, contactID)
+	}
 
 	a.logAudit(orgID, userID,
 		"contact", contact.ID, models.AuditActionUpdated, &oldContact, contact)
@@ -865,6 +908,10 @@ func (a *App) decorateAccessModes(responses []ContactResponse, contacts []models
 			mode = AccessModeStandard
 		case c.AssignedUserID != nil && *c.AssignedUserID == userID:
 			mode = AccessModeCurrentAssignee
+		case isCurrentCollaborator(c, userID):
+			// Active participant — full access (must match
+			// conversationAccessMode; keep the two in sync).
+			mode = AccessModeCollaborator
 		case granted[c.ID]:
 			// closed_by is audit-only — the grant is the sole durable access.
 			mode = AccessModeHistoricalReadOnly

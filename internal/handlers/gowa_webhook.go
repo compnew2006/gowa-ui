@@ -843,15 +843,19 @@ func (a *App) processGowaChatPresence(account *models.WhatsAppAccount, envelope 
 	// matching contact. chat_id is the conversation JID (group @g.us or 1:1
 	// @s.whatsapp.net); the frontend matches it against the open contact.
 	if a.WSHub != nil {
-		a.WSHub.BroadcastToOrg(account.OrganizationID, websocket.WSMessage{
-			Type: websocket.TypeChatPresence,
-			Payload: map[string]any{
-				"chat_id":  presence.ChatID,
-				"from":     presence.From,
-				"activity": activity,
-				"is_group": presence.IsGroup,
-			},
-		})
+		// Scoped to the conversation's visible users — the JID (phone) must
+		// not reach users whose account scope excludes this chat.
+		if recipients := a.wsContactRecipientsForChatJID(account.OrganizationID, account.Name, presence.ChatID); len(recipients) > 0 {
+			a.WSHub.BroadcastToUsers(account.OrganizationID, recipients, websocket.WSMessage{
+				Type: websocket.TypeChatPresence,
+				Payload: map[string]any{
+					"chat_id":  presence.ChatID,
+					"from":     presence.From,
+					"activity": activity,
+					"is_group": presence.IsGroup,
+				},
+			})
+		}
 	}
 }
 
@@ -1006,14 +1010,16 @@ func (a *App) processGowaRevoked(account *models.WhatsAppAccount, envelope *gowa
 	}
 
 	if a.WSHub != nil {
-		a.WSHub.BroadcastToOrg(account.OrganizationID, websocket.WSMessage{
-			Type: websocket.TypeStatusUpdate,
-			Payload: map[string]any{
-				"message_id": msg.ID,
-				"contact_id": msg.ContactID,
-				"status":     models.MessageStatusRevoked,
-			},
-		})
+		a.WSHub.BroadcastToUsers(account.OrganizationID,
+			a.wsContactRecipientsByID(account.OrganizationID, msg.ContactID),
+			websocket.WSMessage{
+				Type: websocket.TypeStatusUpdate,
+				Payload: map[string]any{
+					"message_id": msg.ID,
+					"contact_id": msg.ContactID,
+					"status":     models.MessageStatusRevoked,
+				},
+			})
 	}
 }
 

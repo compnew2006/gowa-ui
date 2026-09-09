@@ -83,14 +83,28 @@ func (a *App) ServeMediaZip(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "No accessible media found", nil, "")
 	}
 
-	// Agents without contacts:read may only access media from contacts
-	// assigned to them (or where they are a collaborator) — identical to the
-	// per-file gate in ServeMedia. Messages from contacts the caller can't
-	// reach are dropped from the archive.
-	canReadAll := a.HasPermission(userID, models.ResourceContacts, models.ActionRead, orgID)
+	// Every message's contact must pass the single contact-visibility gate —
+	// contacts:read alone is NOT org-wide access (account subsets and
+	// involvement still apply; mirrors ServeMedia). Messages from contacts
+	// the caller can't reach are dropped from the archive.
+	contactIDs := make([]uuid.UUID, 0, len(messages))
+	for i := range messages {
+		contactIDs = append(contactIDs, messages[i].ContactID)
+	}
+	var visibleIDs []uuid.UUID
+	if err := a.scopeAssignedContact(
+		a.DB.Model(&models.Contact{}).Select("id"), userID, orgID,
+	).Where("id IN ?", contactIDs).Pluck("id", &visibleIDs).Error; err != nil {
+		a.Log.Error("Failed to scope zip contacts", "error", err, "user_id", userID)
+		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Access denied", nil, "")
+	}
+	visible := make(map[uuid.UUID]bool, len(visibleIDs))
+	for _, id := range visibleIDs {
+		visible[id] = true
+	}
 	access := messages[:0]
 	for i := range messages {
-		if canReadAll || a.canAccessContactMedia(userID, orgID, messages[i].ContactID) {
+		if visible[messages[i].ContactID] {
 			access = append(access, messages[i])
 		}
 	}
@@ -157,15 +171,6 @@ func (a *App) ServeMediaZip(r *fastglue.Request) error {
 	r.RequestCtx.SetBody(buf.Bytes())
 
 	return nil
-}
-
-// canAccessContactMedia reports whether the given user may access media
-// belonging to contactID. It mirrors the ownership logic in ServeMedia:
-// assigned owner or collaborator (via scopeAssignedContact).
-func (a *App) canAccessContactMedia(userID, orgID, contactID uuid.UUID) bool {
-	var contact models.Contact
-	q := a.scopeAssignedContact(a.DB.Where("id = ? AND organization_id = ?", contactID, orgID), userID, orgID)
-	return q.First(&contact).Error == nil
 }
 
 // defaultZipEntryName picks a sensible filename for a zip entry from the

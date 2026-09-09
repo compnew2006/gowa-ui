@@ -110,6 +110,20 @@ responsibility. Do not re-merge these.
   Default seeding: `admin` + `manager` get `contacts.manage:read`; `agent` does
   not. Import/Export stay additionally enforced by the `contacts:import`/
   `contacts:export` actions.
+- **WebSocket broadcasts are contact-scoped (`internal/handlers/ws_scoping.go`).**
+  Conversation-content events (new_message, reaction_update, message_edited,
+  status_update, chat presence) go through `wsContactRecipients` →
+  `BroadcastToUsers` — the same population `scopeAssignedContact` lets read the
+  conversation (involvement on any account; otherwise contacts:read + account
+  coverage). Errors fail CLOSED (broadcast dropped, never org-wide). Lifecycle
+  events (chat_claimed/released/closed/access-revoked) and ops events (campaign/
+  device/app status) stay org-wide BY DESIGN: they carry no conversation content
+  and the user who LOST access must still receive the one event that tells their
+  UI to drop the chat. Assignment changes must go through `ChatLifecycle.Assign`
+  (AssignContact AND UpdateContact's `assigned_user_id`/`clear_assigned_agent`
+  fields) — a raw `assigned_user_id` write would create an assignment with no
+  access grant. Access modes: `standard` | `current_assignee` | `collaborator`
+  (ACTIVE collaborator = full access) | `historical_assignment_read_only`.
 
 ## Conventions
 
