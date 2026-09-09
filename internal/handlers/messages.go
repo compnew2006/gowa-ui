@@ -840,18 +840,37 @@ func (a *App) SendTemplateMessage(r *fastglue.Request) error {
 		if err != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid contact_id", nil, "")
 		}
-		c, err := findByIDAndOrg[models.Contact](a.DB, r, cID, orgID, "Contact")
-		if err != nil {
+		// Scoped load + historical read-only guard: template sends are WRITES,
+		// so a grant-only (historical) viewer must be refused, and the contact
+		// must be within the caller's account/involvement scope — otherwise a
+		// known contact_id would bypass the chat visibility rules entirely.
+		var c models.Contact
+		q := a.scopeAssignedContact(a.DB.Where("id = ? AND organization_id = ?", cID, orgID), userID, orgID)
+		if err := q.First(&c).Error; err != nil {
+			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
+		}
+		if a.rejectHistoricalAssignmentAccess(r, &c, userID, orgID) {
 			return nil
 		}
-		contact = c
+		contact = &c
 	} else {
 		// Find or create contact from phone number
 		phoneNumber := req.PhoneNumber
 		var c models.Contact
-		err := a.DB.Where("phone_number = ? AND organization_id = ?", phoneNumber, orgID).First(&c).Error
+		err := a.scopeAssignedContact(a.DB.Where("phone_number = ? AND organization_id = ?", phoneNumber, orgID), userID, orgID).First(&c).Error
 		if err != nil {
-			// Contact not found, create new one
+			// Missed the scoped lookup: if the phone EXISTS in the org but
+			// outside the caller's account/involvement scope, refuse with 404 —
+			// never fall through to create (which would 500 on the unique
+			// index, or worse mint an out-of-scope contact).
+			var existing int64
+			a.DB.Model(&models.Contact{}).
+				Where("phone_number = ? AND organization_id = ?", phoneNumber, orgID).
+				Count(&existing)
+			if existing > 0 {
+				return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
+			}
+			// Contact not found at all, create new one
 			c = models.Contact{
 				BaseModel:      models.BaseModel{ID: uuid.New()},
 				OrganizationID: orgID,

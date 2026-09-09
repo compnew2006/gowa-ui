@@ -3,6 +3,7 @@ package handlers_test
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/compnew2006/gowa-ui/internal/handlers"
 	"github.com/compnew2006/gowa-ui/internal/models"
@@ -133,11 +134,13 @@ func TestScopeAssignedContact_NonReaderInvolvementOnly(t *testing.T) {
 		"without contacts:read, unassigned own-account conversations stay hidden")
 }
 
-// TestScopeAssignedContact_ClosedByKeepsClosedChatFindable: close releases
-// the assignment; metadata.closed_by keeps the closed conversation searchable
-// for the agent who handled it (parity with users of that account), while it
-// stays hidden for everyone else outside the account.
-func TestScopeAssignedContact_ClosedByKeepsClosedChatFindable(t *testing.T) {
+// TestScopeAssignedContact_ClosedFindableOnlyViaGrant: close releases the
+// assignment and metadata.closed_by is AUDIT-ONLY — it must NOT keep the
+// conversation visible. The durable access is the assignment grant (minted by
+// direct admin assignment): a closed conversation stays findable for a holder
+// of an active grant, and disappears for a closed_by-only "closer" once the
+// grant is revoked.
+func TestScopeAssignedContact_ClosedFindableOnlyViaGrant(t *testing.T) {
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
 
@@ -150,6 +153,13 @@ func TestScopeAssignedContact_ClosedByKeepsClosedChatFindable(t *testing.T) {
 
 	closed := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(accB.Name))
 	assignForScopeTest(t, app, closed, closer.ID)
+	// Mint the grant the way AssignContact does (direct admin assignment).
+	require.NoError(t, app.DB.Create(&models.ContactAssignmentAccessGrant{
+		OrganizationID: org.ID,
+		ContactID:      closed.ID,
+		UserID:         closer.ID,
+		GrantedBy:      closer.ID,
+	}).Error)
 	closed.AssignedUserID = nil
 	closed.SetStatus(models.ChatStatusClosed)
 	closed.SetClosedBy(closer.ID.String(), "Closer")
@@ -160,7 +170,15 @@ func TestScopeAssignedContact_ClosedByKeepsClosedChatFindable(t *testing.T) {
 
 	closerView := visibleContactIDs(t, app, org.ID, closer.ID)
 	assert.True(t, closerView[closed.ID],
-		"the agent who closed the conversation must still find it (closed_by grant)")
+		"the grant holder must still find the closed conversation")
+
+	// Revoke the grant → closed_by alone must NOT keep it visible.
+	require.NoError(t, app.DB.Model(&models.ContactAssignmentAccessGrant{}).
+		Where("contact_id = ? AND user_id = ?", closed.ID, closer.ID).
+		Update("revoked_at", time.Now()).Error)
+	revokedView := visibleContactIDs(t, app, org.ID, closer.ID)
+	assert.False(t, revokedView[closed.ID],
+		"after Release, closed_by must not substitute for the revoked grant")
 
 	bystanderView := visibleContactIDs(t, app, org.ID, bystander.ID)
 	assert.False(t, bystanderView[closed.ID],
@@ -172,9 +190,9 @@ func TestScopeAssignedContact_ClosedByKeepsClosedChatFindable(t *testing.T) {
 }
 
 // TestScopeAssignedContact_ClosedChatVisibleThroughLifecycle: end-to-end —
-// the scoped agent closes the cross-account conversation through CloseChat and
-// can still load it afterwards through the scoped read path (the same path
-// GetMessages/search use).
+// the scoped agent (holding the assignment grant) closes the cross-account
+// conversation through CloseChat and can still load it afterwards through the
+// scoped read path, now as read-only.
 func TestScopeAssignedContact_ClosedChatVisibleThroughLifecycle(t *testing.T) {
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
@@ -186,6 +204,14 @@ func TestScopeAssignedContact_ClosedChatVisibleThroughLifecycle(t *testing.T) {
 
 	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(accB.Name))
 	assignForScopeTest(t, app, contact, agent.ID)
+	// The grant that AssignContact would mint — post-close access comes from
+	// THIS, not from closed_by.
+	require.NoError(t, app.DB.Create(&models.ContactAssignmentAccessGrant{
+		OrganizationID: org.ID,
+		ContactID:      contact.ID,
+		UserID:         agent.ID,
+		GrantedBy:      agent.ID,
+	}).Error)
 
 	// Close through the real endpoint (PUT /contacts/{id}/close).
 	req := newPUTRequest(t)
@@ -194,8 +220,8 @@ func TestScopeAssignedContact_ClosedChatVisibleThroughLifecycle(t *testing.T) {
 	require.NoError(t, app.CloseChat(req))
 	require.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
 
-	// The closed conversation is still in the agent's scoped list.
+	// The closed conversation is still in the agent's scoped list, read-only.
 	visible := visibleContactIDs(t, app, org.ID, agent.ID)
 	assert.True(t, visible[contact.ID],
-		"after close, the handler must still find the conversation via closed_by")
+		"after close, the grant holder must still find the conversation")
 }

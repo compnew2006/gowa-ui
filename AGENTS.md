@@ -87,13 +87,18 @@ responsibility. Do not re-merge these.
   the assigned account IDs → names are resolved before filtering. (Contacts
   mirror of `scopeAccountsToUser` in accounts.go, used by
   `/settings/accounts`.)
-- **Grant 2 — involvement:** being the assignee, a collaborator, or the agent
-  who closed the conversation (`metadata.closed_by`, stamped by
-  `chatlifecycle.Service.Close`/`Leave`) makes that ONE conversation visible
-  even under an account the user is NOT assigned to. This is how a manager
-  hands a single cross-account conversation to an agent, and how a closed
-  conversation stays searchable for the agent who handled it after close
-  releases the assignment.
+- **Grant 2 — involvement:** being the assignee, a collaborator, or the
+  holder of an ACTIVE assignment access grant
+  (`contact_assignment_access_grants`, minted ONLY by direct admin assignment
+  — `chatlifecycle.upsertAssignmentGrant`) makes that ONE conversation
+  visible even under an account the user is NOT assigned to. A grant holder
+  whose assignment has moved on is READ-ONLY: every write/lifecycle path
+  refuses via `rejectHistoricalAssignmentAccess` (central in
+  `loadContactByPath` + `findScopedMutableContact` + inline in message/
+  template/scheduled/media write paths). `metadata.closed_by` is an AUDIT
+  stamp only — never a visibility path; revoking the grant ends access even
+  for the agent who closed the conversation. Release grant + release
+  assignment commit in ONE transaction (`ChatLifecycle.ReleaseWithDB`).
 - **`contacts:read` (chat visibility) ≠ `contacts.manage:read` (settings page).**
   `contacts:read` drives chat-list scoping inside `scopeAssignedContact`
   (users with it see their accounts' conversations plus any they are involved

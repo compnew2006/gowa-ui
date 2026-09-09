@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
+	"gorm.io/gorm"
 )
 
 // Assignment access-grant management: listing who holds permanent
@@ -62,6 +63,12 @@ func (a *App) ListAccessGrants(r *fastglue.Request) error {
 	}
 	contact, err := a.findScopedContact(r, contactID, userID, orgID)
 	if err != nil {
+		return nil
+	}
+	// A historical read-only holder may neither see other users' grants nor
+	// act on them — grant management belongs to account/assign-permission
+	// holders with normal access.
+	if a.rejectHistoricalAssignmentAccess(r, contact, userID, orgID) {
 		return nil
 	}
 
@@ -121,45 +128,59 @@ func (a *App) RevokeAccessGrant(r *fastglue.Request) error {
 	if err != nil {
 		return nil
 	}
+	// Same rule as ListAccessGrants: a historical read-only holder cannot
+	// manage grants (including releasing other users' access).
+	if a.rejectHistoricalAssignmentAccess(r, contact, userID, orgID) {
+		return nil
+	}
 
 	targetID, err := parsePathUUID(r, "target_user_id", "user")
 	if err != nil {
 		return nil
 	}
 
-	// Revoke the grant (idempotent — 0 rows is success).
-	now := time.Now()
-	res := a.DB.Model(&models.ContactAssignmentAccessGrant{}).
-		Where("contact_id = ? AND user_id = ? AND organization_id = ? AND revoked_at IS NULL",
-			contact.ID, targetID, orgID).
-		Updates(map[string]any{"revoked_at": now, "revoked_by": userID})
-	if res.Error != nil {
-		a.Log.Error("Failed to revoke access grant", "error", res.Error, "contact_id", contact.ID)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to release access", nil, "")
-	}
-	revoked := res.RowsAffected > 0
-
-	// If the released user is the current assignee, release the assignment
-	// too — this is the "Release" the plan defines for the assignee case.
+	// ATOMIC Release: the grant revocation and (for the assignee case) the
+	// assignment release commit together or not at all — a partial failure
+	// must never leave a user released but still holding a permanent grant
+	// (unsafe direction), nor stripped of the grant while still responsible
+	// for the conversation (safe but confusing direction).
+	revoked := false
 	assigneeReleased := false
-	if contact.AssignedUserID != nil && *contact.AssignedUserID == targetID {
-		if contact.EffectiveStatus() == models.ChatStatusClosed {
-			// Closed stays closed; close already cleared the assignee, but a
-			// legacy closed-but-assigned row is normalized here.
-			if err := a.DB.Model(&models.Contact{}).Where("id = ?", contact.ID).
-				Update("assigned_user_id", nil).Error; err != nil {
-				a.Log.Error("Failed to clear assignee on closed chat", "error", err, "contact_id", contact.ID)
-				return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to release access", nil, "")
+	txErr := a.DB.Transaction(func(tx *gorm.DB) error {
+		now := time.Now()
+		res := tx.Model(&models.ContactAssignmentAccessGrant{}).
+			Where("contact_id = ? AND user_id = ? AND organization_id = ? AND revoked_at IS NULL",
+				contact.ID, targetID, orgID).
+			Updates(map[string]any{"revoked_at": now, "revoked_by": userID})
+		if res.Error != nil {
+			return res.Error
+		}
+		revoked = res.RowsAffected > 0
+
+		// If the released user is the current assignee, release the assignment
+		// too — the "Release" the plan defines for the assignee case.
+		if contact.AssignedUserID != nil && *contact.AssignedUserID == targetID {
+			if contact.EffectiveStatus() == models.ChatStatusClosed {
+				// Closed stays closed; close already cleared the assignee, but
+				// a legacy closed-but-assigned row is normalized here.
+				if err := tx.Model(&models.Contact{}).Where("id = ?", contact.ID).
+					Update("assigned_user_id", nil).Error; err != nil {
+					return err
+				}
+				assigneeReleased = true
+				return nil
 			}
-			assigneeReleased = true
-		} else {
-			released, rerr := a.ChatLifecycle.Release(r.RequestCtx, orgID, userID, contact, false, true)
+			released, rerr := a.ChatLifecycle.ReleaseWithDB(r.RequestCtx, tx, orgID, userID, contact, false, true)
 			if rerr != nil {
-				a.Log.Error("Failed to release assignment on grant revoke", "error", rerr, "contact_id", contact.ID)
-				return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to release access", nil, "")
+				return rerr
 			}
 			assigneeReleased = released
 		}
+		return nil
+	})
+	if txErr != nil {
+		a.Log.Error("Failed to release access", "error", txErr, "contact_id", contact.ID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to release access", nil, "")
 	}
 
 	if revoked || assigneeReleased {

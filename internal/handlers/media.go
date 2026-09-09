@@ -537,15 +537,15 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 		return nil
 	}
 
-	// Users without contacts:read permission can only access media from contacts
-	// assigned to them (the persistent owner or a collaborator, via
-	// scopeAssignedContact).
-	if !a.HasPermission(userID, models.ResourceContacts, models.ActionRead, orgID) {
-		var contact models.Contact
-		q := a.scopeAssignedContact(a.DB.Where("id = ? AND organization_id = ?", message.ContactID, orgID), userID, orgID)
-		if err := q.First(&contact).Error; err != nil {
-			return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Access denied", nil, "")
-		}
+	// Media access follows the SAME visibility as the chat list for every
+	// caller — scopeAssignedContact (account grant ∪ involvement grant).
+	// Gating only non-contacts:read users here let an account-scoped agent
+	// read any org account's media files by message ID. Historical grant
+	// holders keep read access (the scope includes active grants).
+	var contact models.Contact
+	q := a.scopeAssignedContact(a.DB.Where("id = ? AND organization_id = ?", message.ContactID, orgID), userID, orgID)
+	if err := q.First(&contact).Error; err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Access denied", nil, "")
 	}
 
 	// Resolve the media storage root once — used both for path-traversal guards

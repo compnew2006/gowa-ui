@@ -219,7 +219,7 @@ func TestHistoricalGrant_ReadOnlyMatrix(t *testing.T) {
 	testutil.SetAuthContext(selfReq, f.org.ID, f.agent.ID)
 	testutil.SetPathParam(selfReq, "id", f.contact.ID.String())
 	require.NoError(t, f.app.AssignContact(selfReq))
-	testutil.AssertErrorResponse(t, selfReq, fasthttp.StatusForbidden, "read-only access")
+	testutil.AssertErrorResponse(t, selfReq, fasthttp.StatusForbidden, "Read-only access")
 
 	// Contact mutation (tags) also refused.
 	tagsReq := testutil.NewJSONRequest(t, map[string]any{"tags": []string{"x"}})

@@ -482,12 +482,51 @@ func (a *App) BulkReleaseChats(r *fastglue.Request) error {
 		for _, id := range visibleIDs {
 			visible[id] = true
 		}
+
+		// Bulk release mutates conversation state, so contacts the caller
+		// reaches only through a historical (read-only) grant are refused —
+		// reported as failures rather than silently released.
+		historical := make(map[uuid.UUID]bool, len(visibleIDs))
+		if len(visibleIDs) > 0 {
+			var rows []models.Contact
+			if err := a.DB.Where("id IN ?", visibleIDs).Find(&rows).Error; err != nil {
+				a.Log.Error("Failed to load bulk-release contacts", "error", err, "user_id", userID)
+				return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to release chats", nil, "")
+			}
+			for i := range rows {
+				if a.conversationAccessMode(&rows[i], userID, orgID) == AccessModeHistoricalReadOnly {
+					historical[rows[i].ID] = true
+				}
+			}
+		}
+		if len(historical) > 0 {
+			visible = make(map[uuid.UUID]bool, len(visible))
+			for id := range historical {
+				visible[id] = false
+			}
+			// re-add the non-historical visible IDs
+			for _, id := range visibleIDs {
+				if !historical[id] {
+					visible[id] = true
+				}
+			}
+		}
 	}
 	scopedIDs := make([]string, 0, len(req.ContactIDs))
 	failed := make([]map[string]any, 0)
 	for _, raw := range req.ContactIDs {
 		if id, err := uuid.Parse(raw); err == nil && visible[id] {
 			scopedIDs = append(scopedIDs, raw)
+		} else if id, err := uuid.Parse(raw); err == nil && !visible[id] && len(visible) > 0 {
+			// Distinguish "invisible because read-only" from "not found".
+			var probe models.Contact
+			if err := a.DB.Select("id").First(&probe, "id = ? AND organization_id = ?", id, orgID).Error; err == nil {
+				if a.conversationAccessMode(&probe, userID, orgID) == AccessModeHistoricalReadOnly {
+					failed = append(failed, map[string]any{"contact_id": raw, "reason": "read-only"})
+					continue
+				}
+			}
+			failed = append(failed, map[string]any{"contact_id": raw, "reason": "not found"})
 		} else if _, err := uuid.Parse(raw); err != nil {
 			scopedIDs = append(scopedIDs, raw) // let the service report "invalid uuid"
 		} else {

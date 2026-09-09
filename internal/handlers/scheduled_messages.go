@@ -368,6 +368,12 @@ func (a *App) loadScopedScheduledMessage(r *fastglue.Request, id, orgID, userID 
 		return nil, errEnvelopeSent
 	}
 
+	// Both callers mutate the conversation (edit/cancel) — historical
+	// read-only holders are refused here.
+	if a.rejectHistoricalAssignmentAccess(r, &contact, userID, orgID) {
+		return nil, errEnvelopeSent
+	}
+
 	return &sm, nil
 }
 

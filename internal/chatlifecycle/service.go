@@ -110,6 +110,15 @@ func (s *Service) CreateSystemMessage(orgID, contactID uuid.UUID, content string
 // Returns (true, nil) on a real release, (false, nil) on the idempotent
 // no-op, and (false, err) on a policy violation or persistence failure.
 func (s *Service) Release(ctx context.Context, orgID, userID uuid.UUID, contact *models.Contact, isAssignee, isAdminOrManager bool) (bool, error) {
+	return s.ReleaseWithDB(ctx, s.db, orgID, userID, contact, isAssignee, isAdminOrManager)
+}
+
+// ReleaseWithDB is Release running on a SUPPLIED gorm DB handle — used by the
+// access-grant Release endpoint to make "revoke grant + release assignment"
+// one transaction. All mutations (contact update, system message, audit
+// insert) run on db; the WS broadcast still fires immediately (it is not
+// transactional — a rollback after broadcast is a cosmetic edge case).
+func (s *Service) ReleaseWithDB(ctx context.Context, db *gorm.DB, orgID, userID uuid.UUID, contact *models.Contact, isAssignee, isAdminOrManager bool) (bool, error) {
 	// Authorization is checked first in the handler; double-check here as a
 	// defense-in-depth invariant (the handler is the source of truth but the
 	// service must not be callable in a way that violates policy).
@@ -141,7 +150,7 @@ func (s *Service) Release(ctx context.Context, orgID, userID uuid.UUID, contact 
 	contact.AssignedUserID = nil
 	contact.SetStatus(models.ChatStatusPending)
 	contact.ClearCollaborators()
-	if err := s.db.Model(&models.Contact{}).Where("id = ?", contact.ID).Updates(map[string]any{
+	if err := db.Model(&models.Contact{}).Where("id = ?", contact.ID).Updates(map[string]any{
 		"assigned_user_id": nil,
 		"metadata":         contact.Metadata,
 		"last_message_at":  &now,
@@ -152,7 +161,7 @@ func (s *Service) Release(ctx context.Context, orgID, userID uuid.UUID, contact 
 	contact.LastMessageAt = &now
 
 	// Agent display name for the system message (durable + locale-independent).
-	agentName := audit.GetUserName(s.db, userID)
+	agentName := audit.GetUserName(db, userID)
 
 	s.CreateSystemMessage(orgID, contact.ID,
 		fmt.Sprintf("🔔 %s released this conversation", agentName),
@@ -166,7 +175,7 @@ func (s *Service) Release(ctx context.Context, orgID, userID uuid.UUID, contact 
 	// silently no-ops when action=updated AND the computed diff is empty, and
 	// status lives in JSONB which the differ does not deeply compare. The
 	// explicit old→new map forces the entry to persist.
-	audit.LogAudit(s.db, orgID, userID, agentName,
+	audit.LogAudit(db, orgID, userID, agentName,
 		"contact", contact.ID, models.AuditActionUpdated, nil, contact,
 		map[string]any{
 			"chat_status":      map[string]any{"old": oldStatus, "new": string(models.ChatStatusPending)},

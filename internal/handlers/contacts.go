@@ -260,9 +260,8 @@ func (a *App) conversationAccessMode(contact *models.Contact, userID, orgID uuid
 	if contact.AssignedUserID != nil && *contact.AssignedUserID == userID {
 		return AccessModeCurrentAssignee
 	}
-	if a.activeGrantExists(contact.ID, userID, orgID) || contact.ClosedByUserID() == userID.String() {
-		return AccessModeHistoricalReadOnly
-	}
+	// closed_by is audit-only (see scope comment) — the grant is the sole
+	// durable access, so its revocation always ends the access.
 	return AccessModeHistoricalReadOnly
 }
 
@@ -310,18 +309,20 @@ func (a *App) scopeAssignedContact(query *gorm.DB, userID, orgID uuid.UUID) *gor
 		return query
 	}
 
-	// Involvement grant: assigned_user_id or the metadata JSONB keys
-	// collaborators/closed_by, or an ACTIVE assignment access grant (the
-	// permanent per-conversation grant created by direct admin assignment —
-	// see upsertAssignmentGrant). @> containment reuses the same GIN-indexed
-	// pattern as the tags filter above.
+	// Involvement grant: assigned_user_id, the collaborators JSONB key, or an
+	// ACTIVE assignment access grant (the permanent per-conversation grant
+	// created by direct admin assignment — see upsertAssignmentGrant).
+	// metadata.closed_by is deliberately NOT a visibility path: it is an
+	// audit record only. After a Release revokes the grant, the released
+	// user must lose access even if they were the one who closed the
+	// conversation. @> containment reuses the same GIN-indexed pattern as
+	// the tags filter above.
 	collaboratorJSON := fmt.Sprintf(`{"collaborators":[{"user_id":"%s"}]}`, userID.String())
-	closedByJSON := fmt.Sprintf(`{"closed_by":{"user_id":"%s"}}`, userID.String())
 	activeGrant := fmt.Sprintf(
 		`EXISTS (SELECT 1 FROM contact_assignment_access_grants gag WHERE gag.contact_id = contacts.id AND gag.user_id = '%s' AND gag.revoked_at IS NULL)`,
 		userID.String())
-	involvement := "assigned_user_id = ? OR metadata @> ?::jsonb OR metadata @> ?::jsonb OR " + activeGrant
-	involvementArgs := []any{userID, collaboratorJSON, closedByJSON}
+	involvement := "assigned_user_id = ? OR metadata @> ?::jsonb OR " + activeGrant
+	involvementArgs := []any{userID, collaboratorJSON}
 
 	if !a.HasPermission(userID, models.ResourceContacts, models.ActionRead, orgID) {
 		// Agents without contacts:read can only access conversations they are
@@ -454,9 +455,11 @@ func (a *App) AssignContact(r *fastglue.Request) error {
 		return nil
 	}
 
-	// Get contact (scoped: account-restricted users can only touch contacts
-	// under their assigned accounts, matching what they can see)
-	contact, err := a.findScopedContact(r, contactID, userID, orgID)
+	// Scoped load + historical read-only refusal: reassignment is a write on
+	// the conversation, so a grant-only (historical) viewer cannot perform it
+	// against ANY target — assigning to someone else would be an unearned
+	// state change, and to themselves a read-only bypass.
+	contact, err := a.findScopedMutableContact(r, contactID, userID, orgID)
 	if err != nil {
 		return nil
 	}
@@ -466,14 +469,6 @@ func (a *App) AssignContact(r *fastglue.Request) error {
 		var user models.User
 		if err := a.DB.Where("id = ? AND organization_id = ?", req.UserID, orgID).First(&user).Error; err != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "User not found", nil, "")
-		}
-		// A historical-grant holder must not regain write access by assigning
-		// the conversation to themselves — that would bypass the read-only
-		// rule. Assigning to OTHER users remains the legitimate admin action.
-		if *req.UserID == userID && a.conversationAccessMode(contact, userID, orgID) == AccessModeHistoricalReadOnly {
-			return r.SendErrorEnvelope(fasthttp.StatusForbidden,
-				"You hold read-only access to this conversation and cannot assign it to yourself",
-				nil, "")
 		}
 	}
 
@@ -870,7 +865,8 @@ func (a *App) decorateAccessModes(responses []ContactResponse, contacts []models
 			mode = AccessModeStandard
 		case c.AssignedUserID != nil && *c.AssignedUserID == userID:
 			mode = AccessModeCurrentAssignee
-		case granted[c.ID] || c.ClosedByUserID() == userID.String():
+		case granted[c.ID]:
+			// closed_by is audit-only — the grant is the sole durable access.
 			mode = AccessModeHistoricalReadOnly
 		}
 		responses[i].AccessMode = mode
