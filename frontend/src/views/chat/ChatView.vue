@@ -90,8 +90,7 @@ import {
   Megaphone,
   RotateCcw,
   ListChecks,
-  Package,
-  Play
+  Package
 } from 'lucide-vue-next'
 import { getInitials, getAvatarGradient, avatarSrc, linkifySegments } from '@/lib/utils'
 import { useColorMode } from '@/composables/useColorMode'
@@ -1542,38 +1541,32 @@ onUnmounted(() => {
                       :data-message-id="m.id"
                     >
                       <img
-                        v-if="m.message_type === 'image' && !brokenMediaIds.has(m.id)"
+                        v-if="(m.message_type === 'image' || m.message_type === 'sticker') && !brokenMediaIds.has(m.id)"
                         :src="getMediaUrl(m)"
                         :alt="m.media_filename || 'Image'"
                         class="w-full h-full object-cover cursor-pointer"
                         @click="handleAlbumTileClick(m)"
                         @error="markMediaBroken(m)"
                       />
-                      <video
-                        v-else-if="m.message_type === 'video' && !brokenMediaIds.has(m.id)"
-                        :src="getMediaUrl(m)"
-                        class="w-full h-full object-cover cursor-pointer"
-                        preload="metadata"
-                        muted
-                        playsinline
+                      <!-- Document tile: icon card with the filename (documents
+                           never "break" like images — the lazy download happens
+                           on click through the media endpoint). -->
+                      <div
+                        v-else-if="m.message_type === 'document'"
+                        class="w-full h-full flex flex-col items-center justify-center gap-1 px-2 bg-background/40 cursor-pointer"
                         @click="handleAlbumTileClick(m)"
-                        @error="markMediaBroken(m)"
-                      />
+                      >
+                        <FileText class="h-8 w-8 text-muted-foreground shrink-0" />
+                        <span class="w-full text-[10px] text-center text-muted-foreground truncate">
+                          {{ m.media_filename || 'Document' }}
+                        </span>
+                      </div>
                       <div v-else class="w-full h-full flex items-center justify-center">
                         <MediaRetryButton
                           :message="m"
                           :is-redownloading="isRedownloading(m)"
                           @retry="retryMediaDownload(m)"
                         />
-                      </div>
-                      <!-- Play affordance on video tiles (tap opens the video) -->
-                      <div
-                        v-if="m.message_type === 'video' && !brokenMediaIds.has(m.id)"
-                        class="absolute inset-0 flex items-center justify-center pointer-events-none"
-                      >
-                        <span class="flex h-9 w-9 items-center justify-center rounded-full bg-black/50">
-                          <Play class="h-4 w-4 text-white" />
-                        </span>
                       </div>
                       <!-- "+N" overflow on the last visible tile: opens the
                            first hidden item's preview. -->

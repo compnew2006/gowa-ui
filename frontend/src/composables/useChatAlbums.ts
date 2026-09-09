@@ -12,15 +12,19 @@ import type { Message } from '@/stores/contacts'
  * `contactsStore.messages` into render items where a run of eligible messages
  * collapses into one album group. Grouping is presentation-only — every member
  * stays its own row in the DB (its own id, wamid, media URL), which keeps
- * scroll anchors, select-mode downloads and lazy media recovery per photo.
+ * scroll anchors, select-mode downloads and lazy media recovery per file.
  *
- * Eligibility mirrors WhatsApp semantics:
- *   - type image/video only (stickers/documents/audio never join);
- *   - no caption (a captioned photo is its own bubble);
+ * Eligibility:
+ *   - FILE types only: image, document, sticker. Audio and video NEVER join
+ *     (user decision 2026-09-09: videos play inline and audio streams, so
+ *     they stay individual bubbles);
+ *   - no caption (a captioned file is its own bubble);
  *   - not a reply, not revoked/failed (those render their own states);
  *   - consecutive, same direction, same sender (group chats), same account;
- *   - ≤ ALBUM_GAP_MS apart and within the same calendar day;
- *   - at least 2 members (a lone photo renders as before).
+ *   - ≤ ALBUM_GAP_MS apart (between each two ADJACENT members, so a slowly
+ *     delivered batch still groups as long as no single gap exceeds it) and
+ *     within the same calendar day;
+ *   - at least 2 members (a lone file renders as before).
  */
 export interface AlbumGroup {
   kind: 'album'
@@ -38,9 +42,10 @@ export interface SingleMessageItem {
 
 export type MessageRenderItem = AlbumGroup | SingleMessageItem
 
-/** Max time between consecutive members to still join one album. WhatsApp
- *  sends a batch within ~1s; 3s leaves headroom for slow webhook relays. */
-export const ALBUM_GAP_MS = 3000
+/** Max time between two ADJACENT members to still join one album (2 minutes —
+ * generous on purpose: batches relayed through slow webhook queues can land
+ * spread out; a lone bigger gap splits the run). */
+export const ALBUM_GAP_MS = 120000
 
 export interface UseChatAlbumsOptions {
   /** Render-eligibility predicate (shouldRenderMedia from useMessageFormat) —
@@ -61,10 +66,12 @@ export function useChatAlbums(
 
 /** Album membership test for a single message (excluding run/gap checks). */
 function isAlbumCandidate(message: Message, shouldRenderMedia: (m: Message) => boolean): boolean {
-  if (message.message_type !== 'image' && message.message_type !== 'video') return false
+  // File types only — image, document, sticker. Audio and video are excluded
+  // by design (they play inline/stream and keep their individual bubbles).
+  if (!['image', 'document', 'sticker'].includes(message.message_type)) return false
   if (message.is_reply) return false
   if (message.status === 'revoked' || message.status === 'failed') return false
-  // Albums are caption-less batches; a captioned photo renders as its own
+  // Albums are caption-less batches; a captioned file renders as its own
   // bubble (content.body is the caption for media messages).
   if (message.content?.body) return false
   return shouldRenderMedia(message)

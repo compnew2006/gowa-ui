@@ -3,11 +3,12 @@ import { loginAsAdmin } from '../../helpers'
 import { ChatPage } from '../../pages'
 
 /**
- * WhatsApp-style media albums: consecutive caption-less image/video messages
- * from one sender arrive as individual rows (GOWA has no album payload) and
- * must collapse into ONE grid bubble. Tapping a tile opens that specific
- * photo. Grouping rules (see useChatAlbums): same direction + account +
- * sender, no caption, not a reply, ≤3s apart, same day, ≥2 members.
+ * WhatsApp-style media albums: consecutive caption-less FILE messages (image,
+ * document, sticker — audio and video NEVER join) from one sender arrive as
+ * individual rows (GOWA has no album payload) and must collapse into ONE grid
+ * bubble. Tapping a tile opens that specific file. Grouping rules (see
+ * useChatAlbums): same direction + account + sender, no caption, not a reply,
+ * ≤2 MINUTES between each two adjacent members, same day, ≥2 members.
  *
  * Uses route interception (same harness as account-tabs.spec.ts) — no real
  * media or backend rows are needed.
@@ -32,10 +33,15 @@ function makeMessage(overrides: Record<string, any> = {}) {
   }
 }
 
-/** Four caption-less images sent as one burst (≤3s apart) — one album. */
-function albumBurst(count = 4, startSeconds = 0): any[] {
+/** A burst of caption-less files sent together — one album (one member per
+ * `startSeconds` step; keep steps well under the 2-minute gap). */
+function albumBurst(count = 4, startSeconds = 0, type = 'image'): any[] {
   return Array.from({ length: count }, (_, i) =>
-    makeMessage({ created_at: `2026-09-08T10:00:${String(startSeconds + i).padStart(2, '0')}Z` })
+    makeMessage({
+      message_type: type,
+      media_filename: type === 'document' ? `doc-${i}.pdf` : undefined,
+      created_at: `2026-09-08T10:00:${String(startSeconds + i).padStart(2, '0')}Z`,
+    })
   )
 }
 
@@ -135,16 +141,72 @@ test.describe('Media Albums', () => {
     }
   })
 
-  test('a large time gap breaks the run', async ({ page }) => {
+  test('photos up to two minutes apart still group', async ({ page }) => {
     const msgs = [
       makeMessage({ created_at: '2026-09-08T10:00:00Z' }),
-      makeMessage({ created_at: '2026-09-08T10:42:00Z' }),
+      makeMessage({ created_at: '2026-09-08T10:01:30Z' }), // 90s later
+      makeMessage({ created_at: '2026-09-08T10:03:00Z' }), // 90s later again
+    ]
+    await setupMockRoutes(page, msgs)
+    await chatPage.goto(CONTACT_ID)
+    await page.waitForTimeout(500)
+
+    await expect(page.locator('[data-album]')).toHaveCount(1)
+    await expect(page.locator('[data-album] [data-message-id]')).toHaveCount(3)
+  })
+
+  test('a gap larger than two minutes breaks the run', async ({ page }) => {
+    const msgs = [
+      makeMessage({ created_at: '2026-09-08T10:00:00Z' }),
+      makeMessage({ created_at: '2026-09-08T10:02:01Z' }), // 2m01s later
     ]
     await setupMockRoutes(page, msgs)
     await chatPage.goto(CONTACT_ID)
     await page.waitForTimeout(500)
 
     await expect(page.locator('[data-album]')).toHaveCount(0)
+  })
+
+  test('documents group into an album too', async ({ page }) => {
+    const burst = albumBurst(3, 0, 'document')
+    await setupMockRoutes(page, burst)
+    await chatPage.goto(CONTACT_ID)
+    await page.waitForTimeout(500)
+
+    await expect(page.locator('[data-album]')).toHaveCount(1)
+    await expect(page.locator('[data-album] [data-message-id]')).toHaveCount(3)
+    // Document tiles surface the filename on the icon card.
+    await expect(page.locator('[data-album] [data-message-id]').first()).toContainText('doc-0.pdf')
+  })
+
+  test('a mixed image + document burst forms one album', async ({ page }) => {
+    const msgs = [
+      makeMessage({ created_at: '2026-09-08T10:00:00Z' }),
+      makeMessage({ message_type: 'document', media_filename: 'invoice.pdf', created_at: '2026-09-08T10:00:05Z' }),
+      makeMessage({ created_at: '2026-09-08T10:00:10Z' }),
+    ]
+    await setupMockRoutes(page, msgs)
+    await chatPage.goto(CONTACT_ID)
+    await page.waitForTimeout(500)
+
+    await expect(page.locator('[data-album]')).toHaveCount(1)
+    await expect(page.locator('[data-album] [data-message-id]')).toHaveCount(3)
+  })
+
+  test('videos never join an album', async ({ page }) => {
+    const msgs = [
+      makeMessage({ message_type: 'video', media_mime_type: 'video/mp4', created_at: '2026-09-08T10:00:00Z' }),
+      makeMessage({ message_type: 'video', media_mime_type: 'video/mp4', created_at: '2026-09-08T10:00:02Z' }),
+      makeMessage({ message_type: 'audio', created_at: '2026-09-08T10:00:04Z' }),
+    ]
+    await setupMockRoutes(page, msgs)
+    await chatPage.goto(CONTACT_ID)
+    await page.waitForTimeout(500)
+
+    await expect(page.locator('[data-album]')).toHaveCount(0)
+    for (const m of msgs) {
+      await expect(page.locator(`#message-${m.id} .chat-bubble`)).toHaveCount(1)
+    }
   })
 
   test('a direction change breaks the run', async ({ page }) => {
