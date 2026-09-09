@@ -519,6 +519,12 @@ class WebSocketService {
       c.assigned_user_name = payload.assigned_to_name
       c.chat_status = payload.chat_status || 'open'
       if (Array.isArray(payload.collaborators)) c.collaborators = payload.collaborators
+    } else {
+      // The chat isn't in the loaded list: it sits beyond the fetched page, or
+      // it was invisible to this user (account/assignment scoping) until this
+      // very assign/claim. Re-fetch so the sidebar picks it up without a
+      // manual refresh.
+      store.fetchContacts()
     }
     // Update currentContact in real-time so the UI switches instantly
     const current = store.currentContact

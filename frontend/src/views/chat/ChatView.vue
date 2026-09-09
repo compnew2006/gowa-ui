@@ -674,7 +674,7 @@ onMounted(async () => {
 
   // Fetch users + custom actions if the agent can assign contacts.
   if (canAssignContacts.value) {
-    usersStore.fetchUsers().catch(() => { /* Silently fail */ })
+    usersStore.fetchAllUsers().catch(() => { /* Silently fail */ })
     fetchCustomActions()
   }
 
@@ -2406,7 +2406,9 @@ onUnmounted(() => {
             {{ $t('chat.unassignContact') }}
           </Button>
           <Separator />
-          <ScrollArea class="max-h-[280px]">
+          <!-- Native overflow scroll: ScrollArea's root max-h doesn't constrain
+               its reka viewport, so the list clips with no working scrollbar. -->
+          <div class="max-h-[280px] overflow-y-auto">
             <div class="space-y-1">
               <Button
                 v-for="user in filteredAssignableUsers"
@@ -2429,7 +2431,7 @@ onUnmounted(() => {
                 {{ $t('chat.noUsersFound') }}
               </p>
             </div>
-          </ScrollArea>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
@@ -2444,7 +2446,7 @@ onUnmounted(() => {
           </DialogDescription>
         </DialogHeader>
         <div class="py-4 space-y-3">
-          <ScrollArea class="max-h-[280px]">
+          <div class="max-h-[280px] overflow-y-auto">
             <div class="space-y-1">
               <Button
                 v-for="user in filteredAssignableUsers"
@@ -2467,7 +2469,7 @@ onUnmounted(() => {
                 {{ $t('chat.noUsersFound') }}
               </p>
             </div>
-          </ScrollArea>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

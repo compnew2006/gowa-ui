@@ -149,11 +149,30 @@ export const useUsersStore = defineStore('users', () => {
     }
   }
 
+  /**
+   * Fetch every org user by paging through the list endpoint (the backend
+   * caps a single page at 100 rows). Surfaces that need the complete roster
+   * — like the chat Assign/Invite dialogs — must use this instead of
+   * fetchUsers(), whose default call stops at the first page (50) and
+   * silently hides everyone beyond it.
+   */
+  async function fetchAllUsers(maxPages = 10): Promise<void> {
+    const first = await fetchUsers({ page: 1, limit: 100 })
+    const byId = new Map(first.users.map(u => [u.id, u]))
+    const pages = Math.min(Math.ceil(first.total / 100) || 1, maxPages)
+    for (let p = 2; p <= pages; p++) {
+      const next = await fetchUsers({ page: p, limit: 100 })
+      next.users.forEach(u => byId.set(u.id, u))
+    }
+    users.value = [...byId.values()]
+  }
+
   return {
     users,
     loading,
     error,
     fetchUsers,
+    fetchAllUsers,
     fetchUser,
     createUser,
     updateUser,
