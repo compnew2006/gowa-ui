@@ -476,6 +476,8 @@
     "bulkSelect": "কথোপকথন নির্বাচন",
     "bulkSelected": "{count} নির্বাচিত",
     "cancel": "বাতিল",
+    "openPhoneChat": "কথোপকথন খুলুন",
+    "phoneChatNotFound": "{phone} এর জন্য কোনো কথোপকথন পাওয়া যায়নি",
     "system": {
       "chat_claimed": "{agent} এই কথোপকথন ক্লেইম করেছেন",
       "chat_released": "{agent} এই কথোপকথন মুক্ত করেছেন",

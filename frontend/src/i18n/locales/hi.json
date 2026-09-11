@@ -474,6 +474,8 @@
     "bulkSelect": "बातचीत चुनें",
     "bulkSelected": "{count} चयनित",
     "cancel": "रद्द करें",
+    "openPhoneChat": "बातचीत खोलें",
+    "phoneChatNotFound": "{phone} के लिए कोई बातचीत नहीं मिली",
     "system": {
       "chat_claimed": "{agent} ने यह बातचीत क्लेम की",
       "chat_released": "{agent} ने यह बातचीत रिलीज़ की",

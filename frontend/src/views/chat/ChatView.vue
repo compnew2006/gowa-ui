@@ -92,7 +92,9 @@ import {
   ListChecks,
   Package
 } from 'lucide-vue-next'
-import { getInitials, getAvatarGradient, avatarSrc, linkifySegments } from '@/lib/utils'
+import { getInitials, getAvatarGradient, avatarSrc, linkifySegments, normalizePhoneDigits } from '@/lib/utils'
+import { contactsService } from '@/services/api'
+import { toast } from 'vue-sonner'
 import { useColorMode } from '@/composables/useColorMode'
 import CannedResponsePicker from '@/components/chat/CannedResponsePicker.vue'
 import TemplatePicker from '@/components/chat/TemplatePicker.vue'
@@ -288,6 +290,53 @@ watch(() => contactsStore.currentContact?.id, () => {
   mediaSelectMode.value = false
   selectedMessageIds.value = new Set()
 })
+
+// ─── Clickable phone numbers in message bubbles ───
+// Two numbers count as the same conversation on exact digit match or on a
+// shared trailing-9-digit suffix (handles 01xxxxxxxx vs 201xxxxxxxx country
+// code variants without ever mismatching short codes — suffix match needs
+// at least 9 overlapping digits).
+function samePhone(a: string, b: string): boolean {
+  if (!a || !b) return false
+  if (a === b) return true
+  if (Math.min(a.length, b.length) < 9) return false
+  return a.slice(-9) === b.slice(-9)
+}
+
+const phoneLookupInFlight = ref(false)
+// Opens the conversation for a phone number tapped inside a message. Local
+// contacts are checked first (instant); otherwise a scoped server search runs
+// (ListContacts applies tenant + scopeAssignedContact, so visibility rules
+// are respected). Unknown numbers show a localized toast, never a dead nav.
+async function openPhoneChat(rawPhone: string) {
+  const digits = normalizePhoneDigits(rawPhone)
+  if (!digits || phoneLookupInFlight.value) return
+  const currentDigits = normalizePhoneDigits(contactsStore.currentContact?.phone_number || '')
+  if (currentDigits && samePhone(digits, currentDigits)) return
+  const local = contactsStore.contacts.find(c =>
+    samePhone(normalizePhoneDigits(c.phone_number || ''), digits)
+  )
+  if (local) {
+    router.push({ name: 'chat-conversation', params: { contactId: local.id } })
+    return
+  }
+  phoneLookupInFlight.value = true
+  try {
+    const response = await contactsService.list({ search: digits, limit: 5 })
+    const data = response.data?.data || response.data
+    const list: Contact[] = data.contacts || []
+    const match = list.find(c => samePhone(normalizePhoneDigits(c.phone_number || ''), digits))
+    if (match) {
+      router.push({ name: 'chat-conversation', params: { contactId: match.id } })
+    } else {
+      toast.error(t('chat.phoneChatNotFound', { phone: rawPhone.trim() }))
+    }
+  } catch {
+    toast.error(t('chat.phoneChatNotFound', { phone: rawPhone.trim() }))
+  } finally {
+    phoneLookupInFlight.value = false
+  }
+}
 
 // ─── Add-contact dialog (pure view state) ───
 const isAddContactOpen = ref(false)
@@ -1907,7 +1956,9 @@ onUnmounted(() => {
                       <p class="text-sm font-medium truncate">{{ contact.name }}</p>
                       <div v-if="contact.phones?.length" class="flex items-center gap-1 text-xs text-muted-foreground">
                         <Phone class="h-3 w-3" />
-                        <span class="truncate">{{ contact.phones.join(', ') }}</span>
+                        <span class="truncate">
+                          <template v-for="(phone, pIdx) in contact.phones" :key="pIdx"><button type="button" class="chat-bubble-phone" :title="$t('chat.openPhoneChat')" @click.stop="openPhoneChat(phone)">{{ phone }}</button><span v-if="pIdx < contact.phones.length - 1">, </span></template>
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -1921,11 +1972,11 @@ onUnmounted(() => {
                 </div>
                 <!-- Button reply - WhatsApp style -->
                 <div v-if="message.message_type === 'button_reply'" class="button-reply-bubble">
-                  <span class="whitespace-pre-wrap break-words"><template v-for="(seg, idx) in linkifySegments(getMessageContent(message))" :key="idx"><a v-if="seg.href" :href="seg.href" target="_blank" rel="noopener noreferrer" class="chat-bubble-link" @click.stop>{{ seg.text }}</a><template v-else>{{ seg.text }}</template></template></span>
+                  <span class="whitespace-pre-wrap break-words"><template v-for="(seg, idx) in linkifySegments(getMessageContent(message))" :key="idx"><a v-if="seg.href" :href="seg.href" target="_blank" rel="noopener noreferrer" class="chat-bubble-link" @click.stop>{{ seg.text }}</a><button v-else-if="seg.kind === 'phone' && seg.phone" type="button" class="chat-bubble-phone" :title="$t('chat.openPhoneChat')" @click.stop="openPhoneChat(seg.phone)">{{ seg.text }}</button><template v-else>{{ seg.text }}</template></template></span>
                   <span class="chat-bubble-time"><span>{{ formatMessageTime(message.created_at) }}</span></span>
                 </div>
                 <!-- Text content (for text messages or captions) -->
-                <span v-else-if="getMessageContent(message)" class="whitespace-pre-wrap break-words"><template v-for="(seg, idx) in linkifySegments(getMessageContent(message))" :key="idx"><a v-if="seg.href" :href="seg.href" target="_blank" rel="noopener noreferrer" class="chat-bubble-link" @click.stop>{{ seg.text }}</a><template v-else>{{ seg.text }}</template></template><span class="chat-bubble-time"><span>{{ formatMessageTime(message.created_at) }}</span><component v-if="message.direction === 'outgoing'" :is="getMessageStatusIcon(message.status)" :class="['h-4 w-4 status-icon', getMessageStatusClass(message.status)]" /></span></span>
+                <span v-else-if="getMessageContent(message)" class="whitespace-pre-wrap break-words"><template v-for="(seg, idx) in linkifySegments(getMessageContent(message))" :key="idx"><a v-if="seg.href" :href="seg.href" target="_blank" rel="noopener noreferrer" class="chat-bubble-link" @click.stop>{{ seg.text }}</a><button v-else-if="seg.kind === 'phone' && seg.phone" type="button" class="chat-bubble-phone" :title="$t('chat.openPhoneChat')" @click.stop="openPhoneChat(seg.phone)">{{ seg.text }}</button><template v-else>{{ seg.text }}</template></template><span class="chat-bubble-time"><span>{{ formatMessageTime(message.created_at) }}</span><component v-if="message.direction === 'outgoing'" :is="getMessageStatusIcon(message.status)" :class="['h-4 w-4 status-icon', getMessageStatusClass(message.status)]" /></span></span>
                 <!-- Fallback for media without URL. Reached when recovery is
                      impossible — e.g. history-synced media in WhatsApp Status or
                      newsletter contacts, where the bytes were never downloaded

@@ -363,6 +363,28 @@
   color: #027eb5;
 }
 
+/* Clickable phone numbers inside chat bubbles — same treatment as links so
+   they are discoverable, but a distinct class for independent styling. */
+.chat-bubble-phone {
+  color: #53bdeb;
+  text-decoration: underline;
+  word-break: break-all;
+  cursor: pointer;
+  padding: 0;
+  background: none;
+  border: none;
+  font: inherit;
+  text-align: inherit;
+}
+
+.chat-bubble-phone:hover {
+  opacity: 0.85;
+}
+
+.light .chat-bubble-phone {
+  color: #027eb5;
+}
+
 /* Time and status */
 .chat-bubble-time {
   @apply text-[10px] mt-1 flex items-center gap-1.5 float-right;

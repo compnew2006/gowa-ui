@@ -476,6 +476,8 @@
     "bulkSelect": "گفتگیوں منتخب کریں",
     "bulkSelected": "{count} منتخب",
     "cancel": "منسوخ",
+    "openPhoneChat": "گفتگو کھولیں",
+    "phoneChatNotFound": "{phone} کے لیے کوئی گفتگو نہیں ملی",
     "system": {
       "chat_claimed": "{agent} نے یہ گفتگو کلیم کی",
       "chat_released": "{agent} نے یہ گفتگو رہا کی",

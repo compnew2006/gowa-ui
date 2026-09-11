@@ -498,7 +498,9 @@
     "releaseAccess": "إلغاء الوصول",
     "confirmRelease": "تأكيد الإلغاء؟",
     "accessReleased": "تم إلغاء الوصول",
-    "accessReleaseFailed": "فشل إلغاء الوصول"
+    "accessReleaseFailed": "فشل إلغاء الوصول",
+    "openPhoneChat": "فتح المحادثة",
+    "phoneChatNotFound": "لا توجد محادثة لهذا الرقم {phone}"
   },
   "contacts": {
     "title": "جهات الاتصال",

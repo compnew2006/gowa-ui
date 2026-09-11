@@ -498,7 +498,9 @@
     "releaseAccess": "Release",
     "confirmRelease": "Confirm release?",
     "accessReleased": "Access released",
-    "accessReleaseFailed": "Failed to release access"
+    "accessReleaseFailed": "Failed to release access",
+    "openPhoneChat": "Open conversation",
+    "phoneChatNotFound": "No conversation found for {phone}"
   },
   "contacts": {
     "title": "Contacts",

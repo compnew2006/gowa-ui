@@ -146,6 +146,9 @@ export function normalizeAuditChanges(changes?: any[] | null): AuditChange[] {
 export interface LinkSegment {
   text: string
   href?: string
+  /** 'phone' segments carry normalized digits for conversation lookup. */
+  kind?: 'url' | 'phone'
+  phone?: string
 }
 
 // Trailing sentence punctuation (and unbalanced closing brackets) is usually
@@ -171,11 +174,67 @@ function trimTrailingPunctuation(url: string): string {
   return result
 }
 
-// linkifySegments splits message text into plain-text and URL segments so chat
-// bubbles can render clickable anchors without resorting to v-html.
+// normalizePhoneDigits strips everything except digits (converting a leading
+// 00 to its implicit + form) and returns '' when the result is outside the
+// 7..15 E.164 digit range. WhatsApp group IDs (120362…/120363…) are not
+// dialable numbers and are rejected too.
+export function normalizePhoneDigits(raw: string): string {
+  if (!raw) return ''
+  let s = raw.trim()
+  if (s.startsWith('00')) s = s.slice(2)
+  const digits = s.replace(/\D/g, '')
+  if (digits.length < 7 || digits.length > 15) return ''
+  if (/^12036[23]/.test(digits)) return ''
+  return digits
+}
+
+// looksLikePhoneNumber mirrors internal/utils/phone.go LooksLikePhoneNumber
+// (at least 7 digits, digits > 70% of the candidate) so frontend and backend
+// agree on what counts as a phone number.
+function looksLikePhoneNumber(candidate: string): boolean {
+  const digits = (candidate.match(/\d/g) || []).length
+  if (digits < 7 || digits > 15) return false
+  if (digits / candidate.length <= 0.7) return false
+  // Dates (2026-09-11, 11/09/2026) pass the ratio test but are not phones.
+  if (/^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}$/.test(candidate)) return false
+  if (/^\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}$/.test(candidate)) return false
+  return true
+}
+
+// splitPhones sub-splits a plain-text chunk on phone-number candidates.
+// Candidates may carry +, spaces, dashes, dots or (parentheses) and must
+// start/end with a digit so surrounding punctuation stays plain text.
+function splitPhones(text: string): LinkSegment[] {
+  const segments: LinkSegment[] = []
+  const regex = /(?:\+|00)?\d[\d\s\-().]{5,}\d/g
+  let cursor = 0
+  let match: RegExpExecArray | null
+  while ((match = regex.exec(text)) !== null) {
+    const candidate = match[0]
+    const digits = normalizePhoneDigits(candidate)
+    if (!digits || !looksLikePhoneNumber(candidate)) continue
+    if (match.index > cursor) {
+      segments.push({ text: text.slice(cursor, match.index) })
+    }
+    segments.push({ text: candidate, kind: 'phone', phone: digits })
+    cursor = match.index + candidate.length
+    regex.lastIndex = cursor
+  }
+  if (cursor < text.length) {
+    segments.push({ text: text.slice(cursor) })
+  }
+  // No phone found — return the chunk untouched (same shape as before).
+  if (segments.length === 0) return [{ text }]
+  return segments
+}
+
+// linkifySegments splits message text into plain-text, URL and phone-number
+// segments so chat bubbles can render clickable anchors without v-html.
+// URLs are extracted first (behavior unchanged); phone detection only runs
+// on the remaining plain-text chunks so it can never hijack a URL.
 export function linkifySegments(text: string): LinkSegment[] {
   if (!text) return []
-  const segments: LinkSegment[] = []
+  const raw: LinkSegment[] = []
   const regex = /(https?:\/\/[^\s<>]+|www\.[^\s<>]+)/gi
   let cursor = 0
   let match: RegExpExecArray | null
@@ -183,18 +242,19 @@ export function linkifySegments(text: string): LinkSegment[] {
     const url = trimTrailingPunctuation(match[0])
     if (!url) continue
     if (match.index > cursor) {
-      segments.push({ text: text.slice(cursor, match.index) })
+      raw.push({ text: text.slice(cursor, match.index) })
     }
-    segments.push({
+    raw.push({
       text: url,
+      kind: 'url',
       href: url.toLowerCase().startsWith('www.') ? `https://${url}` : url
     })
     cursor = match.index + url.length
     regex.lastIndex = cursor
   }
   if (cursor < text.length) {
-    segments.push({ text: text.slice(cursor) })
+    raw.push({ text: text.slice(cursor) })
   }
-  return segments
+  return raw.flatMap(seg => (seg.href ? [seg] : splitPhones(seg.text)))
 }
 
