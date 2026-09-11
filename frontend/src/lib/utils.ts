@@ -174,13 +174,23 @@ function trimTrailingPunctuation(url: string): string {
   return result
 }
 
+// normalizeArabicDigits converts Arabic-Indic (٠-٩ U+0660-0669) and Extended
+// Arabic-Indic / Persian (۰-۹ U+06F0-06F9) digits to ASCII 0-9 so a query
+// typed as "٤٦٢٨" matches a stored "4628".
+export function normalizeArabicDigits(s: string): string {
+  if (!s) return s
+  return s
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - '٠'.charCodeAt(0)))
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - '۰'.charCodeAt(0)))
+}
+
 // normalizePhoneDigits strips everything except digits (converting a leading
 // 00 to its implicit + form) and returns '' when the result is outside the
 // 7..15 E.164 digit range. WhatsApp group IDs (120362…/120363…) are not
 // dialable numbers and are rejected too.
 export function normalizePhoneDigits(raw: string): string {
   if (!raw) return ''
-  let s = raw.trim()
+  let s = normalizeArabicDigits(raw.trim())
   if (s.startsWith('00')) s = s.slice(2)
   const digits = s.replace(/\D/g, '')
   if (digits.length < 7 || digits.length > 15) return ''

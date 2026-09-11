@@ -64,6 +64,44 @@ type ReactionInfo struct {
 	FromUser  string `json:"from_user,omitempty"`
 }
 
+// normalizeContactSearchDigits converts Arabic-Indic (٠-٩ U+0660-0669) and
+// Extended Arabic-Indic / Persian (۰-۹ U+06F0-06F9) digits to ASCII 0-9, then
+// strips phone formatting (leading +, spaces, dashes, dots, parentheses) from
+// digit-only queries — mirroring frontend normalizeContactSearch in
+// frontend/src/stores/contacts.ts. This lets "٤٦٢٨" match a stored "4628".
+func normalizeContactSearchDigits(s string) string {
+	s = strings.Map(func(r rune) rune {
+		switch {
+		case r >= '٠' && r <= '٩':
+			return '0' + (r - '٠')
+		case r >= '۰' && r <= '۹':
+			return '0' + (r - '۰')
+		}
+		return r
+	}, s)
+	trimmed := strings.TrimSpace(s)
+	trimmed = strings.TrimPrefix(trimmed, "+")
+	if trimmed == "" {
+		return trimmed
+	}
+	isPhone := true
+	for _, ch := range trimmed {
+		if (ch < '0' || ch > '9') && ch != ' ' && ch != '+' && ch != '(' && ch != ')' && ch != '-' && ch != '.' {
+			isPhone = false
+			break
+		}
+	}
+	if isPhone {
+		trimmed = strings.Map(func(r rune) rune {
+			if r >= '0' && r <= '9' {
+				return r
+			}
+			return -1
+		}, trimmed)
+	}
+	return trimmed
+}
+
 // ListContacts returns all contacts for the organization
 // Users without contacts:read permission only see contacts assigned to them
 func (a *App) ListContacts(r *fastglue.Request) error {
@@ -128,6 +166,12 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 		// Limit search string length to prevent abuse
 		if len(search) > 1000 {
 			search = search[:1000]
+		}
+		search = normalizeContactSearchDigits(search)
+		if search == "" {
+			// Query was only phone formatting (e.g. "+") — match nothing
+			// rather than falling back to "%...%" semantics.
+			search = "\x00"
 		}
 		searchPattern := "%" + search + "%"
 		// Use ILIKE for case-insensitive search on profile_name

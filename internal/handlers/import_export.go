@@ -231,13 +231,16 @@ func (a *App) ExportData(r *fastglue.Request) error {
 
 	// Apply filters
 	if search, ok := req.Filters["search"]; ok && search != "" {
-		searchPattern := "%" + search + "%"
 		switch req.Table {
 		case "contacts":
+			// Normalize Arabic-Indic digits so "٤٦٢٨" matches stored "4628".
+			search = normalizeContactSearchDigits(search)
+			searchPattern := "%" + search + "%"
 			// Use ILIKE for case-insensitive search on profile_name
 			query = query.Where("phone_number LIKE ? OR profile_name ILIKE ?", searchPattern, searchPattern)
 		case "tags":
 			// models.Tag has no description column — search on name only.
+			searchPattern := "%" + search + "%"
 			query = query.Where("name ILIKE ?", searchPattern)
 		}
 	}

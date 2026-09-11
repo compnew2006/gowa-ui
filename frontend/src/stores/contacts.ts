@@ -4,12 +4,21 @@ import { contactsService, messagesService, api } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import { STATUS_VIRTUAL_CONTACT, STATUS_CONTACT_ID, isStatusContact } from '@/lib/status'
 
+// Converts Arabic-Indic (٠-٩) and Extended Arabic-Indic / Persian (۰-۹)
+// digits to ASCII so "٤٦٢٨" matches a stored "4628".
+function normalizeArabicDigits(s: string): string {
+  return s
+    .replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - '٠'.charCodeAt(0)))
+    .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - '۰'.charCodeAt(0)))
+}
+
 // Phones are stored without leading + or whitespace (see CreateContact in
 // internal/handlers/contacts.go). Strip them from a digit-only query so a user
 // typing "+91 98765 43210" still matches a stored "919876543210" via the
 // server's substring LIKE.
 function normalizeContactSearch(raw: string): string {
-  const trimmed = raw.trim().replace(/^\+/, '')
+  const ascii = normalizeArabicDigits(raw)
+  const trimmed = ascii.trim().replace(/^\+/, '')
   if (trimmed && /^[\d\s+()-]+$/.test(trimmed)) {
     return trimmed.replace(/[\s+()-]/g, '')
   }
@@ -334,7 +343,7 @@ export const useContactsStore = defineStore('contacts', () => {
     const needle = q.toLowerCase()
     const matches = sortedContacts.value.filter(c =>
       (c.name?.toLowerCase().includes(needle)) ||
-      (c.phone_number?.toLowerCase().includes(needle)) ||
+      (normalizeArabicDigits(c.phone_number || '').toLowerCase().includes(needle)) ||
       (c.assigned_user_name?.toLowerCase().includes(needle))
     )
     return matches
