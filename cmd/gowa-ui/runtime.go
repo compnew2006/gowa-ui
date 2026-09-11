@@ -60,6 +60,15 @@ type processorHandles struct {
 // minutes). Each gets its own cancellable context so shutdown can stop them
 // independently. All three "started" log lines are preserved verbatim.
 func startProcessors(app *handlers.App, lo logf.Logger) *processorHandles {
+	// One-shot GOWA device-id self-heal (non-blocking): re-link accounts whose
+	// gowa_device_id no longer matches the engine (device renamed) via JID,
+	// so send/receipts/media recovery don't fail with DEVICE_NOT_FOUND.
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		app.RepairGowaDeviceIDs(ctx)
+	}()
+
 	// Start daily chat-reset processor (polls every minute, resets assigned
 	// chats to pending per account schedule).
 	chatResetProcessor := handlers.NewChatResetProcessor(app, time.Minute)
