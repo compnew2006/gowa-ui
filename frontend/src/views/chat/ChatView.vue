@@ -79,6 +79,7 @@ import {
   RotateCw,
   Trash2,
   Filter,
+  Copy,
   StickyNote,
   CalendarClock,
   Lock,
@@ -92,7 +93,7 @@ import {
   ListChecks,
   Package
 } from 'lucide-vue-next'
-import { getInitials, getAvatarGradient, avatarSrc, linkifySegments, normalizePhoneDigits } from '@/lib/utils'
+import { getInitials, getAvatarGradient, avatarSrc, linkifySegments, normalizePhoneDigits, samePhoneDigits, phoneSearchVariants } from '@/lib/utils'
 import { contactsService } from '@/services/api'
 import { toast } from 'vue-sonner'
 import { useColorMode } from '@/composables/useColorMode'
@@ -273,6 +274,41 @@ function toggleSelectInSelectMode(message: Message) {
   if (mediaSelectMode.value) toggleMessageSelect(message.id)
 }
 
+// ─── Copy text-only bubble ───
+// Shown only when the bubble holds plain text (no downloadable media file).
+// Uses the same getMessageContent/canDownloadMedia helpers as the renderer,
+// so captions on media bubbles stay excluded per requirement.
+function canCopyMessageText(message: Message): boolean {
+  if (message.status === 'revoked') return false
+  if (canDownloadMedia(message)) return false
+  return !!getMessageContent(message)?.trim()
+}
+
+async function copyMessageText(message: Message) {
+  const text = getMessageContent(message)
+  if (!text) return
+  try {
+    await navigator.clipboard.writeText(text)
+    toast.success(t('common.copiedToClipboard'))
+  } catch {
+    // Clipboard API unavailable (non-secure context / denied permission):
+    // fall back to the legacy execCommand path.
+    try {
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+      toast.success(t('common.copiedToClipboard'))
+    } catch {
+      toast.error(t('common.error'))
+    }
+  }
+}
+
 async function downloadSelectedZip() {
   await downloadAsZip(selectedMediaMessages.value)
   mediaSelectMode.value = false
@@ -292,29 +328,21 @@ watch(() => contactsStore.currentContact?.id, () => {
 })
 
 // ─── Clickable phone numbers in message bubbles ───
-// Two numbers count as the same conversation on exact digit match or on a
-// shared trailing-9-digit suffix (handles 01xxxxxxxx vs 201xxxxxxxx country
-// code variants without ever mismatching short codes — suffix match needs
-// at least 9 overlapping digits).
-function samePhone(a: string, b: string): boolean {
-  if (!a || !b) return false
-  if (a === b) return true
-  if (Math.min(a.length, b.length) < 9) return false
-  return a.slice(-9) === b.slice(-9)
-}
-
 const phoneLookupInFlight = ref(false)
 // Opens the conversation for a phone number tapped inside a message. Local
 // contacts are checked first (instant); otherwise a scoped server search runs
 // (ListContacts applies tenant + scopeAssignedContact, so visibility rules
-// are respected). Unknown numbers show a localized toast, never a dead nav.
+// are respected). Message text often carries local format (05…) while storage
+// is international (9665…), so the server is queried with zero-stripped
+// variants that substring-match both. Unknown numbers show a localized toast,
+// never a dead nav.
 async function openPhoneChat(rawPhone: string) {
   const digits = normalizePhoneDigits(rawPhone)
   if (!digits || phoneLookupInFlight.value) return
   const currentDigits = normalizePhoneDigits(contactsStore.currentContact?.phone_number || '')
-  if (currentDigits && samePhone(digits, currentDigits)) return
+  if (currentDigits && samePhoneDigits(digits, currentDigits)) return
   const local = contactsStore.contacts.find(c =>
-    samePhone(normalizePhoneDigits(c.phone_number || ''), digits)
+    samePhoneDigits(normalizePhoneDigits(c.phone_number || ''), digits)
   )
   if (local) {
     router.push({ name: 'chat-conversation', params: { contactId: local.id } })
@@ -322,15 +350,17 @@ async function openPhoneChat(rawPhone: string) {
   }
   phoneLookupInFlight.value = true
   try {
-    const response = await contactsService.list({ search: digits, limit: 5 })
-    const data = response.data?.data || response.data
-    const list: Contact[] = data.contacts || []
-    const match = list.find(c => samePhone(normalizePhoneDigits(c.phone_number || ''), digits))
-    if (match) {
-      router.push({ name: 'chat-conversation', params: { contactId: match.id } })
-    } else {
-      toast.error(t('chat.phoneChatNotFound', { phone: rawPhone.trim() }))
+    for (const variant of phoneSearchVariants(digits)) {
+      const response = await contactsService.list({ search: variant, limit: 10 })
+      const data = response.data?.data || response.data
+      const list: Contact[] = data.contacts || []
+      const match = list.find(c => samePhoneDigits(normalizePhoneDigits(c.phone_number || ''), digits))
+      if (match) {
+        router.push({ name: 'chat-conversation', params: { contactId: match.id } })
+        return
+      }
     }
+    toast.error(t('chat.phoneChatNotFound', { phone: rawPhone.trim() }))
   } catch {
     toast.error(t('chat.phoneChatNotFound', { phone: rawPhone.trim() }))
   } finally {
@@ -2098,6 +2128,17 @@ onUnmounted(() => {
                   @click="replyToMessage(message)"
                 >
                   <Reply class="h-3 w-3" />
+                </Button>
+                <!-- Copy plain-text bubbles (text only, no media files). -->
+                <Button
+                  v-if="canCopyMessageText(message)"
+                  variant="ghost"
+                  size="icon"
+                  class="h-6 w-6"
+                  :title="$t('common.copy')"
+                  @click="copyMessageText(message)"
+                >
+                  <Copy class="h-3 w-3" />
                 </Button>
                 <!-- Download this bubble's media file under its display
                      filename. Media messages only; history-synced files are

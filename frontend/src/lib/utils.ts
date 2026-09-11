@@ -188,6 +188,29 @@ export function normalizePhoneDigits(raw: string): string {
   return digits
 }
 
+// samePhoneDigits reports whether two normalized digit strings belong to the
+// same conversation: exact match, or a shared trailing-9-digit suffix (handles
+// local 05xxxxxxxx vs international 9665xxxxxxxx variants without ever
+// mismatching short codes — suffix match needs 9 overlapping digits).
+export function samePhoneDigits(a: string, b: string): boolean {
+  if (!a || !b) return false
+  if (a === b) return true
+  if (Math.min(a.length, b.length) < 9) return false
+  return a.slice(-9) === b.slice(-9)
+}
+
+// phoneSearchVariants builds server-search strings for a normalized number.
+// Stored numbers are usually international (9665…) while message text often
+// carries local format (05…); a raw LIKE '%05…%' never matches '9665…', so
+// the leading-zero-stripped form (a substring of both formats) comes first.
+export function phoneSearchVariants(digits: string): string[] {
+  const out: string[] = []
+  const stripped = digits.replace(/^0+/, '')
+  if (stripped.length >= 7 && stripped !== digits) out.push(stripped)
+  out.push(digits)
+  return out
+}
+
 // looksLikePhoneNumber mirrors internal/utils/phone.go LooksLikePhoneNumber
 // (at least 7 digits, digits > 70% of the candidate) so frontend and backend
 // agree on what counts as a phone number.
