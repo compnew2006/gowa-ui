@@ -58,8 +58,6 @@ interface WhatsAppAccount {
   name: string
   gowa_base_url?: string
   gowa_device_id?: string
-  gowa_username?: string
-  gowa_password?: string
   has_gowa_webhook_secret?: boolean
   is_default_incoming: boolean
   is_default_outgoing: boolean
@@ -177,8 +175,6 @@ const form = ref({
   name: '',
   gowa_base_url: '',
   gowa_device_id: '',
-  gowa_username: '',
-  gowa_password: '',
   gowa_webhook_secret: '',
   is_default_incoming: false,
   is_default_outgoing: false,
@@ -219,8 +215,6 @@ function syncForm() {
     name: account.value.name,
     gowa_base_url: account.value.gowa_base_url || '',
     gowa_device_id: account.value.gowa_device_id || '',
-    gowa_username: account.value.gowa_username || '',
-    gowa_password: account.value.gowa_password || '',
     gowa_webhook_secret: '',
     is_default_incoming: account.value.is_default_incoming,
     is_default_outgoing: account.value.is_default_outgoing,
@@ -245,8 +239,6 @@ async function save() {
       name: form.value.name,
       gowa_base_url: form.value.gowa_base_url,
       gowa_device_id: form.value.gowa_device_id,
-      gowa_username: form.value.gowa_username,
-      gowa_password: form.value.gowa_password,
       gowa_webhook_secret: form.value.gowa_webhook_secret,
       is_default_incoming: form.value.is_default_incoming,
       is_default_outgoing: form.value.is_default_outgoing,
@@ -402,10 +394,13 @@ onMounted(async () => {
                 id="account_name"
                 v-model="form.name"
                 :placeholder="$t('accounts.accountNamePlaceholder', 'e.g. Sales WhatsApp')"
-                :disabled="!canWrite"
+                :disabled="!canWrite || !isNew"
                 class="h-9"
               />
               <p class="text-[11px] text-muted-foreground">{{ $t('accounts.nameHint') }}</p>
+              <p v-if="!isNew" class="text-[11px] text-amber-600">
+                {{ $t('accounts.nameLockedHint', 'The name links chats, messages and campaigns. Renaming is disabled to protect history.') }}
+              </p>
             </div>
 
             <Separator />
@@ -436,29 +431,8 @@ onMounted(async () => {
                   :disabled="!canWrite"
                 />
               </div>
-              <div class="space-y-1.5">
-                <Label for="gowa_username" class="text-xs">{{ $t('accounts.gowaUsernameOptional') }}</Label>
-                <Input
-                  id="gowa_username"
-                  v-model="form.gowa_username"
-                  :placeholder="isNew ? 'basic-auth user' : ''"
-                  class="h-9"
-                  :disabled="!canWrite"
-                />
-              </div>
-              <div class="space-y-1.5">
-                <Label for="gowa_password" class="text-xs">{{ $t('accounts.gowaPasswordOptional') }}</Label>
-                <Input
-                  id="gowa_password"
-                  v-model="form.gowa_password"
-                  type="password"
-                  :placeholder="isNew ? 'basic-auth password' : ''"
-                  class="h-9"
-                  :disabled="!canWrite"
-                />
-              </div>
             </div>
-            <p class="text-[11px] text-muted-foreground -mt-2">{{ $t('accounts.gowaAuthHint') }}</p>
+            <p class="text-[11px] text-muted-foreground -mt-2">{{ $t('accounts.gowaAuthHint', 'Gateway credentials are managed in the GOWA Gateway, not here.') }}</p>
             <p class="text-[11px] text-muted-foreground -mt-3">
               {{ $t('accounts.deviceLifecycleHint', 'Device pairing and connection controls live in the GOWA Gateway.') }}
             </p>
@@ -486,6 +460,7 @@ onMounted(async () => {
                   <div class="min-w-0">
                     <Label class="text-xs">{{ $t('accounts.defaultIncoming') }}</Label>
                     <p class="text-[11px] text-muted-foreground mt-0.5">{{ $t('settings.incomingRoutingDesc') }}</p>
+                    <p class="text-[11px] text-amber-600 mt-0.5">{{ $t('accounts.incomingReservedHint', 'Reserved for future routing — incoming webhooks route by device, not by this switch.') }}</p>
                   </div>
                   <Switch :checked="form.is_default_incoming" @update:checked="form.is_default_incoming = $event" :disabled="!canWrite" class="shrink-0" />
                 </li>
@@ -699,6 +674,7 @@ onMounted(async () => {
           <AlertDialogTitle>{{ $t('accounts.deleteAccount', 'Delete Account') }}</AlertDialogTitle>
           <AlertDialogDescription>
             {{ $t('accounts.deleteAccountConfirm', 'Are you sure? This action cannot be undone.') }}
+            {{ $t('accounts.deleteAccountImpact', 'Linked chats, messages and campaigns keep the account name and will no longer resolve to this account.') }}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

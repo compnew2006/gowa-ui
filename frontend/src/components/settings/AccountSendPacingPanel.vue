@@ -28,20 +28,29 @@ const effectiveDefault = ref(0)
 const isSubmitting = ref(false)
 
 // Built in script: the composer's t() has no (key, fallback, named) overload.
-const defaultHint = computed(() =>
-  effectiveDefault.value > 0
+const defaultHint = computed(() => {
+  if (pacingSource.value === 'account') {
+    return `This account: ${messagesPerMinute.value}/min (overrides server default)`
+  }
+  return effectiveDefault.value > 0
     ? `Server default: ${effectiveDefault.value}/min`
     : 'No server default — off unless enabled here'
-)
+})
+const pacingSource = ref<'account' | 'server' | 'unlimited'>('unlimited')
 
 onMounted(async () => {
   try {
     const res = await sendPacingService.getSettings(props.accountId)
     const s = res.data.data
-    effectiveDefault.value = s.messages_per_minute
-    if (s.messages_per_minute > 0) {
+    // Prefer the stored account value for the switch (a server default must
+    // not look like an account override). Fall back to the legacy effective
+    // field for backward compatibility with older backends.
+    const stored = s.stored_messages_per_minute ?? (s.source ? 0 : s.messages_per_minute)
+    pacingSource.value = s.source ?? (stored > 0 ? 'account' : 'unlimited')
+    effectiveDefault.value = s.effective_messages_per_minute ?? s.messages_per_minute
+    if (stored > 0) {
       enabled.value = true
-      messagesPerMinute.value = s.messages_per_minute
+      messagesPerMinute.value = stored
     }
   } catch {
     toast.error('Failed to load send pacing settings')

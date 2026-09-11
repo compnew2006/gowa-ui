@@ -650,6 +650,9 @@ export interface ChatResetSettings {
 
 export interface SendPacingSettings {
   messages_per_minute: number
+  stored_messages_per_minute?: number
+  effective_messages_per_minute?: number
+  source?: 'account' | 'server' | 'unlimited'
 }
 
 // Per-account campaign send pacing (ban shield: messages/minute budget)

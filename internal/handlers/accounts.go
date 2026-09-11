@@ -147,6 +147,15 @@ func (a *App) CreateAccount(r *fastglue.Request) error {
 	if req.Name == "" || req.GowaBaseURL == "" || req.GowaDeviceID == "" {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Name, gowa_base_url, and gowa_device_id are required", nil, "")
 	}
+	// Duplicate-name guard (same pre-check pattern as canned_responses/tags):
+	// Name is a soft reference for 7 tables (contacts, messages, ...), so a
+	// clear 409 is safer than a generic 500 from the unique index.
+	var existing models.WhatsAppAccount
+	if err := a.DB.Where("organization_id = ? AND name = ?", orgID, req.Name).
+		First(&existing).Error; err == nil {
+		return r.SendErrorEnvelope(fasthttp.StatusConflict,
+			"Account with this name already exists", nil, "")
+	}
 	// Auto-generate webhook secret if not supplied (FR-017).
 	// Callers never need to provide one manually — the system ensures
 	// every account has a secret before it can accept webhooks.
@@ -174,19 +183,25 @@ func (a *App) CreateAccount(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create account", nil, "")
 	}
 
-	// If this is set as default, unset other defaults
-	if req.IsDefaultIncoming {
-		a.DB.Model(&models.WhatsAppAccount{}).
-			Where("organization_id = ? AND is_default_incoming = ?", orgID, true).
-			Update("is_default_incoming", false)
-	}
-	if req.IsDefaultOutgoing {
-		a.DB.Model(&models.WhatsAppAccount{}).
-			Where("organization_id = ? AND is_default_outgoing = ?", orgID, true).
-			Update("is_default_outgoing", false)
-	}
-
-	if err := a.DB.Create(&account).Error; err != nil {
+	// If this is set as default, unset other defaults — wrapped with the
+	// create in one transaction so a failed save can't leave the org
+	// without any default.
+	if err := a.DB.Transaction(func(tx *gorm.DB) error {
+		if req.IsDefaultIncoming {
+			tx.Model(&models.WhatsAppAccount{}).
+				Where("organization_id = ? AND is_default_incoming = ?", orgID, true).
+				Update("is_default_incoming", false)
+		}
+		if req.IsDefaultOutgoing {
+			tx.Model(&models.WhatsAppAccount{}).
+				Where("organization_id = ? AND is_default_outgoing = ?", orgID, true).
+				Update("is_default_outgoing", false)
+		}
+		if err := tx.Create(&account).Error; err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
 		a.Log.Error("Failed to create account", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create account", nil, "")
 	}
@@ -264,8 +279,17 @@ func (a *App) UpdateAccount(r *fastglue.Request) error {
 		return nil
 	}
 
-	// Update fields if provided
-	if req.Name != "" {
+	// Update fields if provided.
+	// NOTE: Name is a soft reference for contacts/messages/campaigns/etc.
+	// Renaming is still allowed (historical behavior + existing tests), but
+	// a duplicate name is rejected with a clear 409.
+	if req.Name != "" && req.Name != account.Name {
+		var dup models.WhatsAppAccount
+		if err := a.DB.Where("organization_id = ? AND name = ?", orgID, req.Name).
+			First(&dup).Error; err == nil {
+			return r.SendErrorEnvelope(fasthttp.StatusConflict,
+				"Account with this name already exists", nil, "")
+		}
 		account.Name = req.Name
 	}
 
@@ -300,22 +324,28 @@ func (a *App) UpdateAccount(r *fastglue.Request) error {
 
 	account.AutoReadReceipt = req.AutoReadReceipt
 
-	// Handle default flags
-	if req.IsDefaultIncoming && !account.IsDefaultIncoming {
-		a.DB.Model(&models.WhatsAppAccount{}).
-			Where("organization_id = ? AND is_default_incoming = ?", orgID, true).
-			Update("is_default_incoming", false)
-	}
-	if req.IsDefaultOutgoing && !account.IsDefaultOutgoing {
-		a.DB.Model(&models.WhatsAppAccount{}).
-			Where("organization_id = ? AND is_default_outgoing = ?", orgID, true).
-			Update("is_default_outgoing", false)
-	}
+	// Handle default flags atomically with the save: unsetting other
+	// defaults and persisting this account happen in one transaction.
 	account.IsDefaultIncoming = req.IsDefaultIncoming
 	account.IsDefaultOutgoing = req.IsDefaultOutgoing
 	account.UpdatedByID = &userID
 
-	if err := a.DB.Save(account).Error; err != nil {
+	if err := a.DB.Transaction(func(tx *gorm.DB) error {
+		if req.IsDefaultIncoming && !oldAccount.IsDefaultIncoming {
+			tx.Model(&models.WhatsAppAccount{}).
+				Where("organization_id = ? AND is_default_incoming = ?", orgID, true).
+				Update("is_default_incoming", false)
+		}
+		if req.IsDefaultOutgoing && !oldAccount.IsDefaultOutgoing {
+			tx.Model(&models.WhatsAppAccount{}).
+				Where("organization_id = ? AND is_default_outgoing = ?", orgID, true).
+				Update("is_default_outgoing", false)
+		}
+		if err := tx.Save(account).Error; err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
 		a.Log.Error("Failed to update account", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update account", nil, "")
 	}
@@ -362,20 +392,22 @@ func (a *App) DeleteAccount(r *fastglue.Request) error {
 		return nil
 	}
 
-	// Best-effort: log the GOWA device out before removing the account so the
-	// pairing dies server-side too (gap #4). Failure is logged, not fatal —
-	// the account deletion must not be blocked by an unreachable gateway.
+	// Delete the row FIRST, then log the device out best-effort. The old
+	// order (logout before delete) could orphan a live account with a dead
+	// session if the DB delete failed after a successful logout.
+	if err := a.DB.Delete(account).Error; err != nil {
+		a.Log.Error("Failed to delete account", "error", err)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete account", nil, "")
+	}
+
+	// Best-effort: log the GOWA device out after the commit so the pairing
+	// dies server-side too. Failure is logged, not fatal.
 	if account.GowaDeviceID != "" {
 		if gc, ok := a.resolveProvider(account).(*gowa.Client); ok && gc != nil {
 			if err := gc.LogoutDevice(context.Background(), account.GowaDeviceID); err != nil {
 				a.Log.Warn("DeleteAccount: failed to logout GOWA device", "device_id", account.GowaDeviceID, "error", err)
 			}
 		}
-	}
-
-	if err := a.DB.Delete(account).Error; err != nil {
-		a.Log.Error("Failed to delete account", "error", err)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to delete account", nil, "")
 	}
 
 	// Remove now-dangling user assignments for this account (hard delete —
