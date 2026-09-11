@@ -89,3 +89,116 @@ func TestApp_CreateAccount_DefaultIncomingFlipsExisting(t *testing.T) {
 	require.NoError(t, app.DB.Where("name = ?", "new-default").First(&fresh).Error)
 	assert.True(t, fresh.IsDefaultIncoming)
 }
+
+// --- Duplicate name → 409 (name is a soft reference for 7 tables) ---
+
+func TestApp_CreateAccount_DuplicateNameConflict(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := createAdminUser(t, app, org.ID)
+	testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+
+	// The seeded account's name, submitted again.
+	var seeded models.WhatsAppAccount
+	require.NoError(t, app.DB.First(&seeded, "organization_id = ?", org.ID).Error)
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"name":           seeded.Name,
+		"gowa_base_url":  "http://gowa.local:3000",
+		"gowa_device_id": "device-dup",
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+
+	require.NoError(t, app.CreateAccount(req))
+	assert.Equal(t, fasthttp.StatusConflict, testutil.GetResponseStatusCode(req))
+}
+
+func TestApp_UpdateAccount_DuplicateNameConflict(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := createAdminUser(t, app, org.ID)
+	accountA := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+	accountB := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"name": accountB.Name, // already taken by B → 409
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", accountA.ID.String())
+
+	require.NoError(t, app.UpdateAccount(req))
+	assert.Equal(t, fasthttp.StatusConflict, testutil.GetResponseStatusCode(req))
+
+	// A must be untouched.
+	var fresh models.WhatsAppAccount
+	require.NoError(t, app.DB.Where("id = ?", accountA.ID).First(&fresh).Error)
+	assert.Equal(t, accountA.Name, fresh.Name)
+}
+
+// --- Failed create/save must not wipe the org's existing defaults ---
+
+func TestApp_CreateAccount_FailedCreatePreservesDefaults(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := createAdminUser(t, app, org.ID)
+	existing := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+	require.NoError(t, app.DB.Model(existing).Update("is_default_outgoing", true).Error)
+
+	// 101 chars overflows varchar(100) → the tx Create fails AFTER the
+	// unset-other-defaults UPDATE, so the rollback is what saves the flag.
+	longName := strings.Repeat("x", 101)
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"name":                longName,
+		"gowa_base_url":       "http://gowa.local:3000",
+		"gowa_device_id":      "device-overflow",
+		"is_default_outgoing": true,
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+
+	require.NoError(t, app.CreateAccount(req))
+	require.Equal(t, fasthttp.StatusInternalServerError, testutil.GetResponseStatusCode(req))
+
+	var prev models.WhatsAppAccount
+	require.NoError(t, app.DB.Where("id = ?", existing.ID).First(&prev).Error)
+	assert.True(t, prev.IsDefaultOutgoing, "a failed create must not leave the org without its default")
+
+	var count int64
+	app.DB.Model(&models.WhatsAppAccount{}).Where("name = ?", longName).Count(&count)
+	assert.Zero(t, count, "the overflowing account row must not persist")
+}
+
+func TestApp_UpdateAccount_FailedSavePreservesDefaults(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := createAdminUser(t, app, org.ID)
+	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+	other := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+	require.NoError(t, app.DB.Model(other).Update("is_default_outgoing", true).Error)
+
+	// Renaming to 101 chars fails the tx Save after the unset-defaults UPDATE.
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"name":                strings.Repeat("y", 101),
+		"is_default_outgoing": true,
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", account.ID.String())
+
+	require.NoError(t, app.UpdateAccount(req))
+	require.Equal(t, fasthttp.StatusInternalServerError, testutil.GetResponseStatusCode(req))
+
+	var prev models.WhatsAppAccount
+	require.NoError(t, app.DB.Where("id = ?", other.ID).First(&prev).Error)
+	assert.True(t, prev.IsDefaultOutgoing, "a failed save must not leave the org without its default")
+
+	var fresh models.WhatsAppAccount
+	require.NoError(t, app.DB.Where("id = ?", account.ID).First(&fresh).Error)
+	assert.Equal(t, account.Name, fresh.Name, "name must be unchanged after the failed save")
+}

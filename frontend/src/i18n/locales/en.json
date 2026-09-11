@@ -1336,7 +1336,7 @@
     "createDeviceDesc": "Creates a fresh device ID on the selected server.",
     "gowaUsernameOptional": "Username",
     "gowaPasswordOptional": "Password",
-    "gowaAuthHint": "Leave blank if the server does not require basic auth.",
+    "gowaAuthHint": "Gateway credentials are managed in the GOWA Gateway, not here.",
     "gowaWebhookSecret": "Webhook secret",
     "gowaWebhookSecretPlaceholder": "Set a new secret (leave blank to keep current)",
     "nameHint": "Shown to teammates and in audit logs.",

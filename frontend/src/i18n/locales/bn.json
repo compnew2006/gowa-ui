@@ -1322,7 +1322,7 @@
     "createDeviceDesc": "নির্বাচিত সার্ভারে একটি নতুন ডিভাইস ID তৈরি করে।",
     "gowaUsernameOptional": "ব্যবহারকারীর নাম",
     "gowaPasswordOptional": "পাসওয়ার্ড",
-    "gowaAuthHint": "সার্ভারে বেসিক অথ না লাগলে খালি রাখুন।",
+    "gowaAuthHint": "গেটওয়ে ক্রেডেনশিয়াল এখানে নয়, GOWA Gateway-এ পরিচালিত হয়।",
     "gowaWebhookSecret": "ওয়েবহুক সিক্রেট",
     "gowaWebhookSecretPlaceholder": "নতুন সিক্রেট সেট করুন (বর্তমান রাখতে খালি)",
     "nameHint": "সতীর্থ ও অডিট লগে দেখানো হয়।",

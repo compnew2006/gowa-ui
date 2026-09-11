@@ -1322,7 +1322,7 @@
     "createDeviceDesc": "منتخب شدہ سرور پر نیا ڈیوائس ID بناتا ہے۔",
     "gowaUsernameOptional": "صارف نام",
     "gowaPasswordOptional": "پاس ورڈ",
-    "gowaAuthHint": "اگر سرور کو بنیادی auth درکار نہیں تو خالی چھوڑیں۔",
+    "gowaAuthHint": "گیٹوی کی اسناد یہاں نہیں، GOWA Gateway میں منظم ہوتی ہیں۔",
     "gowaWebhookSecret": "ویب ہوک سیکرٹ",
     "gowaWebhookSecretPlaceholder": "نیا سیکرٹ سیٹ کریں (موجودہ رکھنے کے لیے خالی)",
     "nameHint": "ساتھیوں اور آڈٹ لاگز میں دکھائی دیتا ہے۔",

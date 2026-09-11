@@ -1320,7 +1320,7 @@
     "createDeviceDesc": "चुने गए सर्वर पर एक नया डिवाइस ID बनाता है।",
     "gowaUsernameOptional": "उपयोगकर्ता नाम",
     "gowaPasswordOptional": "पासवर्ड",
-    "gowaAuthHint": "यदि सर्वर को बेसिक ऑथ नहीं चाहिए तो खाली छोड़ें।",
+    "gowaAuthHint": "गेटवे क्रेडेंशियल यहाँ नहीं, GOWA Gateway में प्रबंधित होते हैं।",
     "gowaWebhookSecret": "वेबहुक सीक्रेट",
     "gowaWebhookSecretPlaceholder": "नया सीक्रेट सेट करें (वर्तमान रखने के लिए खाली)",
     "nameHint": "साथियों और ऑडिट लॉग में दिखाया गया।",

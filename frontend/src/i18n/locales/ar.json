@@ -1088,7 +1088,7 @@
     "createDeviceDesc": "ينشئ معرّف جهاز جديد على الخادم المحدد.",
     "gowaUsernameOptional": "اسم المستخدم",
     "gowaPasswordOptional": "كلمة المرور",
-    "gowaAuthHint": "اتركه فارغًا إذا كان الخادم لا يتطلب مصادقة أساسية.",
+    "gowaAuthHint": "بيانات الدخول إلى البوابة بتُدار من صفحة GOWA Gateway، مش من هنا.",
     "gowaWebhookSecret": "سر الـ Webhook",
     "gowaWebhookSecretPlaceholder": "أدخل سرًا جديدًا (اتركه فارغًا للإبقاء على الحالي)",
     "nameHint": "يظهر لزملائك وفي سجلات التدقيق.",
