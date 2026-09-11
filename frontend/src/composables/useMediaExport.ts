@@ -19,10 +19,13 @@ export interface UseMediaExportResult {
   progress: ReturnType<typeof ref<{ current: number; total: number }>>
   /** Set of message IDs currently being re-downloaded (per-message spinners). */
   redownloading: ReturnType<typeof ref<Set<string>>>
-  /** Download the given messages as a single server-built ZIP. */
-  downloadAsZip: (messages: Message[]) => Promise<void>
-  /** Download each message's media as a separate file, sequentially. */
-  downloadSeparately: (messages: Message[]) => Promise<void>
+  /** Download the given messages as a single server-built ZIP. Resolves true
+   *  only when the archive was actually saved (used to "seal" the album so
+   *  later files group separately — sealing never blocks re-download). */
+  downloadAsZip: (messages: Message[]) => Promise<boolean>
+  /** Download each message's media as a separate file, sequentially.
+   *  Resolves true only when every file was saved. */
+  downloadSeparately: (messages: Message[]) => Promise<boolean>
   /** Re-fetch a message's media from the provider. Returns updated fields. */
   redownload: (message: Message) => Promise<RedownloadResult>
 }
@@ -42,12 +45,12 @@ export function useMediaExport(): UseMediaExportResult {
   const isDownloading = ref(false)
   const progress = ref({ current: 0, total: 0 })
   const redownloading = ref(new Set<string>())
-  async function downloadAsZip(messages: Message[]): Promise<void> {
+  async function downloadAsZip(messages: Message[]): Promise<boolean> {
     // No export-permission pre-check here: the ZIP bundles the same files the
     // per-message endpoint already serves to anyone who can view the chat —
     // the backend enforces identical org + visibility scoping on /api/media/zip.
     const eligible = messages.filter((m) => !!m.media_url)
-    if (eligible.length === 0) return
+    if (eligible.length === 0) return false
 
     isDownloading.value = true
     progress.value = { current: 0, total: eligible.length }
@@ -62,16 +65,18 @@ export function useMediaExport(): UseMediaExportResult {
       progress.value = { current: eligible.length, total: eligible.length }
       saveBlob(blob, zipFilename())
       toast.success(t('chat.filesDownloaded'))
+      return true
     } catch (e: any) {
       toast.error(t('chat.downloadFailed'), { description: e?.message || t('chat.tryAgain') })
+      return false
     } finally {
       isDownloading.value = false
     }
   }
 
-  async function downloadSeparately(messages: Message[]): Promise<void> {
+  async function downloadSeparately(messages: Message[]): Promise<boolean> {
     const eligible = messages.filter((m) => !!m.media_url)
-    if (eligible.length === 0) return
+    if (eligible.length === 0) return false
 
     isDownloading.value = true
     progress.value = { current: 0, total: eligible.length }
@@ -91,8 +96,10 @@ export function useMediaExport(): UseMediaExportResult {
         }
       }
       toast.success(t('chat.filesDownloaded'))
+      return true
     } catch (e: any) {
       toast.error(t('chat.downloadFailed'), { description: e?.message || t('chat.tryAgain') })
+      return false
     } finally {
       isDownloading.value = false
     }

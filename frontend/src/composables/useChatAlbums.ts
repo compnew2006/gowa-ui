@@ -52,6 +52,13 @@ export interface UseChatAlbumsOptions {
    *  a message that would not render as media on its own must not join an
    *  album either (status/newsletter contacts have unrecoverable media). */
   shouldRenderMedia: (message: Message) => boolean
+  /** IDs of messages belonging to an already-downloaded ("sealed") album.
+   *  A sealed group never absorbs newly received files: when the seal status
+   *  of the run's last member and the incoming candidate differs, the run is
+   *  flushed so the newcomer starts a fresh group. Re-downloading a sealed
+   *  album still works — sealing only splits grouping, never blocks export.
+   *  Accepts a getter so the render-items computed stays reactive to seals. */
+  sealedIds?: Set<string> | (() => Set<string>)
 }
 
 export function useChatAlbums(
@@ -59,7 +66,11 @@ export function useChatAlbums(
   options: UseChatAlbumsOptions
 ) {
   const renderItems = computed<MessageRenderItem[]>(() =>
-    buildRenderItems(messages.value, options.shouldRenderMedia)
+    buildRenderItems(
+      messages.value,
+      options.shouldRenderMedia,
+      typeof options.sealedIds === 'function' ? options.sealedIds() : options.sealedIds
+    )
   )
   return { renderItems }
 }
@@ -103,10 +114,14 @@ function withinAlbumGap(prev: Message, next: Message): boolean {
 }
 
 /** Fold a flat, oldest→newest message list into render items. Exported for
- *  tests — pure, no reactive dependencies. */
+ *  tests — pure, no reactive dependencies. `sealedIds` holds messages of an
+ *  already-downloaded album: a run split on seal-status change keeps the old
+ *  (sealed) bubble intact while newly received files start their own group,
+ *  even inside ALBUM_GAP_MS. */
 export function buildRenderItems(
   messages: Message[],
-  shouldRenderMedia: (m: Message) => boolean
+  shouldRenderMedia: (m: Message) => boolean,
+  sealedIds?: Set<string>
 ): MessageRenderItem[] {
   const items: MessageRenderItem[] = []
   let group: Message[] = []
@@ -126,9 +141,18 @@ export function buildRenderItems(
   for (let i = 0; i < messages.length; i++) {
     const message = messages[i]
     const candidate = isAlbumCandidate(message, shouldRenderMedia)
+    const last = group.length > 0 ? group[group.length - 1] : undefined
+    // Seal-status change splits the run: a sealed (already downloaded) group
+    // never absorbs a newly received file, and vice versa. Without sealedIds
+    // this is a no-op — grouping behaves exactly as before.
+    const sealSplit =
+      !!sealedIds &&
+      !!last &&
+      (sealedIds.has(last.id) !== sealedIds.has(message.id))
     const joinsRun =
       candidate &&
       group.length > 0 &&
+      !sealSplit &&
       sameAlbumSide(group[group.length - 1], message) &&
       withinAlbumGap(group[group.length - 1], message)
 

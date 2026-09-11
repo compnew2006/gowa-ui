@@ -1,10 +1,13 @@
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import type { Ref } from 'vue'
 import { toast } from 'vue-sonner'
 import { api, getRequestHeaders } from '@/services/api'
-import { getErrorMessage } from '@/lib/api-utils'
 import { mediaDisplayName, mediaUrl, saveBlob } from '@/lib/media'
 import type { Message } from '@/stores/contacts'
+
+/** Max files per send batch. Each file is sent as its own message via a
+ * synchronous GOWA upload, so larger batches risk long dialogs/timeouts. */
+export const MAX_BATCH_FILES = 10
 
 export interface UseChatMediaOptions {
   /** i18n translator. */
@@ -46,20 +49,31 @@ export interface UseChatMediaOptions {
 export function useChatMedia(options: UseChatMediaOptions) {
   const { t, contactsStore, selectedAccount } = options
 
-  // File upload state (fileInputRef is owned by the view, passed in)
+  // File upload state (fileInputRef is owned by the view, passed in).
   const fileInputRef = options.fileInputRef
-  const selectedFile = ref<File | null>(null)
-  const filePreviewUrl = ref<string | null>(null)
+  // Multi-file queue: the picker accepts several files, each sent as its own
+  // message (caption goes on the first only, so the rest can still fold into
+  // an album bubble at render time — see useChatAlbums).
+  const selectedFiles = ref<File[]>([])
+  const activeFileIndex = ref(0)
+  const filePreviewUrls = ref<(string | null)[]>([])
+  // Back-compat selectors for the single active file (the view's preview
+  // blocks keep working unchanged).
+  const selectedFile = computed(() => selectedFiles.value[activeFileIndex.value] ?? null)
+  const filePreviewUrl = computed(() => filePreviewUrls.value[activeFileIndex.value] ?? null)
   const isMediaDialogOpen = ref(false)
   const mediaCaption = ref('')
   const isUploadingMedia = ref(false)
-  // 0..100 upload progress (bytes sent to the server). Reaches 100 while the
-  // server still processes (GOWA send), during which isUploadingMedia keeps
-  // the "sending" state on the button.
+  // 0..100 overall batch progress (completed files + current file fraction).
   const uploadProgress = ref(0)
+  // 1-based position inside the batch while sending ("file 2 of 5").
+  const uploadCurrent = ref(0)
+  const uploadTotal = ref(0)
   // Aborts the in-flight upload when the user cancels mid-transfer. Non-null
-  // only while an upload request is running.
+  // only while an upload request is running. batchCancelled stops the queue
+  // loop after the current file finishes aborting.
   let uploadAbort: AbortController | null = null
+  let batchCancelled = false
 
   // Messages whose media failed to load in the DOM (video error, image error).
   // Keyed by message id so the "Retry download" affordance only shows on broken bubbles.
@@ -175,92 +189,127 @@ export function useChatMedia(options: UseChatMediaOptions) {
     fileInputRef.value?.click()
   }
 
-  function handleFileSelect(event: Event) {
-    const input = event.target as HTMLInputElement
-    const file = input.files?.[0]
-    if (!file) return
-
-    // Validate file type. The MIME check alone is not enough: browsers report
-    // empty or generic application/octet-stream MIME for archives (.zip/.rar/
-    // .7z) on several platforms, which used to reject valid documents. Fall
-    // back to the file extension — kept in sync with the file input's accept
-    // attribute in ChatView.vue.
+  // Per-file validation shared by single and batch picks. Returns the
+  // failure reason so the caller can group offending names in one toast.
+  // Extension fallback kept in sync with the file input's accept attribute
+  // in ChatView.vue (browsers report empty/generic MIME for archives).
+  function validateFile(file: File): 'type' | 'size' | null {
     const allowedMimePrefixes = ['image/', 'video/', 'audio/', 'text/', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument', 'application/zip', 'application/x-zip-compressed', 'application/x-7z-compressed', 'application/x-rar-compressed', 'application/rar', 'application/rtf', 'application/json', 'application/xml', 'application/vnd.oasis.opendocument']
     const allowedExtensions = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv', 'html', 'htm', 'zip', 'rar', '7z', 'md', 'json', 'xml', 'rtf', 'odt', 'ods', 'odp']
     const ext = (file.name.split('.').pop() || '').toLowerCase()
     const isAllowed = allowedMimePrefixes.some(type => file.type.startsWith(type)) || allowedExtensions.includes(ext)
-    if (!isAllowed) {
-      toast.error(t('chat.unsupportedFileType'), {
-        description: t('chat.unsupportedFileTypeDesc')
-      })
-      return
-    }
+    if (!isAllowed) return 'type'
 
-    // Validate file size — aligned with the engine: GOWA (go-whatsapp-web-
-    // multidevice) enforces a hard 50MB upload limit ("max file upload is
-    // 50 MB"); media (image/video/audio) stay at WhatsApp's 16MB. Everything
-    // upstream (nginx 110M, server body 110MB) only provides headroom.
+    // Size limits aligned with the engine: GOWA enforces a hard 50MB upload
+    // limit; media (image/video/audio) stay at WhatsApp's 16MB.
     const isMediaType = file.type.startsWith('image/') || file.type.startsWith('video/') || file.type.startsWith('audio/')
     const maxSize = isMediaType ? 16 * 1024 * 1024 : 50 * 1024 * 1024
-    if (file.size > maxSize) {
+    if (file.size > maxSize) return 'size'
+    return null
+  }
+
+  function revokePreviews() {
+    for (const url of filePreviewUrls.value) {
+      if (url) URL.revokeObjectURL(url)
+    }
+    filePreviewUrls.value = []
+  }
+
+  function handleFileSelect(event: Event) {
+    const input = event.target as HTMLInputElement
+    const picked = Array.from(input.files ?? [])
+    // Reset input so the same files can be selected again
+    input.value = ''
+    if (!picked.length) return
+
+    if (picked.length > MAX_BATCH_FILES) {
+      toast.error(t('chat.tooManyFiles', { max: MAX_BATCH_FILES }))
+      return
+    }
+    // Validate the whole batch upfront — a batch with any invalid file does
+    // not start, so the user fixes the pick instead of getting a partial send.
+    const badType = picked.filter((f) => validateFile(f) === 'type')
+    if (badType.length) {
+      toast.error(t('chat.unsupportedFileType'), {
+        description: badType.map((f) => f.name).join(', ')
+      })
+      return
+    }
+    const tooBig = picked.filter((f) => validateFile(f) === 'size')
+    if (tooBig.length) {
       toast.error(t('chat.fileTooLarge'), {
-        description: t('chat.fileTooLargeDesc')
+        description: tooBig.map((f) => f.name).join(', ')
       })
       return
     }
 
-    selectedFile.value = file
+    revokePreviews()
+    selectedFiles.value = picked
+    activeFileIndex.value = 0
+    // Create preview URLs for images and videos only
+    filePreviewUrls.value = picked.map((f) =>
+      f.type.startsWith('image/') || f.type.startsWith('video/') ? URL.createObjectURL(f) : null
+    )
     mediaCaption.value = ''
 
-    // Create preview URL for images and videos
-    if (file.type.startsWith('image/') || file.type.startsWith('video/')) {
-      filePreviewUrl.value = URL.createObjectURL(file)
-    } else {
-      filePreviewUrl.value = null
-    }
-
     isMediaDialogOpen.value = true
+  }
 
-    // Reset input so same file can be selected again
-    input.value = ''
+  /** Drop a queued file before sending (releases its preview URL). */
+  function removeFile(index: number) {
+    const remaining = selectedFiles.value.filter((_, i) => i !== index)
+    const url = filePreviewUrls.value[index]
+    if (url) URL.revokeObjectURL(url)
+    filePreviewUrls.value = filePreviewUrls.value.filter((_, i) => i !== index)
+    selectedFiles.value = remaining
+    if (activeFileIndex.value >= remaining.length) {
+      activeFileIndex.value = Math.max(0, remaining.length - 1)
+    }
+    if (!remaining.length) {
+      isMediaDialogOpen.value = false
+      mediaCaption.value = ''
+    }
+  }
+
+  function setActiveFile(index: number) {
+    if (index >= 0 && index < selectedFiles.value.length) {
+      activeFileIndex.value = index
+    }
   }
 
   function closeMediaDialog() {
     // Cancel during an active upload aborts the transfer itself — the dialog
     // must not stay hostage until the last byte lands (large files can take
-    // minutes on slow links).
+    // minutes on slow links). The batch loop observes batchCancelled and
+    // stops after the current file.
     if (uploadAbort) {
+      batchCancelled = true
       uploadAbort.abort()
       uploadAbort = null
     }
     isMediaDialogOpen.value = false
-    if (filePreviewUrl.value) {
-      URL.revokeObjectURL(filePreviewUrl.value)
-      filePreviewUrl.value = null
-    }
-    selectedFile.value = null
+    revokePreviews()
+    selectedFiles.value = []
+    activeFileIndex.value = 0
     mediaCaption.value = ''
+    uploadCurrent.value = 0
+    uploadTotal.value = 0
   }
 
-  async function sendMediaMessage() {
-    if (!selectedFile.value || !contactsStore.currentContact) return
-
-    // Status conversation posts media to status@broadcast via a dedicated path.
-    if (options.isStatusContact(contactsStore.currentContact.id)) {
-      await options.sendStatusMedia(selectedFile.value, mediaCaption.value.trim())
-      return
-    }
-
-    isUploadingMedia.value = true
-    uploadProgress.value = 0
+  /**
+   * Upload one queued file as its own message. Throws on failure so the
+   * batch loop can record it and continue with the rest. `fileIndex` drives
+   * the overall progress bar.
+   */
+  async function sendSingleFile(file: File, caption: string, fileIndex: number, total: number) {
     uploadAbort = new AbortController()
     try {
       const formData = new FormData()
-      formData.append('file', selectedFile.value)
-      formData.append('contact_id', contactsStore.currentContact.id)
-      formData.append('type', getMediaType(selectedFile.value.type))
-      if (mediaCaption.value.trim()) {
-        formData.append('caption', mediaCaption.value.trim())
+      formData.append('file', file)
+      formData.append('contact_id', contactsStore.currentContact!.id)
+      formData.append('type', getMediaType(file.type))
+      if (caption) {
+        formData.append('caption', caption)
       }
       if (selectedAccount.value) {
         formData.append('whatsapp_account', selectedAccount.value)
@@ -281,7 +330,8 @@ export function useChatMedia(options: UseChatMediaOptions) {
         headers: { ...getRequestHeaders({ csrf: true }), 'Content-Type': 'multipart/form-data' },
         onUploadProgress: (e) => {
           if (e.total) {
-            uploadProgress.value = Math.min(100, Math.round((e.loaded / e.total) * 100))
+            const frac = Math.min(1, e.loaded / e.total)
+            uploadProgress.value = Math.min(100, Math.round(((fileIndex + frac) / total) * 100))
           }
         }
       })
@@ -293,21 +343,77 @@ export function useChatMedia(options: UseChatMediaOptions) {
         contactsStore.addMessage(result.data)
         options.scrollToBottom()
       }
+      uploadProgress.value = Math.round(((fileIndex + 1) / total) * 100)
+    } finally {
+      uploadAbort = null
+    }
+  }
 
-      toast.success(t('chat.mediaSent'))
-      closeMediaDialog()
-    } catch (error: any) {
-      // A user-initiated abort is not a failure — closeMediaDialog already
-      // reset the dialog; an error toast for it would be noise.
-      if (error?.code === 'ERR_CANCELED' || error?.name === 'CanceledError') {
-        return
+  async function sendMediaMessage() {
+    if (!selectedFiles.value.length || !contactsStore.currentContact) return
+
+    // Status conversation posts media to status@broadcast via a dedicated path
+    // that supports a single file — batch sends stay in normal chats.
+    if (options.isStatusContact(contactsStore.currentContact.id)) {
+      await options.sendStatusMedia(selectedFiles.value[0], mediaCaption.value.trim())
+      return
+    }
+
+    isUploadingMedia.value = true
+    batchCancelled = false
+    uploadProgress.value = 0
+    const files = [...selectedFiles.value]
+    const total = files.length
+    uploadTotal.value = total
+    // The caption rides on the FIRST file only: any captioned file renders as
+    // its own bubble (see useChatAlbums), so this keeps the rest eligible to
+    // fold into one album grid.
+    const caption = mediaCaption.value.trim()
+    const failedIndexes: number[] = []
+    try {
+      for (let i = 0; i < files.length; i++) {
+        if (batchCancelled) break
+        uploadCurrent.value = i + 1
+        try {
+          await sendSingleFile(files[i], i === 0 ? caption : '', i, total)
+        } catch (error: any) {
+          // A user-initiated abort is not a failure — closeMediaDialog already
+          // reset the dialog; stop the loop quietly.
+          if (error?.code === 'ERR_CANCELED' || error?.name === 'CanceledError' || batchCancelled) {
+            return
+          }
+          failedIndexes.push(i)
+          toast.error(t('chat.mediaFailed'), {
+            description: files[i].name
+          })
+        }
       }
-      toast.error(t('chat.mediaFailed'), {
-        description: error?.response?.data?.message || error.message || getErrorMessage(error, t('chat.mediaFailedDesc'))
-      })
+      if (batchCancelled) return
+      const sent = total - failedIndexes.length
+      if (failedIndexes.length === 0) {
+        toast.success(t('chat.mediaSent'))
+        closeMediaDialog()
+      } else {
+        // Keep only the failed files queued so the user can retry them
+        // directly; succeeded ones are already bubbles in the room.
+        const failedFiles = failedIndexes.map((i) => files[i])
+        revokePreviews()
+        selectedFiles.value = failedFiles
+        activeFileIndex.value = 0
+        filePreviewUrls.value = failedFiles.map((f) =>
+          f.type.startsWith('image/') || f.type.startsWith('video/') ? URL.createObjectURL(f) : null
+        )
+        // The caption was consumed by the first file unless it also failed.
+        if (!failedIndexes.includes(0)) mediaCaption.value = ''
+        toast.error(t('chat.partialSent', { sent, total }))
+      }
     } finally {
       isUploadingMedia.value = false
-      uploadProgress.value = 0
+      if (failedIndexes.length === 0) {
+        uploadProgress.value = 0
+        uploadCurrent.value = 0
+        uploadTotal.value = 0
+      }
       uploadAbort = null
     }
   }
@@ -315,11 +421,15 @@ export function useChatMedia(options: UseChatMediaOptions) {
   return {
     // Upload dialog state (fileInputRef owned by the view — not re-returned)
     selectedFile,
+    selectedFiles,
+    activeFileIndex,
     filePreviewUrl,
     isMediaDialogOpen,
     mediaCaption,
     isUploadingMedia,
     uploadProgress,
+    uploadCurrent,
+    uploadTotal,
     // Broken-media / redownload
     brokenMediaIds,
     retryMediaDownload,
@@ -332,6 +442,8 @@ export function useChatMedia(options: UseChatMediaOptions) {
     // Actions
     openFilePicker,
     handleFileSelect,
+    removeFile,
+    setActiveFile,
     closeMediaDialog,
     sendMediaMessage,
     openMediaPreview,

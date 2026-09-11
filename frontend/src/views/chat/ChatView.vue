@@ -310,13 +310,15 @@ async function copyMessageText(message: Message) {
 }
 
 async function downloadSelectedZip() {
-  await downloadAsZip(selectedMediaMessages.value)
+  const ok = await downloadAsZip(selectedMediaMessages.value)
+  if (ok) sealAlbumMessages(selectedMediaMessages.value)
   mediaSelectMode.value = false
   selectedMessageIds.value = new Set()
 }
 
 async function downloadSelectedSeparately() {
-  await downloadSeparately(selectedMediaMessages.value)
+  const ok = await downloadSeparately(selectedMediaMessages.value)
+  if (ok) sealAlbumMessages(selectedMediaMessages.value)
   mediaSelectMode.value = false
   selectedMessageIds.value = new Set()
 }
@@ -325,6 +327,7 @@ async function downloadSelectedSeparately() {
 watch(() => contactsStore.currentContact?.id, () => {
   mediaSelectMode.value = false
   selectedMessageIds.value = new Set()
+  loadSealedAlbumIds()
 })
 
 // ─── Clickable phone numbers in message bubbles ───
@@ -470,11 +473,15 @@ const media = useChatMedia({
 })
 const {
   selectedFile,
+  selectedFiles,
+  activeFileIndex,
   filePreviewUrl,
   isMediaDialogOpen,
   mediaCaption,
   isUploadingMedia,
   uploadProgress,
+  uploadCurrent,
+  uploadTotal,
   brokenMediaIds,
   retryMediaDownload,
   markMediaBroken,
@@ -484,6 +491,8 @@ const {
   downloadMessageFile,
   openFilePicker,
   handleFileSelect,
+  removeFile,
+  setActiveFile,
   closeMediaDialog,
   sendMediaMessage,
   openMediaPreview,
@@ -491,13 +500,48 @@ const {
   handleMediaError,
 } = media
 
+// ─── Sealed albums: an album the employee already downloaded never absorbs
+// newly received files — newcomers start their own group even inside the
+// 2-minute gap. Sealing only splits grouping; re-downloading a sealed album
+// (or any file in it) keeps working. Persisted per conversation so a reload
+// doesn't re-merge the groups.
+const sealedAlbumIds = ref(new Set<string>())
+function sealedStorageKey(cid: string | undefined): string {
+  return `album-sealed:${cid ?? 'none'}`
+}
+function loadSealedAlbumIds(): void {
+  try {
+    const raw = localStorage.getItem(sealedStorageKey(contactId.value))
+    const parsed: unknown = raw ? JSON.parse(raw) : []
+    sealedAlbumIds.value = new Set(Array.isArray(parsed) ? parsed.filter((id) => typeof id === 'string') : [])
+  } catch {
+    sealedAlbumIds.value = new Set()
+  }
+}
+function persistSealedAlbumIds(): void {
+  try {
+    localStorage.setItem(sealedStorageKey(contactId.value), JSON.stringify([...sealedAlbumIds.value].slice(-500)))
+  } catch {
+    // Storage full or unavailable — grouping still works in-memory.
+  }
+}
+function sealAlbumMessages(messages: Message[]): void {
+  const next = new Set(sealedAlbumIds.value)
+  for (const m of messages) {
+    if (m.media_url) next.add(m.id)
+  }
+  sealedAlbumIds.value = next
+  persistSealedAlbumIds()
+}
+loadSealedAlbumIds()
+
 // 4b) WhatsApp-style media albums: consecutive caption-less image/video runs
 // fold into ONE grid bubble at render time. Presentation-only — every member
 // keeps its own message row/id/media URL, so per-photo anchors, select-mode
 // downloads and lazy media recovery are untouched.
 const { renderItems: albumRenderItems } = useChatAlbums(
   computed(() => contactsStore.messages),
-  { shouldRenderMedia }
+  { shouldRenderMedia, sealedIds: () => sealedAlbumIds.value }
 )
 const albumByMessageId = computed(() => {
   const map = new Map<string, AlbumGroup>()
@@ -534,10 +578,12 @@ function handleAlbumTileClick(message: Message) {
   }
 }
 async function downloadAlbumSeparately(album: AlbumGroup) {
-  await downloadSeparately(album.messages)
+  const ok = await downloadSeparately(album.messages)
+  if (ok) sealAlbumMessages(album.messages)
 }
 async function downloadAlbumZip(album: AlbumGroup) {
-  await downloadAsZip(album.messages)
+  const ok = await downloadAsZip(album.messages)
+  if (ok) sealAlbumMessages(album.messages)
 }
 
 // 5) Messaging (send / retry / revoke / reply + status paths)
@@ -2311,6 +2357,7 @@ onUnmounted(() => {
             <input
               ref="fileInputRef"
               type="file"
+              multiple
               accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.html,.htm,.zip,.rar,.7z,.md,.json,.xml,.rtf"
               class="hidden"
               @change="handleFileSelect"
@@ -2626,10 +2673,37 @@ onUnmounted(() => {
         <DialogHeader>
           <DialogTitle>{{ $t('chat.sendMedia') }}</DialogTitle>
           <DialogDescription>
-            {{ selectedFile?.name }}
+            {{ selectedFiles.length > 1 ? $t('chat.sendNFiles', { count: selectedFiles.length }) : (selectedFile?.name ?? '') }}
           </DialogDescription>
         </DialogHeader>
         <div class="py-4 space-y-4">
+          <!-- Queued files (multi-select): pick the previewed file or drop one -->
+          <div v-if="selectedFiles.length > 1" class="space-y-1.5 max-h-[160px] overflow-y-auto" data-testid="media-queue">
+            <button
+              v-for="(f, i) in selectedFiles"
+              :key="`${f.name}-${f.size}-${i}`"
+              type="button"
+              class="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-start transition-colors"
+              :class="i === activeFileIndex ? 'bg-primary/10 ring-1 ring-primary/30' : 'bg-muted/50 hover:bg-muted'"
+              @click="setActiveFile(i)"
+            >
+              <Paperclip class="h-4 w-4 shrink-0 text-muted-foreground" />
+              <span class="flex-1 min-w-0">
+                <span class="block truncate text-sm font-medium">{{ f.name }}</span>
+                <span class="block text-xs text-muted-foreground">{{ (f.size / 1024).toFixed(1) }} KB</span>
+              </span>
+              <span
+                role="button"
+                tabindex="0"
+                class="shrink-0 rounded-full p-1 hover:bg-background"
+                :title="$t('common.remove')"
+                @click.stop="removeFile(i)"
+                @keydown.enter.stop="removeFile(i)"
+              >
+                <X class="h-3.5 w-3.5" />
+              </span>
+            </button>
+          </div>
           <!-- Image preview -->
           <div v-if="selectedFile?.type.startsWith('image/') && filePreviewUrl" class="flex justify-center">
             <img
@@ -2681,13 +2755,18 @@ onUnmounted(() => {
               class="min-h-[60px] max-h-[100px] resize-none"
               :rows="2"
             />
+            <p v-if="selectedFiles.length > 1" class="mt-1 text-xs text-muted-foreground">
+              {{ $t('chat.captionFirstFileHint') }}
+            </p>
           </div>
 
           <!-- Upload progress: bytes-to-server percentage. Sitting at 100% is
                expected while the server finishes the synchronous GOWA send. -->
           <div v-if="isUploadingMedia" class="space-y-1.5" data-testid="upload-progress">
             <Progress :model-value="uploadProgress" class="h-2" />
-            <p class="text-center text-xs text-muted-foreground">{{ uploadProgress }}%</p>
+            <p class="text-center text-xs text-muted-foreground">
+              <template v-if="uploadTotal > 1">{{ $t('chat.sendingFileN', { current: uploadCurrent, total: uploadTotal }) }} · </template>{{ uploadProgress }}%
+            </p>
           </div>
 
           <!-- Actions -->
@@ -2695,10 +2774,10 @@ onUnmounted(() => {
             <Button variant="outline" @click="closeMediaDialog">
               {{ $t('common.cancel') }}
             </Button>
-            <Button @click="sendMediaMessage" :disabled="isUploadingMedia">
+            <Button @click="sendMediaMessage" :disabled="isUploadingMedia || !selectedFiles.length">
               <Send v-if="!isUploadingMedia" class="mr-2 h-4 w-4" />
               <span v-if="isUploadingMedia">{{ $t('chat.sending') }}...</span>
-              <span v-else>{{ $t('chat.send') }}</span>
+              <span v-else>{{ selectedFiles.length > 1 ? $t('chat.sendNFiles', { count: selectedFiles.length }) : $t('chat.send') }}</span>
             </Button>
           </div>
         </div>
