@@ -88,6 +88,9 @@ type callRejectMock struct {
 	rejectBody    map[string]any
 	failReject    bool
 	rejectCalled  bool
+	// failRejectSoft simulates a GOWA server that answers HTTP 200 with an
+	// integer-code error envelope instead of a proper non-2xx status.
+	failRejectSoft bool
 	webhookEvents string // served on GET /devices/{id}/webhook
 	patchedEvents string // captured from PATCH /devices/{id}/webhook
 	patchedSecret string // captured webhook_secret from PATCH
@@ -167,6 +170,11 @@ func newCallRejectMock(t *testing.T) *callRejectMock {
 			if m.failReject {
 				w.WriteHeader(http.StatusInternalServerError)
 				_, _ = w.Write([]byte(`{"code":"ERROR","message":"call not found"}`))
+				return
+			}
+			if m.failRejectSoft {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"code":500,"message":"call not found","results":null}`))
 				return
 			}
 			// Real GOWA answers /call/reject with a GenericResponse that has
@@ -552,4 +560,30 @@ func TestProcessGowaCallOffer_AlreadyRejectedByGowa(t *testing.T) {
 	require.NoError(t, app.DB.Where("contact_id = ? AND direction = ?", contact.ID, models.DirectionOutgoing).Find(&msgs).Error)
 	require.Len(t, msgs, 1, "the automated message must still be sent")
 	assert.Equal(t, "ابعت رسالة وهنرد عليك", msgs[0].Content)
+}
+
+// TestProcessGowaCallOffer_HTTP200ErrorEnvelopeSkipsMessage verifies that a
+// GOWA server answering HTTP 200 with an integer-code error envelope is
+// treated as a failed rejection (not a false success): no automated message
+// is sent, so the operator sees the failure in the logs instead of a phone
+// that keeps ringing behind a "success".
+func TestProcessGowaCallOffer_HTTP200ErrorEnvelopeSkipsMessage(t *testing.T) {
+	mock := newCallRejectMock(t)
+	mock.failRejectSoft = true
+	app := newCallRejectTestApp(t, mock)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+
+	settings := models.JSONB{
+		"call_auto_reject": map[string]any{"enabled": true, "message": "ابعت رسالة"},
+	}
+	require.NoError(t, app.DB.Model(account).Update("settings", settings).Error)
+	require.NoError(t, app.DB.First(account, account.ID).Error)
+
+	app.processGowaCallOffer(account, callOfferEnvelope(t, account.GowaDeviceID, "628123456789@s.whatsapp.net", "CALL_008"))
+
+	require.True(t, mock.rejectCalled)
+	var count int64
+	app.DB.Model(&models.Message{}).Where("organization_id = ?", org.ID).Count(&count)
+	assert.Zero(t, count, "a failed rejection must not send the automated message")
 }

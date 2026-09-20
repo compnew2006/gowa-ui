@@ -201,6 +201,30 @@ func TestRejectCall_SendsCallerJIDAndCallID(t *testing.T) {
 	assert.Equal(t, "CALL_123", body["call_id"])
 }
 
+func TestRejectCall_HTTP200WithErrorCodeIsFailure(t *testing.T) {
+	t.Parallel()
+	mock := newMockAPIServer()
+	defer mock.close()
+	// GOWA error envelopes may arrive with HTTP 200 and an integer code —
+	// a bare 2xx must never count as a rejection.
+	mock.respBody = `{"code":500,"message":"call not found","results":null}`
+	c := gowa.New(mock.url(), "", "")
+
+	err := c.RejectCall(context.Background(), "dev1", "caller@s.whatsapp.net", "CALL_404")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "call not found")
+}
+
+func TestRejectCall_MissingCodeIsFailure(t *testing.T) {
+	t.Parallel()
+	mock := newMockAPIServer()
+	defer mock.close()
+	mock.respBody = `{"message":"weird","results":null}`
+	c := gowa.New(mock.url(), "", "")
+
+	require.Error(t, c.RejectCall(context.Background(), "dev1", "caller@s.whatsapp.net", "CALL_X"))
+}
+
 // --- Webhook config ---
 
 func TestSetDeviceWebhook_SendsPatchWithWebhookURL(t *testing.T) {

@@ -15,14 +15,41 @@ import (
 //
 // Uses doJSONRaw because /call/reject answers with a GenericResponse that
 // has no message_id — doJSON's parseSendResponse would misreport the
-// successful rejection as an error.
+// successful rejection as an error. The envelope code is then checked
+// explicitly: GOWA error envelopes may arrive with HTTP 200 (code is an
+// integer status instead of "SUCCESS"), and a bare 2xx must never count as
+// a rejection — otherwise the caller keeps ringing while we log success.
 func (c *Client) RejectCall(ctx context.Context, deviceID, callerJID, callID string) error {
 	body := map[string]any{
 		"caller_jid": callerJID,
 		"call_id":    callID,
 	}
-	_, err := c.doJSONRaw(ctx, "POST", "/call/reject", deviceID, body)
-	return err
+	respBody, err := c.doJSONRaw(ctx, "POST", "/call/reject", deviceID, body)
+	if err != nil {
+		return err
+	}
+	var env struct {
+		Code    json.RawMessage `json:"code"`
+		Message string          `json:"message"`
+	}
+	if err := json.Unmarshal(respBody, &env); err != nil {
+		return fmt.Errorf("parse /call/reject response: %w", err)
+	}
+	if !isGowaSuccessCode(env.Code) {
+		return fmt.Errorf("gowa /call/reject failed: code=%s message=%s", string(env.Code), env.Message)
+	}
+	return nil
+}
+
+// isGowaSuccessCode reports whether a GOWA envelope code means success: the
+// string "SUCCESS" (case-insensitive). Anything else — an integer status
+// code, another string, or a missing code — is an error envelope.
+func isGowaSuccessCode(code json.RawMessage) bool {
+	var s string
+	if err := json.Unmarshal(code, &s); err != nil {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(s), "SUCCESS")
 }
 
 // userInfoResponse is the GOWA /user/info response shape.
