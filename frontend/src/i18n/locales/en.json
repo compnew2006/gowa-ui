@@ -1273,7 +1273,7 @@
     "editAccount": "Edit WhatsApp Account",
     "createAccount": "Add WhatsApp Account",
     "deleteAccount": "Delete Account",
-    "mediaRetention": {"title": "Media Retention", "description": "Automatically delete local media files older than the retention window to free disk space.", "enable": "Delete old media files", "days": "Keep media for (days)", "warning": "Deletion is permanent: chat history keeps the message, but the file itself cannot be recovered unless the provider still holds it (explicit re-download).", "firstRun": "First cleanup runs within 24 hours of enabling.", "saved": "Media retention saved", "saveFailed": "Failed to save media retention", "loadFailed": "Failed to load media retention settings"},
+    "mediaRetention": {"title": "Media Retention", "description": "Automatically delete local media files older than the retention window to free disk space.", "enable": "Delete old media files", "days": "Keep media for (days)", "warning": "Deletion is permanent: chat history keeps the message, but the file itself cannot be recovered unless the provider still holds it (explicit re-download).", "firstRun": "First cleanup runs within 24 hours of enabling.", "saved": "Media retention saved", "saveFailed": "Failed to save media retention", "loadFailed": "Failed to load media retention settings", "invalidDays": "Retention days must be between 1 and 3650"},
     "accountName": "Account Name",
     "accountNamePlaceholder": "e.g., Main Business Line",
     "options": "Options",

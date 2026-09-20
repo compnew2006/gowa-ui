@@ -41,11 +41,19 @@ onMounted(async () => {
 })
 
 async function save() {
+  let days = 0
+  if (enabled.value) {
+    days = Math.floor(Number(retentionDays.value))
+    if (!Number.isFinite(days) || days < 1 || days > 3650) {
+      toast.error(t('accounts.mediaRetention.invalidDays', 'Retention days must be between 1 and 3650'))
+      return
+    }
+  }
   isSubmitting.value = true
   try {
     await mediaRetentionService.updateSettings(props.accountId, {
       enabled: enabled.value,
-      retention_days: enabled.value ? retentionDays.value : 0
+      retention_days: days
     })
     toast.success(t('accounts.mediaRetention.saved', 'Media retention saved'))
     emit('saved')

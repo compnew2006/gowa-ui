@@ -411,15 +411,23 @@ func (a *App) retentionSweepStuck(now time.Time, limit int, stats *mediaRetentio
 			continue
 		}
 		// Refresh the lease first so a crash mid-retry doesn't hammer the
-		// same row every pass.
+		// same row every pass. Guarded by the current state: a concurrent
+		// redownload may have restored the row (clearing retention_state)
+		// between the sweep query above and this write — without the guard
+		// we'd resurrect a 'purging' marker on a live file and delete it.
 		frag, _ := json.Marshal(map[string]string{
 			retentionStateKey:    mediaRetentionStatePurging,
 			retentionPurgedAtKey: now.UTC().Format(time.RFC3339),
 		})
-		if err := a.DB.Exec(
-			`UPDATE messages SET metadata = COALESCE(metadata, '{}'::jsonb) || ?::jsonb WHERE id = ?`,
-			string(frag), stuck[i].ID).Error; err != nil {
-			a.Log.Error("Media retention: lease refresh failed", "message_id", stuck[i].ID, "error", err)
+		leaseRes := a.DB.Exec(
+			`UPDATE messages SET metadata = COALESCE(metadata, '{}'::jsonb) || ?::jsonb WHERE id = ? AND metadata ->> 'retention_state' IN (?, ?)`,
+			string(frag), stuck[i].ID, mediaRetentionStatePurging, mediaRetentionStateDeleteFailed)
+		if leaseRes.Error != nil {
+			a.Log.Error("Media retention: lease refresh failed", "message_id", stuck[i].ID, "error", leaseRes.Error)
+			continue
+		}
+		if leaseRes.RowsAffected == 0 {
+			// Lost the race (row restored or finalized concurrently) — skip.
 			continue
 		}
 		a.retentionFinishClaim(stuck[i].ID, originalPath, stats)
