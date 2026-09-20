@@ -54,16 +54,19 @@ const (
 	ResourceSettingsCallAutoReject = "settings.call_auto_reject"
 	// Audit-only resource for the daily chat-reset settings tab (not a permission).
 	ResourceSettingsChatReset = "settings.chat_reset"
-	ResourceAccounts          = "accounts"
-	ResourceDevices           = "devices"
-	ResourceGowaInstances     = "gowa_instances"
-	ResourceTemplates         = "templates"
-	ResourceCampaigns         = "campaigns"
-	ResourceChat              = "chat"
-	ResourceChatAssign        = "chat.assign"
-	ResourceChatCollaborate   = "chat.collaborate"
-	ResourceChatRevoke        = "chat.revoke"
-	ResourceContacts          = "contacts"
+	// Audit-only resource for the per-account media-retention settings tab
+	// (not a permission).
+	ResourceSettingsMediaRetention = "settings.media_retention"
+	ResourceAccounts               = "accounts"
+	ResourceDevices                = "devices"
+	ResourceGowaInstances          = "gowa_instances"
+	ResourceTemplates              = "templates"
+	ResourceCampaigns              = "campaigns"
+	ResourceChat                   = "chat"
+	ResourceChatAssign             = "chat.assign"
+	ResourceChatCollaborate        = "chat.collaborate"
+	ResourceChatRevoke             = "chat.revoke"
+	ResourceContacts               = "contacts"
 	// Contacts management page (settings). Separate from contacts:read (which
 	// drives chat-list visibility/scoping) so a role can see conversations in
 	// /chat while being blocked from the /settings/contacts directory page and

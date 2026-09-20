@@ -430,6 +430,12 @@ func getIndexes() []string {
 		`CREATE INDEX IF NOT EXISTS idx_bulk_campaigns_account ON bulk_message_campaigns(whats_app_account, status)`,
 		`CREATE INDEX IF NOT EXISTS idx_notification_rules_account ON notification_rules(whats_app_account, is_enabled)`,
 		`CREATE INDEX IF NOT EXISTS idx_messages_account ON messages(whats_app_account, created_at DESC)`,
+		// Media-retention daily scan: only rows still holding a local file
+		// matter, so the partial predicate keeps the index tiny while the
+		// purge scan stays an index-only plan. Soft-deleted rows are purged
+		// too (their files occupy disk) so they are deliberately NOT excluded
+		// here — they fall back to the idx_messages_account scan above.
+		`CREATE INDEX IF NOT EXISTS idx_messages_retention_scan ON messages(organization_id, whats_app_account, created_at) WHERE media_url <> '' AND deleted_at IS NULL`,
 		`CREATE INDEX IF NOT EXISTS idx_contacts_account ON contacts(whats_app_account)`,
 		// GOWA inbound dedup at the DB level: a webhook redelivery (or a
 		// check-then-insert race between concurrent goroutines) must not create

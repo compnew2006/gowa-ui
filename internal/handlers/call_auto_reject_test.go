@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/compnew2006/gowa-ui/internal/config"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/pkg/gowa"
 	"github.com/compnew2006/gowa-ui/pkg/whatsapp"
@@ -89,6 +90,12 @@ type callRejectMock struct {
 	rejectCalled  bool
 	webhookEvents string // served on GET /devices/{id}/webhook
 	patchedEvents string // captured from PATCH /devices/{id}/webhook
+	patchedSecret string // captured webhook_secret from PATCH
+	patchCalled   bool   // whether PATCH /devices/{id}/webhook was called
+	// serveEmptySecret/serveEmptyURL simulate GOWA versions that omit those
+	// fields from the GET response.
+	serveEmptySecret bool
+	serveEmptyURL    bool
 	// lidMap maps a LID number (without suffix) to a phone number, simulating
 	// GOWA's /user/info?phone=<lid>@lid resolved_phone field.
 	lidMap map[string]string
@@ -102,12 +109,25 @@ func newCallRejectMock(t *testing.T) *callRejectMock {
 		m.paths = append(m.paths, r.URL.Path)
 		if strings.HasPrefix(r.URL.Path, "/devices/") && strings.HasSuffix(r.URL.Path, "/webhook") {
 			events := m.webhookEvents
+			secret := "secret"
+			webhookURL := "http://localhost:8080/api/gowa/webhook"
+			if m.serveEmptySecret {
+				secret = ""
+			}
+			if m.serveEmptyURL {
+				webhookURL = ""
+			}
 			if r.Method == http.MethodPatch {
 				var body map[string]any
 				_ = json.NewDecoder(r.Body).Decode(&body)
+				m.patchCalled = true
 				if v, ok := body["webhook_events"].(string); ok {
 					m.patchedEvents = v
 					events = v
+				}
+				if v, ok := body["webhook_secret"].(string); ok {
+					m.patchedSecret = v
+					secret = v
 				}
 			}
 			m.mu.Unlock()
@@ -116,8 +136,8 @@ func newCallRejectMock(t *testing.T) *callRejectMock {
 				"code":    "SUCCESS",
 				"message": "Success",
 				"results": map[string]any{
-					"webhook_url":    "http://localhost:8080/api/gowa/webhook",
-					"webhook_secret": "secret",
+					"webhook_url":    webhookURL,
+					"webhook_secret": secret,
 					"webhook_events": events,
 				},
 			})
@@ -184,6 +204,7 @@ func newCallRejectTestApp(t *testing.T, mock *callRejectMock) *App {
 	app := &App{
 		DB:         db,
 		Log:        log,
+		Config:     &config.Config{},
 		WARegistry: whatsapp.NewRegistryWithFactory(
 			log,
 			func(_ uuid.UUID, baseURL string) (string, string) { return "", "" },
@@ -459,4 +480,76 @@ func TestEnsureCallOfferSubscription(t *testing.T) {
 
 		assert.Empty(t, mock.patchedEvents, "no PATCH expected")
 	})
+
+	t.Run("GET without secret keeps the stored secret on PATCH", func(t *testing.T) {
+		mock := newCallRejectMock(t)
+		mock.webhookEvents = "message,message.ack"
+		mock.serveEmptySecret = true // GOWA omits webhook_secret from GET
+		app := newCallRejectTestApp(t, mock)
+		org := testutil.CreateTestOrganization(t, app.DB)
+		account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+		require.NoError(t, app.DB.Model(account).Update("gowa_webhook_secret", "stored-secret").Error)
+		require.NoError(t, app.DB.First(account, account.ID).Error)
+
+		app.ensureCallOfferSubscription(account)
+
+		require.True(t, mock.patchCalled, "repair PATCH must still be sent")
+		assert.Equal(t, "message,message.ack,call.offer", mock.patchedEvents)
+		assert.Equal(t, "stored-secret", mock.patchedSecret, "must not wipe the secret with an empty value")
+	})
+
+	t.Run("GET without URL skips the repair instead of clearing it", func(t *testing.T) {
+		mock := newCallRejectMock(t)
+		mock.webhookEvents = "message,message.ack"
+		mock.serveEmptyURL = true // GOWA omits webhook_url from GET
+		app := newCallRejectTestApp(t, mock)
+		org := testutil.CreateTestOrganization(t, app.DB)
+		account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+
+		app.ensureCallOfferSubscription(account)
+
+		assert.False(t, mock.patchCalled, "no PATCH expected when the URL is unknown")
+	})
+}
+
+// TestProcessGowaCallOffer_AlreadyRejectedByGowa verifies that when the GOWA
+// server itself already rejected the call (WHATSAPP_AUTO_REJECT_CALL=true,
+// payload.auto_rejected=true), the handler skips the second POST
+// /call/reject (which would fail with "call not found") and still sends the
+// automated message.
+func TestProcessGowaCallOffer_AlreadyRejectedByGowa(t *testing.T) {
+	mock := newCallRejectMock(t)
+	app := newCallRejectTestApp(t, mock)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+
+	settings := models.JSONB{
+		"call_auto_reject": map[string]any{
+			"enabled": true,
+			"message": "ابعت رسالة وهنرد عليك",
+		},
+	}
+	require.NoError(t, app.DB.Model(account).Update("settings", settings).Error)
+	require.NoError(t, app.DB.First(account, account.ID).Error)
+
+	payload, err := json.Marshal(map[string]any{
+		"call_id":       "CALL_007",
+		"from":          "628123456789@s.whatsapp.net",
+		"auto_rejected": true,
+	})
+	require.NoError(t, err)
+	app.processGowaCallOffer(account, &gowa.WebhookPayload{
+		Event:    "call.offer",
+		DeviceID: account.GowaDeviceID,
+		Payload:  payload,
+	})
+
+	assert.False(t, mock.rejectCalled, "must not POST /call/reject for an already-rejected call")
+
+	var contact models.Contact
+	require.NoError(t, app.DB.Where("organization_id = ? AND phone_number = ?", org.ID, "628123456789").First(&contact).Error)
+	var msgs []models.Message
+	require.NoError(t, app.DB.Where("contact_id = ? AND direction = ?", contact.ID, models.DirectionOutgoing).Find(&msgs).Error)
+	require.Len(t, msgs, 1, "the automated message must still be sent")
+	assert.Equal(t, "ابعت رسالة وهنرد عليك", msgs[0].Content)
 }

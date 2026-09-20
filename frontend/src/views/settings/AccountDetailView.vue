@@ -16,6 +16,7 @@ import AccountCloseRatingPanel from '@/components/settings/AccountCloseRatingPan
 import AccountCallRejectPanel from '@/components/settings/AccountCallRejectPanel.vue'
 import AccountChatResetPanel from '@/components/settings/AccountChatResetPanel.vue'
 import AccountSendPacingPanel from '@/components/settings/AccountSendPacingPanel.vue'
+import AccountMediaRetentionPanel from '@/components/settings/AccountMediaRetentionPanel.vue'
 import AccountBusinessHoursPanel from '@/components/settings/AccountBusinessHoursPanel.vue'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -103,6 +104,7 @@ const accountLogResourceTypes = [
   'settings.close_rating',
   'settings.call_auto_reject',
   'settings.chat_reset',
+  'settings.media_retention'
 ]
 function bumpAccountLog() {
   accountLogKey.value++
@@ -602,6 +604,11 @@ onMounted(async () => {
             @saved="bumpAccountLog"
           />
           <AccountSendPacingPanel
+            :account-id="account.id"
+            :can-write="canWrite"
+            @saved="bumpAccountLog"
+          />
+          <AccountMediaRetentionPanel
             :account-id="account.id"
             :can-write="canWrite"
             @saved="bumpAccountLog"

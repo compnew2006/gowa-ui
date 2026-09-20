@@ -300,6 +300,10 @@ func setupAccountRoutes(g *fastglue.Fastglue, app *handlers.App) {
 	g.GET("/api/accounts/{id}/send-pacing", app.GetSendPacingSettings)
 	g.PUT("/api/accounts/{id}/send-pacing", app.UpdateSendPacingSettings)
 
+	// Per-account media retention (delete local media files older than N days)
+	g.GET("/api/accounts/{id}/media-retention", app.GetMediaRetentionSettings)
+	g.PUT("/api/accounts/{id}/media-retention", app.UpdateMediaRetentionSettings)
+
 	// Per-account business hours + outside-hours auto-reply
 	g.GET("/api/accounts/{id}/business-hours", app.GetBusinessHoursSettings)
 	g.PUT("/api/accounts/{id}/business-hours", app.UpdateBusinessHoursSettings)

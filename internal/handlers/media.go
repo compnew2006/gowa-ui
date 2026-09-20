@@ -548,6 +548,16 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Access denied", nil, "")
 	}
 
+	// Retention-purged media (any retention_state — purged, purging, or a
+	// failed delete) is administratively gone: answer 410 Gone WITHOUT
+	// attempting provider recovery. Recovery here would either hammer GOWA
+	// with doomed requests on every view of an old chat, or resurrect a file
+	// the retention policy just deleted. An explicit user redownload
+	// (RedownloadMedia) remains the one allowed way back.
+	if state := messageRetentionState(message); state != "" {
+		return r.SendErrorEnvelope(fasthttp.StatusGone, "Media retention expired", nil, "")
+	}
+
 	// Resolve the media storage root once — used both for path-traversal guards
 	// and as the parent for any lazily recovered file.
 	baseDir, err := filepath.Abs(a.getMediaStoragePath())

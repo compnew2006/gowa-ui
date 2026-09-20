@@ -53,6 +53,9 @@ type processorHandles struct {
 
 	campaignScheduler     *handlers.CampaignSchedulerProcessor
 	campaignSchedulerStop context.CancelFunc
+
+	mediaRetention     *handlers.MediaRetentionProcessor
+	mediaRetentionStop context.CancelFunc
 }
 
 // startProcessors starts the three periodic background processors (chat-reset
@@ -67,6 +70,16 @@ func startProcessors(app *handlers.App, lo logf.Logger) *processorHandles {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
 		app.RepairGowaDeviceIDs(ctx)
+	}()
+
+	// One-shot call.offer subscription self-heal (non-blocking): devices
+	// registered before call.offer existed keep their stale webhook
+	// subscription until the feature is re-saved — this pass repairs them on
+	// every restart for accounts with the feature enabled.
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		app.RepairCallOfferSubscriptions(ctx)
 	}()
 
 	// Start daily chat-reset processor (polls every minute, resets assigned
@@ -121,6 +134,16 @@ func startProcessors(app *handlers.App, lo logf.Logger) *processorHandles {
 	go campaignSchedulerProcessor.Start(campaignSchedulerCtx)
 	lo.Info("Campaign scheduler processor started")
 
+	// Start the media-retention processor (daily). Deletes local media files
+	// older than the per-account retention window under an advisory lock.
+	// Deliberately no startup burst: a freshly-enabled account with a large
+	// backlog must not get a deletion storm at boot — first pass runs one
+	// interval in.
+	mediaRetentionProcessor := handlers.NewMediaRetentionProcessor(app, 24*time.Hour)
+	mediaRetentionCtx, mediaRetentionCancel := context.WithCancel(context.Background())
+	go mediaRetentionProcessor.Start(mediaRetentionCtx)
+	lo.Info("Media retention processor started")
+
 	return &processorHandles{
 		chatReset:     chatResetProcessor,
 		chatResetStop: chatResetCancel,
@@ -139,6 +162,9 @@ func startProcessors(app *handlers.App, lo logf.Logger) *processorHandles {
 
 		campaignScheduler:     campaignSchedulerProcessor,
 		campaignSchedulerStop: campaignSchedulerCancel,
+
+		mediaRetention:     mediaRetentionProcessor,
+		mediaRetentionStop: mediaRetentionCancel,
 	}
 }
 
@@ -236,6 +262,12 @@ func gracefulShutdown(
 	procs.campaignSchedulerStop()
 	procs.campaignScheduler.Stop()
 	lo.Info("Campaign scheduler processor stopped")
+
+	// Stop media retention processor
+	lo.Info("Stopping media retention processor...")
+	procs.mediaRetentionStop()
+	procs.mediaRetention.Stop()
+	lo.Info("Media retention processor stopped")
 
 	// Stop workers first
 	if workerCancel != nil {

@@ -286,12 +286,24 @@ export function useMessageFormat(options: UseMessageFormatOptions) {
   }
 
   /**
+   * Whether a message's media was administratively deleted by the retention
+   * processor (metadata tombstone). Purged media must never issue a request:
+   * the backend answers 410 without provider recovery, and the bubble renders
+   * the retention-expired card instead.
+   */
+  function isRetentionPurged(message: Message): boolean {
+    return !!message.metadata?.retention_state
+  }
+
+  /**
    * Whether a message should attempt to render/download its media. True when the
    * media is already local (media_url set) OR the conversation allows provider
    * recovery. False for history-synced media in status/newsletter contacts,
-   * where the bytes are unreachable.
+   * where the bytes are unreachable, and for retention-purged media, where the
+   * only path back is an explicit user re-download.
    */
   function shouldRenderMedia(message: Message): boolean {
+    if (isRetentionPurged(message)) return false
     if (message.media_url) return true
     return isMediaRecoverable()
   }
@@ -410,6 +422,7 @@ export function useMessageFormat(options: UseMessageFormatOptions) {
     hasRevokedMedia,
     getMediaUrl,
     shouldRenderMedia,
+    isRetentionPurged,
     // Interactive / location / contacts decoding
     getInteractiveButtons,
     getCTAUrlData,

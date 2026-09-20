@@ -171,7 +171,10 @@ const (
 // eligibility: media-bearing rows that never got bytes on disk (media_url
 // empty but a provider message id exists) and are still worth retrying —
 // i.e. not yet exhausted (mbf_attempts) and not permanently gone
-// (mbf_permanent). Callers add ordering/limit.
+// (mbf_permanent). Rows purged by media retention are excluded the same
+// way: their empty media_url is an administrative deletion, not a pending
+// download — re-fetching them would fight the retention processor (and
+// delete_failed rows would ping-pong forever). Callers add ordering/limit.
 func (a *App) pendingBackfillQuery() *gorm.DB {
 	return a.DB.Model(&models.Message{}).
 		Where("media_url = '' AND whats_app_message_id <> ''").
@@ -179,6 +182,7 @@ func (a *App) pendingBackfillQuery() *gorm.DB {
 			string(models.MessageTypeImage), string(models.MessageTypeVideo),
 			string(models.MessageTypeAudio), string(models.MessageTypeDocument), "sticker",
 		}).
+		Where("COALESCE(metadata ->> 'retention_state', '') = ''").
 		Where("COALESCE((metadata ->> 'mbf_permanent')::boolean, false) = false").
 		Where("COALESCE((metadata ->> 'mbf_attempts')::int, 0) < ?", gowaBackfillMaxAttempts)
 }

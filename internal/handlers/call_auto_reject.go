@@ -104,13 +104,23 @@ func (a *App) processGowaCallOffer(account *models.WhatsAppAccount, envelope *go
 	// Rejection only succeeds while the call is still ringing; if it already
 	// ended GOWA returns an error — skip the automated message in that case
 	// so callers who hung up (or were answered) don't get a rejection text.
-	if err := gowaClient.RejectCall(context.Background(), account.GowaDeviceID, call.From, call.CallID); err != nil {
-		a.Log.Error("Failed to reject incoming call", "error", err,
-			"account", account.Name, "call_id", call.CallID)
-		return
+	//
+	// When the GOWA server itself already auto-rejected the call
+	// (WHATSAPP_AUTO_REJECT_CALL=true, payload.auto_rejected=true), a second
+	// POST /call/reject would fail with "call not found" — skip the
+	// rejection and go straight to the automated message.
+	if call.AutoRejected {
+		a.Log.Info("Call already auto-rejected by GOWA; sending automated message only",
+			"account", account.Name, "caller", call.From, "call_id", call.CallID)
+	} else {
+		if err := gowaClient.RejectCall(context.Background(), account.GowaDeviceID, call.From, call.CallID); err != nil {
+			a.Log.Error("Failed to reject incoming call", "error", err,
+				"account", account.Name, "call_id", call.CallID)
+			return
+		}
+		a.Log.Info("Auto-rejected incoming call",
+			"account", account.Name, "caller", call.From, "call_id", call.CallID)
 	}
-	a.Log.Info("Auto-rejected incoming call",
-		"account", account.Name, "caller", call.From, "call_id", call.CallID)
 
 	if settings.Message == "" {
 		return
@@ -254,6 +264,20 @@ func (a *App) ensureCallOfferSubscription(account *models.WhatsAppAccount) {
 	}
 
 	cfg.WebhookEvents += ",call.offer"
+	// Never wipe the URL/secret: some GOWA versions omit webhook_secret (and
+	// occasionally webhook_url) from the GET response, and PATCHing those
+	// empty values back would break HMAC verification for ALL events. Fall
+	// back to the account's stored secret; skip the repair if the URL is
+	// unknown rather than clearing it.
+	if cfg.WebhookSecret == "" && a.Config != nil {
+		a.decryptAccountSecrets(account)
+		cfg.WebhookSecret = account.GowaWebhookSecret
+	}
+	if cfg.WebhookURL == "" {
+		a.Log.Warn("Skipping call.offer subscription repair: GOWA returned no webhook URL",
+			"account", account.Name, "device_id", account.GowaDeviceID)
+		return
+	}
 	if _, err := gowaClient.SetDeviceWebhook(ctx, account.GowaDeviceID, *cfg); err != nil {
 		a.Log.Error("Failed to add call.offer to GOWA device webhook subscription",
 			"error", err, "account", account.Name, "device_id", account.GowaDeviceID)
@@ -261,4 +285,37 @@ func (a *App) ensureCallOfferSubscription(account *models.WhatsAppAccount) {
 	}
 	a.Log.Info("Subscribed GOWA device to call.offer events",
 		"account", account.Name, "device_id", account.GowaDeviceID)
+}
+
+// RepairCallOfferSubscriptions is a one-shot startup self-heal. Devices
+// registered before call.offer existed keep their old webhook subscription on
+// the GOWA server and never receive call events — and the AfterSave repair in
+// UpdateCallAutoRejectSettings only runs when the feature is re-saved. This
+// pass checks every account with the feature enabled and repairs stale
+// subscriptions, so a restart heals devices that would otherwise stay broken
+// forever. Every failure is non-fatal so an unreachable GOWA server cannot
+// block startup (mirrors RepairGowaDeviceIDs).
+func (a *App) RepairCallOfferSubscriptions(ctx context.Context) {
+	var accounts []models.WhatsAppAccount
+	if err := a.DB.Where("gowa_device_id <> ''").Find(&accounts).Error; err != nil {
+		a.Log.Error("call.offer subscription repair: failed to load accounts", "error", err)
+		return
+	}
+	checked := 0
+	for i := range accounts {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		acct := &accounts[i]
+		if !callAutoRejectSettingsForAccount(acct).Enabled {
+			continue
+		}
+		checked++
+		a.ensureCallOfferSubscription(acct)
+	}
+	if checked > 0 {
+		a.Log.Info("call.offer subscription repair pass complete", "checked", checked)
+	}
 }

@@ -137,15 +137,12 @@ func (a *App) RedownloadMedia(r *fastglue.Request) error {
 	}
 	sniffedType := http.DetectContentType(data[:sniffLen])
 
-	// Update the message in place.
-	updates := map[string]any{
-		"media_url": relativePath,
-	}
-	// Store the sniffed MIME type so the frontend can render the bubble.
-	if sniffedType != "" {
-		updates["media_mime_type"] = sniffedType
-	}
-	if err := a.DB.Model(&models.Message{}).Where("id = ?", message.ID).Updates(updates).Error; err != nil {
+	// Update the message in place. A redownload on a retention-purged row is
+	// the one allowed resurrection path (explicit user action): the same
+	// UPDATE clears the tombstone and grants the restored file a fresh
+	// retention window (keep-until), so the next pass doesn't delete it again
+	// immediately just for being old.
+	if err := a.applyRetentionRestore(&message, relativePath, sniffedType, time.Now()); err != nil {
 		a.Log.Error("Failed to update message media_url after re-download", "message_id", message.ID, "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Saved but failed to update message", nil, "")
 	}

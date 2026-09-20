@@ -126,6 +126,11 @@ type CallOfferPayload struct {
 	CallID string `json:"call_id"`
 	From   string `json:"from"`
 	ChatID string `json:"chat_id,omitempty"`
+	// AutoRejected is true when the GOWA server itself already rejected the
+	// call (WHATSAPP_AUTO_REJECT_CALL=true / --auto-reject-call). In that
+	// case a second POST /call/reject would fail with "call not found", so
+	// the handler must skip the rejection and only send the automated text.
+	AutoRejected bool `json:"auto_rejected,omitempty"`
 }
 
 // ConnectionPayload is decoded when event == "connection".

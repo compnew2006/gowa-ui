@@ -663,6 +663,20 @@ export const sendPacingService = {
     api.put(`/accounts/${accountId}/send-pacing`, data)
 }
 
+export interface MediaRetentionSettings {
+  enabled: boolean
+  retention_days: number
+  effective?: boolean
+}
+
+// Per-account media retention (delete local media files older than N days)
+export const mediaRetentionService = {
+  getSettings: (accountId: string) =>
+    api.get<{ data: MediaRetentionSettings }>(`/accounts/${accountId}/media-retention`),
+  updateSettings: (accountId: string, data: MediaRetentionSettings) =>
+    api.put(`/accounts/${accountId}/media-retention`, data)
+}
+
 export interface BusinessHoursSettings {
   enabled: boolean
   start_time: string
