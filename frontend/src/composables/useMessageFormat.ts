@@ -229,7 +229,7 @@ export function useMessageFormat(options: UseMessageFormatOptions) {
   }
 
   function isMediaMessage(message: Message): boolean {
-    if (!['image', 'video', 'audio', 'document'].includes(message.message_type)) {
+    if (!['image', 'video', 'audio', 'document', 'sticker'].includes(message.message_type)) {
       return false
     }
     // Media that can render (file local or lazily recoverable from the

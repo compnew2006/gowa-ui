@@ -2068,6 +2068,11 @@ onUnmounted(() => {
                   <span class="text-sm text-muted-foreground truncate">
                     {{ message.media_filename ? `${$t('chat.mediaRetentionExpired')} · ${message.media_filename}` : $t('chat.mediaRetentionExpired') }}
                   </span>
+                  <MediaRetryButton
+                    :message="message"
+                    :is-redownloading="isRedownloading(message)"
+                    @retry="retryMediaDownload(message)"
+                  />
                 </div>
                 <!-- Fallback for media without URL. Reached when recovery is
                      impossible — e.g. history-synced media in WhatsApp Status or

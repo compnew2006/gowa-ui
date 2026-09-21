@@ -64,5 +64,22 @@ func (a *App) UpdateMediaRetentionSettings(r *fastglue.Request) error {
 				"retention_days": req.RetentionDays,
 			}, nil
 		},
+		// Disabling retention must not leave stale keep-until windows behind:
+		// a restored file's retention_keep_until would otherwise survive the
+		// off period and shield the file after a later re-enable. Best-effort
+		// cleanup scoped to this account's messages (matched by org + the
+		// account name string, the same reference the purge scan uses).
+		AfterSave: func(a *App, account *models.WhatsAppAccount, block map[string]any) {
+			enabled, _ := block["enabled"].(bool)
+			if enabled {
+				return
+			}
+			if err := a.DB.Exec(
+				`UPDATE messages SET metadata = COALESCE(metadata, '{}'::jsonb) - 'retention_keep_until' - 'retention_restored_at' WHERE organization_id = ? AND whats_app_account = ?`,
+				account.OrganizationID, account.Name).Error; err != nil {
+				a.Log.Warn("Media retention: failed to clear keep-until windows on disable",
+					"account_id", account.ID, "error", err)
+			}
+		},
 	})
 }

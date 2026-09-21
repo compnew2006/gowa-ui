@@ -105,10 +105,18 @@ export function useChatMedia(options: UseChatMediaOptions) {
     // Patch the message in the store so the bubble re-renders.
     const idx = contactsStore.messages.findIndex((m) => m.id === message.id)
     if (idx !== -1) {
+      // The backend cleared the retention tombstone on success — mirror that
+      // locally or the retention-expired card would keep showing until the
+      // conversation is reloaded.
+      const metadata = { ...(contactsStore.messages[idx].metadata as Record<string, unknown> | undefined) }
+      delete metadata.retention_state
+      delete metadata.retention_purged_at
+      delete metadata.retention_original_path
       const updated = {
         ...contactsStore.messages[idx],
         media_url: result.mediaUrl || contactsStore.messages[idx].media_url,
-        media_mime_type: result.mediaMimeType || contactsStore.messages[idx].media_mime_type
+        media_mime_type: result.mediaMimeType || contactsStore.messages[idx].media_mime_type,
+        metadata
       }
       const fresh = [...contactsStore.messages]
       fresh[idx] = updated

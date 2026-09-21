@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"time"
@@ -74,9 +75,8 @@ type MediaRetentionProcessor struct {
 }
 
 // NewMediaRetentionProcessor creates the media-retention processor. The
-// interval is the pass cadence; there is deliberately NO burst run at
-// startup (unlike ChatResetProcessor) — a retention pass can delete a lot on
-// a freshly-enabled account, so the first pass waits one full interval.
+// interval is the pass cadence; a jittered catch-up pass also runs 1–5
+// minutes after Start so daily restarts can't starve the sweep forever.
 func NewMediaRetentionProcessor(app *App, interval time.Duration) *MediaRetentionProcessor {
 	return &MediaRetentionProcessor{
 		app:      app,
@@ -85,10 +85,26 @@ func NewMediaRetentionProcessor(app *App, interval time.Duration) *MediaRetentio
 	}
 }
 
-// Start begins the retention loop: first pass at the first tick, then every
-// interval. Blocks until the context is cancelled or Stop is called.
+// Start begins the retention loop: a jittered catch-up pass shortly after
+// startup, then every interval. The catch-up is required because the 24h
+// cadence would otherwise never fire on hosts that restart daily — each
+// restart would reset the timer. The advisory lock + per-pass caps make the
+// early pass safe. Blocks until the context is cancelled or Stop is called.
 func (p *MediaRetentionProcessor) Start(ctx context.Context) {
 	p.app.Log.Info("Media retention processor started", "interval", p.interval)
+
+	catchUpDelay := time.Minute + time.Duration(rand.Int63n(int64(4*time.Minute)))
+	time.AfterFunc(catchUpDelay, func() {
+		if ctx.Err() != nil {
+			return
+		}
+		select {
+		case <-p.stopCh:
+			return
+		default:
+		}
+		p.runPass(ctx)
+	})
 
 	ticker := time.NewTicker(p.interval)
 	defer ticker.Stop()
@@ -166,7 +182,17 @@ func (p *MediaRetentionProcessor) runPass(ctx context.Context) {
 		return
 	}
 
+	stats.accounts = len(accounts)
+
+	// Round-robin: one batch per account per round. Draining the first
+	// account fully before touching the second would let one high-volume
+	// account consume the whole global cap every pass and starve the rest
+	// forever — each account advances one batch per round instead.
+	cursors := make(map[uuid.UUID]*retentionAccountCursor, len(accounts))
 	for i := range accounts {
+		cursors[accounts[i].ID] = &retentionAccountCursor{}
+	}
+	for {
 		select {
 		case <-ctx.Done():
 			p.logPass(stats)
@@ -179,7 +205,18 @@ func (p *MediaRetentionProcessor) runPass(ctx context.Context) {
 		if p.capsExceeded(&stats, deadline) {
 			break
 		}
-		p.processAccount(&accounts[i], &stats, deadline)
+		progress := false
+		for i := range accounts {
+			if p.capsExceeded(&stats, deadline) {
+				break
+			}
+			if p.processAccountBatch(&accounts[i], cursors[accounts[i].ID], &stats, deadline) {
+				progress = true
+			}
+		}
+		if !progress {
+			break
+		}
 	}
 	p.logPass(stats)
 }
@@ -204,77 +241,110 @@ func (p *MediaRetentionProcessor) logPass(stats mediaRetentionPassStats) {
 		"bytes_freed", stats.bytesFreed)
 }
 
-// processAccount purges one account's expired media in keyset batches
-// (created_at, id) until the account is drained or a cap trips.
+// retentionAccountCursor is the keyset position of one account's scan
+// ((0, nil) = start). Shared by the round-robin pass and drained fully by
+// processAccount.
+type retentionAccountCursor struct {
+	createdAt time.Time
+	id        uuid.UUID
+	drained   bool
+}
+
+// processAccount purges one account's expired media in keyset batches until
+// the account is drained or a cap trips. Kept as the single-account drain
+// primitive (and test entry point); the pass itself round-robins via
+// processAccountBatch for fairness across accounts.
 func (p *MediaRetentionProcessor) processAccount(account *models.WhatsAppAccount, stats *mediaRetentionPassStats, deadline time.Time) {
+	stats.accounts++
+	cur := &retentionAccountCursor{}
+	for !cur.drained {
+		if p.capsExceeded(stats, deadline) {
+			return
+		}
+		p.processAccountBatch(account, cur, stats, deadline)
+	}
+}
+
+// processAccountBatch purges a single keyset batch for one account. Returns
+// true when the batch did work (the account may hold more); false when the
+// account is drained, misconfigured, or the batch query failed.
+func (p *MediaRetentionProcessor) processAccountBatch(account *models.WhatsAppAccount, cur *retentionAccountCursor, stats *mediaRetentionPassStats, deadline time.Time) bool {
+	if cur.drained {
+		return false
+	}
 	days := mediaRetentionDays(account)
 	if days < 1 {
 		p.app.Log.Warn("Media retention: skipping account with invalid retention_days",
 			"account_id", account.ID, "account", account.Name, "retention_days", days)
-		return
+		cur.drained = true
+		return false
 	}
 	cutoff := time.Now().AddDate(0, 0, -days)
-	stats.accounts++
 
-	lastCreatedAt := time.Time{}
-	lastID := uuid.Nil
-	for {
+	batch, err := p.fetchExpiredBatch(account, cutoff, cur.createdAt, cur.id)
+	if err != nil {
+		p.app.Log.Error("Media retention: batch query failed",
+			"account_id", account.ID, "account", account.Name, "error", err)
+		return false
+	}
+	if len(batch) == 0 {
+		cur.drained = true
+		return false
+	}
+
+	for i := range batch {
+		select {
+		case <-p.stopCh:
+			return true
+		default:
+		}
 		if p.capsExceeded(stats, deadline) {
-			return
+			return true
 		}
-
-		var batch []models.Message
-		// Unscoped ON PURPOSE: soft-deleted message rows are invisible but
-		// their files still occupy disk — they are the best deletion
-		// candidates. The row itself stays soft-deleted.
-		q := p.app.DB.Unscoped().
-			Where("organization_id = ? AND whats_app_account = ?", account.OrganizationID, account.Name).
-			Where("message_type IN ?", []string{
-				string(models.MessageTypeImage), string(models.MessageTypeVideo),
-				string(models.MessageTypeAudio), string(models.MessageTypeDocument), "sticker",
-			}).
-			Where("media_url <> '' AND created_at < ?", cutoff).
-			// Re-downloaded (restored) media lives out its keep-until window
-			// before becoming eligible again.
-			Where("metadata ->> 'retention_keep_until' IS NULL OR (metadata ->> 'retention_keep_until')::timestamptz <= now()").
-			Where("(created_at, id) > (?, ?)", lastCreatedAt, lastID).
-			Order("created_at ASC, id ASC").
-			Limit(mediaRetentionBatchSize)
-		if err := q.Find(&batch).Error; err != nil {
-			p.app.Log.Error("Media retention: batch query failed",
-				"account_id", account.ID, "account", account.Name, "error", err)
-			return
-		}
-		if len(batch) == 0 {
-			return
-		}
-
-		for i := range batch {
+		stats.scanned++
+		p.app.retentionPurgeMessage(&batch[i], time.Now(), stats)
+		if i < len(batch)-1 {
 			select {
 			case <-p.stopCh:
-				return
-			default:
+				return true
+			case <-time.After(mediaRetentionInterItemDelay):
 			}
-			if p.capsExceeded(stats, deadline) {
-				return
-			}
-			stats.scanned++
-			p.app.retentionPurgeMessage(&batch[i], time.Now(), stats)
-			if i < len(batch)-1 {
-				select {
-				case <-p.stopCh:
-					return
-				case <-time.After(mediaRetentionInterItemDelay):
-				}
-			}
-		}
-
-		last := batch[len(batch)-1]
-		lastCreatedAt, lastID = last.CreatedAt, last.ID
-		if len(batch) < mediaRetentionBatchSize {
-			return
 		}
 	}
+
+	last := batch[len(batch)-1]
+	cur.createdAt, cur.id = last.CreatedAt, last.ID
+	if len(batch) < mediaRetentionBatchSize {
+		cur.drained = true
+	}
+	return true
+}
+
+// fetchExpiredBatch returns one keyset-ordered batch of purge candidates for
+// an account: media-bearing types, still holding a local file, older than
+// the cutoff, and outside any redownload keep-until window.
+func (p *MediaRetentionProcessor) fetchExpiredBatch(account *models.WhatsAppAccount, cutoff, afterCreatedAt time.Time, afterID uuid.UUID) ([]models.Message, error) {
+	var batch []models.Message
+	// Unscoped ON PURPOSE: soft-deleted message rows are invisible but
+	// their files still occupy disk — they are the best deletion
+	// candidates. The row itself stays soft-deleted.
+	q := p.app.DB.Unscoped().
+		Where("organization_id = ? AND whats_app_account = ?", account.OrganizationID, account.Name).
+		Where("message_type IN ?", []string{
+			string(models.MessageTypeImage), string(models.MessageTypeVideo),
+			string(models.MessageTypeAudio), string(models.MessageTypeDocument), "sticker",
+		}).
+		Where("media_url <> '' AND created_at < ?", cutoff).
+		// Re-downloaded (restored) media lives out its keep-until window
+		// before becoming eligible again.
+		Where("metadata ->> 'retention_keep_until' IS NULL OR (metadata ->> 'retention_keep_until')::timestamptz <= now()").
+		Where("(created_at, id) > (?, ?)", afterCreatedAt, afterID).
+		Order("created_at ASC, id ASC").
+		Limit(mediaRetentionBatchSize)
+	if err := q.Find(&batch).Error; err != nil {
+		return nil, err
+	}
+	return batch, nil
 }
 
 // rollback silently rolls back a lock transaction (best-effort mutex release).
@@ -458,9 +528,12 @@ func (a *App) mediaPathStillReferenced(path string) (bool, error) {
 	if n > 0 {
 		return true, nil
 	}
+	// Any campaign state protects the file — scheduled/paused campaigns
+	// still need it, in-flight ones are sending it, and even completed/
+	// failed ones can be retried or duplicated. Filtering by status here
+	// deleted files out from under live campaigns.
 	if err := a.DB.Model(&models.BulkMessageCampaign{}).
-		Where("header_media_local_path = ? AND status IN ?", path,
-			[]string{"draft", "queued", "processing"}).
+		Where("header_media_local_path = ?", path).
 		Count(&n).Error; err != nil {
 		return false, err
 	}

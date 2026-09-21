@@ -135,10 +135,10 @@ func startProcessors(app *handlers.App, lo logf.Logger) *processorHandles {
 	lo.Info("Campaign scheduler processor started")
 
 	// Start the media-retention processor (daily). Deletes local media files
-	// older than the per-account retention window under an advisory lock.
-	// Deliberately no startup burst: a freshly-enabled account with a large
-	// backlog must not get a deletion storm at boot — first pass runs one
-	// interval in.
+	// older than the per-account retention window under an advisory lock. A
+	// jittered catch-up pass runs minutes after startup (daily restarts must
+	// not starve the sweep); pass caps bound the deletion storm on a
+	// freshly-enabled account with a large backlog.
 	mediaRetentionProcessor := handlers.NewMediaRetentionProcessor(app, 24*time.Hour)
 	mediaRetentionCtx, mediaRetentionCancel := context.WithCancel(context.Background())
 	go mediaRetentionProcessor.Start(mediaRetentionCtx)

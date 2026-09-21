@@ -432,10 +432,14 @@ func getIndexes() []string {
 		`CREATE INDEX IF NOT EXISTS idx_messages_account ON messages(whats_app_account, created_at DESC)`,
 		// Media-retention daily scan: only rows still holding a local file
 		// matter, so the partial predicate keeps the index tiny while the
-		// purge scan stays an index-only plan. Soft-deleted rows are purged
-		// too (their files occupy disk) so they are deliberately NOT excluded
-		// here — they fall back to the idx_messages_account scan above.
-		`CREATE INDEX IF NOT EXISTS idx_messages_retention_scan ON messages(organization_id, whats_app_account, created_at) WHERE media_url <> '' AND deleted_at IS NULL`,
+		// purge scan stays an index-only plan. No deleted_at predicate ON
+		// PURPOSE: the scan is Unscoped (soft-deleted rows' files occupy
+		// disk too) and PostgreSQL can only use a partial index whose
+		// predicate the query implies — a deleted_at IS NULL clause would
+		// silently disable this index for exactly the query it was built
+		// for. Soft-deleted rows therefore share this index via the
+		// media_url predicate.
+		`CREATE INDEX IF NOT EXISTS idx_messages_retention_scan ON messages(organization_id, whats_app_account, created_at) WHERE media_url <> ''`,
 		`CREATE INDEX IF NOT EXISTS idx_contacts_account ON contacts(whats_app_account)`,
 		// GOWA inbound dedup at the DB level: a webhook redelivery (or a
 		// check-then-insert race between concurrent goroutines) must not create

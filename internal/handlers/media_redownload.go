@@ -60,6 +60,13 @@ func (a *App) RedownloadMedia(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Access denied", nil, "")
 	}
 
+	// Write gate: a re-download rewrites media_url + metadata, so historical
+	// (read-only) assignment holders must be refused here — visibility alone
+	// is not enough. Mirrors every other media/contact write path.
+	if a.rejectHistoricalAssignmentAccess(r, &contact, userID, orgID) {
+		return nil
+	}
+
 	// Must be a media message with a provider message ID to re-fetch.
 	if message.WhatsAppMessageID == "" {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest,
@@ -144,6 +151,10 @@ func (a *App) RedownloadMedia(r *fastglue.Request) error {
 	// immediately just for being old.
 	if err := a.applyRetentionRestore(&message, relativePath, sniffedType, time.Now()); err != nil {
 		a.Log.Error("Failed to update message media_url after re-download", "message_id", message.ID, "error", err)
+		// Compensating delete: the bytes are on disk but no row points at
+		// them — drop the orphan instead of leaking it (same pattern as the
+		// backfill worker's failed-claim path).
+		a.removeLocalMedia(relativePath)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Saved but failed to update message", nil, "")
 	}
 
