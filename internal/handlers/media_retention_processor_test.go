@@ -520,6 +520,73 @@ func TestMediaRetentionProcessor_ProcessAccount(t *testing.T) {
 	}
 }
 
+// --- Cross-account fairness ---
+
+// A late-listed account must be served in the same pass even when an
+// earlier account holds more than one batch: one batch per account per
+// round (round-robin), not drain-first.
+func TestMediaRetentionProcessor_RoundRobinServesLateAccounts(t *testing.T) {
+	app := newRetentionTestApp(t)
+	app.Config.Storage.LocalPath = t.TempDir()
+	org := testutil.CreateTestOrganization(t, app.DB)
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+	accountA := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("fair-a"))
+	accountB := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("fair-b"))
+	enableRetention(t, app, accountA, 30)
+	enableRetention(t, app, accountB, 30)
+
+	// Account A holds more than one full batch of expired media.
+	for i := 0; i < mediaRetentionBatchSize+5; i++ {
+		rel := filepath.Join("images", fmt.Sprintf("a-%d.jpg", i))
+		writeRetentionFile(t, app, rel, "a")
+		createRetentionMessage(t, app, org.ID, contact.ID, "fair-a", "image", rel, 40*24*time.Hour)
+	}
+	// Account B holds a single expired file.
+	bRel := filepath.Join("images", "b-only.jpg")
+	writeRetentionFile(t, app, bRel, "b")
+	bMsg := createRetentionMessage(t, app, org.ID, contact.ID, "fair-b", "image", bRel, 40*24*time.Hour)
+
+	processor := NewMediaRetentionProcessor(app, time.Hour)
+	processor.runPass(context.Background())
+
+	bGone := reloadMessage(t, app, bMsg.ID)
+	assert.Empty(t, bGone.MediaURL, "late account must be served in the same pass")
+	assert.NoFileExists(t, filepath.Join(app.getMediaStoragePath(), bRel))
+
+	// Rotation is persisted: A still had a second batch after B was served
+	// in round 1, so the last account served is A — a fresh processor after
+	// a restart resumes after A instead of restarting at the top.
+	prog := app.loadRetentionProgress()
+	require.NotNil(t, prog.LastAccountID, "progress cursor must be recorded")
+	assert.Equal(t, accountA.ID, *prog.LastAccountID)
+	require.NotNil(t, prog.LastPassAt)
+
+	fresh := NewMediaRetentionProcessor(app, time.Hour)
+	fresh.runPass(context.Background())
+	prog2 := fresh.app.loadRetentionProgress()
+	require.NotNil(t, prog2.LastPassAt)
+	assert.True(t, !prog2.LastPassAt.Before(*prog.LastPassAt), "second pass must record its own completion")
+}
+
+// rotateAccountOrder is pure: stable order, start after the cursor, wrap.
+func TestRotateAccountOrder(t *testing.T) {
+	mk := func(id uuid.UUID) models.WhatsAppAccount {
+		return models.WhatsAppAccount{BaseModel: models.BaseModel{ID: id}}
+	}
+	a, b, c := uuid.New(), uuid.New(), uuid.New()
+	accounts := []models.WhatsAppAccount{mk(a), mk(b), mk(c)}
+
+	got := rotateAccountOrder(accounts, b)
+	require.Len(t, got, 3)
+	assert.Equal(t, c, got[0].ID)
+	assert.Equal(t, a, got[1].ID)
+	assert.Equal(t, b, got[2].ID, "wraps around")
+
+	assert.Equal(t, accounts, rotateAccountOrder(accounts, uuid.Nil), "empty cursor keeps order")
+	assert.Equal(t, accounts, rotateAccountOrder(accounts, uuid.New()), "unknown cursor keeps order")
+	assert.Empty(t, rotateAccountOrder(nil, b))
+}
+
 // --- Advisory lock ---
 
 func TestMediaRetentionProcessor_AdvisoryLockBlocksSecondPass(t *testing.T) {

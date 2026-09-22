@@ -103,6 +103,9 @@ func GetMigrationModels() []MigrationModel {
 		// Scheduled outgoing messages
 		{"ScheduledMessage", &models.ScheduledMessage{}},
 
+		// Media-retention sweeper cursor (single row, rotation + last-pass time)
+		{"MediaRetentionProgress", &models.MediaRetentionProgress{}},
+
 		// Durable GOWA webhook inbox — events are persisted before 2xx so a
 		// crash never silently drops an inbound event (gap #1).
 		{"GowaWebhookEvent", &models.GowaWebhookEvent{}},

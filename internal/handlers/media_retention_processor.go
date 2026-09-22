@@ -93,7 +93,7 @@ func NewMediaRetentionProcessor(app *App, interval time.Duration) *MediaRetentio
 func (p *MediaRetentionProcessor) Start(ctx context.Context) {
 	p.app.Log.Info("Media retention processor started", "interval", p.interval)
 
-	catchUpDelay := time.Minute + time.Duration(rand.Int63n(int64(4*time.Minute)))
+	catchUpDelay := 5*time.Minute + time.Duration(rand.Int63n(int64(5*time.Minute)))
 	time.AfterFunc(catchUpDelay, func() {
 		if ctx.Err() != nil {
 			return
@@ -102,6 +102,14 @@ func (p *MediaRetentionProcessor) Start(ctx context.Context) {
 		case <-p.stopCh:
 			return
 		default:
+		}
+		// Crash-loop guard: a pass that completed less than one interval
+		// ago means this boot is a restart, not a stale host — the regular
+		// ticker will fire on schedule, so skip the extra pass instead of
+		// running cleanup every few minutes.
+		if last := p.app.loadRetentionProgress().LastPassAt; last != nil && time.Since(*last) < p.interval {
+			p.app.Log.Info("Media retention: skipping catch-up, recent pass already ran", "last_pass_at", *last)
+			return
 		}
 		p.runPass(ctx)
 	})
@@ -177,20 +185,40 @@ func (p *MediaRetentionProcessor) runPass(ctx context.Context) {
 	var accounts []models.WhatsAppAccount
 	if err := p.app.DB.Where(
 		`settings->'media_retention'->>'enabled' = 'true'`,
-	).Find(&accounts).Error; err != nil {
+	).Order("created_at ASC, id ASC").Find(&accounts).Error; err != nil {
 		p.app.Log.Error("Media retention: failed to load enabled accounts", "error", err)
 		return
 	}
 
 	stats.accounts = len(accounts)
 
-	// Round-robin: one batch per account per round. Draining the first
-	// account fully before touching the second would let one high-volume
-	// account consume the whole global cap every pass and starve the rest
-	// forever — each account advances one batch per round instead.
-	cursors := make(map[uuid.UUID]*retentionAccountCursor, len(accounts))
-	for i := range accounts {
-		cursors[accounts[i].ID] = &retentionAccountCursor{}
+	// Fair rotation across passes AND restarts: accounts load in a stable
+	// order and each pass starts right after the account served last (from
+	// the persisted cursor), wrapping around. One batch per account per
+	// round within the pass. Without the persisted cursor, every restart
+	// would reset to index 0 and capped passes would serve the same first
+	// ~20 full accounts forever.
+	prog := p.app.loadRetentionProgress()
+	var lastServedID uuid.UUID
+	servedAny := false
+	defer func() {
+		if servedAny {
+			p.app.recordRetentionProgress(&lastServedID, time.Now())
+		} else {
+			// Pass ran but served nothing (or was cancelled): still record
+			// the time so the startup catch-up knows a pass recently ran,
+			// but keep the previous rotation position.
+			p.app.recordRetentionProgress(nil, time.Now())
+		}
+	}()
+	var startAfter uuid.UUID
+	if prog.LastAccountID != nil {
+		startAfter = *prog.LastAccountID
+	}
+	ordered := rotateAccountOrder(accounts, startAfter)
+	cursors := make(map[uuid.UUID]*retentionAccountCursor, len(ordered))
+	for i := range ordered {
+		cursors[ordered[i].ID] = &retentionAccountCursor{}
 	}
 	for {
 		select {
@@ -206,12 +234,14 @@ func (p *MediaRetentionProcessor) runPass(ctx context.Context) {
 			break
 		}
 		progress := false
-		for i := range accounts {
+		for i := range ordered {
 			if p.capsExceeded(&stats, deadline) {
 				break
 			}
-			if p.processAccountBatch(&accounts[i], cursors[accounts[i].ID], &stats, deadline) {
+			acct := &ordered[i]
+			if p.processAccountBatch(acct, cursors[acct.ID], &stats, deadline) {
 				progress = true
+				lastServedID, servedAny = acct.ID, true
 			}
 		}
 		if !progress {
@@ -220,6 +250,46 @@ func (p *MediaRetentionProcessor) runPass(ctx context.Context) {
 	}
 	p.logPass(stats)
 }
+
+// loadRetentionProgress reads the sweeper cursor (zero value = never ran).
+func (a *App) loadRetentionProgress() models.MediaRetentionProgress {
+	var prog models.MediaRetentionProgress
+	if err := a.DB.First(&prog, 1).Error; err != nil {
+		return models.MediaRetentionProgress{}
+	}
+	return prog
+}
+
+// recordRetentionProgress upserts the sweeper cursor best-effort. A nil
+// lastServed keeps the previous rotation position (pass ran but served
+// nothing); LastPassAt is always refreshed.
+func (a *App) recordRetentionProgress(lastServed *uuid.UUID, at time.Time) {
+	if err := a.DB.Exec(
+		`INSERT INTO media_retention_progress (id, last_account_id, last_pass_at) VALUES (1, ?, ?)
+		ON CONFLICT (id) DO UPDATE SET last_account_id = COALESCE(EXCLUDED.last_account_id, media_retention_progress.last_account_id), last_pass_at = EXCLUDED.last_pass_at`,
+		lastServed, at).Error; err != nil {
+		a.Log.Warn("Media retention: failed to record progress", "error", err)
+	}
+}
+
+// rotateAccountOrder returns accounts starting right after afterID,
+// wrapping around. Unknown/empty afterID keeps the order unchanged.
+func rotateAccountOrder(accounts []models.WhatsAppAccount, afterID uuid.UUID) []models.WhatsAppAccount {
+	if afterID == uuid.Nil || len(accounts) == 0 {
+		return accounts
+	}
+	for i := range accounts {
+		if accounts[i].ID == afterID {
+			out := make([]models.WhatsAppAccount, 0, len(accounts))
+			out = append(out, accounts[i+1:]...)
+			return append(out, accounts[:i+1]...)
+		}
+	}
+	return accounts
+}
+
+// nextStart returns the round-robin start offset for this pass and advances
+// it for the next one.
 
 // capsExceeded reports whether the pass budget (file count, freed bytes,
 // wall clock) is spent.

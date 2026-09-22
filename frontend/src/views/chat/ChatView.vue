@@ -1829,9 +1829,25 @@ onUnmounted(() => {
                     {{ $t('chat.messageRevokedPlaceholder') }}
                   </div>
                   <div class="revoked-content mt-1">
+                    <!-- Retention-purged media inside a revoked bubble: the
+                         revoked template swallows the message (main chain is
+                         v-else), so the card must render here too — otherwise
+                         a revoked+purged message shows only the badge with no
+                         restore path. -->
+                    <div v-if="isMediaMessage(message) && isRetentionPurged(message)" class="mb-2 flex items-center gap-2 px-3 py-2 bg-background/50 rounded-lg max-w-[280px]">
+                      <Clock class="h-5 w-5 text-muted-foreground shrink-0" />
+                      <span class="text-sm text-muted-foreground truncate">
+                        {{ message.media_filename ? `${$t('chat.mediaRetentionExpired')} · ${message.media_filename}` : $t('chat.mediaRetentionExpired') }}
+                      </span>
+                      <MediaRetryButton
+                        :message="message"
+                        :is-redownloading="isRedownloading(message)"
+                        @retry="retryMediaDownload(message)"
+                      />
+                    </div>
                     <!-- Original media (kept dimmed, still previewable/downloadable).
                          Retention-purged media renders nothing here — the
-                         retention card in the main chain shows instead. -->
+                         retention card above shows instead. -->
                     <img
                       v-if="(message.message_type === 'image' || message.message_type === 'sticker') && !isRetentionPurged(message)"
                       :src="getMediaUrl(message)"
@@ -2057,23 +2073,34 @@ onUnmounted(() => {
                   <span class="whitespace-pre-wrap break-words"><template v-for="(seg, idx) in linkifySegments(getMessageContent(message))" :key="idx"><a v-if="seg.href" :href="seg.href" target="_blank" rel="noopener noreferrer" class="chat-bubble-link" @click.stop>{{ seg.text }}</a><button v-else-if="seg.kind === 'phone' && seg.phone" type="button" class="chat-bubble-phone" :title="$t('chat.openPhoneChat')" @click.stop="openPhoneChat(seg.phone)">{{ seg.text }}</button><template v-else>{{ seg.text }}</template></template></span>
                   <span class="chat-bubble-time"><span>{{ formatMessageTime(message.created_at) }}</span></span>
                 </div>
-                <!-- Text content (for text messages or captions) -->
-                <span v-else-if="getMessageContent(message)" class="whitespace-pre-wrap break-words"><template v-for="(seg, idx) in linkifySegments(getMessageContent(message))" :key="idx"><a v-if="seg.href" :href="seg.href" target="_blank" rel="noopener noreferrer" class="chat-bubble-link" @click.stop>{{ seg.text }}</a><button v-else-if="seg.kind === 'phone' && seg.phone" type="button" class="chat-bubble-phone" :title="$t('chat.openPhoneChat')" @click.stop="openPhoneChat(seg.phone)">{{ seg.text }}</button><template v-else>{{ seg.text }}</template></template><span class="chat-bubble-time"><span>{{ formatMessageTime(message.created_at) }}</span><component v-if="message.direction === 'outgoing'" :is="getMessageStatusIcon(message.status)" :class="['h-4 w-4 status-icon', getMessageStatusClass(message.status)]" /></span></span>
                 <!-- Retention-purged media: administratively deleted after the
                      account's retention window. No request is issued (backend
                      answers 410 without recovery); show a clear "expired"
-                     card instead of a broken player. Covers documents too. -->
-                <div v-else-if="isMediaMessage(message) && isRetentionPurged(message)" class="mb-2 flex items-center gap-2 px-3 py-2 bg-background/50 rounded-lg max-w-[280px]">
-                  <Clock class="h-5 w-5 text-muted-foreground shrink-0" />
-                  <span class="text-sm text-muted-foreground truncate">
-                    {{ message.media_filename ? `${$t('chat.mediaRetentionExpired')} · ${message.media_filename}` : $t('chat.mediaRetentionExpired') }}
-                  </span>
-                  <MediaRetryButton
-                    :message="message"
-                    :is-redownloading="isRedownloading(message)"
-                    @retry="retryMediaDownload(message)"
-                  />
+                     card with a restore button instead of a broken player.
+                     Placed BEFORE the text branch: purged media with a caption
+                     would otherwise match getMessageContent first and never
+                     reach this card. Covers documents too. -->
+                <div v-else-if="isMediaMessage(message) && isRetentionPurged(message)" class="mb-2 max-w-[280px] space-y-1.5">
+                  <div class="flex items-center gap-2 px-3 py-2 bg-background/50 rounded-lg">
+                    <Clock class="h-5 w-5 text-muted-foreground shrink-0" />
+                    <span class="text-sm text-muted-foreground truncate">
+                      {{ message.media_filename ? `${$t('chat.mediaRetentionExpired')} · ${message.media_filename}` : $t('chat.mediaRetentionExpired') }}
+                    </span>
+                    <MediaRetryButton
+                      :message="message"
+                      :is-redownloading="isRedownloading(message)"
+                      @retry="retryMediaDownload(message)"
+                    />
+                  </div>
+                  <div v-if="getMessageContent(message)" class="text-sm whitespace-pre-wrap break-words px-1">
+                    {{ getMessageContent(message) }}
+                  </div>
                 </div>
+                <!-- Text content (for text messages or captions). Purged media
+                     is excluded: it renders the retention card above (with its
+                     caption) instead of a caption-only bubble with no restore
+                     path. -->
+                <span v-else-if="getMessageContent(message) && !(isMediaMessage(message) && isRetentionPurged(message))" class="whitespace-pre-wrap break-words"><template v-for="(seg, idx) in linkifySegments(getMessageContent(message))" :key="idx"><a v-if="seg.href" :href="seg.href" target="_blank" rel="noopener noreferrer" class="chat-bubble-link" @click.stop>{{ seg.text }}</a><button v-else-if="seg.kind === 'phone' && seg.phone" type="button" class="chat-bubble-phone" :title="$t('chat.openPhoneChat')" @click.stop="openPhoneChat(seg.phone)">{{ seg.text }}</button><template v-else>{{ seg.text }}</template></template><span class="chat-bubble-time"><span>{{ formatMessageTime(message.created_at) }}</span><component v-if="message.direction === 'outgoing'" :is="getMessageStatusIcon(message.status)" :class="['h-4 w-4 status-icon', getMessageStatusClass(message.status)]" /></span></span>
                 <!-- Fallback for media without URL. Reached when recovery is
                      impossible — e.g. history-synced media in WhatsApp Status or
                      newsletter contacts, where the bytes were never downloaded

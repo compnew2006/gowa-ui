@@ -68,16 +68,41 @@ func (a *App) UpdateMediaRetentionSettings(r *fastglue.Request) error {
 		// a restored file's retention_keep_until would otherwise survive the
 		// off period and shield the file after a later re-enable. Best-effort
 		// cleanup scoped to this account's messages (matched by org + the
-		// account name string, the same reference the purge scan uses).
+		// account name string, the same reference the purge scan uses). The
+		// key-existence predicate keeps this from rewriting every message
+		// row of the account — only rows that actually carry retention keys
+		// are touched (no locks/WAL storm on disable).
 		AfterSave: func(a *App, account *models.WhatsAppAccount, block map[string]any) {
 			enabled, _ := block["enabled"].(bool)
-			if enabled {
+			if !enabled {
+				if err := a.DB.Exec(
+					`UPDATE messages SET metadata = COALESCE(metadata, '{}'::jsonb) - 'retention_keep_until' - 'retention_restored_at' WHERE organization_id = ? AND whats_app_account = ? AND ((metadata -> 'retention_keep_until') IS NOT NULL OR (metadata -> 'retention_restored_at') IS NOT NULL)`,
+					account.OrganizationID, account.Name).Error; err != nil {
+					a.Log.Warn("Media retention: failed to clear keep-until windows on disable",
+						"account_id", account.ID, "error", err)
+				}
+				return
+			}
+			// Clamp previously granted keep-until windows to the (possibly
+			// lowered) window: without this, lowering 3650 → 30 days would
+			// leave old far-future windows shielding files for years. Only
+			// rows carrying the key are rewritten. The block here comes from
+			// Decode (Go int), not from a JSONB round-trip (float64) — accept
+			// both.
+			days := 0
+			switch v := block["retention_days"].(type) {
+			case int:
+				days = v
+			case float64:
+				days = int(v)
+			}
+			if days < 1 {
 				return
 			}
 			if err := a.DB.Exec(
-				`UPDATE messages SET metadata = COALESCE(metadata, '{}'::jsonb) - 'retention_keep_until' - 'retention_restored_at' WHERE organization_id = ? AND whats_app_account = ?`,
-				account.OrganizationID, account.Name).Error; err != nil {
-				a.Log.Warn("Media retention: failed to clear keep-until windows on disable",
+				`UPDATE messages SET metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('retention_keep_until', LEAST((metadata ->> 'retention_keep_until')::timestamptz, now() + (? * interval '1 day'))) WHERE organization_id = ? AND whats_app_account = ? AND (metadata ->> 'retention_keep_until') IS NOT NULL AND (metadata ->> 'retention_keep_until')::timestamptz > now() + (? * interval '1 day')`,
+				int(days), account.OrganizationID, account.Name, int(days)).Error; err != nil {
+				a.Log.Warn("Media retention: failed to clamp keep-until windows",
 					"account_id", account.ID, "error", err)
 			}
 		},
