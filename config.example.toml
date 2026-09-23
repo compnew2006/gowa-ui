@@ -95,6 +95,6 @@ api_window_seconds = 60        # Time window for global API rate limit (0 = 60)
 
 # Default admin credentials (only used during initial setup when no users exist)
 [default_admin]
-email = "admin@admin.com"
-password = "admin"
+email = ""     # Set explicitly for production database bootstrap
+password = ""  # Production bootstrap password must be at least 12 characters
 full_name = "Admin"

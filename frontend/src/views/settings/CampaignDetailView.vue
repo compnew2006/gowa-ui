@@ -190,6 +190,11 @@ const canRetryFailed = computed(() => {
 const recipients = ref<Recipient[]>([])
 const recipientsOpen = ref(true)
 const isLoadingRecipients = ref(false)
+const isLoadingMoreRecipients = ref(false)
+const recipientsPage = ref(0)
+const recipientsTotal = ref(0)
+const recipientsPageSize = 50
+const hasMoreRecipients = computed(() => recipients.value.length < recipientsTotal.value)
 const deletingRecipientId = ref<string | null>(null)
 const showAddRecipientsDialog = ref(false)
 const isAddingRecipients = ref(false)
@@ -575,13 +580,52 @@ async function loadExistingMedia() {
 async function loadRecipients() {
   if (isNew.value || !campaign.value) return
   isLoadingRecipients.value = true
+  recipientsPage.value = 0
+  recipients.value = []
+  recipientsTotal.value = 0
   try {
-    const response = await campaignsService.getRecipients(campaign.value.id)
-    recipients.value = (response.data as any).data?.recipients || []
+    const response = await campaignsService.getRecipients(campaign.value.id, {
+      page: 1,
+      limit: recipientsPageSize,
+    })
+    const data = (response.data as any).data || response.data
+    recipients.value = data?.recipients || []
+    const total = Number(data?.total)
+    recipientsTotal.value = Number.isFinite(total) && total >= 0 ? total : recipients.value.length
+    recipientsPage.value = Number(data?.page) || 1
   } catch {
     recipients.value = []
+    recipientsTotal.value = 0
   } finally {
     isLoadingRecipients.value = false
+  }
+}
+
+async function loadMoreRecipients() {
+  if (!campaign.value || !hasMoreRecipients.value || isLoadingMoreRecipients.value) return
+  isLoadingMoreRecipients.value = true
+  try {
+    const nextPage = recipientsPage.value + 1
+    const response = await campaignsService.getRecipients(campaign.value.id, {
+      page: nextPage,
+      limit: recipientsPageSize,
+    })
+    const data = (response.data as any).data || response.data
+    const nextRecipients: Recipient[] = data?.recipients || []
+    const loadedIds = new Set(recipients.value.map(recipient => recipient.id))
+    recipients.value = [
+      ...recipients.value,
+      ...nextRecipients.filter(recipient => !loadedIds.has(recipient.id)),
+    ]
+    const total = Number(data?.total)
+    if (Number.isFinite(total) && total >= 0) {
+      recipientsTotal.value = total
+    }
+    recipientsPage.value = Number(data?.page) || nextPage
+  } catch (err: unknown) {
+    toast.error(getErrorMessage(err, t('campaigns.recipientsLoadFailed', 'Failed to load recipients')))
+  } finally {
+    isLoadingMoreRecipients.value = false
   }
 }
 
@@ -590,9 +634,8 @@ async function deleteRecipient(recipientId: string) {
   deletingRecipientId.value = recipientId
   try {
     await campaignsService.deleteRecipient(campaign.value.id, recipientId)
-    recipients.value = recipients.value.filter(r => r.id !== recipientId)
     toast.success(t('common.deletedSuccess', { resource: 'Recipient' }, 'Recipient deleted'))
-    await loadCampaign()
+    await Promise.all([loadCampaign(), loadRecipients()])
   } catch (err: unknown) {
     toast.error(getErrorMessage(err, t('common.failedDelete', { resource: 'recipient' }, 'Failed to delete recipient')))
   } finally {
@@ -1362,7 +1405,7 @@ onUnmounted(() => {
           <CollapsibleTrigger class="flex items-center gap-2 cursor-pointer hover:opacity-80">
             <ChevronDown class="h-4 w-4 text-muted-foreground transition-transform [[data-state=closed]_&]:rotate-[-90deg]" />
             <CardTitle class="text-sm font-medium">
-              {{ $t('campaigns.recipients', 'Recipients') }} ({{ recipients.length }})
+              {{ $t('campaigns.recipients', 'Recipients') }} ({{ recipientsTotal }})
             </CardTitle>
           </CollapsibleTrigger>
           <Button v-if="isDraft" variant="outline" size="sm" @click="openAddRecipientsDialog">
@@ -1429,6 +1472,17 @@ onUnmounted(() => {
               </TableRow>
             </TableBody>
           </Table>
+        </div>
+        <div v-if="hasMoreRecipients" class="flex justify-center pt-3">
+          <Button
+            variant="outline"
+            size="sm"
+            :disabled="isLoadingMoreRecipients"
+            @click="loadMoreRecipients"
+          >
+            <Loader2 v-if="isLoadingMoreRecipients" class="h-4 w-4 mr-1 animate-spin" />
+            {{ isLoadingMoreRecipients ? $t('common.loading', 'Loading...') : $t('common.loadMore', 'Load more') }}
+          </Button>
         </div>
       </CardContent>
         </CollapsibleContent>

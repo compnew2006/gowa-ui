@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"log/slog"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/models"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -121,19 +121,59 @@ func LogAudit(
 	oldData, newData any,
 	extraChanges ...map[string]any,
 ) {
-	changes := ComputeChanges(oldData, newData)
-	changes = append(changes, extraChanges...)
-
-	if action == models.AuditActionUpdated && len(changes) == 0 {
+	entry, ok := newAuditLogEntry(orgID, userID, userName, resourceType, resourceID, action, oldData, newData, extraChanges...)
+	if !ok {
 		return
 	}
 
-	changesArr := make(models.JSONBArray, len(changes))
-	for i, c := range changes {
-		changesArr[i] = c
+	go func() {
+		if err := db.Create(entry).Error; err != nil {
+			slog.Error("failed to create audit log", "error", err)
+		}
+	}()
+}
+
+// LogAuditSync writes an audit entry through the supplied DB handle and
+// returns persistence errors to callers that must include the audit row in
+// the same transaction as the state change.
+func LogAuditSync(
+	db *gorm.DB,
+	orgID, userID uuid.UUID,
+	userName string,
+	resourceType string,
+	resourceID uuid.UUID,
+	action models.AuditAction,
+	oldData, newData any,
+	extraChanges ...map[string]any,
+) error {
+	entry, ok := newAuditLogEntry(orgID, userID, userName, resourceType, resourceID, action, oldData, newData, extraChanges...)
+	if !ok {
+		return nil
+	}
+	return db.Create(entry).Error
+}
+
+func newAuditLogEntry(
+	orgID, userID uuid.UUID,
+	userName string,
+	resourceType string,
+	resourceID uuid.UUID,
+	action models.AuditAction,
+	oldData, newData any,
+	extraChanges ...map[string]any,
+) (*models.AuditLog, bool) {
+	changes := ComputeChanges(oldData, newData)
+	changes = append(changes, extraChanges...)
+	if action == models.AuditActionUpdated && len(changes) == 0 {
+		return nil, false
 	}
 
-	entry := models.AuditLog{
+	changesArr := make(models.JSONBArray, len(changes))
+	for i, change := range changes {
+		changesArr[i] = change
+	}
+
+	return &models.AuditLog{
 		OrganizationID: orgID,
 		ResourceType:   resourceType,
 		ResourceID:     resourceID,
@@ -141,13 +181,7 @@ func LogAudit(
 		UserName:       userName,
 		Action:         action,
 		Changes:        changesArr,
-	}
-
-	go func() {
-		if err := db.Create(&entry).Error; err != nil {
-			slog.Error("failed to create audit log", "error", err)
-		}
-	}()
+	}, true
 }
 
 func extractSubField(val any, key string) any {

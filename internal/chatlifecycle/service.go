@@ -68,10 +68,16 @@ func New(db *gorm.DB, wsHub *websocket.Hub, log logf.Logger) *Service {
 // by customer" on inbound messages) can migrate off the *App helper. Until
 // that migration happens, the handler layer keeps a thin delegator.
 //
-// NOTE: this intentionally does NOT bump Contact.last_message_at — that is
-// the caller's responsibility (ReleaseChat and BulkReleaseChats bump it in
-// their Updates call so the released chat re-sorts to the top of Pending).
+// NOTE: this intentionally does NOT bump Contact.last_message_at — the
+// release transition updates it alongside the contact state so the released
+// chat re-sorts to the top of Pending.
 func (s *Service) CreateSystemMessage(orgID, contactID uuid.UUID, content string, metadata models.JSONB) {
+	if err := s.createSystemMessage(s.db, orgID, contactID, content, metadata); err != nil {
+		s.log.Error("Failed to create system message", "error", err, "contact_id", contactID)
+	}
+}
+
+func (s *Service) createSystemMessage(db *gorm.DB, orgID, contactID uuid.UUID, content string, metadata models.JSONB) error {
 	if metadata == nil {
 		metadata = models.JSONB{}
 	}
@@ -87,9 +93,7 @@ func (s *Service) CreateSystemMessage(orgID, contactID uuid.UUID, content string
 		Status:         models.MessageStatusSent,
 		Metadata:       metadata,
 	}
-	if err := s.db.Create(msg).Error; err != nil {
-		s.log.Error("Failed to create system message", "error", err, "contact_id", contactID)
-	}
+	return db.Create(msg).Error
 }
 
 // Release returns an assigned (open or closed) conversation to the pending
@@ -110,15 +114,27 @@ func (s *Service) CreateSystemMessage(orgID, contactID uuid.UUID, content string
 // Returns (true, nil) on a real release, (false, nil) on the idempotent
 // no-op, and (false, err) on a policy violation or persistence failure.
 func (s *Service) Release(ctx context.Context, orgID, userID uuid.UUID, contact *models.Contact, isAssignee, isAdminOrManager bool) (bool, error) {
-	return s.ReleaseWithDB(ctx, s.db, orgID, userID, contact, isAssignee, isAdminOrManager)
+	var released bool
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var err error
+		released, err = s.ReleaseWithDB(ctx, tx, orgID, userID, contact, isAssignee, isAdminOrManager)
+		return err
+	})
+	if err != nil {
+		return false, err
+	}
+	if released {
+		s.BroadcastReleased(orgID, userID, contact)
+	}
+	return released, nil
 }
 
 // ReleaseWithDB is Release running on a SUPPLIED gorm DB handle — used by the
 // access-grant Release endpoint to make "revoke grant + release assignment"
-// one transaction. All mutations (contact update, system message, audit
-// insert) run on db; the WS broadcast still fires immediately (it is not
-// transactional — a rollback after broadcast is a cosmetic edge case).
+// one transaction. All database writes run synchronously on db. The caller
+// owns the transaction and must broadcast only after its commit succeeds.
 func (s *Service) ReleaseWithDB(ctx context.Context, db *gorm.DB, orgID, userID uuid.UUID, contact *models.Contact, isAssignee, isAdminOrManager bool) (bool, error) {
+	db = db.WithContext(ctx)
 	// Authorization is checked first in the handler; double-check here as a
 	// defense-in-depth invariant (the handler is the source of truth but the
 	// service must not be callable in a way that violates policy).
@@ -163,25 +179,44 @@ func (s *Service) ReleaseWithDB(ctx context.Context, db *gorm.DB, orgID, userID 
 	// Agent display name for the system message (durable + locale-independent).
 	agentName := audit.GetUserName(db, userID)
 
-	s.CreateSystemMessage(orgID, contact.ID,
+	if err := s.createSystemMessage(db, orgID, contact.ID,
 		fmt.Sprintf("🔔 %s released this conversation", agentName),
 		models.JSONB{
 			"system_type": "chat_released",
 			"agent_id":    userID.String(),
 			"agent_name":  agentName,
-		})
+		}); err != nil {
+		s.log.Error("Failed to create release system message", "error", err, "contact_id", contact.ID)
+		return false, fmt.Errorf("chat: failed to create release message: %w", err)
+	}
 
 	// Audit: the extraChanges safeguard is load-bearing — audit.LogAudit
 	// silently no-ops when action=updated AND the computed diff is empty, and
 	// status lives in JSONB which the differ does not deeply compare. The
 	// explicit old→new map forces the entry to persist.
-	audit.LogAudit(db, orgID, userID, agentName,
+	if err := audit.LogAuditSync(db, orgID, userID, agentName,
 		"contact", contact.ID, models.AuditActionUpdated, nil, contact,
 		map[string]any{
 			"chat_status":      map[string]any{"old": oldStatus, "new": string(models.ChatStatusPending)},
 			"assigned_user_id": map[string]any{"old": oldAssigned, "new": nil},
-		})
+		}); err != nil {
+		s.log.Error("Failed to create release audit log", "error", err, "contact_id", contact.ID)
+		return false, fmt.Errorf("chat: failed to create release audit log: %w", err)
+	}
+	return true, nil
+}
 
+// BroadcastReleased emits the release event after the state transition has
+// committed. Callers that pass an existing transaction to ReleaseWithDB must
+// invoke this only after their outer transaction succeeds.
+func (s *Service) BroadcastReleased(orgID, userID uuid.UUID, contact *models.Contact) {
+	if contact == nil {
+		return
+	}
+	lastMessageAt := ""
+	if contact.LastMessageAt != nil {
+		lastMessageAt = contact.LastMessageAt.Format(time.RFC3339Nano)
+	}
 	s.broadcast(orgID, websocket.WSMessage{
 		Type: websocket.TypeChatReleased,
 		Payload: map[string]any{
@@ -189,11 +224,9 @@ func (s *Service) ReleaseWithDB(ctx context.Context, db *gorm.DB, orgID, userID 
 			"released_by":     userID.String(),
 			"chat_status":     string(models.ChatStatusPending),
 			"collaborators":   []any{}, // cleared server-side — include so clients drop stale collabs
-			"last_message_at": now.Format(time.RFC3339Nano),
+			"last_message_at": lastMessageAt,
 		},
 	})
-
-	return true, nil
 }
 
 // Assign is the admin/manager "Assign to agent" transition: sets the owner,
@@ -219,7 +252,9 @@ func (s *Service) Assign(ctx context.Context, orgID, adminID uuid.UUID, contact 
 		// No state change, but still (re)ensure the access grant: re-assigning
 		// the same user after a Release must reactivate their permanent access.
 		// The upsert is duplicate-safe by construction.
-		return upsertAssignmentGrant(s.db, orgID, adminID, contact.ID, *targetID)
+		return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			return upsertAssignmentGrant(tx, orgID, adminID, contact.ID, *targetID)
+		})
 	}
 
 	// Capture pre-mutation values for the audit log BEFORE mutation (see
@@ -229,43 +264,46 @@ func (s *Service) Assign(ctx context.Context, orgID, adminID uuid.UUID, contact 
 
 	contact.AssignedUserID = targetID
 	contact.SetStatus(models.ChatStatusOpen)
+	adminName := audit.GetUserName(s.db, adminID)
+	targetName := audit.GetUserName(s.db, *targetID)
 	// Assignment update + permanent access grant land in ONE transaction: a
 	// crash between them would leave a cross-account assignee who cannot see
-	// the conversation they were just made responsible for. The grant is
-	// idempotent (upsert on contact+user), and this is the ONLY path that
-	// creates grants — Claim/auto-routing never does (see Service.Claim).
-	if err := s.db.Transaction(func(tx *gorm.DB) error {
+	// the conversation they were just made responsible for. The system message
+	// and audit row share the transaction so persistence failures roll back the
+	// state change and grant as well. The grant is idempotent (upsert on
+	// contact+user), and this is the ONLY path that creates grants —
+	// Claim/auto-routing never does (see Service.Claim).
+	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(&models.Contact{}).Where("id = ?", contact.ID).Updates(map[string]any{
 			"assigned_user_id": targetID,
 			"metadata":         contact.Metadata,
 		}).Error; err != nil {
 			return err
 		}
-		return upsertAssignmentGrant(tx, orgID, adminID, contact.ID, *targetID)
+		if err := upsertAssignmentGrant(tx, orgID, adminID, contact.ID, *targetID); err != nil {
+			return err
+		}
+		if err := s.createSystemMessage(tx, orgID, contact.ID,
+			fmt.Sprintf("🔔 %s assigned this conversation to %s", adminName, targetName),
+			models.JSONB{
+				"system_type":      "chat_assigned",
+				"agent_id":         targetID.String(),
+				"agent_name":       targetName,
+				"assigned_by":      adminID.String(),
+				"assigned_by_name": adminName,
+			}); err != nil {
+			return fmt.Errorf("failed to create assignment system message: %w", err)
+		}
+		return audit.LogAuditSync(tx, orgID, adminID, adminName,
+			"contact", contact.ID, models.AuditActionUpdated, nil, contact,
+			map[string]any{
+				"chat_status":      map[string]any{"old": oldStatus, "new": string(models.ChatStatusOpen)},
+				"assigned_user_id": map[string]any{"old": oldAssigned, "new": targetID},
+			})
 	}); err != nil {
 		s.log.Error("Failed to assign chat", "error", err, "contact_id", contact.ID)
 		return fmt.Errorf("chat: failed to assign: %w", err)
 	}
-
-	adminName := audit.GetUserName(s.db, adminID)
-	targetName := audit.GetUserName(s.db, *targetID)
-
-	s.CreateSystemMessage(orgID, contact.ID,
-		fmt.Sprintf("🔔 %s assigned this conversation to %s", adminName, targetName),
-		models.JSONB{
-			"system_type":      "chat_assigned",
-			"agent_id":         targetID.String(),
-			"agent_name":       targetName,
-			"assigned_by":      adminID.String(),
-			"assigned_by_name": adminName,
-		})
-
-	audit.LogAudit(s.db, orgID, adminID, adminName,
-		"contact", contact.ID, models.AuditActionUpdated, nil, contact,
-		map[string]any{
-			"chat_status":      map[string]any{"old": oldStatus, "new": string(models.ChatStatusOpen)},
-			"assigned_user_id": map[string]any{"old": oldAssigned, "new": targetID},
-		})
 
 	// Same shape as Claim's broadcast — the frontend's chat_claimed handler
 	// already updates the list entry and re-fetches messages for viewers, so

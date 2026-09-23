@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/internal/queue"
 	"github.com/compnew2006/gowa-ui/internal/utils"
 	"github.com/compnew2006/gowa-ui/internal/websocket"
+	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 	"gorm.io/gorm"
@@ -795,8 +795,16 @@ func (a *App) GetCampaignRecipients(r *fastglue.Request) error {
 		return nil
 	}
 
+	pg := parsePagination(r)
+	query := a.DB.Where("campaign_id = ?", id)
+	var total int64
+	if err := query.Model(&models.BulkMessageRecipient{}).Count(&total).Error; err != nil {
+		a.Log.Error("Failed to count campaign recipients", "error", err)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to list recipients", nil, "")
+	}
+
 	var recipients []models.BulkMessageRecipient
-	if err := a.DB.Where("campaign_id = ?", id).Order("created_at ASC").Find(&recipients).Error; err != nil {
+	if err := pg.Apply(query.Order("created_at ASC").Order("id ASC")).Find(&recipients).Error; err != nil {
 		a.Log.Error("Failed to list recipients", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to list recipients", nil, "")
 	}
@@ -810,7 +818,9 @@ func (a *App) GetCampaignRecipients(r *fastglue.Request) error {
 
 	return r.SendEnvelope(map[string]any{
 		"recipients": recipients,
-		"total":      len(recipients),
+		"total":      total,
+		"page":       pg.Page,
+		"limit":      pg.Limit,
 	})
 }
 

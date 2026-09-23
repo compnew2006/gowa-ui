@@ -146,7 +146,7 @@ func (a *App) RevokeAccessGrant(r *fastglue.Request) error {
 	// for the conversation (safe but confusing direction).
 	revoked := false
 	assigneeReleased := false
-	txErr := a.DB.Transaction(func(tx *gorm.DB) error {
+	txErr := a.DB.WithContext(r.RequestCtx).Transaction(func(tx *gorm.DB) error {
 		now := time.Now()
 		res := tx.Model(&models.ContactAssignmentAccessGrant{}).
 			Where("contact_id = ? AND user_id = ? AND organization_id = ? AND revoked_at IS NULL",
@@ -167,14 +167,30 @@ func (a *App) RevokeAccessGrant(r *fastglue.Request) error {
 					Update("assigned_user_id", nil).Error; err != nil {
 					return err
 				}
+				contact.AssignedUserID = nil
 				assigneeReleased = true
-				return nil
+			} else {
+				released, rerr := a.ChatLifecycle.ReleaseWithDB(r.RequestCtx, tx, orgID, userID, contact, false, true)
+				if rerr != nil {
+					return rerr
+				}
+				assigneeReleased = released
 			}
-			released, rerr := a.ChatLifecycle.ReleaseWithDB(r.RequestCtx, tx, orgID, userID, contact, false, true)
-			if rerr != nil {
-				return rerr
+		}
+		if revoked || assigneeReleased {
+			actorName := audit.GetUserName(tx, userID)
+			if err := audit.LogAuditSync(tx, orgID, userID, actorName,
+				"contact", contact.ID, models.AuditActionUpdated, nil, contact,
+				map[string]any{
+					"access_grant_released": map[string]any{
+						"user_id":          targetID.String(),
+						"was_assignee":     assigneeReleased,
+						"grant_existed":    revoked,
+						"conversation_now": string(contact.EffectiveStatus()),
+					},
+				}); err != nil {
+				return err
 			}
-			assigneeReleased = released
 		}
 		return nil
 	})
@@ -182,19 +198,8 @@ func (a *App) RevokeAccessGrant(r *fastglue.Request) error {
 		a.Log.Error("Failed to release access", "error", txErr, "contact_id", contact.ID)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to release access", nil, "")
 	}
-
-	if revoked || assigneeReleased {
-		actorName := audit.GetUserName(a.DB, userID)
-		audit.LogAudit(a.DB, orgID, userID, actorName,
-			"contact", contact.ID, models.AuditActionUpdated, nil, contact,
-			map[string]any{
-				"access_grant_released": map[string]any{
-					"user_id":          targetID.String(),
-					"was_assignee":     assigneeReleased,
-					"grant_existed":    revoked,
-					"conversation_now": string(contact.EffectiveStatus()),
-				},
-			})
+	if assigneeReleased && contact.EffectiveStatus() == models.ChatStatusPending {
+		a.ChatLifecycle.BroadcastReleased(orgID, userID, contact)
 	}
 
 	// Broadcast so the released user's clients drop the conversation

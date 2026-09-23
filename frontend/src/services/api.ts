@@ -414,7 +414,8 @@ export const campaignsService = {
   cancel: (id: string) => api.post(`/campaigns/${id}/cancel`),
   retryFailed: (id: string) => api.post(`/campaigns/${id}/retry-failed`),
   // Recipients
-  getRecipients: (id: string) => api.get(`/campaigns/${id}/recipients`),
+  getRecipients: (id: string, params?: { page?: number; limit?: number }) =>
+    api.get(`/campaigns/${id}/recipients`, { params }),
   addRecipients: (id: string, recipients: Array<{ phone_number: string; recipient_name?: string; template_params?: Record<string, any> }>) =>
     api.post(`/campaigns/${id}/recipients/import`, { recipients }),
   deleteRecipient: (campaignId: string, recipientId: string) =>

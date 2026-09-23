@@ -3,6 +3,7 @@ package database
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/compnew2006/gowa-ui/internal/config"
@@ -496,11 +497,20 @@ func getIndexes() []string {
 // CreateDefaultAdmin creates a default admin user if no users exist
 // This should only be called once during initial setup
 func CreateDefaultAdmin(db *gorm.DB, cfg *config.DefaultAdminConfig) error {
-	// Check if admin already exists (using email from config)
-	var existingAdmin models.User
-	if err := db.Where("email = ?", cfg.Email).First(&existingAdmin).Error; err == nil {
-		// Admin already exists, skip
+	// Only bootstrap the first user. A config change must never create another
+	// super-admin account on a later migration/startup.
+	var existingUsers int64
+	if err := db.Model(&models.User{}).Count(&existingUsers).Error; err != nil {
+		return fmt.Errorf("failed to check existing users: %w", err)
+	}
+	if existingUsers > 0 {
 		return nil
+	}
+	if cfg == nil || strings.TrimSpace(cfg.Email) == "" || strings.TrimSpace(cfg.Password) == "" {
+		return fmt.Errorf("default admin email and password are required to initialize an empty database")
+	}
+	if cfg.RequireStrongPassword && len([]rune(cfg.Password)) < 12 {
+		return fmt.Errorf("default admin password must be at least 12 characters outside development")
 	}
 
 	// Find any existing organization, or create "Default Organization" if none exist
@@ -679,11 +689,6 @@ func SeedSystemRolesForAllOrgs(db *gorm.DB) error {
 	// Migrate existing users from old role column to new role_id
 	if err := MigrateExistingUserRoles(db); err != nil {
 		return fmt.Errorf("failed to migrate user roles: %w", err)
-	}
-
-	// Make admin@admin.com a super admin if exists
-	if err := db.Exec("UPDATE users SET is_super_admin = true WHERE email = 'admin@admin.com'").Error; err != nil {
-		return fmt.Errorf("failed to set super admin: %w", err)
 	}
 
 	return nil
@@ -952,9 +957,10 @@ func SeedSystemRolesForOrg(db *gorm.DB, orgID uuid.UUID) error {
 
 // SeedDefaultWidgets creates default dashboard widgets for all organizations
 func SeedDefaultWidgets(db *gorm.DB) error {
-	// Find the super admin user (admin@admin.com)
+	// Find an active super admin. Bootstrap email is configurable and must not
+	// be part of the widget seeding contract.
 	var superAdmin models.User
-	if err := db.Where("email = ?", "admin@admin.com").First(&superAdmin).Error; err != nil {
+	if err := db.Where("is_super_admin = ? AND is_active = ?", true, true).First(&superAdmin).Error; err != nil {
 		// No super admin exists yet, skip widget creation
 		return nil
 	}

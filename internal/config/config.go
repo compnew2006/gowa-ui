@@ -172,9 +172,10 @@ type StorageConfig struct {
 }
 
 type DefaultAdminConfig struct {
-	Email    string `koanf:"email"`
-	Password string `koanf:"password"`
-	FullName string `koanf:"full_name"`
+	Email                 string `koanf:"email"`
+	Password              string `koanf:"password"`
+	FullName              string `koanf:"full_name"`
+	RequireStrongPassword bool   `koanf:"-"` // Runtime policy; never loaded from config.
 }
 
 type CookieConfig struct {
@@ -241,9 +242,9 @@ func Load(configPath string) (*Config, error) {
 	if err := k.Unmarshal("", &cfg); err != nil {
 		return nil, err
 	}
-
 	// Set defaults
 	setDefaults(&cfg)
+	cfg.DefaultAdmin.RequireStrongPassword = cfg.App.Environment != "development"
 
 	return &cfg, nil
 }
@@ -322,12 +323,16 @@ func setDefaults(cfg *Config) {
 	if cfg.Storage.MaxMediaDownloadMB <= 0 {
 		cfg.Storage.MaxMediaDownloadMB = 1024
 	}
-	// Default admin credentials (only used during initial setup)
-	if cfg.DefaultAdmin.Email == "" {
-		cfg.DefaultAdmin.Email = "admin@admin.com"
-	}
-	if cfg.DefaultAdmin.Password == "" {
-		cfg.DefaultAdmin.Password = "admin"
+	// Keep the convenient bootstrap account for development only. Other
+	// environments must supply bootstrap credentials explicitly when the first
+	// user is created; existing installations need not retain them in config.
+	if cfg.App.Environment == "development" {
+		if cfg.DefaultAdmin.Email == "" {
+			cfg.DefaultAdmin.Email = "admin@admin.com"
+		}
+		if cfg.DefaultAdmin.Password == "" {
+			cfg.DefaultAdmin.Password = "admin"
+		}
 	}
 	if cfg.DefaultAdmin.FullName == "" {
 		cfg.DefaultAdmin.FullName = "Admin"

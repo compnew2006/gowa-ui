@@ -234,10 +234,7 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 	shouldMask := a.ShouldMaskPhoneNumbers(orgID)
 
 	// Convert to response format (masking resolved once for the whole page)
-	response := make([]ContactResponse, len(contacts))
-	for i := range contacts {
-		response[i] = a.buildContactResponseMasked(&contacts[i], orgID, userID, shouldMask)
-	}
+	response := a.buildContactResponsesMasked(contacts, orgID, userID, shouldMask)
 	a.decorateAccessModes(response, contacts, userID, orgID)
 
 	return r.SendEnvelope(listEnvelope("contacts", response, total, pg))
@@ -999,6 +996,100 @@ func (a *App) buildContactResponseMasked(contact *models.Contact, orgID, viewerU
 		Limit(1).
 		Scan(&lastMessageAccount)
 
+	assignedUserName := ""
+	if contact.AssignedUserID != nil {
+		var u models.User
+		if a.DB.Select("full_name").First(&u, "id = ?", *contact.AssignedUserID).Error == nil {
+			assignedUserName = u.FullName
+		}
+	}
+
+	return a.buildContactResponseMaskedWithData(contact, orgID, viewerUserID, shouldMask, unreadCount, lastMessageAccount, assignedUserName)
+}
+
+// buildContactResponsesMasked loads the message and assignee fields for a
+// contact page in batches so response construction does not issue queries per
+// contact.
+func (a *App) buildContactResponsesMasked(contacts []models.Contact, orgID, viewerUserID uuid.UUID, shouldMask bool) []ContactResponse {
+	responses := make([]ContactResponse, len(contacts))
+	if len(contacts) == 0 {
+		return responses
+	}
+
+	contactIDs := make([]uuid.UUID, 0, len(contacts))
+	assignedUserIDs := make([]uuid.UUID, 0, len(contacts))
+	seenAssignedUserIDs := make(map[uuid.UUID]struct{}, len(contacts))
+	for i := range contacts {
+		contactIDs = append(contactIDs, contacts[i].ID)
+		if contacts[i].AssignedUserID == nil {
+			continue
+		}
+		if _, seen := seenAssignedUserIDs[*contacts[i].AssignedUserID]; seen {
+			continue
+		}
+		seenAssignedUserIDs[*contacts[i].AssignedUserID] = struct{}{}
+		assignedUserIDs = append(assignedUserIDs, *contacts[i].AssignedUserID)
+	}
+
+	type unreadCountRow struct {
+		ContactID   uuid.UUID
+		UnreadCount int64
+	}
+	var unreadRows []unreadCountRow
+	a.DB.Model(&models.Message{}).
+		Select("contact_id, COUNT(*) AS unread_count").
+		Where("contact_id IN ? AND organization_id = ? AND direction = ? AND status NOT IN ?",
+			contactIDs, orgID, models.DirectionIncoming,
+			[]models.MessageStatus{models.MessageStatusRead, models.MessageStatusRevoked, models.MessageStatusFailed}).
+		Group("contact_id").
+		Scan(&unreadRows)
+	unreadCounts := make(map[uuid.UUID]int64, len(unreadRows))
+	for _, row := range unreadRows {
+		unreadCounts[row.ContactID] = row.UnreadCount
+	}
+
+	type lastMessageAccountRow struct {
+		ContactID       uuid.UUID
+		WhatsAppAccount string
+	}
+	var lastMessageAccountRows []lastMessageAccountRow
+	latestAccounts := a.DB.Model(&models.Message{}).
+		Select("contact_id, whats_app_account, ROW_NUMBER() OVER (PARTITION BY contact_id ORDER BY created_at DESC) AS row_num").
+		Where("contact_id IN ? AND organization_id = ? AND whats_app_account <> ''", contactIDs, orgID)
+	a.DB.Table("(?) AS latest_message_accounts", latestAccounts).
+		Select("contact_id, whats_app_account").
+		Where("row_num = ?", 1).
+		Scan(&lastMessageAccountRows)
+	lastMessageAccounts := make(map[uuid.UUID]string, len(lastMessageAccountRows))
+	for _, row := range lastMessageAccountRows {
+		lastMessageAccounts[row.ContactID] = row.WhatsAppAccount
+	}
+
+	assignedUserNames := make(map[uuid.UUID]string, len(assignedUserIDs))
+	if len(assignedUserIDs) > 0 {
+		var users []models.User
+		a.DB.Select("id", "full_name").Where("id IN ?", assignedUserIDs).Find(&users)
+		for _, user := range users {
+			assignedUserNames[user.ID] = user.FullName
+		}
+	}
+
+	for i := range contacts {
+		assignedUserName := ""
+		if contacts[i].AssignedUserID != nil {
+			assignedUserName = assignedUserNames[*contacts[i].AssignedUserID]
+		}
+		responses[i] = a.buildContactResponseMaskedWithData(
+			&contacts[i], orgID, viewerUserID, shouldMask,
+			unreadCounts[contacts[i].ID], lastMessageAccounts[contacts[i].ID], assignedUserName,
+		)
+	}
+
+	return responses
+}
+
+func (a *App) buildContactResponseMaskedWithData(contact *models.Contact, orgID, viewerUserID uuid.UUID, shouldMask bool, unreadCount int64, lastMessageAccount, assignedUserName string) ContactResponse {
+
 	tags := []string{}
 	if contact.Tags != nil {
 		for _, t := range contact.Tags {
@@ -1017,15 +1108,6 @@ func (a *App) buildContactResponseMasked(contact *models.Contact, orgID, viewerU
 
 	// 24-hour service window: open if customer messaged within the last 24 hours.
 	serviceWindowOpen := contact.LastInboundAt != nil && time.Since(*contact.LastInboundAt) < 24*time.Hour
-
-	// Load assigned user name
-	assignedUserName := ""
-	if contact.AssignedUserID != nil {
-		var u models.User
-		if a.DB.Select("full_name").First(&u, "id = ?", *contact.AssignedUserID).Error == nil {
-			assignedUserName = u.FullName
-		}
-	}
 
 	return ContactResponse{
 		ID:                 contact.ID,
