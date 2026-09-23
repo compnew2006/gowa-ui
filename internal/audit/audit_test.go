@@ -4,9 +4,24 @@ import (
 	"testing"
 
 	"github.com/compnew2006/gowa-ui/internal/audit"
+	"github.com/compnew2006/gowa-ui/internal/models"
+	"github.com/compnew2006/gowa-ui/test/testutil"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestLogAuditSyncReturnsPersistenceErrors(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	err := audit.LogAuditSync(
+		db.Table("missing_audit_table_for_sync_test"),
+		uuid.New(), uuid.New(), "Auditor", "contact", uuid.New(),
+		models.AuditActionUpdated,
+		map[string]string{"status": "old"},
+		map[string]string{"status": "new"},
+	)
+	require.Error(t, err, "synchronous audit writes must report persistence failures to the transaction")
+}
 
 func TestComputeChanges_CreateRecordsAllFields(t *testing.T) {
 	type Foo struct {

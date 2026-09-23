@@ -2,11 +2,15 @@
 # Fixes the truncated GOWA device_ids on the existing accounts and syncs history.
 # Run ON the VPS.
 set -uo pipefail
+umask 077
 API=http://127.0.0.1:8081
 ORIGIN=http://31.97.192.53:8081
-J=/tmp/gowa.cookies
+J=$(mktemp "${TMPDIR:-/tmp}/gowa-cookies.XXXXXX")
+CSRF_HEADER_FILE=$(mktemp "${TMPDIR:-/tmp}/gowa-csrf-header.XXXXXX")
+trap 'rm -f "$J" "$CSRF_HEADER_FILE"' EXIT
 EMAIL=admin@gowa-ui.local
-PASS=$(grep admin_password /opt/gowa-ui/.deploy-secrets | cut -d= -f2 | tr -d ' ')
+PASS=$(grep '^admin_password=' /opt/gowa-ui/.deploy-secrets | head -n 1 | cut -d= -f2-)
+: "${PASS:?admin_password is missing from /opt/gowa-ui/.deploy-secrets}"
 BASE=https://gowa.ofuqalmadenah.com
 ENC(){ python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1],safe=''))" "$1"; }
 
@@ -24,9 +28,14 @@ SQL
 
 echo ""
 echo "== 2) login (capture CSRF) =="
-curl -s -c "$J" -X POST "$API/api/auth/login" -H 'Content-Type: application/json' -H "Origin: $ORIGIN" \
-  -d "{\"email\":\"$EMAIL\",\"password\":\"$PASS\"}" -o /dev/null -w "login -> HTTP %{http_code}\n"
+python3 -c \
+  'import json,sys; print(json.dumps({"email": sys.argv[1], "password": sys.stdin.read().rstrip("\n")}))' "$EMAIL" <<< "$PASS" \
+  | curl -s -c "$J" -X POST "$API/api/auth/login" -H 'Content-Type: application/json' -H "Origin: $ORIGIN" \
+      --data-binary @- -o /dev/null -w "login -> HTTP %{http_code}\n"
+unset PASS
 CSRF=$(awk '$6=="whm_csrf"{print $7}' "$J")
+: "${CSRF:?login did not return a CSRF token}"
+printf 'X-CSRF-Token: %s\n' "$CSRF" > "$CSRF_HEADER_FILE"
 INST_ID=$(curl -s -b "$J" "$API/api/gowa/servers" \
   | python3 -c "import sys,json;d=json.load(sys.stdin);insts=d.get('data',d).get('instances',[]) or [];print(next((i['id'] for i in insts if i.get('base_url')=='$BASE'),''))" 2>/dev/null)
 echo "instance: $INST_ID ; csrf captured: $([ -n "$CSRF" ] && echo yes || echo NO)"
@@ -38,7 +47,7 @@ su - postgres -c "psql -d gowa_ui -tAc \"SELECT gowa_device_id FROM whatsapp_acc
   DEVE=$(ENC "$DEV")
   CODE=$(curl -s --max-time 90 -o /dev/null -w "%{http_code}" -b "$J" -X POST \
     "$API/api/gowa/servers/$INST_ID/devices/$DEVE/sync-messages" \
-    -H "Origin: $ORIGIN" -H "X-CSRF-Token: $CSRF")
+    -H "Origin: $ORIGIN" -H "@$CSRF_HEADER_FILE")
   echo "sync $DEV -> HTTP $CODE"
 done
 

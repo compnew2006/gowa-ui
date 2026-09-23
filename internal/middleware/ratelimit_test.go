@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/middleware"
 	"github.com/compnew2006/gowa-ui/test/testutil"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
@@ -177,6 +177,7 @@ func (a mockAddr) String() string  { return string(a) }
 func init() {
 	_ = func() *fastglue.Request {
 		ctx := &fasthttp.RequestCtx{}
+		ctx.Init(&fasthttp.Request{}, nil, nil)
 		return &fastglue.Request{RequestCtx: ctx}
 	}
 }

@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/handlers"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/test/testutil"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
@@ -497,6 +497,7 @@ func TestApp_CreateAPIKey_InvalidJSONBody(t *testing.T) {
 
 	// Create a raw request with invalid JSON
 	ctx := &fasthttp.RequestCtx{}
+	ctx.Init(&fasthttp.Request{}, nil, nil)
 	ctx.Request.Header.SetContentType("application/json")
 	ctx.Request.Header.SetMethod("POST")
 	ctx.Request.SetBody([]byte(`{invalid json`))

@@ -23,6 +23,7 @@ const testJWTSecret = "test-secret-key-must-be-at-least-32-chars"
 // newTestRequest creates a fastglue request for testing.
 func newTestRequest() *fastglue.Request {
 	ctx := &fasthttp.RequestCtx{}
+	ctx.Init(&fasthttp.Request{}, nil, nil)
 	return &fastglue.Request{RequestCtx: ctx}
 }
 

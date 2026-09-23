@@ -13,6 +13,7 @@ import (
 type Config struct {
 	App           AppConfig          `koanf:"app"`
 	Server        ServerConfig       `koanf:"server"`
+	Profiling     ProfilingConfig    `koanf:"profiling"`
 	Database      DatabaseConfig     `koanf:"database"`
 	Redis         RedisConfig        `koanf:"redis"`
 	JWT           JWTConfig          `koanf:"jwt"`
@@ -41,6 +42,14 @@ type ServerConfig struct {
 	WriteTimeout   int    `koanf:"write_timeout"`
 	BasePath       string `koanf:"base_path"`       // Base path for frontend (e.g., "/gowa-ui" for proxy pass)
 	AllowedOrigins string `koanf:"allowed_origins"` // Comma-separated list of allowed CORS origins
+}
+
+// ProfilingConfig controls the optional, loopback-only runtime profiling
+// listener. It is intentionally separate from ServerConfig so pprof can never
+// be mounted on the public application server.
+type ProfilingConfig struct {
+	Enabled bool   `koanf:"enabled"`
+	Address string `koanf:"address"`
 }
 
 type DatabaseConfig struct {
@@ -254,7 +263,7 @@ func setDefaults(cfg *Config) {
 		cfg.App.Name = "gowa-ui"
 	}
 	if cfg.App.Environment == "" {
-		cfg.App.Environment = "development"
+		cfg.App.Environment = "production"
 	}
 	if cfg.Server.Host == "" {
 		cfg.Server.Host = "0.0.0.0"
@@ -267,6 +276,9 @@ func setDefaults(cfg *Config) {
 	}
 	if cfg.Server.WriteTimeout == 0 {
 		cfg.Server.WriteTimeout = 30
+	}
+	if cfg.Profiling.Address == "" {
+		cfg.Profiling.Address = "127.0.0.1:6060"
 	}
 	if cfg.Database.Port == 0 {
 		cfg.Database.Port = 5432
@@ -323,9 +335,8 @@ func setDefaults(cfg *Config) {
 	if cfg.Storage.MaxMediaDownloadMB <= 0 {
 		cfg.Storage.MaxMediaDownloadMB = 1024
 	}
-	// Keep the convenient bootstrap account for development only. Other
-	// environments must supply bootstrap credentials explicitly when the first
-	// user is created; existing installations need not retain them in config.
+	// Keep the convenient bootstrap account only when development is explicitly
+	// selected. An omitted environment defaults to production-safe settings.
 	if cfg.App.Environment == "development" {
 		if cfg.DefaultAdmin.Email == "" {
 			cfg.DefaultAdmin.Email = "admin@admin.com"

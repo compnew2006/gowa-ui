@@ -871,12 +871,12 @@ func (a *App) DeleteContact(r *fastglue.Request) error {
 // list so agents can never see that an admin is present in the chat. Admins and
 // managers see the full list. The viewer's own entry is always preserved so a
 // collaborator still sees themselves.
-func (a *App) filterCollaboratorsForViewer(collabs []models.Collaborator, viewerID, orgID uuid.UUID) []models.Collaborator {
+func filterCollaboratorsForViewer(collabs []models.Collaborator, viewerID uuid.UUID, canManageContacts map[uuid.UUID]bool) []models.Collaborator {
 	if len(collabs) == 0 {
 		return collabs
 	}
 	// Admins/managers see everyone.
-	if a.HasPermission(viewerID, models.ResourceContacts, models.ActionWrite, orgID) {
+	if canManageContacts[viewerID] {
 		return collabs
 	}
 	// Agents: strip admin/manager collaborators (Ghost Mode), keep self + other agents.
@@ -893,12 +893,93 @@ func (a *App) filterCollaboratorsForViewer(collabs []models.Collaborator, viewer
 			filtered = append(filtered, c)
 			continue
 		}
-		if a.HasPermission(uid, models.ResourceContacts, models.ActionWrite, orgID) {
+		if canManageContacts[uid] {
 			continue // admin/manager → hide from agent
 		}
 		filtered = append(filtered, c)
 	}
 	return filtered
+}
+
+func failClosedCollaboratorPermissions(userIDs []uuid.UUID, viewerID uuid.UUID) map[uuid.UUID]bool {
+	permissions := make(map[uuid.UUID]bool, len(userIDs))
+	for _, id := range userIDs {
+		if id != viewerID {
+			permissions[id] = true
+		}
+	}
+	return permissions
+}
+
+// loadCollaboratorManagementPermissions loads the viewer and every distinct
+// collaborator's contacts:write permission in one query for a contact page.
+// Permission checks here must be batched: response construction can include
+// many contacts and each contact can have multiple collaborators.
+func (a *App) loadCollaboratorManagementPermissions(contacts []models.Contact, viewerID, orgID uuid.UUID) map[uuid.UUID]bool {
+	userIDs := make([]uuid.UUID, 0)
+	seen := make(map[uuid.UUID]struct{})
+	hasCollaborators := false
+	addID := func(rawID string) {
+		id, err := uuid.Parse(rawID)
+		if err != nil {
+			return
+		}
+		if _, ok := seen[id]; ok {
+			return
+		}
+		seen[id] = struct{}{}
+		userIDs = append(userIDs, id)
+	}
+	for i := range contacts {
+		collaborators := contacts[i].GetCollaborators()
+		if len(collaborators) == 0 {
+			continue
+		}
+		hasCollaborators = true
+		for _, collaborator := range collaborators {
+			addID(collaborator.UserID)
+		}
+	}
+	if !hasCollaborators {
+		return nil
+	}
+	if _, ok := seen[viewerID]; !ok {
+		userIDs = append(userIDs, viewerID)
+	}
+
+	type permissionRow struct {
+		UserID            uuid.UUID `gorm:"column:user_id"`
+		CanManageContacts bool      `gorm:"column:can_manage_contacts"`
+	}
+	var rows []permissionRow
+	err := a.DB.Model(&models.User{}).
+		Select(`users.id AS user_id,
+			(users.is_super_admin OR EXISTS (
+				SELECT 1
+				FROM role_permissions AS rp
+				JOIN custom_roles AS cr ON cr.id = rp.custom_role_id AND cr.deleted_at IS NULL
+				JOIN permissions AS p ON p.id = rp.permission_id AND p.deleted_at IS NULL
+				WHERE rp.custom_role_id = COALESCE(
+					(SELECT uo.role_id FROM user_organizations AS uo
+					 WHERE uo.user_id = users.id AND uo.organization_id = ? AND uo.deleted_at IS NULL LIMIT 1),
+					users.role_id
+				)
+				AND p.resource = ? AND p.action = ?
+			)) AS can_manage_contacts`, orgID, models.ResourceContacts, models.ActionWrite).
+		Where("users.id IN ?", userIDs).
+		Scan(&rows).Error
+	if err != nil {
+		a.Log.Error("Failed to load collaborator permissions", "error", err, "organization_id", orgID)
+		// Do not expose administrator identities to an agent when the permission
+		// lookup fails. The viewer is always retained by the filter itself.
+		return failClosedCollaboratorPermissions(userIDs, viewerID)
+	}
+
+	permissions := make(map[uuid.UUID]bool, len(rows))
+	for _, row := range rows {
+		permissions[row.UserID] = row.CanManageContacts
+	}
+	return permissions
 }
 
 // decorateAccessModes fills AccessMode/CanReply/CanClose on a page of contact
@@ -1004,7 +1085,8 @@ func (a *App) buildContactResponseMasked(contact *models.Contact, orgID, viewerU
 		}
 	}
 
-	return a.buildContactResponseMaskedWithData(contact, orgID, viewerUserID, shouldMask, unreadCount, lastMessageAccount, assignedUserName)
+	canManageContacts := a.loadCollaboratorManagementPermissions([]models.Contact{*contact}, viewerUserID, orgID)
+	return a.buildContactResponseMaskedWithData(contact, orgID, viewerUserID, shouldMask, unreadCount, lastMessageAccount, assignedUserName, canManageContacts)
 }
 
 // buildContactResponsesMasked loads the message and assignee fields for a
@@ -1073,6 +1155,7 @@ func (a *App) buildContactResponsesMasked(contacts []models.Contact, orgID, view
 			assignedUserNames[user.ID] = user.FullName
 		}
 	}
+	canManageContacts := a.loadCollaboratorManagementPermissions(contacts, viewerUserID, orgID)
 
 	for i := range contacts {
 		assignedUserName := ""
@@ -1081,14 +1164,14 @@ func (a *App) buildContactResponsesMasked(contacts []models.Contact, orgID, view
 		}
 		responses[i] = a.buildContactResponseMaskedWithData(
 			&contacts[i], orgID, viewerUserID, shouldMask,
-			unreadCounts[contacts[i].ID], lastMessageAccounts[contacts[i].ID], assignedUserName,
+			unreadCounts[contacts[i].ID], lastMessageAccounts[contacts[i].ID], assignedUserName, canManageContacts,
 		)
 	}
 
 	return responses
 }
 
-func (a *App) buildContactResponseMaskedWithData(contact *models.Contact, orgID, viewerUserID uuid.UUID, shouldMask bool, unreadCount int64, lastMessageAccount, assignedUserName string) ContactResponse {
+func (a *App) buildContactResponseMaskedWithData(contact *models.Contact, orgID, viewerUserID uuid.UUID, shouldMask bool, unreadCount int64, lastMessageAccount, assignedUserName string, canManageContacts map[uuid.UUID]bool) ContactResponse {
 
 	tags := []string{}
 	if contact.Tags != nil {
@@ -1131,7 +1214,7 @@ func (a *App) buildContactResponseMaskedWithData(contact *models.Contact, orgID,
 		IsGroupChat:        contact.Metadata != nil && contact.Metadata["is_group_chat"] == true,
 		IsNewsletter:       contact.Metadata != nil && contact.Metadata["is_newsletter"] == true,
 		ChatStatus:         string(contact.EffectiveStatus()),
-		Collaborators:      a.filterCollaboratorsForViewer(contact.GetCollaborators(), viewerUserID, orgID),
+		Collaborators:      filterCollaboratorsForViewer(contact.GetCollaborators(), viewerUserID, canManageContacts),
 		CreatedAt:          contact.CreatedAt,
 		UpdatedAt:          contact.UpdatedAt,
 	}

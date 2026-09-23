@@ -21,6 +21,7 @@ import (
 func newPUTRequest(t *testing.T) *fastglue.Request {
 	t.Helper()
 	ctx := &fasthttp.RequestCtx{}
+	ctx.Init(&fasthttp.Request{}, nil, nil)
 	ctx.Request.Header.SetMethod("PUT")
 	return &fastglue.Request{RequestCtx: ctx}
 }
@@ -30,6 +31,7 @@ func newPUTRequest(t *testing.T) *fastglue.Request {
 func newPOSTJSONRequest(t *testing.T, body any) *fastglue.Request {
 	t.Helper()
 	ctx := &fasthttp.RequestCtx{}
+	ctx.Init(&fasthttp.Request{}, nil, nil)
 	ctx.Request.Header.SetContentType("application/json")
 	ctx.Request.Header.SetMethod("POST")
 	if body != nil {
@@ -38,6 +40,26 @@ func newPOSTJSONRequest(t *testing.T, body any) *fastglue.Request {
 		ctx.Request.SetBody(data)
 	}
 	return &fastglue.Request{RequestCtx: ctx}
+}
+
+func TestRequestHelpersInitializeContextsForDatabaseCalls(t *testing.T) {
+	requests := []struct {
+		name string
+		new  func() *fastglue.Request
+	}{
+		{name: "json", new: func() *fastglue.Request {
+			return testutil.NewJSONRequest(t, map[string]string{"ok": "yes"})
+		}},
+		{name: "get", new: func() *fastglue.Request { return testutil.NewGETRequest(t) }},
+		{name: "empty", new: func() *fastglue.Request { return testutil.NewRequest(t) }},
+	}
+
+	for _, tt := range requests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := tt.new()
+			assert.NotPanics(t, func() { _ = req.RequestCtx.Done() })
+		})
+	}
 }
 
 // claimContactForTest sets a contact into the "assigned/open" state in the DB,

@@ -14,7 +14,7 @@ import (
 func NewJSONRequest(t *testing.T, body any) *fastglue.Request {
 	t.Helper()
 
-	ctx := &fasthttp.RequestCtx{}
+	ctx := newInitializedRequestCtx()
 	ctx.Request.Header.SetContentType("application/json")
 	ctx.Request.Header.SetMethod("POST")
 
@@ -31,7 +31,7 @@ func NewJSONRequest(t *testing.T, body any) *fastglue.Request {
 func NewGETRequest(t *testing.T) *fastglue.Request {
 	t.Helper()
 
-	ctx := &fasthttp.RequestCtx{}
+	ctx := newInitializedRequestCtx()
 	ctx.Request.Header.SetMethod("GET")
 
 	return &fastglue.Request{RequestCtx: ctx}
@@ -41,8 +41,14 @@ func NewGETRequest(t *testing.T) *fastglue.Request {
 func NewRequest(t *testing.T) *fastglue.Request {
 	t.Helper()
 
-	ctx := &fasthttp.RequestCtx{}
+	ctx := newInitializedRequestCtx()
 	return &fastglue.Request{RequestCtx: ctx}
+}
+
+func newInitializedRequestCtx() *fasthttp.RequestCtx {
+	ctx := &fasthttp.RequestCtx{}
+	ctx.Init(&fasthttp.Request{}, nil, nil)
+	return ctx
 }
 
 // SetAuthHeader sets a Bearer token Authorization header on the request.

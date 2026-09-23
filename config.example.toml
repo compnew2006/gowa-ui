@@ -18,6 +18,13 @@ write_timeout = 30
 base_path = ""  # Set to "/subpath" if behind nginx proxy pass
 allowed_origins = ""  # Comma-separated CORS origins (e.g., "https://app.example.com,https://admin.example.com"). Empty = allow all (dev only).
 
+# Optional Go runtime profiling endpoint. Keep disabled during normal service.
+# When enabled, address must use a literal loopback IP (127.0.0.1 or ::1); the
+# pprof listener is separate from the public application HTTP server.
+[profiling]
+enabled = false
+address = "127.0.0.1:6060"
+
 [database]
 host = "db"  # Use "localhost" for local development
 port = 5432

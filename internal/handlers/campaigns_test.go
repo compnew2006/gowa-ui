@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/handlers"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/test/testutil"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
@@ -52,7 +52,12 @@ func TestApp_ListCampaigns_Success(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("list-campaigns")), testutil.WithPassword("password"))
+	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "Campaign Reader", []string{"campaigns:read"})
+	user := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("list-campaigns")),
+		testutil.WithPassword("password"),
+		testutil.WithRoleID(&role.ID),
+	)
 	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("test-account"))
 	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
 
@@ -83,7 +88,12 @@ func TestApp_ListCampaigns_FilterByStatus(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("list-filter")), testutil.WithPassword("password"))
+	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "Campaign Reader", []string{"campaigns:read"})
+	user := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("list-filter")),
+		testutil.WithPassword("password"),
+		testutil.WithRoleID(&role.ID),
+	)
 	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("test-account-filter"))
 	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
 
@@ -871,7 +881,12 @@ func TestApp_GetCampaignRecipients_Success(t *testing.T) {
 	mockQueue := testutil.NewMockQueue()
 	app := newTestApp(t, withQueue(mockQueue))
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("get-recipients")), testutil.WithPassword("password"))
+	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "Campaign Reader", []string{"campaigns:read"})
+	user := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("get-recipients")),
+		testutil.WithPassword("password"),
+		testutil.WithRoleID(&role.ID),
+	)
 	account := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("get-recipients-account"))
 	template := testutil.CreateTestTemplate(t, app.DB, org.ID, account.Name)
 	campaign := createTestCampaign(t, app, org.ID, template.ID, user.ID, account.Name, models.CampaignStatusDraft)
@@ -890,11 +905,38 @@ func TestApp_GetCampaignRecipients_Success(t *testing.T) {
 		Data struct {
 			Recipients []models.BulkMessageRecipient `json:"recipients"`
 			Total      int                           `json:"total"`
+			Page       int                           `json:"page"`
+			Limit      int                           `json:"limit"`
 		} `json:"data"`
 	}
 	err = json.Unmarshal(testutil.GetResponseBody(req), &resp)
 	require.NoError(t, err)
 	assert.Equal(t, 2, resp.Data.Total)
+	assert.Equal(t, 1, resp.Data.Page)
+	assert.Equal(t, 50, resp.Data.Limit)
+	assert.Len(t, resp.Data.Recipients, 2)
+
+	pageReq := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(pageReq, org.ID, user.ID)
+	testutil.SetPathParam(pageReq, "id", campaign.ID.String())
+	testutil.SetQueryParam(pageReq, "page", 2)
+	testutil.SetQueryParam(pageReq, "limit", 1)
+	require.NoError(t, app.GetCampaignRecipients(pageReq))
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(pageReq))
+
+	var pageResp struct {
+		Data struct {
+			Recipients []models.BulkMessageRecipient `json:"recipients"`
+			Total      int                           `json:"total"`
+			Page       int                           `json:"page"`
+			Limit      int                           `json:"limit"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(pageReq), &pageResp))
+	assert.Equal(t, 2, pageResp.Data.Total, "total must describe all campaign recipients, not only this page")
+	assert.Equal(t, 2, pageResp.Data.Page)
+	assert.Equal(t, 1, pageResp.Data.Limit)
+	assert.Len(t, pageResp.Data.Recipients, 1)
 }
 
 func TestApp_GetCampaignRecipients_CampaignNotFound(t *testing.T) {

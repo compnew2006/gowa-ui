@@ -3,11 +3,11 @@ package database_test
 import (
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/config"
 	"github.com/compnew2006/gowa-ui/internal/database"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/test/testutil"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -267,6 +267,39 @@ func TestCreateDefaultAdmin_CreatesOrgAndUser(t *testing.T) {
 
 	// Verify the user belongs to the organization
 	assert.Equal(t, org.ID, user.OrganizationID)
+}
+
+func TestCreateDefaultAdmin_RejectsWeakPasswordWhenRequired(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	cleanAll(t, db)
+
+	cfg := &config.DefaultAdminConfig{
+		Email:                 "weak-admin@example.com",
+		Password:              "short",
+		RequireStrongPassword: true,
+	}
+	err := database.CreateDefaultAdmin(db, cfg)
+	require.ErrorContains(t, err, "at least 12 characters")
+
+	var users int64
+	require.NoError(t, db.Model(&models.User{}).Count(&users).Error)
+	assert.Zero(t, users, "weak bootstrap credentials must not create the first admin")
+}
+
+func TestSeedDefaultWidgets_UsesConfiguredSuperAdmin(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	cleanAll(t, db)
+	org := testutil.CreateTestOrganization(t, db)
+	admin := testutil.CreateTestUser(t, db, org.ID,
+		testutil.WithEmail("configured-bootstrap-admin@example.com"),
+		testutil.WithPassword("configured-bootstrap-password"),
+	)
+	require.NoError(t, db.Model(&models.User{}).Where("id = ?", admin.ID).Update("is_super_admin", true).Error)
+
+	require.NoError(t, database.SeedDefaultWidgets(db))
+	var widgets int64
+	require.NoError(t, db.Model(&models.Widget{}).Where("organization_id = ?", org.ID).Count(&widgets).Error)
+	assert.Positive(t, widgets, "custom bootstrap emails must receive default dashboard widgets")
 }
 
 func TestCreateDefaultAdmin_Idempotent(t *testing.T) {

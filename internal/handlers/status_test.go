@@ -9,11 +9,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/handlers"
 	"github.com/compnew2006/gowa-ui/pkg/gowa"
 	"github.com/compnew2006/gowa-ui/pkg/whatsapp"
 	"github.com/compnew2006/gowa-ui/test/testutil"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
@@ -26,8 +26,8 @@ import (
 // response envelope shape as newMockGowaServer so gowa.doJSON/doMultipart parse
 // it correctly.
 type statusMockGowa struct {
-	server   *httptest.Server
-	mu       sync.Mutex
+	server    *httptest.Server
+	mu        sync.Mutex
 	lastPhone string
 	lastPath  string
 	fail      bool
@@ -110,6 +110,7 @@ func newMultipartStatusRequest(t *testing.T, orgID, userID uuid.UUID, fields map
 	require.NoError(t, writer.Close())
 
 	ctx := &fasthttp.RequestCtx{}
+	ctx.Init(&fasthttp.Request{}, nil, nil)
 	ctx.Request.Header.SetMethod("POST")
 	ctx.Request.Header.SetContentType(writer.FormDataContentType())
 	ctx.Request.SetBody(buf.Bytes())
@@ -241,9 +242,9 @@ func TestApp_SendStatus_Image_Multipart(t *testing.T) {
 
 	png := minimalPNG()
 	req := newMultipartStatusRequest(t, org.ID, user.ID, map[string]string{
-		"type":              "image",
-		"caption":           "status caption",
-		"whatsapp_account":  account.Name,
+		"type":             "image",
+		"caption":          "status caption",
+		"whatsapp_account": account.Name,
 	}, "status.png", "image/png", png)
 
 	require.NoError(t, app.SendStatus(req))
@@ -307,4 +308,3 @@ func minimalPNG() []byte {
 		0x42, 0x60, 0x82,
 	}
 }
-

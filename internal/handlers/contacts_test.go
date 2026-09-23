@@ -907,6 +907,7 @@ func TestApp_SendMessage(t *testing.T) {
 
 		// Send non-JSON body
 		ctx := &fasthttp.RequestCtx{}
+		ctx.Init(&fasthttp.Request{}, nil, nil)
 		ctx.Request.Header.SetContentType("application/json")
 		ctx.Request.Header.SetMethod("POST")
 		ctx.Request.SetBody([]byte("not-json"))

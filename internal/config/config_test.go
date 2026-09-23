@@ -23,7 +23,7 @@ func TestLoad_AppliesDefaultsForMissingFields(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "gowa-ui", cfg.App.Name)
-	assert.Equal(t, "development", cfg.App.Environment)
+	assert.Equal(t, "production", cfg.App.Environment, "unspecified environment must use production-safe defaults")
 	assert.Equal(t, "0.0.0.0", cfg.Server.Host)
 	assert.Equal(t, 8080, cfg.Server.Port)
 	assert.Equal(t, 30, cfg.Server.ReadTimeout)
@@ -38,8 +38,21 @@ func TestLoad_AppliesDefaultsForMissingFields(t *testing.T) {
 	assert.Equal(t, 1, cfg.JWT.RefreshExpiryDays)
 	assert.Equal(t, "local", cfg.Storage.Type)
 	assert.Equal(t, "./uploads", cfg.Storage.LocalPath)
+	assert.Empty(t, cfg.DefaultAdmin.Email, "unspecified environment must not receive development bootstrap credentials")
+	assert.Empty(t, cfg.DefaultAdmin.Password, "unspecified environment must not receive development bootstrap credentials")
+	assert.True(t, cfg.DefaultAdmin.RequireStrongPassword, "unspecified environment must fail closed for bootstrap")
+}
+
+func TestLoad_ExplicitDevelopmentEnvironmentGetsDevelopmentBootstrapCredentials(t *testing.T) {
+	cfg, err := config.Load(writeConfig(t, `
+[app]
+environment = "development"
+`))
+	require.NoError(t, err)
+
 	assert.Equal(t, "admin@admin.com", cfg.DefaultAdmin.Email)
 	assert.Equal(t, "admin", cfg.DefaultAdmin.Password)
+	assert.False(t, cfg.DefaultAdmin.RequireStrongPassword)
 }
 
 func TestLoad_FileValuesOverrideDefaults(t *testing.T) {
@@ -81,6 +94,7 @@ secure = false
 `))
 	require.NoError(t, err)
 	assert.True(t, cfg.Cookie.Secure, "production environment must force Cookie.Secure=true")
+	assert.True(t, cfg.DefaultAdmin.RequireStrongPassword)
 }
 
 func TestLoad_DevelopmentDoesNotForceSecureCookie(t *testing.T) {

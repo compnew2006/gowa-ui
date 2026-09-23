@@ -92,6 +92,10 @@ func runServer(args []string) {
 
 	// Logger may downgrade to info in production now that the environment is known.
 	lo = setupLogger(cfg.App.Environment, "gowa-ui")
+	profiling, err := startProfilingServer(cfg.Profiling, lo)
+	if err != nil {
+		lo.Fatal("Failed to start profiling server", "error", err)
+	}
 
 	db := setupDB(cfg, lo)
 	if *migrate {
@@ -128,7 +132,7 @@ func runServer(args []string) {
 	workers, workerCancel, _ := startEmbeddedWorkers(cfg, db, rdb, lo, waRegistry, *numWorkers)
 
 	_ = waitForShutdownSignal()
-	gracefulShutdown(lo, app, procs, workers, workerCancel, server)
+	gracefulShutdown(lo, app, procs, workers, workerCancel, server, profiling)
 }
 
 // ============================================================================

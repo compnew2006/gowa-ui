@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -219,6 +221,7 @@ func gracefulShutdown(
 	workers []*worker.Worker,
 	workerCancel context.CancelFunc,
 	server *fasthttp.Server,
+	profiling *profilingServer,
 ) {
 	lo.Info("Shutting down...")
 
@@ -285,6 +288,20 @@ func gracefulShutdown(
 		lo.Error("Server shutdown error", "error", err)
 	}
 	lo.Info("Server stopped")
+
+	if profiling != nil {
+		lo.Info("Stopping profiling server...")
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		if err := profiling.server.Shutdown(ctx); err != nil {
+			lo.Error("Profiling server shutdown error", "error", err)
+			if closeErr := profiling.server.Close(); closeErr != nil && !errors.Is(closeErr, http.ErrServerClosed) {
+				lo.Error("Profiling server close error", "error", closeErr)
+			}
+		}
+		cancel()
+		profiling.restoreSampling()
+		lo.Info("Profiling server stopped")
+	}
 }
 
 // waitForShutdownSignal blocks until SIGINT/SIGTERM is received and returns
