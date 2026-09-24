@@ -9,6 +9,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -145,7 +146,8 @@ func (c *Client) doRequest(ctx context.Context, method, path, deviceID, contentT
 	}
 	c.setAuth(req)
 	if deviceID != "" {
-		req.Header.Set("X-Device-Id", deviceID)
+		// GOWA's middleware decodes this header with QueryUnescape.
+		req.Header.Set("X-Device-Id", url.QueryEscape(deviceID))
 	}
 
 	resp, err := c.httpClient.Do(req)
@@ -162,23 +164,48 @@ func (c *Client) doRequest(ctx context.Context, method, path, deviceID, contentT
 	return resp.StatusCode, respBody, nil
 }
 
-// doJSON sends a JSON request to the GOWA API and decodes the send response.
+// doJSON sends a JSON request and validates the GOWA response envelope. A
+// message ID is optional here because many successful API operations do not
+// send a WhatsApp message.
 func (c *Client) doJSON(ctx context.Context, method, path, deviceID string, body any) (string, error) {
+	respBody, err := c.doJSONResponse(ctx, method, path, deviceID, body, false)
+	if err != nil {
+		return "", err
+	}
+	return responseMessageID(respBody), nil
+}
+
+// doSendJSON sends a JSON message request and requires GOWA to return the
+// message ID created by WhatsApp.
+func (c *Client) doSendJSON(ctx context.Context, method, path, deviceID string, body any) (string, error) {
+	respBody, err := c.doJSONResponse(ctx, method, path, deviceID, body, false)
+	if err != nil {
+		return "", err
+	}
+	return sendResponseMessageID(respBody)
+}
+
+// doJSONResponse is the shared JSON transport path. marshalNil preserves the
+// existing distinction between doJSON (no body for nil) and doJSONRaw (JSON
+// literal null for nil).
+func (c *Client) doJSONResponse(ctx context.Context, method, path, deviceID string, body any, marshalNil bool) ([]byte, error) {
 	var reqBody io.Reader
-	if body != nil {
+	if body != nil || marshalNil {
 		jsonBody, err := json.Marshal(body)
 		if err != nil {
-			return "", fmt.Errorf("marshal request body: %w", err)
+			return nil, fmt.Errorf("marshal request body: %w", err)
 		}
 		reqBody = bytes.NewReader(jsonBody)
 	}
 
 	statusCode, respBody, err := c.doRequest(ctx, method, path, deviceID, "application/json", reqBody)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-
-	return parseSendResponse(statusCode, respBody)
+	if err := validateGOWAResponse(statusCode, respBody, true); err != nil {
+		return nil, err
+	}
+	return respBody, nil
 }
 
 // doMultipart sends a multipart/form-data request to the GOWA API.
@@ -233,32 +260,17 @@ func (c *Client) doRaw(ctx context.Context, method, path, deviceID string) ([]by
 		return nil, err
 	}
 
-	if statusCode < 200 || statusCode >= 300 {
-		return nil, fmt.Errorf("gowa API returned status %d: %s", statusCode, string(respBody))
+	if err := validateGOWAResponse(statusCode, respBody, false); err != nil {
+		return nil, err
 	}
 
 	return respBody, nil
 }
 
-// doJSONRaw sends a JSON request with any HTTP method and returns the raw
-// response body. Unlike doJSON (which returns just the message ID), this
-// returns the full body for callers that need to unmarshal custom types.
+// doJSONRaw sends a JSON request with any HTTP method and returns the full
+// response body for callers that need to unmarshal custom types.
 func (c *Client) doJSONRaw(ctx context.Context, method, path, deviceID string, body any) ([]byte, error) {
-	jsonBody, err := json.Marshal(body)
-	if err != nil {
-		return nil, fmt.Errorf("marshal request body: %w", err)
-	}
-
-	statusCode, respBody, err := c.doRequest(ctx, method, path, deviceID, "application/json", bytes.NewReader(jsonBody))
-	if err != nil {
-		return nil, err
-	}
-
-	if statusCode < 200 || statusCode >= 300 {
-		return nil, fmt.Errorf("gowa API returned status %d: %s", statusCode, string(respBody))
-	}
-
-	return respBody, nil
+	return c.doJSONResponse(ctx, method, path, deviceID, body, true)
 }
 
 // setAuth applies Basic Auth to the request.
@@ -270,13 +282,16 @@ func (c *Client) setAuth(req *http.Request) {
 
 // parseSendResponse decodes a GOWA send envelope and extracts the message ID.
 func parseSendResponse(statusCode int, body []byte) (string, error) {
+	if err := validateGOWAResponse(statusCode, body, true); err != nil {
+		return "", err
+	}
+	return sendResponseMessageID(body)
+}
+
+func sendResponseMessageID(body []byte) (string, error) {
 	var sr sendResponse
 	if err := json.Unmarshal(body, &sr); err != nil {
-		return "", fmt.Errorf("gowa API returned status %d: %s", statusCode, string(body))
-	}
-
-	if statusCode < 200 || statusCode >= 300 {
-		return "", fmt.Errorf("gowa API error: %s", sr.Message)
+		return "", fmt.Errorf("parse GOWA send response: %w", err)
 	}
 
 	if sr.Results.MessageID == "" {
@@ -284,6 +299,71 @@ func parseSendResponse(statusCode int, body []byte) (string, error) {
 	}
 
 	return sr.Results.MessageID, nil
+}
+
+// validateGOWAResponse checks the HTTP status and, when the body is a GOWA
+// envelope, its code. Non-JSON bodies are accepted only by doRaw, which also
+// carries CSV and media responses. A message without a code is treated as a
+// malformed GOWA envelope; results-only payloads remain compatible with older
+// endpoints that omit the standard envelope fields.
+func validateGOWAResponse(statusCode int, body []byte, requireJSON bool) error {
+	if statusCode < 200 || statusCode >= 300 {
+		var response struct {
+			Message string `json:"message"`
+		}
+		if json.Unmarshal(body, &response) == nil && response.Message != "" {
+			return fmt.Errorf("gowa API error: %s", response.Message)
+		}
+		return fmt.Errorf("gowa API returned status %d: %s", statusCode, string(body))
+	}
+
+	var envelope map[string]json.RawMessage
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		if requireJSON {
+			return fmt.Errorf("parse GOWA JSON response: %w", err)
+		}
+		return nil
+	}
+	if envelope == nil {
+		return nil
+	}
+
+	code, hasCode := envelope["code"]
+	if !hasCode {
+		if message, hasMessage := envelope["message"]; hasMessage {
+			return fmt.Errorf("gowa API response is missing code: message=%s", string(message))
+		}
+		return nil
+	}
+	if !isGowaSuccessCode(code) {
+		var message string
+		_ = json.Unmarshal(envelope["message"], &message)
+		return fmt.Errorf("gowa API error: code=%s message=%s", string(code), message)
+	}
+	return nil
+}
+
+// isGowaSuccessCode reports whether a GOWA envelope code means success.
+func isGowaSuccessCode(code json.RawMessage) bool {
+	var value string
+	if err := json.Unmarshal(code, &value); err != nil {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(value), "SUCCESS")
+}
+
+// responseMessageID extracts an optional message ID from a successful
+// response. Generic GOWA operations may legitimately have no results object.
+func responseMessageID(body []byte) string {
+	var response struct {
+		Results struct {
+			MessageID string `json:"message_id"`
+		} `json:"results"`
+	}
+	if json.Unmarshal(body, &response) != nil {
+		return ""
+	}
+	return response.Results.MessageID
 }
 
 // cacheMedia stores raw bytes for the UploadMedia→send pattern and returns

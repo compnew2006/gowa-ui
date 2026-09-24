@@ -85,14 +85,14 @@ func (c *Client) CreateDevice(ctx context.Context, deviceID string, cfg WebhookC
 // DeleteDevice removes a device from the GOWA instance.
 // GOWA endpoint: DELETE /devices/{device_id}
 func (c *Client) DeleteDevice(ctx context.Context, deviceID string) error {
-	_, err := c.doRaw(ctx, "DELETE", fmt.Sprintf("/devices/%s", deviceID), "")
+	_, err := c.doRaw(ctx, "DELETE", fmt.Sprintf("/devices/%s", url.PathEscape(deviceID)), "")
 	return err
 }
 
 // GetDeviceStatus checks the connection state of a device.
 // GOWA endpoint: GET /devices/{device_id}/status
 func (c *Client) GetDeviceStatus(ctx context.Context, deviceID string) (*DeviceStatus, error) {
-	rawBody, err := c.doRaw(ctx, "GET", fmt.Sprintf("/devices/%s/status", deviceID), "")
+	rawBody, err := c.doRaw(ctx, "GET", fmt.Sprintf("/devices/%s/status", url.PathEscape(deviceID)), "")
 	if err != nil {
 		return nil, err
 	}
@@ -108,21 +108,21 @@ func (c *Client) GetDeviceStatus(ctx context.Context, deviceID string) (*DeviceS
 // LogoutDevice logs out a device (keeps the device slot).
 // GOWA endpoint: POST /devices/{device_id}/logout
 func (c *Client) LogoutDevice(ctx context.Context, deviceID string) error {
-	_, err := c.doRaw(ctx, "POST", fmt.Sprintf("/devices/%s/logout", deviceID), "")
+	_, err := c.doRaw(ctx, "POST", fmt.Sprintf("/devices/%s/logout", url.PathEscape(deviceID)), "")
 	return err
 }
 
 // ReconnectDevice triggers a reconnection for a device.
 // GOWA endpoint: POST /devices/{device_id}/reconnect
 func (c *Client) ReconnectDevice(ctx context.Context, deviceID string) error {
-	_, err := c.doRaw(ctx, "POST", fmt.Sprintf("/devices/%s/reconnect", deviceID), "")
+	_, err := c.doRaw(ctx, "POST", fmt.Sprintf("/devices/%s/reconnect", url.PathEscape(deviceID)), "")
 	return err
 }
 
 // GetDeviceWebhook retrieves the webhook config for a device.
 // GOWA endpoint: GET /devices/{device_id}/webhook
 func (c *Client) GetDeviceWebhook(ctx context.Context, deviceID string) (*WebhookConfig, error) {
-	rawBody, err := c.doRaw(ctx, "GET", fmt.Sprintf("/devices/%s/webhook", deviceID), "")
+	rawBody, err := c.doRaw(ctx, "GET", fmt.Sprintf("/devices/%s/webhook", url.PathEscape(deviceID)), "")
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +144,7 @@ func (c *Client) SetDeviceWebhook(ctx context.Context, deviceID string, cfg Webh
 		"webhook_events":               cfg.WebhookEvents,
 		"webhook_insecure_skip_verify": cfg.WebhookInsecureSkipVerify,
 	}
-	rawBody, err := c.doJSONRaw(ctx, "PATCH", fmt.Sprintf("/devices/%s/webhook", deviceID), "", body)
+	rawBody, err := c.doJSONRaw(ctx, "PATCH", fmt.Sprintf("/devices/%s/webhook", url.PathEscape(deviceID)), "", body)
 	if err != nil {
 		return nil, err
 	}

@@ -15,7 +15,7 @@ func (c *Client) SendTextMessage(ctx context.Context, account *whatsapp.Account,
 	if len(replyToMsgID) > 0 && replyToMsgID[0] != "" {
 		body["reply_message_id"] = replyToMsgID[0]
 	}
-	return c.doJSON(ctx, "POST", "/send/message", deviceID(account), body)
+	return c.doSendJSON(ctx, "POST", "/send/message", deviceID(account), body)
 }
 
 // resolveMediaData returns the raw bytes for a mediaID produced by
@@ -100,7 +100,7 @@ func (c *Client) sendMedia(ctx context.Context, account *whatsapp.Account, rcpt 
 	if replyMessageID != "" {
 		body["reply_message_id"] = replyMessageID
 	}
-	return c.doJSON(ctx, "POST", path, deviceID(account), body)
+	return c.doSendJSON(ctx, "POST", path, deviceID(account), body)
 }
 
 // SendInteractiveButtons is not supported by GOWA v8.10.0.
@@ -119,7 +119,7 @@ func (c *Client) SendCTAURLButton(ctx context.Context, account *whatsapp.Account
 	if bodyText != "" {
 		body["caption"] = bodyText
 	}
-	return c.doJSON(ctx, "POST", "/send/link", deviceID(account), body)
+	return c.doSendJSON(ctx, "POST", "/send/link", deviceID(account), body)
 }
 
 // StatusBroadcastJID is WhatsApp's well-known JID for the Status (story)

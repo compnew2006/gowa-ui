@@ -62,7 +62,14 @@ tmp/
 temp/
 uploads/
 audio/
+# Keep local GOWA checkouts ignored while allowing only the sanitized template.
 GOWA/
+!/GOWA/
+GOWA/*
+!GOWA/.env.example
+!/gowa/
+gowa/*
+!gowa/.env.example
 
 # Test results
 test-results/
