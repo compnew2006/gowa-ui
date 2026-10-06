@@ -474,6 +474,8 @@
     "tabMe": "Me",
     "tabClosed": "Closed",
     "tabAll": "All",
+    "tabInternal": "Internal",
+    "internal": "Internal",
     "releasedConversation": "Release",
     "releaseClosedHint": "Closed chats must be reopened before release",
     "conversationTabs": "Conversation lists",

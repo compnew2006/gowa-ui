@@ -48,11 +48,16 @@ type ContactResponse struct {
 	// UI can render the read-only state precisely. CanReply/CanClose are
 	// server-computed convenience flags for the same purpose — the server
 	// re-checks on every write regardless.
-	AccessMode string    `json:"access_mode,omitempty"`
-	CanReply   bool      `json:"can_reply"`
-	CanClose   bool      `json:"can_close"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	AccessMode string `json:"access_mode,omitempty"`
+	CanReply   bool   `json:"can_reply"`
+	CanClose   bool   `json:"can_close"`
+	// IsInternal marks a conversation with one of the org's OWN connected
+	// numbers (two accounts messaging each other); InternalAccountName is
+	// that counterpart account's Name. See internal_contacts.go.
+	IsInternal          bool      `json:"is_internal"`
+	InternalAccountName string    `json:"internal_account_name,omitempty"`
+	CreatedAt           time.Time `json:"created_at"`
+	UpdatedAt           time.Time `json:"updated_at"`
 }
 
 // MessageResponse represents a message for the frontend
@@ -1086,7 +1091,9 @@ func (a *App) buildContactResponseMasked(contact *models.Contact, orgID, viewerU
 	}
 
 	canManageContacts := a.loadCollaboratorManagementPermissions([]models.Contact{*contact}, viewerUserID, orgID)
-	return a.buildContactResponseMaskedWithData(contact, orgID, viewerUserID, shouldMask, unreadCount, lastMessageAccount, assignedUserName, canManageContacts)
+	resp := a.buildContactResponseMaskedWithData(contact, orgID, viewerUserID, shouldMask, unreadCount, lastMessageAccount, assignedUserName, canManageContacts)
+	markInternalContact(&resp, contact.PhoneNumber, a.orgAccountPhones(orgID))
+	return resp
 }
 
 // buildContactResponsesMasked loads the message and assignee fields for a
@@ -1156,6 +1163,7 @@ func (a *App) buildContactResponsesMasked(contacts []models.Contact, orgID, view
 		}
 	}
 	canManageContacts := a.loadCollaboratorManagementPermissions(contacts, viewerUserID, orgID)
+	accountPhones := a.orgAccountPhones(orgID)
 
 	for i := range contacts {
 		assignedUserName := ""
@@ -1166,6 +1174,7 @@ func (a *App) buildContactResponsesMasked(contacts []models.Contact, orgID, view
 			&contacts[i], orgID, viewerUserID, shouldMask,
 			unreadCounts[contacts[i].ID], lastMessageAccounts[contacts[i].ID], assignedUserName, canManageContacts,
 		)
+		markInternalContact(&responses[i], contacts[i].PhoneNumber, accountPhones)
 	}
 
 	return responses

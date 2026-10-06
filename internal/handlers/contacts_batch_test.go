@@ -95,6 +95,6 @@ func TestBuildContactResponsesMasked_UsesBoundedBatchQueries(t *testing.T) {
 	manyContactCounts := measure(25)
 	assert.Equal(t, singleContactCounts, manyContactCounts,
 		"lookup query count must stay constant as the page size grows")
-	assert.Equal(t, 4, manyContactCounts,
-		"one grouped unread query, one last-account query, one assignee batch, and one collaborator-permission batch are expected")
+	assert.Equal(t, 5, manyContactCounts,
+		"one grouped unread query, one last-account query, one assignee batch, one collaborator-permission batch, and one org-account-phones lookup are expected")
 }

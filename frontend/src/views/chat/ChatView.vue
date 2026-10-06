@@ -396,6 +396,7 @@ const selectedAccount = ref<string | null>(null)
 const {
   getMessageContent,
   getSystemMessageText,
+  getSystemMessageTimestamp,
   getReplyPreviewContent,
   getMessageStatusIcon,
   getMessageStatusClass,
@@ -706,6 +707,7 @@ const {
   fetchCustomActions,
   executeCustomAction,
   visibleTabOrder,
+  tabGridClass,
   onTabKeydown,
   tabLabel,
   tabCount,
@@ -1021,7 +1023,7 @@ onUnmounted(() => {
           aria-label="$t('chat.conversationTabs')"
           :class="[
             'grid gap-1 rounded-lg bg-white/[0.04] light:bg-gray-100 p-1 mt-2',
-            contactsStore.canSeeSupervisorTabs ? 'grid-cols-4' : 'grid-cols-2'
+            tabGridClass()
           ]"
           @keydown="onTabKeydown"
         >
@@ -1116,6 +1118,10 @@ onUnmounted(() => {
                   <Badge v-else-if="contact.is_group_chat" class="ml-1 h-4 text-[9px] align-middle bg-blue-500/20 text-blue-400 light:bg-blue-100 light:text-blue-700">
                     {{ $t('chat.group') }}
                   </Badge>
+                  <!-- Conversation with another of the org's own numbers. -->
+                  <Badge v-if="contact.is_internal" class="ml-1 h-4 text-[9px] align-middle bg-cyan-500/20 text-cyan-400 light:bg-cyan-100 light:text-cyan-700">
+                    {{ $t('chat.internal') }}
+                  </Badge>
                 </p>
                 <span class="flex-shrink-0 text-[11px] text-white/40 light:text-gray-500 tabular-nums">
                   {{ formatContactTime(contact.last_message_at) }}
@@ -1123,7 +1129,7 @@ onUnmounted(() => {
               </div>
               <div class="flex items-center justify-between gap-2">
                 <p class="flex-1 min-w-0 text-xs text-white/50 light:text-gray-500 truncate flex items-center gap-1">
-                  {{ isStatusContact(contact.id) ? $t('chat.statusHint') : contact.phone_number }}
+                  {{ isStatusContact(contact.id) ? $t('chat.statusHint') : (contact.internal_account_name || contact.phone_number) }}
                   <!-- M1: assigned-agent tag. Shows whenever a chat is assigned
                        to someone other than the viewer, so an admin can see who
                        owns each conversation at a glance and a fellow agent can
@@ -1218,6 +1224,10 @@ onUnmounted(() => {
                 <Badge v-if="contactsStore.currentContact?.assigned_user_name && !contactsStore.isPendingClaim"
                        class="text-[10px] h-5 bg-emerald-500/20 text-emerald-400 light:bg-emerald-100 light:text-emerald-700">
                   👤 {{ contactsStore.currentContact.assigned_user_name }}
+                </Badge>
+                <Badge v-if="contactsStore.currentContact?.is_internal"
+                       class="text-[10px] h-5 bg-cyan-500/20 text-cyan-400 light:bg-cyan-100 light:text-cyan-700">
+                  {{ $t('chat.internal') }} · {{ contactsStore.currentContact.internal_account_name }}
                 </Badge>
                 <Badge v-if="contactsStore.isChatClosed"
                        class="text-[10px] h-5 bg-gray-500/20 text-gray-400 light:bg-gray-100 light:text-gray-600">
@@ -1627,6 +1637,7 @@ onUnmounted(() => {
               >
                 <div class="px-3.5 py-1 bg-white/[0.04] light:bg-gray-200/60 rounded-full text-[11px] text-white/45 light:text-gray-500 font-medium max-w-[85%] text-center select-none border-none shadow-none">
                   {{ getSystemMessageText(message) }}
+                  <span v-if="getSystemMessageTimestamp(message)" class="opacity-70"> · <bdi class="tabular-nums">{{ getSystemMessageTimestamp(message) }}</bdi></span>
                 </div>
               </div>
 

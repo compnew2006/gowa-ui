@@ -10,7 +10,7 @@ import {
 } from 'lucide-vue-next'
 import type { Contact, Message } from '@/stores/contacts'
 
-type ListTab = 'me' | 'pending' | 'closed' | 'all'
+type ListTab = 'me' | 'pending' | 'closed' | 'all' | 'internal'
 
 export interface UseChatContactsListOptions {
   /** i18n translator. */
@@ -33,6 +33,7 @@ export interface UseChatContactsListOptions {
     pendingCount: number
     closedCount: number
     allCount: number
+    internalCount: number
     hasMoreContacts: boolean
     isLoadingMoreContacts: boolean
     loadMoreContacts: () => Promise<void>
@@ -201,10 +202,24 @@ export function useChatContactsList(options: UseChatContactsListOptions) {
   const TAB_ORDER = ['me', 'pending', 'closed', 'all'] as const
   // 'closed' and 'all' are supervisor tabs (contacts:write — the admin/manager
   // marker, matching canManageAllChats), so agents keep the two-tab strip.
+  // 'internal' (chats between the org's own numbers) appears for everyone, but
+  // only while such chats are loaded — or while it is the active tab, so the
+  // selection never points at a hidden tab.
   function visibleTabOrder(): ListTab[] {
-    return contactsStore.canSeeSupervisorTabs
+    const order: ListTab[] = contactsStore.canSeeSupervisorTabs
       ? [...TAB_ORDER]
       : ['me', 'pending']
+    if (contactsStore.internalCount > 0 || contactsStore.activeListTab === 'internal') {
+      order.push('internal')
+    }
+    return order
+  }
+  // Static class names so Tailwind's scanner keeps every column count.
+  const TAB_GRID_COLS: Record<number, string> = {
+    2: 'grid-cols-2', 3: 'grid-cols-3', 4: 'grid-cols-4', 5: 'grid-cols-5',
+  }
+  function tabGridClass(): string {
+    return TAB_GRID_COLS[visibleTabOrder().length] ?? 'grid-cols-4'
   }
   function onTabKeydown(e: KeyboardEvent) {
     const order = visibleTabOrder()
@@ -228,6 +243,7 @@ export function useChatContactsList(options: UseChatContactsListOptions) {
       case 'pending': return t('chat.tabPending')
       case 'closed': return t('chat.tabClosed')
       case 'all': return t('chat.tabAll')
+      case 'internal': return t('chat.tabInternal')
       default: return t('chat.tabMe')
     }
   }
@@ -236,6 +252,7 @@ export function useChatContactsList(options: UseChatContactsListOptions) {
       case 'pending': return contactsStore.pendingCount
       case 'closed': return contactsStore.closedCount
       case 'all': return contactsStore.allCount
+      case 'internal': return contactsStore.internalCount
       default: return contactsStore.myCount
     }
   }
@@ -388,6 +405,7 @@ export function useChatContactsList(options: UseChatContactsListOptions) {
   executeCustomAction,
   // Tabs (tabStripRef owned by the view — not re-returned)
   visibleTabOrder,
+  tabGridClass,
   onTabKeydown,
   tabLabel,
   tabCount,

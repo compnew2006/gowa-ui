@@ -136,6 +136,11 @@ func (a *App) maybeSendAwayReply(account *models.WhatsAppAccount, fromPhone, pro
 	if isWithinBusinessHours(bh, time.Now()) {
 		return
 	}
+	// A colleague writing from another org number is not a customer waiting
+	// on opening hours.
+	if a.isInternalPhone(account.OrganizationID, fromPhone) {
+		return
+	}
 	contact, _, err := contactutil.GetOrCreateContact(a.DB, account.OrganizationID, fromPhone, profileName)
 	if err != nil || contact == nil {
 		a.Log.Error("Business hours: failed to load contact for away reply",

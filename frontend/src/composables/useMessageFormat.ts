@@ -3,6 +3,7 @@ import type { MaybeRefOrGetter } from 'vue'
 import { toValue } from 'vue'
 import type { Message } from '@/stores/contacts'
 import { mediaUrl } from '@/lib/media'
+import { formatDateTime } from '@/lib/utils'
 
 /** Decoded location payload stored in a `location` message. */
 export interface LocationData {
@@ -154,6 +155,14 @@ export function useMessageFormat(options: UseMessageFormatOptions) {
       return t(`chat.system.${systemType}`, { agent })
     }
     return getMessageContent(message)
+  }
+
+  // System pills (claim, assign, release, close, ...) carry their own date +
+  // time: the date separator above them only names the day, and when the
+  // lifecycle event happened is the point of the pill.
+  function getSystemMessageTimestamp(message: Message): string {
+    if (!message.metadata?.is_system_message || !message.created_at) return ''
+    return formatDateTime(message.created_at)
   }
 
   function getMessageStatusIcon(status: string) {
@@ -409,6 +418,7 @@ export function useMessageFormat(options: UseMessageFormatOptions) {
     // Content decoding
     getMessageContent,
     getSystemMessageText,
+    getSystemMessageTimestamp,
     getReplyPreviewContent,
     // Status / time formatting
     getMessageStatusIcon,

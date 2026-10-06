@@ -47,6 +47,10 @@ export interface Contact {
   marketing_opt_out?: boolean
   is_group_chat?: boolean
   is_newsletter?: boolean
+  /** Conversation with one of the org's OWN connected numbers (two accounts
+   *  messaging each other); internal_account_name is that account's name. */
+  is_internal?: boolean
+  internal_account_name?: string
   chat_status?: 'pending' | 'open' | 'closed'
   /** How the VIEWER reaches this conversation: standard (own account),
    *  current_assignee (cross-account via current assignment — full access),
@@ -153,7 +157,9 @@ export const useContactsStore = defineStore('contacts', () => {
   // on 'me' (their own assigned conversations — the primary working surface).
   // 'closed' and 'all' are supervisor tabs, gated on contacts:write in the
   // view (the admin/manager marker — see canSeeSupervisorTabs below).
-  const VALID_TABS = ['me', 'pending', 'closed', 'all'] as const
+  // 'internal' lists conversations between the org's own numbers; the view
+  // only shows it while such conversations exist.
+  const VALID_TABS = ['me', 'pending', 'closed', 'all', 'internal'] as const
   type ListTab = typeof VALID_TABS[number]
 
   // One-time migration: an earlier build defaulted everyone (including admins)
@@ -218,7 +224,8 @@ export const useContactsStore = defineStore('contacts', () => {
     }
     if (hasExplicitTabChoice) return
     // No explicit choice — ensure user lands on a visible tab.
-    if (!canSeeSupervisorTabs.value && activeListTab.value !== 'pending' && activeListTab.value !== 'me') {
+    if (!canSeeSupervisorTabs.value && activeListTab.value !== 'pending'
+      && activeListTab.value !== 'me' && activeListTab.value !== 'internal') {
       activeListTab.value = 'pending'
     }
   }, { immediate: true })
@@ -278,7 +285,8 @@ export const useContactsStore = defineStore('contacts', () => {
   // defaults to "open" for legacy rows that never had chat_status set, so a
   // filter on `chat_status === 'pending'` alone would hide most legacy
   // unassigned chats. We therefore treat "pending" as `!assigned && !closed`.
-  //   pending → not assigned to anyone AND not closed (awaiting a claim)
+  //   pending → not assigned to anyone AND not closed (awaiting a claim);
+  //             internal conversations stay out of the customer queue
   //   me      → assigned and NOT closed. Closing releases ownership (backend
   //             Close clears the assignment), so closed chats leave Me and live
   //             in the Closed tab only — including legacy closed-but-assigned
@@ -287,8 +295,9 @@ export const useContactsStore = defineStore('contacts', () => {
   //             chat_status default to open and correctly stay out of here)
   //   all     → every loaded chat, no filter (supervisors only — the backend
   //             already returns everything for contacts:read holders)
+  //   internal → conversations between the org's own numbers, any status
   const pendingContacts = computed(() =>
-    sortedContacts.value.filter(c => !c.assigned_user_id && c.chat_status !== 'closed')
+    sortedContacts.value.filter(c => !c.assigned_user_id && c.chat_status !== 'closed' && !c.is_internal)
   )
   // Supervisors (contacts:write — the admin/manager marker everywhere else)
   // get the "Me" tab as a follow-up surface: EVERY assigned conversation in
@@ -307,10 +316,12 @@ export const useContactsStore = defineStore('contacts', () => {
     sortedContacts.value.filter(c => c.chat_status === 'closed')
   )
   const allContacts = computed(() => sortedContacts.value)
+  const internalContacts = computed(() => sortedContacts.value.filter(c => c.is_internal))
   const pendingCount = computed(() => pendingContacts.value.length)
   const myCount = computed(() => myContacts.value.length)
   const closedCount = computed(() => closedContacts.value.length)
   const allCount = computed(() => allContacts.value.length)
+  const internalCount = computed(() => internalContacts.value.length)
 
   // The list to render in the sidebar for the active tab.
   // The virtual Status conversation is pinned to the top on every tab — it is
@@ -321,6 +332,7 @@ export const useContactsStore = defineStore('contacts', () => {
       case 'me': tabList = myContacts.value; break
       case 'closed': tabList = closedContacts.value; break
       case 'all': tabList = allContacts.value; break
+      case 'internal': tabList = internalContacts.value; break
       case 'pending':
       default: tabList = pendingContacts.value
     }
@@ -367,20 +379,23 @@ export const useContactsStore = defineStore('contacts', () => {
     if (!q) return null
     const r = searchResultsAcrossTabs.value ?? []
     if (!r.length) return null
-    const inPending = r.some(c => !c.assigned_user_id && c.chat_status !== 'closed')
+    const inPending = r.some(c => !c.assigned_user_id && c.chat_status !== 'closed' && !c.is_internal)
     const inMe = r.some(c => c.assigned_user_id === authStore.user?.id && c.chat_status !== 'closed')
     const inClosed = canSeeSupervisorTabs.value && r.some(c => c.chat_status === 'closed')
+    const inInternal = r.some(c => c.is_internal)
     const current = activeListTab.value
     const currentHasHits =
       current === 'all' ||
       (current === 'pending' && inPending) ||
       (current === 'me' && inMe) ||
-      (current === 'closed' && inClosed)
+      (current === 'closed' && inClosed) ||
+      (current === 'internal' && inInternal)
     if (currentHasHits) return null
     const tabs: ListTab[] = []
     if (inMe) tabs.push('me')
     if (inPending) tabs.push('pending')
     if (inClosed) tabs.push('closed')
+    if (inInternal) tabs.push('internal')
     return { show: tabs.length > 0, tabs }
   })
 
@@ -1040,6 +1055,7 @@ export const useContactsStore = defineStore('contacts', () => {
     myCount,
     closedCount,
     allCount,
+    internalCount,
     displayedContacts,
     // Cross-tab search (M3)
     visibleContacts,

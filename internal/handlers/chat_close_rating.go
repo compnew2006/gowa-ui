@@ -229,6 +229,10 @@ func (a *App) maybeSendCloseRatingPrompt(orgID, closedBy uuid.UUID, contact mode
 	if !settings.Enabled {
 		return
 	}
+	// Internal conversations (another org number) are not customer service.
+	if a.isInternalPhone(orgID, contact.PhoneNumber) {
+		return
+	}
 
 	closedByCopy := closedBy
 	cycle := models.ChatClosureRating{

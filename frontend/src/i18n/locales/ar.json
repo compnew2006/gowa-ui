@@ -474,6 +474,8 @@
     "tabMe": "محادثاتي",
     "tabClosed": "المغلقة",
     "tabAll": "الكل",
+    "tabInternal": "داخلية",
+    "internal": "داخلي",
     "releasedConversation": "تحرير",
     "releaseClosedHint": "يجب إعادة فتح المحادثات المغلقة قبل تحريرها",
     "conversationTabs": "قوائم المحادثات",
