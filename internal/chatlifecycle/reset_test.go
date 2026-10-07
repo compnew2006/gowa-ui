@@ -2,6 +2,7 @@ package chatlifecycle_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -53,6 +54,41 @@ func TestService_ResetAssignedChats_ResetsAllOpenAssigned(t *testing.T) {
 
 		msgs := systemMessagesFor(t, db, c.ID, "chat_daily_reset")
 		require.Len(t, msgs, 1, "each reset chat must have exactly one reset system message")
+	}
+}
+
+// TestService_ResetAssignedChats_SkipsInternalChats: Private-tab
+// conversations — one with another org number (by connected JID, device
+// suffix included) or one a user moved there by hand — are not customer
+// queue work and must survive the daily reset untouched.
+func TestService_ResetAssignedChats_SkipsInternalChats(t *testing.T) {
+	svc, db, org := newService(t)
+	account := testutil.CreateTestWhatsAppAccount(t, db, org.ID)
+	peer := testutil.CreateTestWhatsAppAccount(t, db, org.ID)
+	peerPhone := fmt.Sprintf("9668%011d", time.Now().UnixNano()%1e11)
+	require.NoError(t, db.Model(peer).Update("gowa_jid", peerPhone+":3@s.whatsapp.net").Error)
+	agent := testutil.CreateTestUser(t, db, org.ID, testutil.WithFullName("Agent"))
+
+	customer := testutil.CreateTestContactWith(t, db, org.ID, testutil.WithContactAccount(account.Name))
+	resetAssignedForTest(t, db, customer, agent.ID)
+	orgNumber := testutil.CreateTestContactWith(t, db, org.ID,
+		testutil.WithContactAccount(account.Name), testutil.WithPhoneNumber(peerPhone))
+	resetAssignedForTest(t, db, orgNumber, agent.ID)
+	marked := testutil.CreateTestContactWith(t, db, org.ID, testutil.WithContactAccount(account.Name))
+	marked.SetMarkedInternal(true)
+	resetAssignedForTest(t, db, marked, agent.ID)
+
+	summary, err := svc.ResetAssignedChats(context.Background(), org.ID, account.Name, "System")
+	require.NoError(t, err)
+	assert.Equal(t, 1, summary.ResetCount, "only the customer chat is reset")
+	assert.Equal(t, []uuid.UUID{customer.ID}, summary.ContactIDs)
+
+	for _, c := range []*models.Contact{orgNumber, marked} {
+		var fresh models.Contact
+		require.NoError(t, db.First(&fresh, "id = ?", c.ID).Error)
+		require.NotNil(t, fresh.AssignedUserID, "internal chats keep their assignee")
+		assert.Equal(t, agent.ID, *fresh.AssignedUserID)
+		assert.Empty(t, systemMessagesFor(t, db, c.ID, "chat_daily_reset"))
 	}
 }
 

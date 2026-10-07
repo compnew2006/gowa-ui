@@ -2,10 +2,12 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '@/services/api'
 
-interface UserSettings {
+export interface UserSettings {
   email_notifications?: boolean
   new_message_alerts?: boolean
   campaign_updates?: boolean
+  /** Show the chat sidebar's Private tab (default true). */
+  show_internal_tab?: boolean
 }
 
 interface Permission {
@@ -141,6 +143,14 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  // Mirror settings the server just saved into the session user.
+  function mergeUserSettings(settings: UserSettings) {
+    if (user.value) {
+      user.value = { ...user.value, settings: { ...user.value.settings, ...settings } }
+      localStorage.setItem('user', JSON.stringify(user.value))
+    }
+  }
+
   function setAvailability(available: boolean, breakStart?: string | null) {
     if (user.value) {
       user.value = { ...user.value, is_available: available }
@@ -196,6 +206,7 @@ export const useAuthStore = defineStore('auth', () => {
     switchOrg,
     logout,
     setAvailability,
+    mergeUserSettings,
     hasPermission
   }
 })

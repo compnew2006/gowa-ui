@@ -1,8 +1,7 @@
 # Gowa-UI — Project Notes
 
-> The global feature workflow (Analyze → Explore → Plan → Verify → Execute)
-> lives in `~/.zcode/AGENTS.md` and applies here. This file adds
-> **project-specific** context on top.
+> The shared solo-developer workflow is loaded from the active coding client's
+> global instruction file. This file adds **project-specific** context on top.
 
 ## Stack
 
@@ -36,6 +35,8 @@ responsibility. Do not re-merge these.
   package is transparent (routing in `cmd/gowa-ui/main.go` references
   `app.MethodName`, not the source file).
   - `contacts.go` — contact CRUD + assignment/tags + response builders only.
+  - `internal_contacts.go` — org-account/private-contact detection, manual
+    Private-tab changes, and merged account-to-account conversation rows.
   - `messages.go` — message list/send/revoke/react/typing + read-state +
     the WhatsApp account/provider resolvers + `gowaChatJID`.
   - `contacts_avatars.go` — contact profile-picture fetch/cache/serve.
@@ -99,6 +100,32 @@ responsibility. Do not re-merge these.
   stamp only — never a visibility path; revoking the grant ends access even
   for the agent who closed the conversation. Release grant + release
   assignment commit in ONE transaction (`ChatLifecycle.ReleaseWithDB`).
+- **Private/internal conversations** are the union of chats with one of the
+  org's connected WhatsApp numbers and contacts manually moved to Private.
+  The manual marker is the boolean `Contact.Metadata[models.MetaInternalChat]`
+  (`internal_chat`); `ContactResponse.is_internal` is the combined result,
+  while `internal_marked` reports only the manual marker. UI toggles must use
+  `internal_marked`, since an org-number conversation stays internal even if
+  its manual marker is cleared. `PUT /api/contacts/{id}/internal` requires
+  `chat:write`, scopes mutations through `findScopedMutableContact`, patches
+  only this JSONB key (preserving concurrent metadata changes), audits a real
+  state change, and sends a contact-scoped `contact_update` event.
+- `show_internal_tab` is a per-user display preference, defaulting to true.
+  `PUT /me/settings` is a partial update: omitted notification or chat-setting
+  fields must remain unchanged. Hiding Private only hides its sidebar tab for
+  that user; it does not revoke chat visibility, and cross-tab search can still
+  return those conversations.
+- `handlers.isInternalContact` is the central guard for customer-facing
+  automations. Check it before sending customer replies or consuming pending
+  customer-automation state. This includes all branches of close-rating flows:
+  guarding prompt creation alone does not protect an already-pending rating
+  cycle and its thank-you reply. Queue/batch SQL that excludes internal chats
+  should append `models.ExcludeInternalContactsSQL` only when querying the
+  `contacts` table; it excludes both manual markers and org account numbers.
+- `ListInternalConversations` merges only the two sides of chats between org
+  account numbers and still scopes each side with `scopeAssignedContact`.
+  Manually marked ordinary contacts are returned in the regular contact list
+  with `is_internal=true`; the frontend adds them to Private as unpaired rows.
 - **`contacts:read` (chat visibility) ≠ `contacts.manage:read` (settings page).**
   `contacts:read` drives chat-list scoping inside `scopeAssignedContact`
   (users with it see their accounts' conversations plus any they are involved

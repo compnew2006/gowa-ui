@@ -34,6 +34,7 @@ export interface UseChatContactsListOptions {
     closedCount: number
     allCount: number
     internalCount: number
+    showInternalTab: boolean
     hasMoreContacts: boolean
     isLoadingMoreContacts: boolean
     loadMoreContacts: () => Promise<void>
@@ -202,14 +203,16 @@ export function useChatContactsList(options: UseChatContactsListOptions) {
   const TAB_ORDER = ['me', 'pending', 'closed', 'all'] as const
   // 'closed' and 'all' are supervisor tabs (contacts:write — the admin/manager
   // marker, matching canManageAllChats), so agents keep the two-tab strip.
-  // 'internal' (chats between the org's own numbers) appears for everyone, but
-  // only while such chats are loaded — or while it is the active tab, so the
-  // selection never points at a hidden tab.
+  // 'internal' (the Private tab: chats between the org's own numbers and those
+  // moved there by hand) appears for everyone who has not hidden it in their
+  // profile, but only while such chats exist — or while it is the active tab,
+  // so the selection never points at a hidden tab.
   function visibleTabOrder(): ListTab[] {
     const order: ListTab[] = contactsStore.canSeeSupervisorTabs
       ? [...TAB_ORDER]
       : ['me', 'pending']
-    if (contactsStore.internalCount > 0 || contactsStore.activeListTab === 'internal') {
+    if (contactsStore.showInternalTab
+      && (contactsStore.internalCount > 0 || contactsStore.activeListTab === 'internal')) {
       order.push('internal')
     }
     return order

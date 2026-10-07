@@ -185,7 +185,8 @@ export const usersService = {
     api.put(`/users/${id}`, data),
   delete: (id: string) => api.delete(`/users/${id}`),
   me: () => api.get('/me'),
-  updateSettings: (data: { email_notifications: boolean; new_message_alerts: boolean; campaign_updates: boolean }) =>
+  // Partial: only the fields sent are changed server-side.
+  updateSettings: (data: { email_notifications?: boolean; new_message_alerts?: boolean; campaign_updates?: boolean; show_internal_tab?: boolean }) =>
     api.put('/me/settings', data),
   changePassword: (data: { current_password: string; new_password: string }) =>
     api.put('/me/password', data),
@@ -224,6 +225,9 @@ export const contactsService = {
   // One entry per pair of org accounts that messaged each other (both
   // per-account copies merged) — drives the sidebar's Internal tab.
   listInternalConversations: () => api.get('/contacts/internal-conversations'),
+  // Move a conversation into (or out of) the Private tab by hand.
+  setInternal: (id: string, internal: boolean) =>
+    api.put(`/contacts/${encodeURIComponent(id)}/internal`, { internal }),
   // Fetches the contact's current WhatsApp profile picture on demand and
   // returns the freshly-cached avatar_url. Used as a lazy refresh for chats
   // that were created before a GOWA contact sync (no avatar_url yet).

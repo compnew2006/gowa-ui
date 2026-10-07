@@ -229,8 +229,8 @@ func (a *App) maybeSendCloseRatingPrompt(orgID, closedBy uuid.UUID, contact mode
 	if !settings.Enabled {
 		return
 	}
-	// Internal conversations (another org number) are not customer service.
-	if a.isInternalPhone(orgID, contact.PhoneNumber) {
+	// Internal (Private-tab) conversations are not customer service.
+	if a.isInternalContact(orgID, &contact) {
 		return
 	}
 
@@ -307,6 +307,12 @@ func (a *App) maybeCaptureCloseRating(account *models.WhatsAppAccount, contact *
 
 	// Lazy expiry: past the window the reply is a normal message again.
 	if time.Now().After(cycle.ExpiresAt) {
+		a.expireRatingCycle(cycle.ID)
+		return false
+	}
+	// A cycle opened before the conversation moved to Private is stale
+	// customer-automation state: drop it instead of rating and thanking.
+	if a.isInternalContact(account.OrganizationID, contact) {
 		a.expireRatingCycle(cycle.ID)
 		return false
 	}

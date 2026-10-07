@@ -51,11 +51,13 @@ type ContactResponse struct {
 	AccessMode string `json:"access_mode,omitempty"`
 	CanReply   bool   `json:"can_reply"`
 	CanClose   bool   `json:"can_close"`
-	// IsInternal marks a conversation with one of the org's OWN connected
-	// numbers (two accounts messaging each other); InternalAccountName is
-	// that counterpart account's Name. See internal_contacts.go.
+	// IsInternal marks a Private-tab conversation: one with an org's OWN
+	// connected number (InternalAccountName is that account's Name) and/or
+	// one a user moved there by hand (InternalMarked). See
+	// internal_contacts.go.
 	IsInternal          bool      `json:"is_internal"`
 	InternalAccountName string    `json:"internal_account_name,omitempty"`
+	InternalMarked      bool      `json:"internal_marked"`
 	CreatedAt           time.Time `json:"created_at"`
 	UpdatedAt           time.Time `json:"updated_at"`
 }
@@ -1092,7 +1094,7 @@ func (a *App) buildContactResponseMasked(contact *models.Contact, orgID, viewerU
 
 	canManageContacts := a.loadCollaboratorManagementPermissions([]models.Contact{*contact}, viewerUserID, orgID)
 	resp := a.buildContactResponseMaskedWithData(contact, orgID, viewerUserID, shouldMask, unreadCount, lastMessageAccount, assignedUserName, canManageContacts)
-	markInternalContact(&resp, contact.PhoneNumber, a.orgAccountPhones(orgID))
+	markInternalContact(&resp, contact, a.orgAccountPhones(orgID))
 	return resp
 }
 
@@ -1174,7 +1176,7 @@ func (a *App) buildContactResponsesMasked(contacts []models.Contact, orgID, view
 			&contacts[i], orgID, viewerUserID, shouldMask,
 			unreadCounts[contacts[i].ID], lastMessageAccounts[contacts[i].ID], assignedUserName, canManageContacts,
 		)
-		markInternalContact(&responses[i], contacts[i].PhoneNumber, accountPhones)
+		markInternalContact(&responses[i], &contacts[i], accountPhones)
 	}
 
 	return responses

@@ -45,6 +45,8 @@ const WS_TYPE_AUTH = 'auth'
 const WS_TYPE_NEW_MESSAGE = 'new_message'
 const WS_TYPE_STATUS_UPDATE = 'status_update'
 const WS_TYPE_SET_CONTACT = 'set_contact'
+// A conversation moved into / out of the Private tab by hand.
+const WS_TYPE_CONTACT_UPDATE = 'contact_update'
 const WS_TYPE_PING = 'ping'
 const WS_TYPE_PONG = 'pong'
 
@@ -250,6 +252,9 @@ class WebSocketService {
       const store = useContactsStore()
 
       switch (message.type) {
+        case WS_TYPE_CONTACT_UPDATE:
+          store.fetchContacts()
+          break
         case WS_TYPE_NEW_MESSAGE:
           this.handleNewMessage(store, message.payload)
           break

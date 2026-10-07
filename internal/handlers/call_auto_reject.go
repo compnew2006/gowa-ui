@@ -179,6 +179,11 @@ func (a *App) processGowaCallOffer(account *models.WhatsAppAccount, envelope *go
 		}
 	}
 
+	// The call is still rejected above, but a colleague on another org number
+	// (or any Private-tab conversation) does not get the customer message.
+	if a.isInternalContact(account.OrganizationID, contact) {
+		return
+	}
 	if err := a.sendAndSaveTextMessage(account, contact, settings.Message); err != nil {
 		a.Log.Error("Failed to send call auto-reject message", "error", err, "contact_id", contact.ID)
 	}

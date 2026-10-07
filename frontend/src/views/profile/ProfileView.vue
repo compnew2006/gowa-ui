@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { toast } from 'vue-sonner'
 import { User, Eye, EyeOff, Loader2 } from 'lucide-vue-next'
@@ -19,6 +20,22 @@ const isChangingPassword = ref(false)
 const showCurrentPassword = ref(false)
 const showNewPassword = ref(false)
 const showConfirmPassword = ref(false)
+
+// Chat preferences — saved on toggle (one switch, no form to submit).
+const isSavingChatPrefs = ref(false)
+const showInternalTab = computed(() => authStore.userSettings.show_internal_tab !== false)
+async function setShowInternalTab(show: boolean) {
+  isSavingChatPrefs.value = true
+  try {
+    await usersService.updateSettings({ show_internal_tab: show })
+    authStore.mergeUserSettings({ show_internal_tab: show })
+    toast.success(t('profile.chatPreferencesSaved'))
+  } catch (error) {
+    toast.error(getErrorMessage(error, t('profile.chatPreferencesFailed')))
+  } finally {
+    isSavingChatPrefs.value = false
+  }
+}
 
 const passwordForm = ref({
   current_password: '',
@@ -92,6 +109,27 @@ async function changePassword() {
                 <Label class="text-muted-foreground">{{ $t('users.role') }}</Label>
                 <p class="font-medium capitalize">{{ authStore.user?.role?.name }}</p>
               </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <!-- Chat preferences -->
+        <Card>
+          <CardHeader>
+            <CardTitle>{{ $t('profile.chatPreferences') }}</CardTitle>
+            <CardDescription>{{ $t('profile.chatPreferencesDesc') }}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div class="flex items-center justify-between gap-4">
+              <div>
+                <p class="font-medium">{{ $t('profile.showPrivateTab') }}</p>
+                <p class="text-sm text-muted-foreground">{{ $t('profile.showPrivateTabDesc') }}</p>
+              </div>
+              <Switch
+                :checked="showInternalTab"
+                :disabled="isSavingChatPrefs"
+                @update:checked="setShowInternalTab"
+              />
             </div>
           </CardContent>
         </Card>

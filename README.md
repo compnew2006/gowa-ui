@@ -19,7 +19,10 @@ Modern, open-source WhatsApp Business Platform. Single binary app.
   Connect via the WhatsApp Business API for messaging.
 
 - **Real-time Chat**
-  Live messaging with WebSocket support for instant communication.
+  Live messaging with WebSocket support for instant communication. Conversation events (claimed, assigned, released, closed, reopened, collaborators joining or leaving) show their date and time in the timeline.
+
+- **Private Conversations**
+  Chats between your own numbers, plus any conversation moved there by hand, live in a separate Private tab. They are kept out of the customer queue, the daily reset and customer automations. Account-to-account chats show as one row with a "Send as" switch, and each user can hide the tab from their profile. See [docs/features/private-conversations.md](docs/features/private-conversations.md).
 
 - **Template Management**
   Create and manage message templates approved by Meta.
@@ -131,6 +134,18 @@ The backend is written in Go ([Fastglue](https://github.com/zerodha/fastglue)) a
 # Development setup
 make run-migrate    # Backend (port 8080)
 cd frontend && npm run dev   # Frontend (port 3000)
+```
+
+Frontend unit tests use Vitest, Vue Test Utils, and jsdom. The test tooling
+requires Node.js 22.22.2+ on the 22.x line, 24.15.0+ on the 24.x line, or 26+.
+Place unit tests under `frontend/src/` with a `.test.ts` or `.spec.ts` suffix.
+
+```bash
+cd frontend
+npm run typecheck
+npm run test:unit          # Run unit tests once
+npm run test:unit:watch    # Watch unit tests during development
+npm run test:e2e           # Run Playwright end-to-end tests
 ```
 
 ## License

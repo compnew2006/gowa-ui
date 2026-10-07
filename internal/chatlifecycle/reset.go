@@ -56,11 +56,14 @@ func (s *Service) ResetAssignedChats(_ context.Context, orgID uuid.UUID, account
 	// Status lives in the JSONB metadata map; an assigned contact with no
 	// explicit chat_status key defaults to open (see EffectiveStatus). We
 	// therefore match assigned contacts whose chat_status is absent OR "open",
-	// excluding explicitly-pending and explicitly-closed rows.
+	// excluding explicitly-pending and explicitly-closed rows. Internal
+	// (Private-tab) conversations are never reset: they are not customer
+	// queue work.
 	var contacts []models.Contact
 	if err := s.db.Where(
 		`organization_id = ? AND whats_app_account = ? AND assigned_user_id IS NOT NULL
-		   AND (metadata->>'chat_status' IS NULL OR metadata->>'chat_status' = ?)`,
+		   AND (metadata->>'chat_status' IS NULL OR metadata->>'chat_status' = ?)
+		   AND `+models.ExcludeInternalContactsSQL,
 		orgID, accountName, string(models.ChatStatusOpen),
 	).Find(&contacts).Error; err != nil {
 		s.log.Error("Failed to load assigned chats for daily reset",

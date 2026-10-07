@@ -157,11 +157,16 @@ type RoleInfo struct {
 	Permissions []PermissionInfo `json:"permissions"`
 }
 
-// UserSettingsRequest represents notification/settings preferences
+// UserSettingsRequest represents notification/settings preferences. Every
+// field is optional: only the ones present are changed, so the Settings page
+// (notifications) and the Profile page (chat preferences) can each save their
+// own fields without resetting the other's.
 type UserSettingsRequest struct {
-	EmailNotifications bool `json:"email_notifications"`
-	NewMessageAlerts   bool `json:"new_message_alerts"`
-	CampaignUpdates    bool `json:"campaign_updates"`
+	EmailNotifications *bool `json:"email_notifications"`
+	NewMessageAlerts   *bool `json:"new_message_alerts"`
+	CampaignUpdates    *bool `json:"campaign_updates"`
+	// ShowInternalTab shows the chat sidebar's Private tab (default true).
+	ShowInternalTab *bool `json:"show_internal_tab"`
 }
 
 // ChangePasswordRequest represents the request body for changing password
@@ -914,19 +919,31 @@ func (a *App) UpdateCurrentUserSettings(r *fastglue.Request) error {
 
 	oldNotif := notificationSettingsSnapshot(user.Settings)
 
-	// Update notification settings
-	user.Settings["email_notifications"] = req.EmailNotifications
-	user.Settings["new_message_alerts"] = req.NewMessageAlerts
-	user.Settings["campaign_updates"] = req.CampaignUpdates
+	notificationChanged := false
+	for key, val := range map[string]*bool{
+		"email_notifications": req.EmailNotifications,
+		"new_message_alerts":  req.NewMessageAlerts,
+		"campaign_updates":    req.CampaignUpdates,
+	} {
+		if val != nil {
+			user.Settings[key] = *val
+			notificationChanged = true
+		}
+	}
+	if req.ShowInternalTab != nil {
+		user.Settings["show_internal_tab"] = *req.ShowInternalTab
+	}
 
 	if err := a.DB.Save(&user).Error; err != nil {
 		a.Log.Error("Failed to update user settings", "error", err)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update settings", nil, "")
 	}
 
-	newNotif := notificationSettingsSnapshot(user.Settings)
-	a.logAudit(orgID, userID,
-		models.ResourceSettingsNotification, userID, models.AuditActionUpdated, oldNotif, newNotif)
+	if notificationChanged {
+		newNotif := notificationSettingsSnapshot(user.Settings)
+		a.logAudit(orgID, userID,
+			models.ResourceSettingsNotification, userID, models.AuditActionUpdated, oldNotif, newNotif)
+	}
 
 	return r.SendEnvelope(map[string]any{
 		"message":  "Settings updated successfully",

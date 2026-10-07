@@ -12,6 +12,8 @@
     "format": "prettier --write src/",
     "test": "BASE_URL=http://localhost:8080 playwright test",
     "test:e2e": "playwright test",
+    "test:unit": "vitest run",
+    "test:unit:watch": "vitest",
     "test:ui": "BASE_URL=http://localhost:8080 playwright test --ui",
     "test:debug": "BASE_URL=http://localhost:8080 playwright test --debug",
     "test:report": "playwright show-report"
@@ -46,14 +48,16 @@
   "devDependencies": {
     "@playwright/test": "^1.57.0",
     "@rushstack/eslint-patch": "^1.6.0",
-    "@types/node": "^20.10.0",
+    "@types/node": "^22.20.5",
     "@types/pg": "^8.16.0",
     "@vitejs/plugin-vue": "^6.0.3",
     "@vue/eslint-config-prettier": "^9.0.0",
     "@vue/eslint-config-typescript": "^12.0.0",
+    "@vue/test-utils": "^2.5.1",
     "autoprefixer": "^10.4.16",
     "eslint": "^8.56.0",
     "eslint-plugin-vue": "^9.19.0",
+    "jsdom": "^30.1.2",
     "pg": "^8.18.0",
     "postcss": "^8.5.13",
     "prettier": "^3.1.0",
@@ -61,6 +65,7 @@
     "typescript": "~5.3.0",
     "vite": "^7.3.2",
     "vite-plugin-compression": "^0.5.1",
+    "vitest": "^5.0.3",
     "vue-tsc": "^3.2.3"
   }
 }

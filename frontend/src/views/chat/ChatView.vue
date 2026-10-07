@@ -93,7 +93,9 @@ import {
   Megaphone,
   RotateCcw,
   ListChecks,
-  Package
+  Package,
+  FolderInput,
+  FolderOutput
 } from 'lucide-vue-next'
 import { getInitials, getAvatarGradient, avatarSrc, linkifySegments, normalizePhoneDigits, samePhoneDigits, phoneSearchVariants } from '@/lib/utils'
 import { contactsService } from '@/services/api'
@@ -778,6 +780,24 @@ function isCurrentInternalSide(side: InternalConversationSide): boolean {
   return side.contact_id === contactsStore.currentContact?.id
     && (!selectedAccount.value || side.account === selectedAccount.value)
 }
+// Any conversation can be moved into the Private tab by hand. An org
+// number's chat is Private by definition, so it has no toggle.
+const canToggleContactInternal = computed(() => {
+  const c = contactsStore.currentContact
+  return !!c && !isStatusContact(c.id) && !c.internal_account_name
+    && !isHistoricalReadOnly.value && authStore.hasPermission('chat', 'write')
+})
+async function toggleContactInternal() {
+  const c = contactsStore.currentContact
+  if (!c) return
+  const internal = !c.internal_marked
+  try {
+    await contactsStore.setContactInternal(c.id, internal)
+    toast.success(internal ? t('chat.movedToPrivate') : t('chat.removedFromPrivate'))
+  } catch {
+    toast.error(t('chat.privateToggleFailed'))
+  }
+}
 
 // Safety-net probe: reconciles the open conversation when the webhook → WS
 // pipeline drops a message silently (see composable doc for cadence).
@@ -1267,7 +1287,7 @@ onUnmounted(() => {
                 </Badge>
                 <Badge v-if="contactsStore.currentContact?.is_internal"
                        class="text-[10px] h-5 bg-cyan-500/20 text-cyan-400 light:bg-cyan-100 light:text-cyan-700">
-                  {{ $t('chat.internal') }}<template v-if="(currentInternalConversation?.sides.length ?? 0) < 2"> · {{ contactsStore.currentContact.internal_account_name }}</template>
+                  {{ $t('chat.internal') }}<template v-if="contactsStore.currentContact.internal_account_name && (currentInternalConversation?.sides.length ?? 0) < 2"> · {{ contactsStore.currentContact.internal_account_name }}</template>
                 </Badge>
                 <!-- Send-as toggle: each side of an internal conversation is
                      one account's copy; switching sides switches the sender. -->
@@ -1521,6 +1541,11 @@ onUnmounted(() => {
                 <DropdownMenuItem @click="isInfoPanelOpen = !isInfoPanelOpen">
                   <Info class="mr-2 h-4 w-4" />
                   <span>{{ isInfoPanelOpen ? $t('chat.hideContactDetails') : $t('chat.viewContactDetails') }}</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem v-if="canToggleContactInternal" @click="toggleContactInternal">
+                  <FolderOutput v-if="contactsStore.currentContact?.internal_marked" class="mr-2 h-4 w-4" />
+                  <FolderInput v-else class="mr-2 h-4 w-4" />
+                  <span>{{ contactsStore.currentContact?.internal_marked ? $t('chat.removeFromPrivate') : $t('chat.moveToPrivate') }}</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

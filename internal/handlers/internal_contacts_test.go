@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/valyala/fasthttp"
 )
 
 func TestAccountPhoneFromJID(t *testing.T) {
@@ -73,6 +74,15 @@ func TestBuildContactResponses_MarksInternalContacts(t *testing.T) {
 		testutil.WithPhoneNumber(f.egyptPhone), testutil.WithContactAccount(f.saudi.Name))
 	customer := testutil.CreateTestContactWith(t, app.DB, f.org.ID,
 		testutil.WithPhoneNumber(internalTestPhone()), testutil.WithContactAccount(f.saudi.Name))
+	marked := testutil.CreateTestContactWith(t, app.DB, f.org.ID,
+		testutil.WithPhoneNumber(internalTestPhone()), testutil.WithContactAccount(f.saudi.Name))
+	marked.SetMarkedInternal(true)
+	require.NoError(t, app.DB.Model(marked).Update("metadata", marked.Metadata).Error)
+
+	markedResp := app.buildContactResponsesMasked([]models.Contact{*marked}, f.org.ID, viewer.ID, true)[0]
+	assert.True(t, markedResp.IsInternal, "a conversation moved to Private by hand is internal")
+	assert.True(t, markedResp.InternalMarked)
+	assert.Empty(t, markedResp.InternalAccountName)
 
 	for _, mask := range []bool{false, true} {
 		t.Run(fmt.Sprintf("list mask=%v", mask), func(t *testing.T) {
@@ -274,4 +284,120 @@ func TestInternalConversations_FollowsContactVisibility(t *testing.T) {
 	require.Len(t, convs[0].Sides, 1, "the side the agent cannot open must not be listed")
 	assert.Equal(t, egyptC.ID, convs[0].Sides[0].ContactID)
 	assert.Equal(t, f.saudi.Name, convs[0].Sides[0].Account)
+}
+
+// setInternalViaAPI calls PUT /api/contacts/{id}/internal as userID.
+func setInternalViaAPI(t *testing.T, app *App, orgID, userID, contactID uuid.UUID, internal bool) *ContactResponse {
+	t.Helper()
+	req := testutil.NewJSONRequest(t, map[string]any{"internal": internal})
+	req.RequestCtx.Request.Header.SetMethod("PUT")
+	testutil.SetAuthContext(req, orgID, userID)
+	testutil.SetPathParam(req, "id", contactID.String())
+	require.NoError(t, app.SetContactInternal(req))
+	if testutil.GetResponseStatusCode(req) != fasthttp.StatusOK {
+		return nil
+	}
+	var resp ContactResponse
+	testutil.ParseEnvelopeResponse(t, req, &resp)
+	return &resp
+}
+
+func TestSetContactInternal_MarksAndClearsByHand(t *testing.T) {
+	app := newProcessorTestApp(t)
+	app.Config = &config.Config{}
+	org, account := createProcessorTestOrg(t, app)
+	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "agent-"+uuid.New().String()[:8],
+		[]string{"chat:read", "chat:write", "contacts:read"})
+	agent := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&role.ID))
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID,
+		testutil.WithPhoneNumber(internalTestPhone()), testutil.WithContactAccount(account.Name))
+	contact.SetStatus(models.ChatStatusPending)
+	require.NoError(t, app.DB.Model(contact).Update("metadata", contact.Metadata).Error)
+
+	resp := setInternalViaAPI(t, app, org.ID, agent.ID, contact.ID, true)
+	require.NotNil(t, resp, "an agent who can write to the chat may move it")
+	assert.True(t, resp.IsInternal)
+	assert.True(t, resp.InternalMarked)
+	assert.Empty(t, resp.InternalAccountName, "a customer number is not an org account")
+
+	var fresh models.Contact
+	require.NoError(t, app.DB.First(&fresh, "id = ?", contact.ID).Error)
+	assert.True(t, fresh.IsMarkedInternal())
+	assert.Equal(t, models.ChatStatusPending, fresh.EffectiveStatus(), "other metadata keys survive the patch")
+	assert.True(t, app.isInternalContact(org.ID, &fresh))
+
+	resp = setInternalViaAPI(t, app, org.ID, agent.ID, contact.ID, false)
+	require.NotNil(t, resp)
+	assert.False(t, resp.IsInternal)
+	assert.False(t, resp.InternalMarked)
+	require.NoError(t, app.DB.First(&fresh, "id = ?", contact.ID).Error)
+	_, hasKey := fresh.Metadata[models.MetaInternalChat]
+	assert.False(t, hasKey, "clearing removes the key")
+	assert.Equal(t, models.ChatStatusPending, fresh.EffectiveStatus())
+
+	// Without chat:write the endpoint refuses.
+	readerRole := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "reader-"+uuid.New().String()[:8],
+		[]string{"chat:read", "contacts:read"})
+	reader := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&readerRole.ID))
+	assert.Nil(t, setInternalViaAPI(t, app, org.ID, reader.ID, contact.ID, true))
+	require.NoError(t, app.DB.First(&fresh, "id = ?", contact.ID).Error)
+	assert.False(t, fresh.IsMarkedInternal())
+}
+
+func TestAutomations_SkipContactsMarkedInternal(t *testing.T) {
+	app := newProcessorTestApp(t)
+	app.Config = &config.Config{}
+	org, account := createProcessorTestOrg(t, app)
+	agent := testutil.CreateTestUser(t, app.DB, org.ID)
+	require.NoError(t, app.DB.Model(account).Update("settings", models.JSONB{
+		"close_rating":   map[string]any{"enabled": true},
+		"business_hours": alwaysClosedBusinessHours("We are closed")["business_hours"],
+	}).Error)
+	require.NoError(t, app.DB.First(account, account.ID).Error)
+
+	marked := testutil.CreateTestContactWith(t, app.DB, org.ID,
+		testutil.WithPhoneNumber(internalTestPhone()), testutil.WithContactAccount(account.Name))
+	marked.SetMarkedInternal(true)
+	require.NoError(t, app.DB.Model(marked).Update("metadata", marked.Metadata).Error)
+
+	app.maybeSendAwayReply(account, marked.PhoneNumber, "Supplier")
+	app.maybeSendCloseRatingPrompt(org.ID, agent.ID, *marked)
+
+	var outgoing, cycles int64
+	app.DB.Model(&models.Message{}).Where("contact_id = ? AND direction = ?", marked.ID, models.DirectionOutgoing).Count(&outgoing)
+	app.DB.Model(&models.ChatClosureRating{}).Where("contact_id = ?", marked.ID).Count(&cycles)
+	assert.Equal(t, int64(0), outgoing, "no away reply to a conversation moved to Private")
+	assert.Equal(t, int64(0), cycles, "no rating prompt for a conversation moved to Private")
+}
+
+func TestMaybeCaptureCloseRating_DropsCycleOnceMovedToPrivate(t *testing.T) {
+	app := newProcessorTestApp(t)
+	app.Config = &config.Config{}
+	org, account := createProcessorTestOrg(t, app)
+	agent := testutil.CreateTestUser(t, app.DB, org.ID)
+	require.NoError(t, app.DB.Model(account).Update("settings",
+		models.JSONB{"close_rating": map[string]any{"enabled": true}}).Error)
+	require.NoError(t, app.DB.First(account, account.ID).Error)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID,
+		testutil.WithPhoneNumber(internalTestPhone()), testutil.WithContactAccount(account.Name))
+
+	// The prompt went out while it was still a customer chat…
+	app.maybeSendCloseRatingPrompt(org.ID, agent.ID, *contact)
+	var cycle models.ChatClosureRating
+	require.NoError(t, app.DB.Where("contact_id = ?", contact.ID).First(&cycle).Error)
+	require.Equal(t, models.RatingStatusPending, cycle.Status)
+	var before int64
+	app.DB.Model(&models.Message{}).Where("contact_id = ? AND direction = ?", contact.ID, models.DirectionOutgoing).Count(&before)
+
+	// …then it moved to Private, and the reply "5" arrives.
+	contact.SetMarkedInternal(true)
+	require.NoError(t, app.DB.Model(contact).Update("metadata", contact.Metadata).Error)
+	captured := app.maybeCaptureCloseRating(account, contact, textIncoming("W_RATE", contact.PhoneNumber, "", "5"))
+
+	assert.False(t, captured, "the reply is an ordinary message, not a rating")
+	require.NoError(t, app.DB.First(&cycle, "id = ?", cycle.ID).Error)
+	assert.Equal(t, models.RatingStatusExpired, cycle.Status, "the stale cycle is dropped")
+	var after int64
+	app.DB.Model(&models.Message{}).Where("contact_id = ? AND direction = ?", contact.ID, models.DirectionOutgoing).Count(&after)
+	assert.Equal(t, before, after, "no thank-you message is sent")
 }

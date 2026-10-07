@@ -6,17 +6,21 @@ import (
 	"time"
 
 	"github.com/compnew2006/gowa-ui/internal/models"
+	"github.com/compnew2006/gowa-ui/internal/websocket"
 	"github.com/compnew2006/gowa-ui/pkg/gowa"
 	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
+	"gorm.io/gorm"
 )
 
-// Internal conversations are chats between two of the org's OWN connected
-// WhatsApp numbers (e.g. the Saudi account messaging the Egypt account). Each
-// side stores the other number as an ordinary contact, so without this marker
-// they mix into the customer queue and trigger customer automations (away
-// replies, close-rating prompts) against a colleague's number.
+// Internal conversations (the sidebar's Private tab) are chats between two of
+// the org's OWN connected WhatsApp numbers (e.g. the Saudi account messaging
+// the Egypt account), plus any conversation a user moved there by hand
+// (models.MetaInternalChat). Each side of an account-to-account chat stores
+// the other number as an ordinary contact, so without this marker they mix
+// into the customer queue and trigger customer automations against a
+// colleague's number. Every customer automation must check isInternalContact.
 
 // accountPhoneFromJID extracts the bare phone from an account's connected
 // JID, dropping any ":<device>" suffix ("9665...:12@s.whatsapp.net").
@@ -57,13 +61,87 @@ func (a *App) isInternalPhone(orgID uuid.UUID, phone string) bool {
 	return ok
 }
 
-// markInternalContact flags resp as an internal conversation when the
-// contact's (unmasked) phone is one of the org's own numbers.
-func markInternalContact(resp *ContactResponse, phone string, accountPhones map[string]string) {
-	if name, ok := accountPhones[phone]; ok {
+// isInternalContact is the single check every customer automation uses:
+// the conversation was moved to the Private tab by hand, or its phone is one
+// of the org's own connected numbers.
+func (a *App) isInternalContact(orgID uuid.UUID, contact *models.Contact) bool {
+	return contact.IsMarkedInternal() || a.isInternalPhone(orgID, contact.PhoneNumber)
+}
+
+// markInternalContact flags resp as an internal conversation when the contact
+// was moved to the Private tab by hand or its (unmasked) phone is one of the
+// org's own numbers.
+func markInternalContact(resp *ContactResponse, contact *models.Contact, accountPhones map[string]string) {
+	if name, ok := accountPhones[contact.PhoneNumber]; ok {
 		resp.IsInternal = true
 		resp.InternalAccountName = name
 	}
+	if contact.IsMarkedInternal() {
+		resp.IsInternal = true
+		resp.InternalMarked = true
+	}
+}
+
+// SetContactInternalRequest moves a conversation into (or out of) the
+// Private tab by hand.
+type SetContactInternalRequest struct {
+	Internal bool `json:"internal"`
+}
+
+// SetContactInternal flags a conversation as internal by hand, so it is
+// treated like a chat with one of the org's own numbers: Private tab only, no
+// customer automations. Any user who can write to the conversation may do it
+// (historical read-only grant holders cannot). Clearing the flag on an org
+// number's contact leaves it internal — that half comes from the phone.
+// Route: PUT /api/contacts/{id}/internal  Permission: chat:write
+func (a *App) SetContactInternal(r *fastglue.Request) error {
+	orgID, userID, err := a.requireAuth(r, models.ResourceChat, models.ActionWrite)
+	if err != nil {
+		return nil
+	}
+	contactID, err := parsePathUUID(r, "id", "contact")
+	if err != nil {
+		return nil
+	}
+	var req SetContactInternalRequest
+	if err := a.decodeRequest(r, &req); err != nil {
+		return nil
+	}
+	contact, err := a.findScopedMutableContact(r, contactID, userID, orgID)
+	if err != nil {
+		return nil
+	}
+
+	// Patch the one key in SQL so a concurrent metadata write (chat_status,
+	// collaborators) is not overwritten with a stale copy.
+	was := contact.IsMarkedInternal()
+	metadata := gorm.Expr("COALESCE(metadata, '{}'::jsonb) - ?::text", models.MetaInternalChat)
+	if req.Internal {
+		metadata = gorm.Expr("COALESCE(metadata, '{}'::jsonb) || jsonb_build_object(?::text, true)", models.MetaInternalChat)
+	}
+	if err := a.DB.Model(&models.Contact{}).Where("id = ?", contact.ID).
+		Update("metadata", metadata).Error; err != nil {
+		a.Log.Error("Failed to update contact internal flag", "error", err, "contact_id", contact.ID)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to update conversation", nil, "")
+	}
+	if err := a.DB.First(contact, "id = ?", contact.ID).Error; err != nil {
+		a.Log.Error("Failed to reload contact", "error", err, "contact_id", contact.ID)
+	}
+
+	if was != req.Internal {
+		a.logAudit(orgID, userID, "contact", contact.ID, models.AuditActionUpdated,
+			map[string]any{models.MetaInternalChat: was}, map[string]any{models.MetaInternalChat: req.Internal})
+		if a.WSHub != nil {
+			a.WSHub.BroadcastToUsers(orgID, a.wsContactRecipients(contact, orgID), websocket.WSMessage{
+				Type: websocket.TypeContactUpdate,
+				Payload: map[string]any{
+					"contact_id":      contact.ID.String(),
+					"internal_marked": req.Internal,
+				},
+			})
+		}
+	}
+	return r.SendEnvelope(a.buildContactResponse(contact, orgID, userID))
 }
 
 // InternalConversationSide is one account's copy of an internal conversation.

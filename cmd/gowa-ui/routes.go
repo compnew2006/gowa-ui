@@ -357,6 +357,7 @@ func setupContactRoutes(g *fastglue.Fastglue, app *handlers.App) {
 	g.DELETE("/api/contacts/{id}", app.DeleteContact)
 	g.PUT("/api/contacts/{id}/assign", app.AssignContact)
 	g.PUT("/api/contacts/{id}/tags", app.UpdateContactTags)
+	g.PUT("/api/contacts/{id}/internal", app.SetContactInternal)
 }
 
 // setupScheduledMessageRoutes registers scheduled-message CRUD.

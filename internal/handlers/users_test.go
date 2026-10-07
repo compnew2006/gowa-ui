@@ -1062,6 +1062,46 @@ func TestApp_UpdateCurrentUserSettings(t *testing.T) {
 		assert.Equal(t, false, resp.Data.Settings["campaign_updates"])
 	})
 
+	t.Run("partial update keeps the other settings", func(t *testing.T) {
+		t.Parallel()
+		app := newTestApp(t)
+		org := testutil.CreateTestOrganization(t, app.DB)
+		user := testutil.CreateTestUser(t, app.DB, org.ID,
+			testutil.WithEmail(testutil.UniqueEmail("settings-partial")),
+		)
+
+		save := func(body map[string]any) map[string]any {
+			req := testutil.NewJSONRequest(t, body)
+			testutil.SetAuthContext(req, org.ID, user.ID)
+			require.NoError(t, app.UpdateCurrentUserSettings(req))
+			require.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+			var resp struct {
+				Data struct {
+					Settings map[string]any `json:"settings"`
+				} `json:"data"`
+			}
+			require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+			return resp.Data.Settings
+		}
+
+		save(map[string]any{
+			"email_notifications": true,
+			"new_message_alerts":  false,
+			"campaign_updates":    true,
+		})
+		// The Profile page saves only the chat preference.
+		got := save(map[string]any{"show_internal_tab": false})
+		assert.Equal(t, false, got["show_internal_tab"])
+		assert.Equal(t, true, got["email_notifications"], "omitted fields must not be reset")
+		assert.Equal(t, false, got["new_message_alerts"], "omitted fields must not be reset")
+		assert.Equal(t, true, got["campaign_updates"], "omitted fields must not be reset")
+
+		// And the Settings page saving notifications leaves the preference alone.
+		got = save(map[string]any{"email_notifications": false})
+		assert.Equal(t, false, got["show_internal_tab"])
+		assert.Equal(t, false, got["email_notifications"])
+	})
+
 	t.Run("unauthorized without user_id", func(t *testing.T) {
 		t.Parallel()
 		app := newTestApp(t)

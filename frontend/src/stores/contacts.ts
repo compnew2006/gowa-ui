@@ -56,6 +56,8 @@ export interface Contact {
    *  messaging each other); internal_account_name is that account's name. */
   is_internal?: boolean
   internal_account_name?: string
+  /** A user moved it to the Private tab by hand. */
+  internal_marked?: boolean
   last_message_preview?: string
   /** Set only on merged Internal-tab rows (see lib/internalConversations):
    *  the conversation key, both side contacts, and the account the row opens. */
@@ -214,6 +216,13 @@ export const useContactsStore = defineStore('contacts', () => {
   const canSeeSupervisorTabs = computed(() =>
     authStore.hasPermission('contacts', 'write')
   )
+
+  // Per-user preference (Profile page). Hidden means the Private tab and its
+  // conversations leave the sidebar; search and notifications still reach them.
+  const showInternalTab = computed(() => authStore.userSettings.show_internal_tab !== false)
+  watch(showInternalTab, (show) => {
+    if (!show && activeListTab.value === 'internal') activeListTab.value = 'pending'
+  }, { immediate: true })
 
   // Role-aware default correction. `loadStoredTab()` may run before the auth
   // session is restored (e.g. on cold load, when the contacts store is created
@@ -539,6 +548,19 @@ export const useContactsStore = defineStore('contacts', () => {
   async function markInternalCounterpartsRead(contactId: string, account?: string | null) {
     const ids = internalCounterpartIds(contactId, account)
     await Promise.allSettled(ids.map(id => contactsService.markRead(id)))
+    await fetchInternalConversations()
+  }
+
+  // Move a conversation into (or out of) the Private tab by hand. The server
+  // answers with the updated contact, which replaces the local copies.
+  async function setContactInternal(contactId: string, internal: boolean) {
+    const response = await contactsService.setInternal(contactId, internal)
+    const updated: Contact = response.data.data || response.data
+    const idx = contacts.value.findIndex(c => c.id === contactId)
+    if (idx !== -1) contacts.value[idx] = { ...contacts.value[idx], ...updated }
+    if (currentContact.value?.id === contactId) {
+      currentContact.value = { ...currentContact.value, ...updated }
+    }
     await fetchInternalConversations()
   }
 
@@ -1112,6 +1134,8 @@ export const useContactsStore = defineStore('contacts', () => {
     closedCount,
     allCount,
     internalCount,
+    showInternalTab,
+    setContactInternal,
     internalConversations,
     fetchInternalConversations,
     internalConversationFor,
