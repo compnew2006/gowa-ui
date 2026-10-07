@@ -3,6 +3,11 @@ import { ref, computed, watch } from 'vue'
 import { contactsService, messagesService, api } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import { STATUS_VIRTUAL_CONTACT, STATUS_CONTACT_ID, isStatusContact } from '@/lib/status'
+import {
+  type InternalConversation,
+  conversationForContact,
+  internalConversationRow,
+} from '@/lib/internalConversations'
 
 // Converts Arabic-Indic (٠-٩) and Extended Arabic-Indic / Persian (۰-۹)
 // digits to ASCII so "٤٦٢٨" matches a stored "4628".
@@ -51,6 +56,12 @@ export interface Contact {
    *  messaging each other); internal_account_name is that account's name. */
   is_internal?: boolean
   internal_account_name?: string
+  last_message_preview?: string
+  /** Set only on merged Internal-tab rows (see lib/internalConversations):
+   *  the conversation key, both side contacts, and the account the row opens. */
+  internal_conversation_key?: string
+  internal_side_contact_ids?: string[]
+  internal_open_account?: string
   chat_status?: 'pending' | 'open' | 'closed'
   /** How the VIEWER reaches this conversation: standard (own account),
    *  current_assignee (cross-account via current assignment — full access),
@@ -285,8 +296,7 @@ export const useContactsStore = defineStore('contacts', () => {
   // defaults to "open" for legacy rows that never had chat_status set, so a
   // filter on `chat_status === 'pending'` alone would hide most legacy
   // unassigned chats. We therefore treat "pending" as `!assigned && !closed`.
-  //   pending → not assigned to anyone AND not closed (awaiting a claim);
-  //             internal conversations stay out of the customer queue
+  //   pending → not assigned to anyone AND not closed (awaiting a claim)
   //   me      → assigned and NOT closed. Closing releases ownership (backend
   //             Close clears the assignment), so closed chats leave Me and live
   //             in the Closed tab only — including legacy closed-but-assigned
@@ -295,9 +305,12 @@ export const useContactsStore = defineStore('contacts', () => {
   //             chat_status default to open and correctly stay out of here)
   //   all     → every loaded chat, no filter (supervisors only — the backend
   //             already returns everything for contacts:read holders)
-  //   internal → conversations between the org's own numbers, any status
+  //   internal → conversations between the org's own numbers, one merged row
+  //             per pair of accounts (any status). They live ONLY in this tab:
+  //             the other tabs list customer conversations.
+  const customerContacts = computed(() => sortedContacts.value.filter(c => !c.is_internal))
   const pendingContacts = computed(() =>
-    sortedContacts.value.filter(c => !c.assigned_user_id && c.chat_status !== 'closed' && !c.is_internal)
+    customerContacts.value.filter(c => !c.assigned_user_id && c.chat_status !== 'closed')
   )
   // Supervisors (contacts:write — the admin/manager marker everywhere else)
   // get the "Me" tab as a follow-up surface: EVERY assigned conversation in
@@ -307,16 +320,27 @@ export const useContactsStore = defineStore('contacts', () => {
   // excluded in both branches — they belong to the Closed tab.
   const myContacts = computed(() => {
     if (canSeeSupervisorTabs.value) {
-      return sortedContacts.value.filter(c => c.assigned_user_id && c.chat_status !== 'closed')
+      return customerContacts.value.filter(c => c.assigned_user_id && c.chat_status !== 'closed')
     }
-    return sortedContacts.value.filter(c =>
+    return customerContacts.value.filter(c =>
       c.assigned_user_id === authStore.user?.id && c.chat_status !== 'closed')
   })
   const closedContacts = computed(() =>
-    sortedContacts.value.filter(c => c.chat_status === 'closed')
+    customerContacts.value.filter(c => c.chat_status === 'closed')
   )
-  const allContacts = computed(() => sortedContacts.value)
-  const internalContacts = computed(() => sortedContacts.value.filter(c => c.is_internal))
+  const allContacts = computed(() => customerContacts.value)
+  const internalConversations = ref<InternalConversation[]>([])
+  const internalContacts = computed(() => {
+    const byId = new Map(contacts.value.map(c => [c.id, c]))
+    const rows = internalConversations.value.map(conv => internalConversationRow(conv, byId))
+    // Internal contacts that are no side of any pair (e.g. a number's chat
+    // with itself, or the pair list failed to load) keep a plain row, since
+    // the other tabs no longer list them.
+    const covered = new Set(rows.flatMap(r => r.internal_side_contact_ids ?? []))
+    const leftovers = sortedContacts.value.filter(c => c.is_internal && !covered.has(c.id))
+    const time = (c: Contact) => (c.last_message_at ? new Date(c.last_message_at).getTime() : 0)
+    return [...rows, ...leftovers].sort((a, b) => time(b) - time(a))
+  })
   const pendingCount = computed(() => pendingContacts.value.length)
   const myCount = computed(() => myContacts.value.length)
   const closedCount = computed(() => closedContacts.value.length)
@@ -380,8 +404,8 @@ export const useContactsStore = defineStore('contacts', () => {
     const r = searchResultsAcrossTabs.value ?? []
     if (!r.length) return null
     const inPending = r.some(c => !c.assigned_user_id && c.chat_status !== 'closed' && !c.is_internal)
-    const inMe = r.some(c => c.assigned_user_id === authStore.user?.id && c.chat_status !== 'closed')
-    const inClosed = canSeeSupervisorTabs.value && r.some(c => c.chat_status === 'closed')
+    const inMe = r.some(c => c.assigned_user_id === authStore.user?.id && c.chat_status !== 'closed' && !c.is_internal)
+    const inClosed = canSeeSupervisorTabs.value && r.some(c => c.chat_status === 'closed' && !c.is_internal)
     const inInternal = r.some(c => c.is_internal)
     const current = activeListTab.value
     const currentHasHits =
@@ -468,12 +492,15 @@ export const useContactsStore = defineStore('contacts', () => {
     isLoading.value = true
     try {
       const tagsParam = selectedTags.value.length > 0 ? selectedTags.value.join(',') : undefined
-      const response = await contactsService.list({
-        page: 1,
-        limit: contactsLimit.value,
-        tags: tagsParam,
-        ...params
-      })
+      const [response] = await Promise.all([
+        contactsService.list({
+          page: 1,
+          limit: contactsLimit.value,
+          tags: tagsParam,
+          ...params
+        }),
+        fetchInternalConversations(),
+      ])
       // API returns { status: "success", data: { contacts: [...], total: number } }
       const data = response.data.data || response.data
       contacts.value = data.contacts || []
@@ -484,6 +511,35 @@ export const useContactsStore = defineStore('contacts', () => {
     } finally {
       isLoading.value = false
     }
+  }
+
+  // Never throws: the Internal tab is secondary to the main contact list.
+  async function fetchInternalConversations() {
+    try {
+      const response = await contactsService.listInternalConversations()
+      const data = response.data.data || response.data
+      internalConversations.value = data.conversations || []
+    } catch (error) {
+      console.error('Failed to fetch internal conversations:', error)
+    }
+  }
+
+  function internalConversationFor(contactId: string, account?: string | null) {
+    return conversationForContact(internalConversations.value, contactId, account)
+  }
+
+  // The other side contacts of the internal conversation `contactId` is
+  // viewed as (through `account`). Their messages are copies of the ones on
+  // screen, so they count as seen too.
+  function internalCounterpartIds(contactId: string, account?: string | null): string[] {
+    const conv = internalConversationFor(contactId, account)
+    return conv ? conv.sides.map(s => s.contact_id).filter(id => id !== contactId) : []
+  }
+
+  async function markInternalCounterpartsRead(contactId: string, account?: string | null) {
+    const ids = internalCounterpartIds(contactId, account)
+    await Promise.allSettled(ids.map(id => contactsService.markRead(id)))
+    await fetchInternalConversations()
   }
 
   async function loadMoreContacts() {
@@ -1056,6 +1112,11 @@ export const useContactsStore = defineStore('contacts', () => {
     closedCount,
     allCount,
     internalCount,
+    internalConversations,
+    fetchInternalConversations,
+    internalConversationFor,
+    internalCounterpartIds,
+    markInternalCounterpartsRead,
     displayedContacts,
     // Cross-tab search (M3)
     visibleContacts,
@@ -1107,6 +1168,7 @@ export const useContactsStore = defineStore('contacts', () => {
     removeContactById,
     refreshAvatar,
     clearMessages,
+    accountFilter,
     setAccountFilter,
     setReplyingTo,
     clearReplyingTo,

@@ -3,6 +3,7 @@ import { reactive, ref, watch, onMounted, onUnmounted, nextTick, computed, defin
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useContactsStore, type Contact, type Message } from '@/stores/contacts'
+import type { InternalConversationSide } from '@/lib/internalConversations'
 import { useAuthStore } from '@/stores/auth'
 import { useUsersStore } from '@/stores/users'
 import { wsService } from '@/services/websocket'
@@ -722,8 +723,13 @@ const {
   contactsStore,
   selectedAccount,
   tabStripRef,
-  onContactClick: (contact: Contact) => router.push(`/chat/${contact.id}`),
+  onContactClick: (contact: Contact) => openContactRow(contact),
   onContactSelected: async (id: string) => {
+    // An internal conversation's other side holds copies of the messages on
+    // screen — mark them read too (only once the content is actually shown).
+    if (contactsStore.currentContact?.is_internal && !contactsStore.isPendingClaim) {
+      contactsStore.markInternalCounterpartsRead(id, selectedAccount.value)
+    }
     // Notes + scheduled messages are view-owned; fetch them after the contact
     // is selected, then scroll the room to the bottom.
     await Promise.all([
@@ -742,6 +748,36 @@ const {
   resetUnreadOnSwitch: resetOnContactSwitch,
   scrollToBottom,
 })
+
+// ─── Internal conversations (chats between the org's own numbers) ───
+// A merged Internal-tab row opens one side; the header toggle switches sides
+// (= which account sends). Sides live on different contacts, so switching
+// navigates, carrying the side's account in ?account=.
+function routeAccount(): string | undefined {
+  return typeof route.query.account === 'string' ? route.query.account : undefined
+}
+function openInternalSide(contactId: string, account: string) {
+  if (contactId === contactsStore.currentContact?.id) {
+    if (account !== selectedAccount.value) switchAccount(account)
+    return
+  }
+  router.push({ path: `/chat/${contactId}`, query: { account } })
+}
+function openContactRow(contact: Contact) {
+  if (contact.internal_open_account) {
+    openInternalSide(contact.id, contact.internal_open_account)
+  } else {
+    router.push(`/chat/${contact.id}`)
+  }
+}
+const currentInternalConversation = computed(() => {
+  const c = contactsStore.currentContact
+  return c?.is_internal ? contactsStore.internalConversationFor(c.id, selectedAccount.value) : undefined
+})
+function isCurrentInternalSide(side: InternalConversationSide): boolean {
+  return side.contact_id === contactsStore.currentContact?.id
+    && (!selectedAccount.value || side.account === selectedAccount.value)
+}
 
 // Safety-net probe: reconciles the open conversation when the webhook → WS
 // pipeline drops a message silently (see composable doc for cadence).
@@ -762,7 +798,7 @@ watch(contactId, async (newId) => {
   if (newId) {
     notesStore.notes = []
     notesStore.hasMore = false
-    await selectContact(newId)
+    await selectContact(newId, routeAccount())
   } else {
     wsService.setCurrentContact(null)
     contactsStore.setCurrentContact(null)
@@ -829,7 +865,7 @@ onMounted(async () => {
   }
 
   if (contactId.value) {
-    await selectContact(contactId.value)
+    await selectContact(contactId.value, routeAccount())
     // Keep the restored conversation visible in the sidebar after a refresh,
     // even if it sits far down the list. 'nearest' only moves the viewport
     // when the active row is off-screen, so it never fights a manual click.
@@ -1081,6 +1117,7 @@ onUnmounted(() => {
             :class="[
               'flex items-center gap-2 px-3 py-2 cursor-pointer border-l-[3px] border-transparent transition-colors',
               contactsStore.currentContact?.id === contact.id
+                || (contactsStore.currentContact && contact.internal_side_contact_ids?.includes(contactsStore.currentContact.id))
                 ? 'bg-white/[0.14] light:bg-slate-200 border-primary'
                 : 'hover:bg-white/[0.04] light:hover:bg-gray-50'
             ]"
@@ -1118,8 +1155,9 @@ onUnmounted(() => {
                   <Badge v-else-if="contact.is_group_chat" class="ml-1 h-4 text-[9px] align-middle bg-blue-500/20 text-blue-400 light:bg-blue-100 light:text-blue-700">
                     {{ $t('chat.group') }}
                   </Badge>
-                  <!-- Conversation with another of the org's own numbers. -->
-                  <Badge v-if="contact.is_internal" class="ml-1 h-4 text-[9px] align-middle bg-cyan-500/20 text-cyan-400 light:bg-cyan-100 light:text-cyan-700">
+                  <!-- Conversation with another of the org's own numbers
+                       (merged Internal-tab rows already say so in the title). -->
+                  <Badge v-if="contact.is_internal && !contact.internal_conversation_key" class="ml-1 h-4 text-[9px] align-middle bg-cyan-500/20 text-cyan-400 light:bg-cyan-100 light:text-cyan-700">
                     {{ $t('chat.internal') }}
                   </Badge>
                 </p>
@@ -1129,7 +1167,9 @@ onUnmounted(() => {
               </div>
               <div class="flex items-center justify-between gap-2">
                 <p class="flex-1 min-w-0 text-xs text-white/50 light:text-gray-500 truncate flex items-center gap-1">
-                  {{ isStatusContact(contact.id) ? $t('chat.statusHint') : (contact.internal_account_name || contact.phone_number) }}
+                  {{ isStatusContact(contact.id) ? $t('chat.statusHint')
+                    : contact.internal_conversation_key ? contact.last_message_preview
+                    : (contact.internal_account_name || contact.phone_number) }}
                   <!-- M1: assigned-agent tag. Shows whenever a chat is assigned
                        to someone other than the viewer, so an admin can see who
                        owns each conversation at a glance and a fellow agent can
@@ -1227,8 +1267,31 @@ onUnmounted(() => {
                 </Badge>
                 <Badge v-if="contactsStore.currentContact?.is_internal"
                        class="text-[10px] h-5 bg-cyan-500/20 text-cyan-400 light:bg-cyan-100 light:text-cyan-700">
-                  {{ $t('chat.internal') }} · {{ contactsStore.currentContact.internal_account_name }}
+                  {{ $t('chat.internal') }}<template v-if="(currentInternalConversation?.sides.length ?? 0) < 2"> · {{ contactsStore.currentContact.internal_account_name }}</template>
                 </Badge>
+                <!-- Send-as toggle: each side of an internal conversation is
+                     one account's copy; switching sides switches the sender. -->
+                <div
+                  v-if="currentInternalConversation && currentInternalConversation.sides.length > 1"
+                  role="group"
+                  :aria-label="$t('chat.sendAs')"
+                  class="inline-flex items-center gap-0.5 h-5 rounded-md bg-white/[0.06] light:bg-gray-100 px-0.5"
+                >
+                  <span class="px-1 text-[10px] text-white/50 light:text-gray-500">{{ $t('chat.sendAs') }}</span>
+                  <button
+                    v-for="side in currentInternalConversation.sides"
+                    :key="side.account"
+                    type="button"
+                    :aria-pressed="isCurrentInternalSide(side)"
+                    :class="[
+                      'h-4 px-1.5 rounded text-[10px] font-medium transition-colors',
+                      isCurrentInternalSide(side)
+                        ? 'bg-cyan-600 text-white'
+                        : 'text-white/60 hover:text-white hover:bg-white/[0.08] light:text-gray-600 light:hover:text-gray-900 light:hover:bg-gray-200'
+                    ]"
+                    @click="openInternalSide(side.contact_id, side.account)"
+                  >{{ side.account }}</button>
+                </div>
                 <Badge v-if="contactsStore.isChatClosed"
                        class="text-[10px] h-5 bg-gray-500/20 text-gray-400 light:bg-gray-100 light:text-gray-600">
                   {{ $t('chat.conversationClosed') }}

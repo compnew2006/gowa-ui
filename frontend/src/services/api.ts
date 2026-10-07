@@ -221,6 +221,9 @@ export const contactsService = {
   updateTags: (id: string, tags: string[]) =>
     api.put(`/contacts/${id}/tags`, { tags }),
   markRead: (id: string) => api.post(`/contacts/${encodeURIComponent(id)}/mark-read`),
+  // One entry per pair of org accounts that messaged each other (both
+  // per-account copies merged) — drives the sidebar's Internal tab.
+  listInternalConversations: () => api.get('/contacts/internal-conversations'),
   // Fetches the contact's current WhatsApp profile picture on demand and
   // returns the freshly-cached avatar_url. Used as a lazy refresh for chats
   // that were created before a GOWA contact sync (no avatar_url yet).

@@ -476,6 +476,7 @@
     "tabAll": "All",
     "tabInternal": "Internal",
     "internal": "Internal",
+    "sendAs": "Send as",
     "releasedConversation": "Release",
     "releaseClosedHint": "Closed chats must be reopened before release",
     "conversationTabs": "Conversation lists",

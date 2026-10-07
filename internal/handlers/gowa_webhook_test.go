@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/google/uuid"
@@ -100,7 +101,11 @@ func TestE2E_GOWASendText_VerifiesHTTPFormat(t *testing.T) {
 	assert.Equal(t, "GOWA_MSG_001", msgID)
 	assert.Equal(t, "POST", mock.lastMethod)
 	assert.Equal(t, "/send/message", mock.lastPath)
-	assert.Equal(t, "628123456789@s.whatsapp.net", mock.lastHeaders.Get("X-Device-Id"))
+	// The client query-escapes X-Device-Id and GOWA's DeviceMiddleware
+	// QueryUnescapes it, so compare the value GOWA actually resolves.
+	deviceID, err := url.QueryUnescape(mock.lastHeaders.Get("X-Device-Id"))
+	require.NoError(t, err)
+	assert.Equal(t, "628123456789@s.whatsapp.net", deviceID)
 
 	var body map[string]any
 	require.NoError(t, json.Unmarshal(mock.lastBody, &body))

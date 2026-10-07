@@ -348,6 +348,7 @@ func setupGowaServerRoutes(g *fastglue.Fastglue, app *handlers.App) {
 func setupContactRoutes(g *fastglue.Fastglue, app *handlers.App) {
 	// Contacts
 	g.GET("/api/contacts", app.ListContacts)
+	g.GET("/api/contacts/internal-conversations", app.ListInternalConversations)
 	g.POST("/api/contacts", app.CreateContact)
 	g.GET("/api/contacts/{id}", app.GetContact)
 	g.GET("/api/contacts/{id}/avatar", app.RefreshContactAvatar)

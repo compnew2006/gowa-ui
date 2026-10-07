@@ -214,9 +214,10 @@ export function useChatContactsList(options: UseChatContactsListOptions) {
     }
     return order
   }
-  // Static class names so Tailwind's scanner keeps every column count.
+  // Static class names so Tailwind's scanner keeps every column count. Five
+  // tabs don't fit one row of the fixed-width sidebar, so they wrap 3 + 2.
   const TAB_GRID_COLS: Record<number, string> = {
-    2: 'grid-cols-2', 3: 'grid-cols-3', 4: 'grid-cols-4', 5: 'grid-cols-5',
+    2: 'grid-cols-2', 3: 'grid-cols-3', 4: 'grid-cols-4', 5: 'grid-cols-3',
   }
   function tabGridClass(): string {
     return TAB_GRID_COLS[visibleTabOrder().length] ?? 'grid-cols-4'
@@ -282,8 +283,10 @@ export function useChatContactsList(options: UseChatContactsListOptions) {
    * Select a contact by id: discover its accounts, auto-select the most likely
    * sending account, bind the WebSocket "current contact", and hand control
    * back to the view for notes/scheduled fetches + scroll setup.
+   * `preferredAccount` (an internal-conversation side) wins over the
+   * auto-selection when the contact has messages on that account.
    */
-  async function selectContact(id: string) {
+  async function selectContact(id: string, preferredAccount?: string) {
     // The virtual Status conversation is send-only and has no backend row:
     // short-circuit the normal fetch/contact-discovery/account-detection flow.
     if (isStatusContact(id)) {
@@ -324,14 +327,16 @@ export function useChatContactsList(options: UseChatContactsListOptions) {
         if (msg.whatsapp_account) accounts.add(msg.whatsapp_account)
       }
       contactAccounts.value = Array.from(accounts).sort()
+      const preferred = preferredAccount && accounts.has(preferredAccount) ? preferredAccount : null
 
       // Auto-select account and filter client-side (avoids a second fetch).
       // Account tabs are shown per-CONTACT, based on the accounts that actually
       // have messages with this number — not all org accounts. A contact with
       // messages on a single account (or none) gets no tabs.
       if (contactAccounts.value.length > 1) {
+        if (preferred) selectedAccount.value = preferred
         // Find account of the most recent incoming message
-        for (let i = contactsStore.messages.length - 1; i >= 0; i--) {
+        for (let i = contactsStore.messages.length - 1; i >= 0 && !selectedAccount.value; i--) {
           const msg = contactsStore.messages[i]
           if (msg.direction === 'incoming' && msg.whatsapp_account) {
             selectedAccount.value = msg.whatsapp_account

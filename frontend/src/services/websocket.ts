@@ -326,6 +326,14 @@ class WebSocketService {
     // Check if this message is for the current contact
     const currentContact = store.currentContact
     const isViewingThisContact = currentContact && payload.contact_id === currentContact.id
+    // An internal conversation is stored once per account: the copy landing
+    // on the OTHER side of the conversation on screen is a message the user is
+    // already looking at. The id comes from our own store data (validated),
+    // never from the payload, before it goes into a request URL.
+    const counterpartId = !isViewingThisContact && currentContact?.is_internal
+      ? store.internalCounterpartIds(currentContact.id, store.accountFilter)
+        .find(id => id === payload.contact_id)
+      : undefined
 
     if (isViewingThisContact) {
       // Add message to the store
@@ -361,7 +369,7 @@ class WebSocketService {
     // 2. Current user is assigned to this contact
     // 3. User has new_message_alerts enabled
     // 4. User is not currently viewing this contact
-    if (payload.direction === 'incoming' && !isViewingThisContact) {
+    if (payload.direction === 'incoming' && !isViewingThisContact && !counterpartId) {
       const authStore = useAuthStore()
       const currentUserId = authStore.user?.id
       const settings = authStore.userSettings
@@ -405,8 +413,9 @@ class WebSocketService {
     const alreadyRead = payload.status === 'read'
     const userActive = typeof document === 'undefined'
       || (document.visibilityState === 'visible' && document.hasFocus())
-    if (isViewingThisContact && currentContact && payload.direction === 'incoming' && !alreadyRead && userActive) {
-      contactsService.markRead(currentContact.id)
+    const readTargetId = isViewingThisContact && currentContact ? currentContact.id : counterpartId
+    if (readTargetId && payload.direction === 'incoming' && !alreadyRead && userActive) {
+      contactsService.markRead(readTargetId)
         .catch(() => { /* non-critical, will resync on next chat-open */ })
         .finally(() => store.fetchContacts())
     } else {
