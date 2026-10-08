@@ -152,7 +152,7 @@
     "createAccountDesc": "ابدأ رحلة واتساب للأعمال مع Gowa-UI",
     "fullName": "الاسم الكامل",
     "fullNamePlaceholder": "الاسم بالكامل",
-    "invitationRequired": "يتطلب التسجيل رابط دعوة من مسؤول مؤسستك.",
+    "invitationRequired": "التسجيل متاح عبر الدعوات فقط. اطلب من مسؤول مؤسستك رابط تسجيل، ثم افتح الرابط لإنشاء حسابك.",
     "passwordMinLength": "8 أحرف على الأقل",
     "confirmPasswordPlaceholder": "تأكيد كلمة السر",
     "createAccountBtn": "إنشاء الحساب",

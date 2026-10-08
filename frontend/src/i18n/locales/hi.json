@@ -152,7 +152,7 @@
     "createAccountDesc": "Gowa-UI के साथ अपनी WhatsApp Business यात्रा शुरू करें",
     "fullName": "पूरा नाम",
     "fullNamePlaceholder": "John Doe",
-    "invitationRequired": "पंजीकरण के लिए आपके संगठन के व्यवस्थापक से आमंत्रण लिंक चाहिए।",
+    "invitationRequired": "पंजीकरण केवल आमंत्रण से किया जा सकता है। अपने संगठन के व्यवस्थापक से पंजीकरण लिंक माँगें और खाता बनाने के लिए उसे खोलें।",
     "passwordMinLength": "कम से कम 8 अक्षर",
     "confirmPasswordPlaceholder": "अपना पासवर्ड कन्फर्म करें",
     "createAccountBtn": "खाता बनाएँ",

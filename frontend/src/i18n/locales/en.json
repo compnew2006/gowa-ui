@@ -152,7 +152,7 @@
     "createAccountDesc": "Start your WhatsApp Business journey with Gowa-UI",
     "fullName": "Full Name",
     "fullNamePlaceholder": "John Doe",
-    "invitationRequired": "Registration requires an invitation link from your organization admin.",
+    "invitationRequired": "Registration is invitation-only. Ask your organization admin for a registration link, then open it to create your account.",
     "passwordMinLength": "At least 8 characters",
     "confirmPasswordPlaceholder": "Confirm your password",
     "createAccountBtn": "Create account",

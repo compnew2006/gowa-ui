@@ -30,7 +30,9 @@ test.describe('Register', () => {
     await expect(page.locator('input#email')).not.toBeVisible()
     await expect(page.locator('input#password')).not.toBeVisible()
 
-    await expect(page.locator('text=/invitation/i')).toBeVisible()
+    await expect(page.locator('text=/invitation-only/i')).toBeVisible()
+    await expect(page.locator('text=/ask your organization admin/i')).toBeVisible()
+    await expect(page.locator('text=/open it to create your account/i')).toBeVisible()
     await expect(page.getByRole('link', { name: /Sign in/i })).toBeVisible()
   })
 

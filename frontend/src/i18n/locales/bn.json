@@ -152,7 +152,7 @@
     "createAccountDesc": "Gowa-UI এর সাথে আপনার WhatsApp Business যাত্রা শুরু করুন",
     "fullName": "পূর্ণ নাম",
     "fullNamePlaceholder": "John Doe",
-    "invitationRequired": "নিবন্ধনের জন্য আপনার প্রতিষ্ঠানের অ্যাডমিনের আমন্ত্রণ লিংক প্রয়োজন।",
+    "invitationRequired": "শুধু আমন্ত্রণের মাধ্যমেই নিবন্ধন করা যায়। আপনার প্রতিষ্ঠানের অ্যাডমিনের কাছে নিবন্ধনের লিংক চান, তারপর অ্যাকাউন্ট তৈরি করতে সেটি খুলুন।",
     "passwordMinLength": "কমপক্ষে ৮ অক্ষর",
     "confirmPasswordPlaceholder": "আপনার পাসওয়ার্ড নিশ্চিত করুন",
     "createAccountBtn": "অ্যাকাউন্ট তৈরি করুন",
