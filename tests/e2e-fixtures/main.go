@@ -97,6 +97,17 @@ func run(args []string) error {
 	}
 }
 
+// fixturePhoneNumber derives a unique, digits-only phone number from the run
+// ID, so concurrent runs never collide on the contacts uniqueness rules.
+func fixturePhoneNumber(runID string) (string, error) {
+	phoneID, ok := new(big.Int).SetString(strings.ReplaceAll(runID, "-", ""), 16)
+	if !ok {
+		return "", errors.New("invalid E2E fixture run ID")
+	}
+	phoneSuffix := new(big.Int).Mod(phoneID, big.NewInt(100_000_000_000))
+	return "1555" + fmt.Sprintf("%011d", phoneSuffix.Int64()), nil
+}
+
 func argument(args []string, index int, fallback string) string {
 	if len(args) > index && strings.TrimSpace(args[index]) != "" {
 		return args[index]
@@ -259,15 +270,37 @@ func seed(db *gorm.DB, scenario, runID string) (fixture, error) {
 				return err
 			}
 			result = fixture{Path: "/settings/canned-responses", Heading: "Canned Responses", ResourceID: response.ID.String()}
-		case "contacts-list", "contact-detail":
-			phoneID, ok := new(big.Int).SetString(strings.ReplaceAll(runID, "-", ""), 16)
-			if !ok {
-				return errors.New("invalid E2E fixture run ID")
+		case "chat-conversation":
+			// An open conversation for the chat composer. The account has no
+			// GOWA device or base URL, so nothing sent from it can leave the
+			// machine; cleanup removes both rows by the run-ID prefix.
+			account, err := createAccount()
+			if err != nil {
+				return err
 			}
-			phoneSuffix := new(big.Int).Mod(phoneID, big.NewInt(100_000_000_000))
+			phone, err := fixturePhoneNumber(runID)
+			if err != nil {
+				return err
+			}
+			contact := &models.Contact{
+				OrganizationID:  orgID,
+				PhoneNumber:     phone,
+				ProfileName:     base + " contact",
+				WhatsAppAccount: account.Name,
+				IsRead:          true,
+			}
+			if err := tx.Create(contact).Error; err != nil {
+				return err
+			}
+			result = fixture{Path: "/chat/" + contact.ID.String(), Heading: contact.ProfileName, ResourceID: contact.ID.String()}
+		case "contacts-list", "contact-detail":
+			phone, err := fixturePhoneNumber(runID)
+			if err != nil {
+				return err
+			}
 			contact := &models.Contact{
 				OrganizationID: orgID,
-				PhoneNumber:    "1555" + fmt.Sprintf("%011d", phoneSuffix.Int64()),
+				PhoneNumber:    phone,
 				ProfileName:    base + " contact",
 				IsRead:         true,
 			}

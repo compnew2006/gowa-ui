@@ -9,6 +9,49 @@ import type { Message } from '@/stores/contacts'
  * synchronous GOWA upload, so larger batches risk long dialogs/timeouts. */
 export const MAX_BATCH_FILES = 10
 
+export type MediaKind = 'image' | 'video' | 'audio' | 'document'
+
+/**
+ * Upload ceiling per message type, in bytes. Decimal, because that is how the
+ * engine counts: GOWA (src/config/settings.go) enforces 20MB for images, 100MB
+ * for videos and 50MB for files, and has no limit of its own for audio, which
+ * takes the general file cap. Anything the dialog accepts is therefore
+ * something GOWA accepts, instead of an invented WhatsApp-wide number. Every
+ * request must also fit the server's 110MB body limit (cmd/gowa-ui/wiring.go).
+ */
+export const MAX_UPLOAD_BYTES: Record<MediaKind, number> = {
+  image: 20_000_000,
+  video: 100_000_000,
+  audio: 50_000_000,
+  document: 50_000_000
+}
+
+/**
+ * Axios budget for one media upload. The shared client defaults to 30s, which
+ * a large file cannot meet, and the server holds this request open until
+ * WhatsApp has accepted the file (bounded by the gateway's 15-minute media
+ * deadline). Cancel still aborts it through the AbortController.
+ */
+export const MEDIA_UPLOAD_TIMEOUT_MS = 16 * 60 * 1000
+
+export function getMediaType(mimeType: string): MediaKind {
+  if (mimeType.startsWith('image/')) return 'image'
+  if (mimeType.startsWith('video/')) return 'video'
+  if (mimeType.startsWith('audio/')) return 'audio'
+  return 'document'
+}
+
+/** Largest size, in bytes, the dialog accepts for a file of this MIME type. */
+export function uploadLimitBytes(mimeType: string): number {
+  return MAX_UPLOAD_BYTES[getMediaType(mimeType)]
+}
+
+/** Megabytes as GOWA counts them, one decimal at most (20, 35.3). Rounded up so
+ * an oversized file never reads as equal to its limit ("20 MB, limit 20 MB"). */
+function formatMB(bytes: number): string {
+  return String(Math.ceil(bytes / 100_000) / 10)
+}
+
 const CLIPBOARD_IMAGE_EXTENSIONS: Record<string, string> = {
   'image/png': 'png',
   'image/jpeg': 'jpg',
@@ -139,13 +182,6 @@ export function useChatMedia(options: UseChatMediaOptions) {
     redownload
   } = options.mediaExport
 
-  function getMediaType(mimeType: string): string {
-    if (mimeType.startsWith('image/')) return 'image'
-    if (mimeType.startsWith('video/')) return 'video'
-    if (mimeType.startsWith('audio/')) return 'audio'
-    return 'document'
-  }
-
   /**
    * Re-fetch a message's media from the provider and, on success, patch the
    * updated media_url into the store so the bubble re-renders with live media.
@@ -259,11 +295,8 @@ export function useChatMedia(options: UseChatMediaOptions) {
     const isAllowed = allowedMimePrefixes.some(type => file.type.startsWith(type)) || allowedExtensions.includes(ext)
     if (!isAllowed) return 'type'
 
-    // Size limits aligned with the engine: GOWA enforces a hard 50MB upload
-    // limit; media (image/video/audio) stay at WhatsApp's 16MB.
-    const isMediaType = file.type.startsWith('image/') || file.type.startsWith('video/') || file.type.startsWith('audio/')
-    const maxSize = isMediaType ? 16 * 1024 * 1024 : 50 * 1024 * 1024
-    if (file.size > maxSize) return 'size'
+    // Size limits aligned with the engine, per message type (MAX_UPLOAD_BYTES).
+    if (file.size > uploadLimitBytes(file.type)) return 'size'
     return null
   }
 
@@ -306,8 +339,18 @@ export function useChatMedia(options: UseChatMediaOptions) {
     }
     const tooBig = picked.filter((f) => validateFile(f) === 'size')
     if (tooBig.length) {
+      // Name each offender with its size and the limit that applies to it, so
+      // the agent knows what to cut down to instead of guessing.
       toast.error(t('chat.fileTooLarge'), {
-        description: tooBig.map((f) => f.name).join(', ')
+        description: tooBig
+          .map((f) =>
+            t('chat.fileSizeOverLimit', {
+              name: f.name,
+              size: formatMB(f.size),
+              max: formatMB(uploadLimitBytes(f.type))
+            })
+          )
+          .join(', ')
       })
       return false
     }
@@ -441,6 +484,7 @@ export function useChatMedia(options: UseChatMediaOptions) {
       // Cancel button abort a long upload mid-transfer.
       const response = await api.post('/messages/media', formData, {
         signal: uploadAbort.signal,
+        timeout: MEDIA_UPLOAD_TIMEOUT_MS,
         headers: { ...getRequestHeaders({ csrf: true }), 'Content-Type': 'multipart/form-data' },
         onUploadProgress: (e) => {
           if (e.total) {

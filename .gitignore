@@ -100,3 +100,6 @@ node_modules/
 .e2e/failures/
 .e2e/logs/
 .e2e/videos/
+
+# Files the e2e upload tests generate (see tests/helpers/upload-files.ts)
+tests/generated-uploads/

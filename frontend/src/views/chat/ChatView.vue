@@ -2505,6 +2505,7 @@ onUnmounted(() => {
             <input
               ref="fileInputRef"
               type="file"
+              data-testid="chat-file-input"
               multiple
               accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.html,.htm,.zip,.rar,.7z,.md,.json,.xml,.rtf"
               class="hidden"

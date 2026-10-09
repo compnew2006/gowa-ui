@@ -37,11 +37,11 @@ embed-frontend:
 
 # Run the backend locally
 run:
-	$(GOCMD) run $(BINARY_PATH)/main.go server -config config.toml
+	$(GOCMD) run $(BINARY_PATH) server -config config.toml
 
 # Run with migrations
 run-migrate:
-	$(GOCMD) run $(BINARY_PATH)/main.go server -config config.toml -migrate
+	$(GOCMD) run $(BINARY_PATH) server -config config.toml -migrate
 
 # Run tests. Uses gotestsum when available for live progress + a clear
 # failure summary at the end. Falls back to the built-in `go test -v` so
@@ -98,7 +98,7 @@ docker-restart:
 
 # Database migrations
 migrate:
-	$(GOCMD) run $(BINARY_PATH)/main.go server -config config.toml -migrate
+	$(GOCMD) run $(BINARY_PATH) server -config config.toml -migrate
 
 # Frontend commands
 frontend-install:

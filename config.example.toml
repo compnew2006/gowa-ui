@@ -13,7 +13,8 @@ encryption_key = ""  # AES-256 key for encrypting secrets at rest (32+ chars, re
 [server]
 host = "0.0.0.0"
 port = 8080
-read_timeout = 30
+read_timeout = 30   # Seconds to receive one whole request, uploads included. A 100MB video needs ~27 Mbit/s to arrive in 30s;
+                    # without a buffering proxy (nginx) in front, raise this (e.g. 300) so large media can be sent over slower links.
 write_timeout = 30
 base_path = ""  # Set to "/subpath" if behind nginx proxy pass
 allowed_origins = ""  # Comma-separated CORS origins (e.g., "https://app.example.com,https://admin.example.com"). Empty = allow all (dev only).

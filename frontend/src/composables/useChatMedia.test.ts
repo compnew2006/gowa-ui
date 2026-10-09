@@ -15,10 +15,14 @@ vi.mock('vue-sonner', () => ({
 }))
 
 import { toast } from 'vue-sonner'
+import { api } from '@/services/api'
 import {
   MAX_BATCH_FILES,
+  MAX_UPLOAD_BYTES,
+  MEDIA_UPLOAD_TIMEOUT_MS,
   clipboardImageName,
   extractClipboardImages,
+  uploadLimitBytes,
   useChatMedia
 } from './useChatMedia'
 
@@ -133,29 +137,31 @@ describe('clipboardImageName', () => {
   })
 })
 
-describe('useChatMedia handlePaste', () => {
-  function setup(opts: { contact?: { id: string } | null } = {}) {
-    const contactsStore = {
-      currentContact: opts.contact === undefined ? { id: 'c1' } : opts.contact,
-      messages: [],
-      addMessage: vi.fn()
-    }
-    const media = useChatMedia({
-      t: (key: string) => key,
-      contactsStore,
-      selectedAccount: { value: null },
-      scrollToBottom: vi.fn(),
-      sendStatusMedia: vi.fn(),
-      isStatusContact: () => false,
-      mediaExport: {
-        redownloading: { value: new Set<string>() },
-        redownload: vi.fn()
-      },
-      fileInputRef: ref(null)
-    })
-    return media
+function setup(opts: { contact?: { id: string } | null } = {}) {
+  const contactsStore = {
+    currentContact: opts.contact === undefined ? { id: 'c1' } : opts.contact,
+    messages: [],
+    addMessage: vi.fn()
   }
+  const media = useChatMedia({
+    // Echo key and params so assertions can see what would be rendered.
+    t: (key: string, params?: Record<string, unknown>) =>
+      params ? `${key} ${JSON.stringify(params)}` : key,
+    contactsStore,
+    selectedAccount: { value: null },
+    scrollToBottom: vi.fn(),
+    sendStatusMedia: vi.fn(),
+    isStatusContact: () => false,
+    mediaExport: {
+      redownloading: { value: new Set<string>() },
+      redownload: vi.fn()
+    },
+    fileInputRef: ref(null)
+  })
+  return media
+}
 
+describe('useChatMedia handlePaste', () => {
   beforeEach(() => {
     URL.createObjectURL = vi.fn(() => 'blob:preview')
     URL.revokeObjectURL = vi.fn()
@@ -249,14 +255,14 @@ describe('useChatMedia handlePaste', () => {
     media.handlePaste(pasteEvent(fakeClipboard({ types: ['Files'], files: [imageFile()] })).event)
 
     expect(media.selectedFiles.value).toHaveLength(MAX_BATCH_FILES)
-    expect(toast.error).toHaveBeenCalledWith('chat.tooManyFiles')
+    expect(toast.error).toHaveBeenCalledWith('chat.tooManyFiles {"max":10}')
   })
 
-  it('rejects an oversized image without opening the dialog', () => {
+  it('rejects an image over the image limit without opening the dialog', () => {
     const media = setup()
-    // Over WhatsApp's 16MB media cap. A real 17MB buffer, not a patched size:
-    // the handler renames by copying the File, which re-reads the true size.
-    const huge = imageFile('big.png', 'image/png', 17 * 1024 * 1024)
+    // A real buffer, not a patched size: the handler renames by copying the
+    // File, which re-reads the true size.
+    const huge = imageFile('big.png', 'image/png', MAX_UPLOAD_BYTES.image + 1)
 
     media.handlePaste(pasteEvent(fakeClipboard({ types: ['Files'], files: [huge] })).event)
 
@@ -264,7 +270,9 @@ describe('useChatMedia handlePaste', () => {
     expect(media.selectedFiles.value).toHaveLength(0)
     expect(toast.error).toHaveBeenCalledWith(
       'chat.fileTooLarge',
-      expect.objectContaining({ description: expect.stringMatching(/^image-/) })
+      expect.objectContaining({
+        description: expect.stringMatching(/^chat\.fileSizeOverLimit .*"name":"image-.*\.png".*"max":"20"/)
+      })
     )
   })
 
@@ -298,5 +306,112 @@ describe('useChatMedia handlePaste', () => {
     expect(media.selectedFiles.value.map((f) => f.name)).toEqual(['a.png', 'b.png'])
     expect(media.isMediaDialogOpen.value).toBe(true)
     expect(input.value).toBe('')
+  })
+})
+
+// ─── Upload limits ───
+
+/** A File that reports `size` without allocating it (handleFileSelect keeps the objects as picked). */
+function sizedFile(name: string, type: string, size: number): File {
+  const file = new File([], name, { type })
+  Object.defineProperty(file, 'size', { value: size })
+  return file
+}
+
+function pick(media: ReturnType<typeof setup>, ...files: File[]) {
+  media.handleFileSelect({ target: { files, value: 'x' } } as unknown as Event)
+}
+
+describe('upload limits', () => {
+  beforeEach(() => {
+    URL.createObjectURL = vi.fn(() => 'blob:preview')
+    URL.revokeObjectURL = vi.fn()
+  })
+
+  // Mirrors GOWA's own caps (src/config/settings.go), counted in decimal MB.
+  it.each([
+    ['image', 'image/png', 20_000_000],
+    ['video', 'video/mp4', 100_000_000],
+    ['audio', 'audio/mpeg', 50_000_000],
+    ['pdf', 'application/pdf', 50_000_000],
+    ['zip', 'application/zip', 50_000_000]
+  ])('accepts a %s of exactly the limit and rejects one byte more', (_label, type, limit) => {
+    const media = setup()
+
+    pick(media, sizedFile('at-limit', type, limit))
+    expect(media.selectedFiles.value).toHaveLength(1)
+    expect(toast.error).not.toHaveBeenCalled()
+
+    const over = setup()
+    pick(over, sizedFile('over-limit', type, limit + 1))
+    expect(over.selectedFiles.value).toHaveLength(0)
+    expect(over.isMediaDialogOpen.value).toBe(false)
+    expect(toast.error).toHaveBeenCalledWith('chat.fileTooLarge', expect.anything())
+  })
+
+  it('no longer stops videos and audio at 16MB', () => {
+    const media = setup()
+    pick(media, sizedFile('clip.mp4', 'video/mp4', 30 * 1_000_000), sizedFile('talk.mp3', 'audio/mpeg', 25 * 1_000_000))
+
+    expect(media.selectedFiles.value.map((f) => f.name)).toEqual(['clip.mp4', 'talk.mp3'])
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
+  it('names the file, its size and the limit that applies to it', () => {
+    const media = setup()
+    pick(media, sizedFile('big.mp4', 'video/mp4', 101_234_567), sizedFile('huge.png', 'image/png', 35_234_000))
+
+    expect(toast.error).toHaveBeenCalledWith('chat.fileTooLarge', {
+      description:
+        'chat.fileSizeOverLimit {"name":"big.mp4","size":"101.3","max":"100"}, ' +
+        'chat.fileSizeOverLimit {"name":"huge.png","size":"35.3","max":"20"}'
+    })
+  })
+
+  it('never reads an oversized file as equal to its limit', () => {
+    const media = setup()
+    pick(media, sizedFile('x.png', 'image/png', 20_000_001))
+
+    expect(toast.error).toHaveBeenCalledWith('chat.fileTooLarge', {
+      description: 'chat.fileSizeOverLimit {"name":"x.png","size":"20.1","max":"20"}'
+    })
+  })
+
+  it('still rejects unsupported types regardless of size', () => {
+    const media = setup()
+    pick(media, sizedFile('evil.exe', 'application/x-msdownload', 10))
+
+    expect(media.selectedFiles.value).toHaveLength(0)
+    expect(toast.error).toHaveBeenCalledWith('chat.unsupportedFileType', { description: 'evil.exe' })
+  })
+
+  it('keeps every limit inside the server request body cap (110MB)', () => {
+    // cmd/gowa-ui/wiring.go MaxRequestBodySize; multipart framing adds a little.
+    const serverBodyLimit = 110 * 1024 * 1024
+    for (const limit of Object.values(MAX_UPLOAD_BYTES)) {
+      expect(limit + 1_000_000).toBeLessThan(serverBodyLimit)
+    }
+  })
+
+  it('picks the limit from the message type the file will be sent as', () => {
+    expect(uploadLimitBytes('video/quicktime')).toBe(MAX_UPLOAD_BYTES.video)
+    expect(uploadLimitBytes('image/webp')).toBe(MAX_UPLOAD_BYTES.image)
+    expect(uploadLimitBytes('')).toBe(MAX_UPLOAD_BYTES.document)
+  })
+
+  it('uploads with a timeout long enough for a large file, not the 30s default', async () => {
+    vi.mocked(api.post).mockResolvedValue({ data: {} })
+    const media = setup()
+    pick(media, sizedFile('clip.mp4', 'video/mp4', 60 * 1_000_000))
+
+    await media.sendMediaMessage()
+
+    expect(api.post).toHaveBeenCalledTimes(1)
+    expect(api.post).toHaveBeenCalledWith(
+      '/messages/media',
+      expect.any(FormData),
+      expect.objectContaining({ timeout: MEDIA_UPLOAD_TIMEOUT_MS })
+    )
+    expect(MEDIA_UPLOAD_TIMEOUT_MS).toBeGreaterThan(15 * 60 * 1000) // above the gateway's media deadline
   })
 })
