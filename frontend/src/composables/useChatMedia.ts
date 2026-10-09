@@ -9,6 +9,57 @@ import type { Message } from '@/stores/contacts'
  * synchronous GOWA upload, so larger batches risk long dialogs/timeouts. */
 export const MAX_BATCH_FILES = 10
 
+const CLIPBOARD_IMAGE_EXTENSIONS: Record<string, string> = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/gif': 'gif',
+  'image/webp': 'webp',
+  'image/bmp': 'bmp'
+}
+
+/**
+ * Pick the images out of a paste event's clipboard, or [] when the paste
+ * should stay an ordinary text paste.
+ *
+ * Rich copies (spreadsheet cells, formatted text, a selection on a web page)
+ * ship a bitmap rendering of the selection next to the real text. Those carry
+ * BOTH text/plain and text/html, and hijacking them into the media dialog would
+ * break plain copy/paste, so the text wins. Screenshots, "Copy image" and files
+ * copied in the OS file manager have no such text/plain + text/html pair (a
+ * file manager may add the file name as text/plain, which is why plain text
+ * alone does not veto the image).
+ */
+export function extractClipboardImages(data: DataTransfer | null | undefined): File[] {
+  if (!data) return []
+  const types = Array.from(data.types ?? [])
+  const isRichTextCopy =
+    types.includes('text/html') &&
+    types.includes('text/plain') &&
+    data.getData('text/plain').trim() !== ''
+  if (isRichTextCopy) return []
+
+  let images = Array.from(data.files ?? []).filter((f) => f.type.startsWith('image/'))
+  if (!images.length) {
+    // Some browsers expose a pasted bitmap only through clipboardData.items.
+    images = Array.from(data.items ?? [])
+      .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
+      .map((item) => item.getAsFile())
+      .filter((f): f is File => f !== null)
+  }
+  return images
+}
+
+/** Pasted bitmaps all arrive as a generic "image.png"; give each a distinct,
+ * sortable name so the queue and the sent bubble stay tellable apart. */
+export function clipboardImageName(file: File, index: number, now: Date = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const stamp =
+    `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}` +
+    `-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
+  const ext = CLIPBOARD_IMAGE_EXTENSIONS[file.type] ?? 'png'
+  return `image-${stamp}${index > 0 ? `-${index + 1}` : ''}.${ext}`
+}
+
 export interface UseChatMediaOptions {
   /** i18n translator. */
   t: (key: string, params?: Record<string, unknown>) => string
@@ -223,16 +274,26 @@ export function useChatMedia(options: UseChatMediaOptions) {
     filePreviewUrls.value = []
   }
 
-  function handleFileSelect(event: Event) {
-    const input = event.target as HTMLInputElement
-    const picked = Array.from(input.files ?? [])
-    // Reset input so the same files can be selected again
-    input.value = ''
-    if (!picked.length) return
+  function previewUrlFor(file: File): string | null {
+    // Preview URLs for images and videos only
+    return file.type.startsWith('image/') || file.type.startsWith('video/')
+      ? URL.createObjectURL(file)
+      : null
+  }
 
-    if (picked.length > MAX_BATCH_FILES) {
+  /**
+   * Validate `picked` and put it in the send queue. 'replace' starts a fresh
+   * queue (file picker); 'append' adds to the open dialog's queue (a paste
+   * while the dialog is already showing), keeping the caption and the files
+   * already queued. Returns false, with a toast, when nothing was queued.
+   */
+  function queueFiles(picked: File[], mode: 'replace' | 'append' = 'replace'): boolean {
+    if (!picked.length) return false
+
+    const queued = mode === 'append' ? selectedFiles.value.length : 0
+    if (queued + picked.length > MAX_BATCH_FILES) {
       toast.error(t('chat.tooManyFiles', { max: MAX_BATCH_FILES }))
-      return
+      return false
     }
     // Validate the whole batch upfront — a batch with any invalid file does
     // not start, so the user fixes the pick instead of getting a partial send.
@@ -241,26 +302,71 @@ export function useChatMedia(options: UseChatMediaOptions) {
       toast.error(t('chat.unsupportedFileType'), {
         description: badType.map((f) => f.name).join(', ')
       })
-      return
+      return false
     }
     const tooBig = picked.filter((f) => validateFile(f) === 'size')
     if (tooBig.length) {
       toast.error(t('chat.fileTooLarge'), {
         description: tooBig.map((f) => f.name).join(', ')
       })
-      return
+      return false
     }
 
-    revokePreviews()
-    selectedFiles.value = picked
-    activeFileIndex.value = 0
-    // Create preview URLs for images and videos only
-    filePreviewUrls.value = picked.map((f) =>
-      f.type.startsWith('image/') || f.type.startsWith('video/') ? URL.createObjectURL(f) : null
-    )
-    mediaCaption.value = ''
+    if (mode === 'append') {
+      selectedFiles.value = [...selectedFiles.value, ...picked]
+      filePreviewUrls.value = [...filePreviewUrls.value, ...picked.map(previewUrlFor)]
+      // Show what was just added.
+      activeFileIndex.value = queued
+    } else {
+      revokePreviews()
+      selectedFiles.value = picked
+      activeFileIndex.value = 0
+      filePreviewUrls.value = picked.map(previewUrlFor)
+      mediaCaption.value = ''
+    }
 
     isMediaDialogOpen.value = true
+    return true
+  }
+
+  function handleFileSelect(event: Event) {
+    const input = event.target as HTMLInputElement
+    const picked = Array.from(input.files ?? [])
+    // Reset input so the same files can be selected again
+    input.value = ''
+    queueFiles(picked)
+  }
+
+  /**
+   * Ctrl/Cmd+V of an image (screenshot, "Copy image", a copied image file)
+   * into the composer or the media dialog's caption field. Opens the media
+   * dialog with the image queued, or adds it to the queue when the dialog is
+   * already open. Text pastes are left to the browser. Never sends by itself.
+   */
+  function handlePaste(event: ClipboardEvent) {
+    const images = extractClipboardImages(event.clipboardData)
+    if (!images.length) return
+    // An image has no sensible textarea paste; claim the event so the
+    // browser does not also try to insert it.
+    event.preventDefault()
+    if (!contactsStore.currentContact) return
+    // The queue is being sent; changing it mid-batch would desync the
+    // progress counter and the failed-file retry list.
+    if (isUploadingMedia.value) return
+
+    const mode = isMediaDialogOpen.value ? 'append' : 'replace'
+    // Two pastes inside the same second would otherwise share a name; skip
+    // any name already in the queue (replace mode starts from an empty one).
+    const taken = new Set(mode === 'append' ? selectedFiles.value.map((f) => f.name) : [])
+    const now = new Date()
+    const named = images.map((f) => {
+      let index = 0
+      while (taken.has(clipboardImageName(f, index, now))) index++
+      const name = clipboardImageName(f, index, now)
+      taken.add(name)
+      return new File([f], name, { type: f.type, lastModified: f.lastModified })
+    })
+    queueFiles(named, mode)
   }
 
   /** Drop a queued file before sending (releases its preview URL). */
@@ -450,6 +556,7 @@ export function useChatMedia(options: UseChatMediaOptions) {
     // Actions
     openFilePicker,
     handleFileSelect,
+    handlePaste,
     removeFile,
     setActiveFile,
     closeMediaDialog,

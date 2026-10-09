@@ -497,6 +497,7 @@ const {
   downloadMessageFile,
   openFilePicker,
   handleFileSelect,
+  handlePaste,
   removeFile,
   setActiveFile,
   closeMediaDialog,
@@ -2519,6 +2520,7 @@ onUnmounted(() => {
               @keydown.enter.exact.prevent="sendMessage"
               @input="autoResizeTextarea(); onTypingInput()"
               @blur="stopTypingIndicator"
+              @paste="handlePaste"
             />
             <button type="submit" class="w-9 h-9 rounded-lg bg-emerald-600 hover:bg-emerald-500 light:bg-emerald-500 light:hover:bg-emerald-600 flex items-center justify-center transition-colors disabled:opacity-50" :disabled="isHistoricalReadOnly || !messageInput.trim() || isSending">
               <Send class="w-4 h-4 text-white" />
@@ -2901,6 +2903,7 @@ onUnmounted(() => {
               :placeholder="$t('chat.mediaCaption') + '...'"
               class="min-h-[60px] max-h-[100px] resize-none"
               :rows="2"
+              @paste="handlePaste"
             />
             <p v-if="selectedFiles.length > 1" class="mt-1 text-xs text-muted-foreground">
               {{ $t('chat.captionFirstFileHint') }}
