@@ -1100,6 +1100,31 @@ func TestApp_UpdateCurrentUserSettings(t *testing.T) {
 		got = save(map[string]any{"email_notifications": false})
 		assert.Equal(t, false, got["show_internal_tab"])
 		assert.Equal(t, false, got["email_notifications"])
+
+		// The album grouping preference saves on its own, keeping the rest.
+		got = save(map[string]any{"album_grouping": "by_type"})
+		assert.Equal(t, "by_type", got["album_grouping"])
+		assert.Equal(t, false, got["show_internal_tab"], "omitted fields must not be reset")
+		got = save(map[string]any{"show_internal_tab": true})
+		assert.Equal(t, "by_type", got["album_grouping"], "omitted fields must not be reset")
+	})
+
+	t.Run("album grouping rejects unknown modes", func(t *testing.T) {
+		t.Parallel()
+		app := newTestApp(t)
+		org := testutil.CreateTestOrganization(t, app.DB)
+		user := testutil.CreateTestUser(t, app.DB, org.ID,
+			testutil.WithEmail(testutil.UniqueEmail("settings-album")),
+		)
+
+		req := testutil.NewJSONRequest(t, map[string]any{"album_grouping": "by_color"})
+		testutil.SetAuthContext(req, org.ID, user.ID)
+		require.NoError(t, app.UpdateCurrentUserSettings(req))
+		assert.Equal(t, fasthttp.StatusBadRequest, testutil.GetResponseStatusCode(req))
+
+		var stored models.User
+		require.NoError(t, app.DB.Where("id = ?", user.ID).First(&stored).Error)
+		assert.Nil(t, stored.Settings["album_grouping"], "an invalid mode must not be saved")
 	})
 
 	t.Run("unauthorized without user_id", func(t *testing.T) {

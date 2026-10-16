@@ -120,7 +120,7 @@ import { useMessageFormat } from '@/composables/useMessageFormat'
 import { useChatScroll } from '@/composables/useChatScroll'
 import { useChatTyping } from '@/composables/useChatTyping'
 import { useChatMedia } from '@/composables/useChatMedia'
-import { useChatAlbums, type AlbumGroup } from '@/composables/useChatAlbums'
+import { useChatAlbums, loadFullAlbum, type AlbumGroup } from '@/composables/useChatAlbums'
 import { useChatCannedTemplates } from '@/composables/useChatCannedTemplates'
 import { useChatMessaging } from '@/composables/useChatMessaging'
 import { useChatLifecycle } from '@/composables/useChatLifecycle'
@@ -430,6 +430,7 @@ const {
   stickyDate,
   showStickyDate,
   messagesScroll,
+  loadOlderMessages,
   scrollToBottom,
   scrollToMessage,
   onUserActive,
@@ -545,10 +546,18 @@ loadSealedAlbumIds()
 // 4b) WhatsApp-style media albums: consecutive caption-less image/video runs
 // fold into ONE grid bubble at render time. Presentation-only — every member
 // keeps its own message row/id/media URL, so per-photo anchors, select-mode
-// downloads and lazy media recovery are untouched.
+// downloads and lazy media recovery are untouched. The user's album_grouping
+// preference ('by_type') splits each burst into one album per file type.
+const albumGroupingMode = computed(() =>
+  authStore.userSettings.album_grouping === 'by_type' ? 'by_type' as const : 'all' as const
+)
 const { renderItems: albumRenderItems } = useChatAlbums(
   computed(() => contactsStore.messages),
-  { shouldRenderMedia, sealedIds: () => sealedAlbumIds.value }
+  {
+    shouldRenderMedia,
+    sealedIds: () => sealedAlbumIds.value,
+    groupingMode: () => albumGroupingMode.value,
+  }
 )
 const albumByMessageId = computed(() => {
   const map = new Map<string, AlbumGroup>()
@@ -573,6 +582,10 @@ function isAlbumStart(message: Message): boolean {
 function getAlbum(message: Message): AlbumGroup {
   return albumByMessageId.value.get(message.id)!
 }
+/** By-type albums name their file type ("PDF", "JPEG"); '' in 'all' mode. */
+function albumTypeLabel(album: AlbumGroup): string {
+  return album.fileType ? album.fileType.toUpperCase() : ''
+}
 /** Runs longer than 4 tiles collapse the tail into a "+N" tile (WhatsApp). */
 function albumOverflowCount(album: AlbumGroup): number {
   return Math.max(0, album.messages.length - 4)
@@ -584,13 +597,32 @@ function handleAlbumTileClick(message: Message) {
     openMediaPreview(message)
   }
 }
+/** Messages page in 50 at a time, so an album can be cut at the top of the
+ *  loaded window; page in the rest of its burst before downloading it. */
+const isCompletingAlbum = ref(false)
+async function completeAlbum(album: AlbumGroup): Promise<Message[]> {
+  isCompletingAlbum.value = true
+  try {
+    const full = await loadFullAlbum(album, {
+      findAlbum: (id) => albumByMessageId.value.get(id),
+      hasMore: () => contactsStore.hasMoreMessages,
+      loadOlder: loadOlderMessages,
+      messageCount: () => contactsStore.messages.length,
+    })
+    return full.messages
+  } finally {
+    isCompletingAlbum.value = false
+  }
+}
 async function downloadAlbumSeparately(album: AlbumGroup) {
-  const ok = await downloadSeparately(album.messages)
-  if (ok) sealAlbumMessages(album.messages)
+  const members = await completeAlbum(album)
+  const ok = await downloadSeparately(members)
+  if (ok) sealAlbumMessages(members)
 }
 async function downloadAlbumZip(album: AlbumGroup) {
-  const ok = await downloadAsZip(album.messages)
-  if (ok) sealAlbumMessages(album.messages)
+  const members = await completeAlbum(album)
+  const ok = await downloadAsZip(members)
+  if (ok) sealAlbumMessages(members)
 }
 
 // 5) Messaging (send / retry / revoke / reply + status paths)
@@ -1768,6 +1800,16 @@ onUnmounted(() => {
                   >
                     {{ message.sender_push_name || message.sender_phone }}
                   </span>
+                  <!-- By-type grouping: name the album's file type and size so
+                       the sibling albums of one burst stay distinguishable. -->
+                  <span
+                    v-if="albumTypeLabel(getAlbum(message))"
+                    class="block text-xs font-medium mb-1.5 tabular-nums"
+                    :title="$t('chat.albumTypeTitle', { type: albumTypeLabel(getAlbum(message)), count: getAlbum(message).messages.length })"
+                    data-album-type
+                  >
+                    {{ albumTypeLabel(getAlbum(message)) }} · {{ getAlbum(message).messages.length }}
+                  </span>
                   <!-- Album grid: 2 columns; a 3-item run spans the first tile
                        wide (WhatsApp layout); runs > 4 collapse into "+N". -->
                   <div class="grid grid-cols-2 gap-[2px] overflow-hidden rounded-lg w-[300px] max-w-full" data-album>
@@ -1857,24 +1899,24 @@ onUnmounted(() => {
                     variant="ghost"
                     size="icon"
                     class="h-6 w-6"
-                    :disabled="isMediaDownloading"
+                    :disabled="isMediaDownloading || isCompletingAlbum"
                     :title="$t('chat.downloadSeparately')"
                     data-album-sep
                     @click="downloadAlbumSeparately(getAlbum(message))"
                   >
-                    <Loader2 v-if="isMediaDownloading" class="h-3 w-3 animate-spin" />
+                    <Loader2 v-if="isMediaDownloading || isCompletingAlbum" class="h-3 w-3 animate-spin" />
                     <Download v-else class="h-3 w-3" />
                   </Button>
                   <Button
                     variant="ghost"
                     size="icon"
                     class="h-6 w-6"
-                    :disabled="isMediaDownloading"
+                    :disabled="isMediaDownloading || isCompletingAlbum"
                     :title="$t('chat.downloadZip')"
                     data-album-zip
                     @click="downloadAlbumZip(getAlbum(message))"
                   >
-                    <Loader2 v-if="isMediaDownloading" class="h-3 w-3 animate-spin" />
+                    <Loader2 v-if="isMediaDownloading || isCompletingAlbum" class="h-3 w-3 animate-spin" />
                     <Package v-else class="h-3 w-3" />
                   </Button>
                 </div>

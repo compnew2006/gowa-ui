@@ -442,8 +442,11 @@ func setupMediaRoutes(g *fastglue.Fastglue, app *handlers.App) {
 	// name exists so browser "save" flows (preview-tab Save Image As, drag-out)
 	// derive a real filename from the URL basename instead of the message UUID.
 	g.GET("/api/media/{message_id}/{filename}", app.ServeMedia)
-	// Media burst download — zips the media of the given message IDs together
+	// Media burst download — zips the media of the given message IDs together.
+	// POST carries the IDs as a JSON body (large albums); GET ?ids= stays for
+	// compatibility.
 	g.GET("/api/media/zip", app.ServeMediaZip)
+	g.POST("/api/media/zip", app.ServeMediaZip)
 	// Re-download a message's media from its provider (e.g. after a failed fetch)
 	g.POST("/api/media/{message_id}/redownload", app.RedownloadMedia)
 }

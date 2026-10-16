@@ -261,7 +261,138 @@ test.describe('Media Albums', () => {
     // its visible title is locale-dependent).
     await page.locator('[data-album-zip]').click()
     const req = await zipRequest
-    const ids = decodeURIComponent(new URL(req.url()).searchParams.get('ids') || '').split(',')
+    // IDs travel as a JSON body (albums can exceed what a URL carries).
+    expect(req.method()).toBe('POST')
+    const ids: string[] = req.postDataJSON().ids
     expect(ids.sort()).toEqual(burst.map((m) => m.id).sort())
+  })
+
+  test('a 55-file burst cut by the 50-message page is completed before the ZIP', async ({ page }) => {
+    // 55 PDFs sent together; the newest page only reaches back to the 11th,
+    // so the album first shows 45 of them (the user-reported 45 vs 55).
+    const files = Array.from({ length: 55 }, (_, i) =>
+      makeMessage({
+        message_type: 'document',
+        media_filename: `scan-${i}.pdf`,
+        media_mime_type: 'application/pdf',
+        created_at: `2026-09-08T10:00:${String(i).padStart(2, '0')}Z`,
+      })
+    )
+    // Later chatter keeps the timeline scrolled away from the top, so the
+    // infinite scroll does not page in the rest on its own.
+    const chatter = Array.from({ length: 15 }, (_, i) =>
+      makeMessage({
+        message_type: 'text',
+        content: { body: `follow-up ${i}` },
+        media_url: undefined,
+        media_mime_type: undefined,
+        created_at: `2026-09-08T10:${String(5 + i).padStart(2, '0')}:00Z`,
+      })
+    )
+    const newestPage = [...files.slice(10), ...chatter]
+    const olderPage = files.slice(0, 10)
+
+    await setupMockRoutes(page, newestPage)
+    let olderRequests = 0
+    await page.route(`**/api/contacts/${CONTACT_ID}/messages*`, async (route: Route) => {
+      if (route.request().method() !== 'GET') return route.continue()
+      const older = new URL(route.request().url()).searchParams.has('before_id')
+      if (older) olderRequests++
+      await route.fulfill({
+        json: {
+          status: 'success',
+          data: older
+            ? { messages: olderPage, has_more: false }
+            : { messages: newestPage, has_more: true },
+        },
+      })
+    })
+    await page.route('**/api/media/zip*', async (route: Route) => {
+      await route.fulfill({ body: TINY_PNG, contentType: 'application/zip' })
+    })
+
+    await chatPage.goto(CONTACT_ID)
+    await page.waitForTimeout(500)
+
+    const album = page.locator('[data-album]')
+    await expect(album).toHaveCount(1)
+    await expect(album.locator('[data-message-id]').nth(3)).toContainText('+41')
+    expect(olderRequests).toBe(0)
+
+    const zipRequest = page.waitForRequest((req) => req.url().includes('/api/media/zip'))
+    await page.locator('[data-album-zip]').click({ force: true })
+    const ids: string[] = (await zipRequest).postDataJSON().ids
+    expect(olderRequests).toBe(1)
+    expect(ids.sort()).toEqual(files.map((m) => m.id).sort())
+    await expect(album.locator('[data-message-id]').nth(3)).toContainText('+51')
+  })
+})
+
+test.describe('Media Albums grouped by file type', () => {
+  let chatPage: ChatPage
+
+  test.beforeEach(async ({ page }) => {
+    await loginAsAdmin(page)
+    chatPage = new ChatPage(page)
+    // The album_grouping preference rides on the user object (/me + the
+    // persisted session copy).
+    await page.route('**/api/me', async (route: Route) => {
+      const res = await route.fetch()
+      const json = await res.json()
+      json.data.settings = { ...(json.data.settings || {}), album_grouping: 'by_type' }
+      await route.fulfill({ response: res, json })
+    })
+    await page.evaluate(() => {
+      const raw = localStorage.getItem('user')
+      if (!raw) return
+      const user = JSON.parse(raw)
+      user.settings = { ...(user.settings || {}), album_grouping: 'by_type' }
+      localStorage.setItem('user', JSON.stringify(user))
+    })
+  })
+
+  test('an interleaved PDF + photo burst splits into one album per type', async ({ page }) => {
+    const pdf = (i: number, s: number) =>
+      makeMessage({
+        message_type: 'document',
+        media_filename: `invoice-${i}.pdf`,
+        media_mime_type: 'application/pdf',
+        created_at: `2026-09-08T10:00:${String(s).padStart(2, '0')}Z`,
+      })
+    const jpeg = (s: number) => makeMessage({ created_at: `2026-09-08T10:00:${String(s).padStart(2, '0')}Z` })
+    const msgs = [pdf(1, 0), jpeg(1), pdf(2, 2), jpeg(3), pdf(3, 4)]
+    await setupMockRoutes(page, msgs)
+    await chatPage.goto(CONTACT_ID)
+    await page.waitForTimeout(500)
+
+    const albums = page.locator('[data-album]')
+    await expect(albums).toHaveCount(2)
+    await expect(albums.nth(0).locator('[data-message-id]')).toHaveCount(3)
+    await expect(albums.nth(1).locator('[data-message-id]')).toHaveCount(2)
+    await expect(page.locator('[data-album-type]')).toHaveText(['PDF · 3', 'JPEG · 2'])
+    // Every member keeps its scroll anchor.
+    for (const m of msgs) {
+      await expect(page.locator(`#message-${m.id}`)).toHaveCount(1)
+    }
+  })
+
+  test("each type album downloads only its own files", async ({ page }) => {
+    const msgs = [
+      makeMessage({ message_type: 'document', media_filename: 'a.pdf', created_at: '2026-09-08T10:00:00Z' }),
+      makeMessage({ created_at: '2026-09-08T10:00:01Z' }),
+      makeMessage({ message_type: 'document', media_filename: 'b.pdf', created_at: '2026-09-08T10:00:02Z' }),
+      makeMessage({ created_at: '2026-09-08T10:00:03Z' }),
+    ]
+    await setupMockRoutes(page, msgs)
+    await page.route('**/api/media/zip*', async (route: Route) => {
+      await route.fulfill({ body: TINY_PNG, contentType: 'application/zip' })
+    })
+    await chatPage.goto(CONTACT_ID)
+    await page.waitForTimeout(500)
+
+    const zipRequest = page.waitForRequest((req) => req.url().includes('/api/media/zip'))
+    await page.locator('[data-album-zip]').first().click({ force: true })
+    const ids: string[] = (await zipRequest).postDataJSON().ids
+    expect(ids.sort()).toEqual([msgs[0].id, msgs[2].id].sort())
   })
 })

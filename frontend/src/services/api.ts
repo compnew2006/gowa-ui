@@ -186,7 +186,7 @@ export const usersService = {
   delete: (id: string) => api.delete(`/users/${id}`),
   me: () => api.get('/me'),
   // Partial: only the fields sent are changed server-side.
-  updateSettings: (data: { email_notifications?: boolean; new_message_alerts?: boolean; campaign_updates?: boolean; show_internal_tab?: boolean }) =>
+  updateSettings: (data: { email_notifications?: boolean; new_message_alerts?: boolean; campaign_updates?: boolean; show_internal_tab?: boolean; album_grouping?: 'all' | 'by_type' }) =>
     api.put('/me/settings', data),
   changePassword: (data: { current_password: string; new_password: string }) =>
     api.put('/me/password', data),

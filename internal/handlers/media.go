@@ -244,6 +244,13 @@ func (a *App) downloadAndSaveMedia(ctx context.Context, mediaID string, mimeType
 // (preserves ".pdf" etc. and keeps ServeFile's MIME inference correct); the
 // MIME stored in the DB is sniffed from the saved file's first bytes.
 func (a *App) recoverMediaToDisk(client *gowa.Client, waAccount *whatsapp.Account, message models.Message, chatJID string) (relativePath, mimeType string, err error) {
+	return a.recoverMediaToDiskCtx(context.Background(), client, waAccount, message, chatJID)
+}
+
+// recoverMediaToDiskCtx is recoverMediaToDisk bounded by a caller context —
+// ServeMediaZip recovers several files inside one request and must stop when
+// its overall budget runs out.
+func (a *App) recoverMediaToDiskCtx(parent context.Context, client *gowa.Client, waAccount *whatsapp.Account, message models.Message, chatJID string) (relativePath, mimeType string, err error) {
 	ext := strings.ToLower(filepath.Ext(message.MediaFilename))
 	if ext == "" {
 		ext = ".bin"
@@ -263,7 +270,7 @@ func (a *App) recoverMediaToDisk(client *gowa.Client, waAccount *whatsapp.Accoun
 	}
 	// Transfer budget sized for the cap: ~10 minutes covers 1GB at ~1.7MB/s
 	// through GOWA; fast links finish far sooner.
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	ctx, cancel := context.WithTimeout(parent, 10*time.Minute)
 	defer cancel()
 
 	_, _, err = client.DownloadMessageMediaToPath(ctx, waAccount, message.WhatsAppMessageID, chatJID, destPath, maxBytes)
@@ -597,70 +604,7 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 	if err != nil {
 		// File is missing from disk (or never downloaded). If it's a GOWA
 		// message, try to auto-recover/download it.
-		// The contact row is loaded first because it's needed for both the chat
-		// JID and as an account-name fallback: a message may reference an account
-		// that was renamed/deleted (e.g. legacy GOWA history-sync rows), while the
-		// contact row still points at the live account that currently owns the chat.
-		var contact models.Contact
-		hasContact := a.DB.Where("id = ? AND organization_id = ?", message.ContactID, orgID).First(&contact).Error == nil
-
-		var account *models.WhatsAppAccount
-		acctName := message.WhatsAppAccount
-		contactName := ""
-		if hasContact {
-			contactName = contact.WhatsAppAccount
-		}
-		// Resolve a GOWA account to fetch the media from. All GOWA accounts in
-		// the org share the same server + credentials, and GOWA keys media by
-		// message id + chat JID, so any of them can recover any media. The broad
-		// fallback covers messages whose whats_app_account references a
-		// stale/renamed name (e.g. history-sync rows written before an account
-		// was renamed), which would otherwise leave media unrenderable.
-		account = a.resolveGowaAccountForRecovery(orgID, acctName, contactName)
-
-		if account == nil {
-			// No usable account — make the failure explicit instead of a silent 404.
-			a.Log.Warn("Media missing from disk and no recoverable account for message",
-				"message_id", message.ID, "wa_message_id", message.WhatsAppMessageID,
-				"msg_account", acctName, "error", err)
-		} else if message.WhatsAppMessageID != "" && hasContact {
-			waAccount := account.ToWAAccount()
-			provider := a.resolveProvider(account)
-			gowaClient, ok := provider.(*gowa.Client)
-			if ok {
-				a.Log.Info("Media missing from disk, attempting auto-recovery", "message_id", message.ID, "path", fullPath)
-				// Build the chat JID (handles group @g.us vs 1:1 suffix).
-				chatJID := gowaChatJID(&contact)
-				// Streamed recovery: bytes go GOWA → disk directly (fixed
-				// copy buffer, never whole-file in RAM), bounded by the
-				// configurable disk cap rather than the in-memory 50MiB
-				// guard — huge customer documents (100MB+) recover the same
-				// way as small images. The transfer budget inside is sized
-				// for the bytes, not a small-media guess.
-				relativePath, sniffedType, derr := a.recoverMediaToDisk(gowaClient, waAccount, *message, chatJID)
-				if derr != nil {
-					a.Log.Warn("GOWA media recovery failed", "message_id", message.ID, "wa_message_id", message.WhatsAppMessageID, "error", derr)
-				} else {
-					updates := map[string]any{
-						"media_url":       relativePath,
-						"media_mime_type": sniffedType,
-						// Re-link the message to the account that actually
-						// owns it, so future fetches find the account on the
-						// first lookup and ServeMedia no longer has to fall
-						// back. Only set when the recovery account differs.
-						"whats_app_account": account.Name,
-					}
-					a.DB.Model(&models.Message{}).Where("id = ?", message.ID).Updates(updates)
-
-					// Re-evaluate full path
-					filePath = filepath.Clean(relativePath)
-					fullPath, err = filepath.Abs(filepath.Join(baseDir, filePath))
-					if err == nil {
-						info, err = os.Lstat(fullPath)
-					}
-				}
-			}
-		}
+		fullPath, info, err = a.recoverMissingMedia(context.Background(), orgID, message, baseDir, err)
 		if err != nil {
 			return r.SendErrorEnvelope(fasthttp.StatusNotFound, "File not found", nil, "")
 		}
@@ -683,4 +627,79 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 	fasthttp.ServeFile(r.RequestCtx, fullPath)
 
 	return nil
+}
+
+// recoverMissingMedia re-fetches a message's media from GOWA when the local
+// file is missing (never downloaded, or gone from disk), re-links the row to
+// the recovered file, and returns its absolute path + Lstat info. missingErr
+// is the reason the local lookup failed (logged only). Shared by ServeMedia's
+// lazy recovery and ServeMediaZip, so a burst ZIP contains exactly the files
+// the per-file endpoint would serve. Callers own authorization and the
+// retention check — this only fetches bytes.
+func (a *App) recoverMissingMedia(ctx context.Context, orgID uuid.UUID, message *models.Message, baseDir string, missingErr error) (string, os.FileInfo, error) {
+	// The contact row is loaded first because it's needed for both the chat
+	// JID and as an account-name fallback: a message may reference an account
+	// that was renamed/deleted (e.g. legacy GOWA history-sync rows), while the
+	// contact row still points at the live account that currently owns the chat.
+	var contact models.Contact
+	hasContact := a.DB.Where("id = ? AND organization_id = ?", message.ContactID, orgID).First(&contact).Error == nil
+
+	acctName := message.WhatsAppAccount
+	contactName := ""
+	if hasContact {
+		contactName = contact.WhatsAppAccount
+	}
+	// Resolve a GOWA account to fetch the media from. All GOWA accounts in
+	// the org share the same server + credentials, and GOWA keys media by
+	// message id + chat JID, so any of them can recover any media. The broad
+	// fallback covers messages whose whats_app_account references a
+	// stale/renamed name (e.g. history-sync rows written before an account
+	// was renamed), which would otherwise leave media unrenderable.
+	account := a.resolveGowaAccountForRecovery(orgID, acctName, contactName)
+	if account == nil {
+		// No usable account — make the failure explicit instead of a silent 404.
+		a.Log.Warn("Media missing from disk and no recoverable account for message",
+			"message_id", message.ID, "wa_message_id", message.WhatsAppMessageID,
+			"msg_account", acctName, "error", missingErr)
+		return "", nil, os.ErrNotExist
+	}
+	if message.WhatsAppMessageID == "" || !hasContact {
+		return "", nil, os.ErrNotExist
+	}
+	gowaClient, ok := a.resolveProvider(account).(*gowa.Client)
+	if !ok {
+		return "", nil, os.ErrNotExist
+	}
+
+	a.Log.Info("Media missing from disk, attempting auto-recovery", "message_id", message.ID, "media_url", message.MediaURL)
+	// Streamed recovery: bytes go GOWA → disk directly (fixed copy buffer,
+	// never whole-file in RAM), bounded by the configurable disk cap rather
+	// than the in-memory 50MiB guard — huge customer documents (100MB+)
+	// recover the same way as small images. The transfer budget inside is
+	// sized for the bytes, not a small-media guess.
+	relativePath, sniffedType, err := a.recoverMediaToDiskCtx(ctx, gowaClient, account.ToWAAccount(), *message, gowaChatJID(&contact))
+	if err != nil {
+		a.Log.Warn("GOWA media recovery failed", "message_id", message.ID, "wa_message_id", message.WhatsAppMessageID, "error", err)
+		return "", nil, err
+	}
+	a.DB.Model(&models.Message{}).Where("id = ?", message.ID).Updates(map[string]any{
+		"media_url":       relativePath,
+		"media_mime_type": sniffedType,
+		// Re-link the message to the account that actually owns it, so
+		// future fetches find the account on the first lookup and no longer
+		// have to fall back.
+		"whats_app_account": account.Name,
+	})
+	message.MediaURL = relativePath
+	message.MediaMimeType = sniffedType
+
+	fullPath, ok := resolveWithinBase(baseDir, relativePath)
+	if !ok {
+		return "", nil, os.ErrNotExist
+	}
+	info, err := os.Lstat(fullPath)
+	if err != nil {
+		return "", nil, err
+	}
+	return fullPath, info, nil
 }

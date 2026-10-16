@@ -117,15 +117,20 @@ export function useChatScroll(options: UseChatScrollOptions) {
   }
 
   // ─── Infinite scroll (load older messages at top) ───
+  // Prepends one older page while keeping the viewport on what the agent is
+  // reading. Also used outside the scroll trigger (e.g. completing an album
+  // whose burst continues above the loaded window before downloading it).
+  async function loadOlderMessages() {
+    if (!contactsStore.currentContact) return
+    await messagesScroll.preserveScrollPosition(async () => {
+      await contactsStore.fetchOlderMessages(contactsStore.currentContact!.id, options.selectedAccount.value || undefined)
+      await nextTick()
+    })
+  }
+
   const messagesScroll = useInfiniteScroll({
     direction: 'top',
-    onLoadMore: async () => {
-      if (!contactsStore.currentContact) return
-      await messagesScroll.preserveScrollPosition(async () => {
-        await contactsStore.fetchOlderMessages(contactsStore.currentContact!.id, options.selectedAccount.value || undefined)
-        await nextTick()
-      })
-    },
+    onLoadMore: loadOlderMessages,
     hasMore: options.hasMoreMessages,
     isLoading: options.isLoadingOlderMessages,
     onScroll: (event: Event) => {
@@ -207,6 +212,7 @@ export function useChatScroll(options: UseChatScrollOptions) {
     // Scroll instance (template binds messagesScroll.scrollAreaRef)
     messagesScroll,
     // Imperative
+    loadOlderMessages,
     scrollToBottom,
     scrollToMessage,
     updateStickyDate,

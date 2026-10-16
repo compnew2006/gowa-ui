@@ -8,6 +8,9 @@ export interface UserSettings {
   campaign_updates?: boolean
   /** Show the chat sidebar's Private tab (default true). */
   show_internal_tab?: boolean
+  /** How a burst of files folds into chat albums: one album per burst
+   *  ('all', default) or one album per file type ('by_type'). */
+  album_grouping?: 'all' | 'by_type'
 }
 
 interface Permission {

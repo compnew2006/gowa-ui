@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { toast } from 'vue-sonner'
 import { User, Eye, EyeOff, Loader2 } from 'lucide-vue-next'
@@ -29,6 +30,25 @@ async function setShowInternalTab(show: boolean) {
   try {
     await usersService.updateSettings({ show_internal_tab: show })
     authStore.mergeUserSettings({ show_internal_tab: show })
+    toast.success(t('profile.chatPreferencesSaved'))
+  } catch (error) {
+    toast.error(getErrorMessage(error, t('profile.chatPreferencesFailed')))
+  } finally {
+    isSavingChatPrefs.value = false
+  }
+}
+
+// How a burst of received files folds into chat albums (default: all together).
+type AlbumGrouping = 'all' | 'by_type'
+const albumGrouping = computed<AlbumGrouping>(() =>
+  authStore.userSettings.album_grouping === 'by_type' ? 'by_type' : 'all'
+)
+async function setAlbumGrouping(value: unknown) {
+  if ((value !== 'all' && value !== 'by_type') || value === albumGrouping.value) return
+  isSavingChatPrefs.value = true
+  try {
+    await usersService.updateSettings({ album_grouping: value })
+    authStore.mergeUserSettings({ album_grouping: value })
     toast.success(t('profile.chatPreferencesSaved'))
   } catch (error) {
     toast.error(getErrorMessage(error, t('profile.chatPreferencesFailed')))
@@ -119,8 +139,8 @@ async function changePassword() {
             <CardTitle>{{ $t('profile.chatPreferences') }}</CardTitle>
             <CardDescription>{{ $t('profile.chatPreferencesDesc') }}</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div class="flex items-center justify-between gap-4">
+          <CardContent class="divide-y divide-border">
+            <div class="flex items-center justify-between gap-4 pb-4">
               <div>
                 <p class="font-medium">{{ $t('profile.showPrivateTab') }}</p>
                 <p class="text-sm text-muted-foreground">{{ $t('profile.showPrivateTabDesc') }}</p>
@@ -130,6 +150,25 @@ async function changePassword() {
                 :disabled="isSavingChatPrefs"
                 @update:checked="setShowInternalTab"
               />
+            </div>
+            <div class="flex flex-col gap-3 pt-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+              <div>
+                <p id="album-grouping-label" class="font-medium">{{ $t('profile.albumGrouping') }}</p>
+                <p class="text-sm text-muted-foreground">{{ $t('profile.albumGroupingDesc') }}</p>
+              </div>
+              <Select
+                :model-value="albumGrouping"
+                :disabled="isSavingChatPrefs"
+                @update:model-value="setAlbumGrouping"
+              >
+                <SelectTrigger class="w-full sm:w-52 shrink-0" aria-labelledby="album-grouping-label" data-album-grouping>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{{ $t('profile.albumGroupingAll') }}</SelectItem>
+                  <SelectItem value="by_type">{{ $t('profile.albumGroupingByType') }}</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </CardContent>
         </Card>

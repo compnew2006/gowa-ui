@@ -33,6 +33,18 @@ export interface UseMediaExportResult {
 /** Gap (ms) between separate downloads so the browser doesn't merge them. */
 const SEPARATE_DOWNLOAD_GAP_MS = 450
 
+/** Message types whose media the server can serve, even when the message's
+ *  media_url is still empty in the store (a download that failed at ingest
+ *  or a history-synced file is recovered lazily server-side). */
+const MEDIA_TYPES = ['image', 'video', 'audio', 'document', 'sticker']
+
+/** Messages that carry a downloadable file. Deliberately NOT keyed on
+ *  media_url alone: that dropped not-yet-downloaded files from album
+ *  downloads although the chat showed them. */
+export function downloadableMedia(messages: Message[]): Message[] {
+  return messages.filter((m) => !!m.media_url || MEDIA_TYPES.includes(m.message_type))
+}
+
 /**
  * Orchestrates downloading a burst of media files — either bundled as a ZIP
  * (built server-side) or as separate sequential downloads. Mirrors the
@@ -49,22 +61,38 @@ export function useMediaExport(): UseMediaExportResult {
     // No export-permission pre-check here: the ZIP bundles the same files the
     // per-message endpoint already serves to anyone who can view the chat —
     // the backend enforces identical org + visibility scoping on /api/media/zip.
-    const eligible = messages.filter((m) => !!m.media_url)
+    const eligible = downloadableMedia(messages)
     if (eligible.length === 0) return false
 
     isDownloading.value = true
     progress.value = { current: 0, total: eligible.length }
     try {
-      const ids = eligible.map((m) => m.id).join(',')
-      const url = `${getBasePath()}/api/media/zip?ids=${encodeURIComponent(ids)}`
-      const res = await fetch(url, { credentials: 'include' })
+      // IDs travel in a JSON body: an album can hold hundreds of files, far
+      // past what a query string comfortably carries.
+      const res = await fetch(`${getBasePath()}/api/media/zip`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', ...getRequestHeaders({ csrf: true }) },
+        body: JSON.stringify({ ids: eligible.map((m) => m.id) })
+      })
       if (!res.ok) {
         throw new Error(`Server responded ${res.status}`)
       }
       const blob = await res.blob()
       progress.value = { current: eligible.length, total: eligible.length }
       saveBlob(blob, zipFilename())
-      toast.success(t('chat.filesDownloaded'))
+      // The server reports files it could not include (gone from the
+      // provider, retention-purged, over the size budget) — say so instead of
+      // silently delivering fewer files than the chat shows.
+      const included = Number(res.headers.get('X-Media-Zip-Included'))
+      const skipped = Number(res.headers.get('X-Media-Zip-Skipped'))
+      if (skipped > 0 && Number.isFinite(included)) {
+        toast.warning(t('chat.zipPartial', { included, total: included + skipped }), {
+          description: t('chat.zipPartialDesc')
+        })
+      } else {
+        toast.success(t('chat.filesDownloaded'))
+      }
       return true
     } catch (e: any) {
       toast.error(t('chat.downloadFailed'), { description: e?.message || t('chat.tryAgain') })
@@ -75,31 +103,43 @@ export function useMediaExport(): UseMediaExportResult {
   }
 
   async function downloadSeparately(messages: Message[]): Promise<boolean> {
-    const eligible = messages.filter((m) => !!m.media_url)
+    const eligible = downloadableMedia(messages)
     if (eligible.length === 0) return false
 
     isDownloading.value = true
     progress.value = { current: 0, total: eligible.length }
+    let failed = 0
+    let lastError = ''
     try {
       for (let i = 0; i < eligible.length; i++) {
         const message = eligible[i]
-        const url = mediaUrl(message)
-        const res = await fetch(url, { credentials: 'include' })
-        if (!res.ok) {
-          throw new Error(`Server responded ${res.status}`)
+        // One unavailable file must not abort the rest of the batch.
+        try {
+          const res = await fetch(mediaUrl(message), { credentials: 'include' })
+          if (!res.ok) {
+            throw new Error(`Server responded ${res.status}`)
+          }
+          const blob = await res.blob()
+          saveBlob(blob, mediaDisplayName(message))
+        } catch (e: any) {
+          failed++
+          lastError = e?.message || ''
         }
-        const blob = await res.blob()
-        saveBlob(blob, mediaDisplayName(message))
         progress.value = { current: i + 1, total: eligible.length }
         if (i < eligible.length - 1) {
           await delay(SEPARATE_DOWNLOAD_GAP_MS)
         }
       }
-      toast.success(t('chat.filesDownloaded'))
-      return true
-    } catch (e: any) {
-      toast.error(t('chat.downloadFailed'), { description: e?.message || t('chat.tryAgain') })
-      return false
+      if (failed === eligible.length) {
+        toast.error(t('chat.downloadFailed'), { description: lastError || t('chat.tryAgain') })
+      } else if (failed > 0) {
+        toast.warning(t('chat.zipPartial', { included: eligible.length - failed, total: eligible.length }), {
+          description: t('chat.zipPartialDesc')
+        })
+      } else {
+        toast.success(t('chat.filesDownloaded'))
+      }
+      return failed === 0
     } finally {
       isDownloading.value = false
     }

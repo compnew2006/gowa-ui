@@ -167,7 +167,17 @@ type UserSettingsRequest struct {
 	CampaignUpdates    *bool `json:"campaign_updates"`
 	// ShowInternalTab shows the chat sidebar's Private tab (default true).
 	ShowInternalTab *bool `json:"show_internal_tab"`
+	// AlbumGrouping controls how a burst of files folds into chat albums:
+	// "all" (default) — one album per burst; "by_type" — one album per file
+	// type within the burst (all PDFs together, all JPEGs together, ...).
+	AlbumGrouping *string `json:"album_grouping"`
 }
+
+// Album grouping modes accepted by UserSettingsRequest.AlbumGrouping.
+const (
+	albumGroupingAll    = "all"
+	albumGroupingByType = "by_type"
+)
 
 // ChangePasswordRequest represents the request body for changing password
 type ChangePasswordRequest struct {
@@ -932,6 +942,14 @@ func (a *App) UpdateCurrentUserSettings(r *fastglue.Request) error {
 	}
 	if req.ShowInternalTab != nil {
 		user.Settings["show_internal_tab"] = *req.ShowInternalTab
+	}
+	if req.AlbumGrouping != nil {
+		switch *req.AlbumGrouping {
+		case albumGroupingAll, albumGroupingByType:
+			user.Settings["album_grouping"] = *req.AlbumGrouping
+		default:
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "album_grouping must be 'all' or 'by_type'", nil, "")
+		}
 	}
 
 	if err := a.DB.Save(&user).Error; err != nil {
