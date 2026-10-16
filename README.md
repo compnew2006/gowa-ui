@@ -89,17 +89,109 @@ __________________
 
 ### Binary
 
-Download the [latest release](https://github.com/compnew2006/gowa-ui/releases) and extract the binary.
+Prebuilt binaries for six platforms are published on the [Releases page](https://github.com/compnew2006/gowa-ui/releases/latest). Each archive holds the `gowa-ui` binary (frontend embedded), `config.example.toml`, `README.md` and `LICENSE`.
+
+| OS | CPU | Archive |
+|---|---|---|
+| Linux | x86-64 | `gowa-ui_<version>_linux_amd64.tar.gz` |
+| Linux | ARM64 (aarch64) | `gowa-ui_<version>_linux_arm64.tar.gz` |
+| macOS | Intel | `gowa-ui_<version>_darwin_amd64.tar.gz` |
+| macOS | Apple Silicon (M-series) | `gowa-ui_<version>_darwin_arm64.tar.gz` |
+| Windows | x64 | `gowa-ui_<version>_windows_amd64.zip` |
+| Windows | ARM64 | `gowa-ui_<version>_windows_arm64.zip` |
+
+The commands below install `1.0.0`; set `VERSION` to the latest release number. You also need PostgreSQL and Redis running and reachable from the machine.
+
+#### Linux
 
 ```bash
-# Copy and edit config
-cp config.example.toml config.toml
+VERSION=1.0.0
+ARCH=amd64   # arm64 on ARM servers; check with `uname -m` (x86_64 = amd64, aarch64 = arm64)
+NAME=gowa-ui_${VERSION}_linux_${ARCH}
 
-# Run with migrations
-./gowa-ui server -migrate
+curl -LO https://github.com/compnew2006/gowa-ui/releases/download/v${VERSION}/${NAME}.tar.gz
+curl -LO https://github.com/compnew2006/gowa-ui/releases/download/v${VERSION}/checksums.txt
+sha256sum --ignore-missing -c checksums.txt   # must print "<file>: OK"
+
+tar -xzf ${NAME}.tar.gz
+cd ${NAME}
+sudo install -m 755 gowa-ui /usr/local/bin/gowa-ui
+gowa-ui version
 ```
 
-Go to `http://localhost:8080` and login with `admin@admin.com` / `admin`
+#### macOS
+
+```bash
+VERSION=1.0.0
+ARCH=arm64   # Apple Silicon; amd64 on Intel Macs. Check with `uname -m` (arm64 or x86_64)
+NAME=gowa-ui_${VERSION}_darwin_${ARCH}
+
+curl -LO https://github.com/compnew2006/gowa-ui/releases/download/v${VERSION}/${NAME}.tar.gz
+curl -LO https://github.com/compnew2006/gowa-ui/releases/download/v${VERSION}/checksums.txt
+shasum -a 256 --ignore-missing -c checksums.txt   # must print "<file>: OK"
+
+tar -xzf ${NAME}.tar.gz
+cd ${NAME}
+sudo mkdir -p /usr/local/bin
+sudo install -m 755 gowa-ui /usr/local/bin/gowa-ui
+gowa-ui version
+```
+
+The binary is not notarized. If you downloaded the archive with a browser instead of `curl`, macOS blocks it on first run; clear the quarantine flag with `xattr -d com.apple.quarantine gowa-ui` before installing.
+
+#### Windows (PowerShell)
+
+```powershell
+$Version = "1.0.0"
+$Arch = "amd64"   # "arm64" on ARM devices; check with $env:PROCESSOR_ARCHITECTURE (AMD64 or ARM64)
+$Name = "gowa-ui_${Version}_windows_$Arch"
+$Base = "https://github.com/compnew2006/gowa-ui/releases/download/v$Version"
+
+Invoke-WebRequest "$Base/$Name.zip" -OutFile "$Name.zip" -UseBasicParsing
+Invoke-WebRequest "$Base/checksums.txt" -OutFile checksums.txt -UseBasicParsing
+
+# Verify the download: must print OK
+$Expected = (Select-String -Path checksums.txt -SimpleMatch "$Name.zip").Line.Split(' ')[0]
+$Actual = (Get-FileHash "$Name.zip" -Algorithm SHA256).Hash.ToLower()
+if ($Actual -eq $Expected) { "OK" } else { "CHECKSUM MISMATCH - do not run this file" }
+
+Expand-Archive "$Name.zip" -DestinationPath .
+Set-Location $Name
+
+# Install for the current user and add it to PATH (open a new terminal afterwards)
+$Dest = "$env:LOCALAPPDATA\Programs\gowa-ui"
+New-Item -ItemType Directory -Force $Dest | Out-Null
+Copy-Item gowa-ui.exe $Dest
+$UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
+if ($UserPath -notlike "*$Dest*") { [Environment]::SetEnvironmentVariable("Path", "$UserPath;$Dest", "User") }
+& "$Dest\gowa-ui.exe" version
+```
+
+If you downloaded the zip with a browser, run `Unblock-File "$Name.zip"` before extracting so SmartScreen does not block the binary.
+
+#### Configure and run (all platforms)
+
+Run these from the extracted folder. The server reads `config.toml` from the current directory; pass `-config <path>` to use another location.
+
+```bash
+cp config.example.toml config.toml   # Windows: Copy-Item config.example.toml config.toml
+```
+
+Edit `config.toml` before the first start:
+
+- In `[database]` and `[redis]`, set `host = "localhost"` (the example points at the Docker service names `db` and `redis`), plus the database user, password and name.
+- For production, set:
+  - `environment = "production"` and an `encryption_key` of 32+ characters.
+  - A random `[jwt] secret`.
+  - `[default_admin] email` and a `password` of 12+ characters.
+
+Start the server; `-migrate` creates or updates the database schema:
+
+```bash
+gowa-ui server -migrate
+```
+
+Go to `http://localhost:8080`. With the example config (`environment = "development"`), log in as `admin@admin.com` / `admin`.
 
 __________________
 
