@@ -35,6 +35,11 @@ func (a *App) wsUpgrader() websocket.FastHTTPUpgrader {
 func (a *App) WebSocketHandler(r *fastglue.Request) error {
 	// Upgrade to WebSocket immediately (unauthenticated)
 	up := a.wsUpgrader()
+	// Keep the status the upgrader picks for a rejected handshake (403 for a
+	// foreign origin, 400 for a malformed request); the envelope below writes
+	// the response.
+	rejectStatus := fasthttp.StatusInternalServerError
+	up.Error = func(_ *fasthttp.RequestCtx, status int, _ error) { rejectStatus = status }
 	err := up.Upgrade(r.RequestCtx, func(conn *websocket.Conn) {
 		// Create unauthenticated client — auth happens via first message
 		client := ws.NewUnauthenticatedClient(a.WSHub, conn, a.validateWSTokenFn())
@@ -46,8 +51,15 @@ func (a *App) WebSocketHandler(r *fastglue.Request) error {
 	})
 
 	if err != nil {
-		a.Log.Error("WebSocket upgrade failed", "error", err)
-		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "WebSocket upgrade failed", nil, "")
+		// The origin is what tells a page opened on an unlisted host (e.g. www
+		// vs the apex in server.allowed_origins) apart from a broken client.
+		origin := string(r.RequestCtx.Request.Header.Peek("Origin"))
+		if rejectStatus < fasthttp.StatusInternalServerError {
+			a.Log.Warn("WebSocket upgrade rejected", "status", rejectStatus, "origin", origin, "error", err)
+		} else {
+			a.Log.Error("WebSocket upgrade failed", "status", rejectStatus, "origin", origin, "error", err)
+		}
+		return r.SendErrorEnvelope(rejectStatus, "WebSocket upgrade failed", nil, "")
 	}
 
 	return nil
