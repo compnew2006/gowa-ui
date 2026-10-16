@@ -255,7 +255,27 @@ export const useContactsStore = defineStore('contacts', () => {
   const contactsLimit = ref(50)
   const contactsTotal = ref(0)
   const isLoadingMoreContacts = ref(false)
-  const hasMoreContacts = computed(() => contacts.value.length < contactsTotal.value)
+  // Page-based: closed rows merged in for the Closed tab (below) also live in
+  // `contacts`, so its length no longer measures the general list.
+  const hasMoreGeneralContacts = computed(() => contactsPage.value * contactsLimit.value < contactsTotal.value)
+
+  // ─── Closed tab: server-side paging ───
+  // Closed conversations stop receiving messages, so they rank far below the
+  // newest page of the general list (ordered by last message): on a busy org
+  // the first 50 rows held no closed chat at all, the Closed tab stayed empty
+  // and there was nothing to scroll to load more. Supervisors therefore page
+  // closed rows straight from the server (chat_status=closed) and merge them
+  // into `contacts`; tab membership itself stays client-side.
+  const closedPage = ref(0)
+  const closedTotal = ref(0)
+  const hasMoreClosedContacts = computed(() => closedPage.value * contactsLimit.value < closedTotal.value)
+  // Infinite scroll of the sidebar follows the active tab's source.
+  const hasMoreContacts = computed(() =>
+    isClosedTabActive() ? hasMoreClosedContacts.value : hasMoreGeneralContacts.value
+  )
+  function isClosedTabActive(): boolean {
+    return activeListTab.value === 'closed' && canSeeSupervisorTabs.value
+  }
 
   // Search is now driven server-side via fetchContacts({ search }), so the
   // visible list is whatever the server returned — no extra local filtering.
@@ -501,13 +521,21 @@ export const useContactsStore = defineStore('contacts', () => {
     isLoading.value = true
     try {
       const tagsParam = selectedTags.value.length > 0 ? selectedTags.value.join(',') : undefined
-      const [response] = await Promise.all([
+      const [response, closedResponse] = await Promise.all([
         contactsService.list({
           page: 1,
           limit: contactsLimit.value,
           tags: tagsParam,
           ...params
         }),
+        // First closed page alongside, so the Closed tab (and its count) is
+        // populated however far down the closed chats rank.
+        canSeeSupervisorTabs.value
+          ? listClosedPage(1, params?.search).catch((error) => {
+              console.error('Failed to fetch closed contacts:', error)
+              return null
+            })
+          : Promise.resolve(null),
         fetchInternalConversations(),
       ])
       // API returns { status: "success", data: { contacts: [...], total: number } }
@@ -515,6 +543,9 @@ export const useContactsStore = defineStore('contacts', () => {
       contacts.value = data.contacts || []
       contactsTotal.value = data.total ?? contacts.value.length
       contactsPage.value = 1
+      closedPage.value = 0
+      closedTotal.value = 0
+      if (closedResponse) applyClosedPage(closedResponse, 1)
     } catch (error) {
       console.error('Failed to fetch contacts:', error)
     } finally {
@@ -564,8 +595,38 @@ export const useContactsStore = defineStore('contacts', () => {
     await fetchInternalConversations()
   }
 
+  function listClosedPage(page: number, search?: string) {
+    const tagsParam = selectedTags.value.length > 0 ? selectedTags.value.join(',') : undefined
+    return contactsService.list({
+      page,
+      limit: contactsLimit.value,
+      tags: tagsParam,
+      search: search ?? (normalizeContactSearch(searchQuery.value) || undefined),
+      chat_status: 'closed',
+    })
+  }
+
+  function applyClosedPage(response: Awaited<ReturnType<typeof listClosedPage>>, page: number) {
+    const data = response.data.data || response.data
+    mergeContacts(data.contacts || [])
+    closedTotal.value = data.total ?? 0
+    closedPage.value = page
+  }
+
+  /** Upsert rows into `contacts`: fresher copies replace loaded ones. */
+  function mergeContacts(rows: Contact[]) {
+    if (rows.length === 0) return
+    const byId = new Map(rows.map(c => [c.id, c]))
+    const loaded = new Set(contacts.value.map(c => c.id))
+    contacts.value = [
+      ...contacts.value.map(c => byId.get(c.id) ?? c),
+      ...rows.filter(c => !loaded.has(c.id)),
+    ]
+  }
+
   async function loadMoreContacts() {
     if (isLoadingMoreContacts.value || !hasMoreContacts.value) return
+    if (isClosedTabActive()) return loadMoreClosedContacts()
 
     isLoadingMoreContacts.value = true
     try {
@@ -591,6 +652,18 @@ export const useContactsStore = defineStore('contacts', () => {
       contactsTotal.value = data.total ?? contactsTotal.value
     } catch (error) {
       console.error('Failed to load more contacts:', error)
+    } finally {
+      isLoadingMoreContacts.value = false
+    }
+  }
+
+  async function loadMoreClosedContacts() {
+    isLoadingMoreContacts.value = true
+    try {
+      const nextPage = closedPage.value + 1
+      applyClosedPage(await listClosedPage(nextPage), nextPage)
+    } catch (error) {
+      console.error('Failed to load more closed contacts:', error)
     } finally {
       isLoadingMoreContacts.value = false
     }

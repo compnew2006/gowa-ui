@@ -1638,6 +1638,63 @@ func TestApp_ListContacts_SortByWhatsAppAccount(t *testing.T) {
 		"desc sort must order by account reversed with NULLS LAST")
 }
 
+// The Closed tab used to filter only the first page of the general list
+// (newest 50 by last message). Closed chats stop receiving messages, so on a
+// busy org that page held none and the tab stayed empty. chat_status=closed
+// pages closed conversations straight from the server — and, like the tab,
+// leaves internal conversations to the Private tab.
+func TestApp_ListContacts_ChatStatusClosedFilter(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+
+	withMeta := func(meta models.JSONB) *models.Contact {
+		c := testutil.CreateTestContactWith(t, app.DB, org.ID)
+		require.NoError(t, app.DB.Model(c).Update("metadata", meta).Error)
+		return c
+	}
+	closedA := withMeta(models.JSONB{"chat_status": "closed"})
+	closedB := withMeta(models.JSONB{"chat_status": "closed", "closed_by": map[string]any{"name": "Ramzy"}})
+	withMeta(models.JSONB{"chat_status": "open"})
+	withMeta(models.JSONB{"chat_status": "pending"})
+	testutil.CreateTestContactWith(t, app.DB, org.ID) // legacy row without chat_status
+	withMeta(models.JSONB{"chat_status": "closed", models.MetaInternalChat: true})
+
+	list := func(status string) (int, []handlers.ContactResponse, int64) {
+		req := testutil.NewGETRequest(t)
+		testutil.SetAuthContext(req, org.ID, user.ID)
+		testutil.SetQueryParam(req, "chat_status", status)
+		require.NoError(t, app.ListContacts(req))
+		var resp struct {
+			Data struct {
+				Contacts []handlers.ContactResponse `json:"contacts"`
+				Total    int64                      `json:"total"`
+			} `json:"data"`
+		}
+		code := testutil.GetResponseStatusCode(req)
+		if code == fasthttp.StatusOK {
+			require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+		}
+		return code, resp.Data.Contacts, resp.Data.Total
+	}
+
+	code, contacts, total := list("closed")
+	require.Equal(t, fasthttp.StatusOK, code)
+	assert.Equal(t, int64(2), total, "only customer conversations that are closed")
+	ids := []uuid.UUID{}
+	for _, c := range contacts {
+		assert.Equal(t, "closed", c.ChatStatus)
+		ids = append(ids, c.ID)
+	}
+	assert.ElementsMatch(t, []uuid.UUID{closedA.ID, closedB.ID}, ids)
+
+	code, _, _ = list("archived")
+	assert.Equal(t, fasthttp.StatusBadRequest, code, "unknown chat_status values are rejected")
+}
+
 func TestApp_ListContacts_UnknownSortKeyFallsBackToDefault(t *testing.T) {
 	t.Parallel()
 

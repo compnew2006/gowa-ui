@@ -132,6 +132,14 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 	// recipients must be individual numbers — groups/newsletters can't receive
 	// template broadcasts, so the recipient picker excludes them.
 	excludeGroups := string(r.RequestCtx.QueryArgs().Peek("exclude_groups"))
+	// chat_status=closed lists only closed customer conversations. The chat
+	// sidebar's Closed tab pages through it: closed chats stop receiving
+	// messages, so they rank far below the newest page of the default
+	// last-message ordering and would otherwise never be loaded.
+	chatStatus := string(r.RequestCtx.QueryArgs().Peek("chat_status"))
+	if chatStatus != "" && chatStatus != string(models.ChatStatusClosed) {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "chat_status must be 'closed'", nil, "")
+	}
 
 	// Server-side sorting across the whole result set (not just the current
 	// page). Allowed column names map to physical columns; the whatsapp_account
@@ -167,6 +175,13 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 			"COALESCE(metadata->>'is_group_chat', '') <> 'true' AND " +
 				"COALESCE(metadata->>'is_newsletter', '') <> 'true' AND " +
 				"phone_number NOT LIKE '120362%' AND phone_number NOT LIKE '120363%'")
+	}
+
+	// Internal conversations live only in the Private tab, so the Closed
+	// tab's server page leaves them out (the sidebar filters them the same way).
+	if chatStatus != "" {
+		query = query.Where("metadata->>'chat_status' = ?", chatStatus).
+			Where(models.ExcludeInternalContactsSQL)
 	}
 
 	if search != "" {
