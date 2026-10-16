@@ -1460,6 +1460,25 @@ func TestApp_GetContact_MultipleUnreadMessages(t *testing.T) {
 	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
 	contact := testutil.CreateTestContact(t, app.DB, org.ID)
 
+	// Create 1 incoming message the user has already read (read state is
+	// per user: it is the user's own read position that covers it).
+	readMsg := &models.Message{
+		BaseModel:       models.BaseModel{ID: uuid.New()},
+		OrganizationID:  org.ID,
+		WhatsAppAccount: account.Name,
+		ContactID:       contact.ID,
+		Direction:       models.DirectionIncoming,
+		MessageType:     models.MessageTypeText,
+		Content:         "Read message",
+		Status:          models.MessageStatusDelivered,
+	}
+	require.NoError(t, app.DB.Create(readMsg).Error)
+	markReq := newMarkReadRequest(t)
+	testutil.SetAuthContext(markReq, org.ID, user.ID)
+	testutil.SetPathParam(markReq, "id", contact.ID.String())
+	require.NoError(t, app.MarkContactRead(markReq))
+	require.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(markReq))
+
 	// Create 3 unread incoming messages
 	for i := 0; i < 3; i++ {
 		msg := &models.Message{
@@ -1474,19 +1493,6 @@ func TestApp_GetContact_MultipleUnreadMessages(t *testing.T) {
 		}
 		require.NoError(t, app.DB.Create(msg).Error)
 	}
-
-	// Create 1 read incoming message
-	readMsg := &models.Message{
-		BaseModel:       models.BaseModel{ID: uuid.New()},
-		OrganizationID:  org.ID,
-		WhatsAppAccount: account.Name,
-		ContactID:       contact.ID,
-		Direction:       models.DirectionIncoming,
-		MessageType:     models.MessageTypeText,
-		Content:         "Read message",
-		Status:          models.MessageStatusRead,
-	}
-	require.NoError(t, app.DB.Create(readMsg).Error)
 
 	// Create 1 outgoing message (should not count as unread)
 	outMsg := &models.Message{

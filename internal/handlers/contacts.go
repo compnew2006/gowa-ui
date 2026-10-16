@@ -1075,17 +1075,9 @@ func (a *App) buildContactResponse(contact *models.Contact, orgID, viewerUserID 
 // decision supplied by the caller, so list endpoints can resolve it once per
 // page instead of once per contact.
 func (a *App) buildContactResponseMasked(contact *models.Contact, orgID, viewerUserID uuid.UUID, shouldMask bool) ContactResponse {
-	// Count unread messages. Terminal statuses (revoked/failed) are excluded:
-	// markMessagesAsRead deliberately never sweeps them (a revoked message
-	// must stay revoked), so counting them here made the badge reappear on
-	// every refresh forever for any conversation containing one deleted
-	// message. They are not "awaiting a read" — the read sweep skips them.
-	var unreadCount int64
-	a.DB.Model(&models.Message{}).
-		Where("contact_id = ? AND direction = ? AND status NOT IN ?",
-			contact.ID, models.DirectionIncoming,
-			[]models.MessageStatus{models.MessageStatusRead, models.MessageStatusRevoked, models.MessageStatusFailed}).
-		Count(&unreadCount)
+	// Unread messages as seen by the viewer — each user has their own read
+	// position (read_state.go).
+	unreadCount := a.unreadCountsForUser(orgID, viewerUserID, []uuid.UUID{contact.ID})[contact.ID]
 
 	// Account of the most recent real message. System messages (claim/close/
 	// release events) carry no account, hence the <> '' filter — a chat whose
@@ -1137,22 +1129,8 @@ func (a *App) buildContactResponsesMasked(contacts []models.Contact, orgID, view
 		assignedUserIDs = append(assignedUserIDs, *contacts[i].AssignedUserID)
 	}
 
-	type unreadCountRow struct {
-		ContactID   uuid.UUID
-		UnreadCount int64
-	}
-	var unreadRows []unreadCountRow
-	a.DB.Model(&models.Message{}).
-		Select("contact_id, COUNT(*) AS unread_count").
-		Where("contact_id IN ? AND organization_id = ? AND direction = ? AND status NOT IN ?",
-			contactIDs, orgID, models.DirectionIncoming,
-			[]models.MessageStatus{models.MessageStatusRead, models.MessageStatusRevoked, models.MessageStatusFailed}).
-		Group("contact_id").
-		Scan(&unreadRows)
-	unreadCounts := make(map[uuid.UUID]int64, len(unreadRows))
-	for _, row := range unreadRows {
-		unreadCounts[row.ContactID] = row.UnreadCount
-	}
+	// Unread counts are per viewer (read_state.go).
+	unreadCounts := a.unreadCountsForUser(orgID, viewerUserID, contactIDs)
 
 	type lastMessageAccountRow struct {
 		ContactID       uuid.UUID

@@ -49,7 +49,7 @@ func TestMarkMessagesAsRead_PreservesRevoked(t *testing.T) {
 	makeMsg("MR-FAIL-1", models.MessageStatusFailed)
 	makeMsg("MR-RECV-1", models.MessageStatusReceived)
 
-	app.markMessagesAsRead(orgID, contact.ID, contact)
+	app.markMessagesAsRead(orgID, contact.ID, contact, nil)
 
 	statusOf := func(wamid string) models.MessageStatus {
 		var msg models.Message
@@ -76,25 +76,29 @@ func TestUnreadCount_ExcludesRevokedAndFailed(t *testing.T) {
 	}
 	require.NoError(t, db.Create(contact).Error)
 
-	for _, tc := range []struct{ wamid, status string }{
-		{"UR-RECV", "received"},
-		{"UR-REV", "revoked"},
-		{"UR-FAIL", "failed"},
-		{"UR-READ", "read"},
-	} {
+	create := func(wamid, status string) {
 		require.NoError(t, db.Create(&models.Message{
 			BaseModel:         models.BaseModel{ID: uuid.New()},
 			OrganizationID:    org.ID,
 			ContactID:         contact.ID,
-			WhatsAppMessageID: tc.wamid,
+			WhatsAppMessageID: wamid,
 			Direction:         models.DirectionIncoming,
 			MessageType:       models.MessageTypeText,
 			Content:           "x",
-			Status:            models.MessageStatus(tc.status),
+			Status:            models.MessageStatus(status),
 		}).Error)
 	}
 
-	resp := app.buildContactResponse(contact, org.ID, uuid.New())
+	// Read state is per user: the viewer reads the first message...
+	viewer := uuid.New()
+	create("UR-READ", "read")
+	app.markReadForUser(org.ID, viewer, contact.ID)
+	// ...then three more arrive, two of them terminal.
+	create("UR-RECV", "received")
+	create("UR-REV", "revoked")
+	create("UR-FAIL", "failed")
+
+	resp := app.buildContactResponse(contact, org.ID, viewer)
 	assert.Equal(t, 1, resp.UnreadCount,
 		"only the plain 'received' message counts as unread")
 }

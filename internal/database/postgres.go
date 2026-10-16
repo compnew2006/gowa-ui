@@ -71,6 +71,7 @@ func GetMigrationModels() []MigrationModel {
 		{"CustomAction", &models.CustomAction{}},
 		{"WhatsAppAccount", &models.WhatsAppAccount{}},
 		{"Contact", &models.Contact{}},
+		{"ContactReadState", &models.ContactReadState{}},
 		{"ContactAssignmentAccessGrant", &models.ContactAssignmentAccessGrant{}},
 		{"Tag", &models.Tag{}},
 		{"Message", &models.Message{}},
@@ -491,6 +492,28 @@ func getIndexes() []string {
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_user_org_unique ON user_organizations(user_id, organization_id) WHERE deleted_at IS NULL`,
 		// Conversation notes
 		`CREATE INDEX IF NOT EXISTS idx_conversation_notes_contact ON conversation_notes(organization_id, contact_id, created_at DESC)`,
+		// Per-user unread state (models.ContactReadState). messages.read_seq
+		// numbers messages in INSERT order; a user's unread messages are the
+		// incoming ones above both their own read position and the
+		// conversation's shared contacts.read_watermark_seq. One-time
+		// conversion of the old global read state, in one transaction:
+		// existing rows are numbered first, then the still-unread incoming
+		// ones are re-numbered after all of them, so each conversation's
+		// watermark (its newest read incoming message) sits below every
+		// unread message and every badge keeps its exact current count.
+		`DO $$ BEGIN
+			IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = CURRENT_SCHEMA() AND table_name = 'messages' AND column_name = 'read_seq') THEN
+				ALTER TABLE messages ADD COLUMN read_seq BIGSERIAL;
+				UPDATE messages SET read_seq = nextval(pg_get_serial_sequence('messages', 'read_seq'))
+					WHERE direction = 'incoming' AND status NOT IN ('read', 'revoked', 'failed');
+				ALTER TABLE contacts ADD COLUMN IF NOT EXISTS read_watermark_seq BIGINT;
+				UPDATE contacts c SET read_watermark_seq = w.seq
+					FROM (SELECT contact_id, MAX(read_seq) AS seq FROM messages
+						WHERE direction = 'incoming' AND status = 'read' GROUP BY contact_id) w
+					WHERE c.id = w.contact_id;
+			END IF;
+		END $$`,
+		`CREATE INDEX IF NOT EXISTS idx_messages_contact_read_seq ON messages(contact_id, read_seq)`,
 	}
 }
 

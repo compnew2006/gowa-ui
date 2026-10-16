@@ -241,12 +241,11 @@ func (a *App) internalConversations(orgID, userID uuid.UUID) ([]InternalConversa
 		UnreadCount     int
 	}
 	var unreadRows []unreadRow
-	if err := a.DB.Model(&models.Message{}).
-		Select("contact_id, whats_app_account, COUNT(*) AS unread_count").
-		Where("organization_id = ? AND contact_id IN ? AND whats_app_account IN ? AND direction = ? AND status NOT IN ?",
-			orgID, contactIDs, accountNames, models.DirectionIncoming,
-			[]models.MessageStatus{models.MessageStatusRead, models.MessageStatusRevoked, models.MessageStatusFailed}).
-		Group("contact_id, whats_app_account").
+	// Unread counts are per viewer (read_state.go).
+	if err := a.unreadMessagesQuery(orgID, userID, contactIDs).
+		Select("m.contact_id, m.whats_app_account, COUNT(*) AS unread_count").
+		Where("m.whats_app_account IN ?", accountNames).
+		Group("m.contact_id, m.whats_app_account").
 		Scan(&unreadRows).Error; err != nil {
 		return nil, err
 	}

@@ -522,7 +522,7 @@ func (a *App) finalizeMessageSend(msg *models.Message, req OutgoingMessageReques
 	// gone out. Keeps the agent's contact-list unread count clean for
 	// conversations handled automatically. See issue #280.
 	if opts.MarkIncomingRead {
-		a.markMessagesAsRead(req.Account.OrganizationID, req.Contact.ID, req.Contact)
+		a.markMessagesAsRead(req.Account.OrganizationID, req.Contact.ID, req.Contact, nil)
 	}
 }
 
@@ -1232,7 +1232,7 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 	}
 
 	// Mark messages as read
-	a.markMessagesAsRead(orgID, contactID, &contact)
+	a.markMessagesAsRead(orgID, contactID, &contact, &userID)
 
 	response := a.buildMessagesResponse(messages)
 	return r.SendEnvelope(map[string]any{
@@ -1387,7 +1387,7 @@ func (a *App) MarkContactRead(r *fastglue.Request) error {
 			"Claim this chat to view messages", nil, "chat_not_claimed")
 	}
 
-	a.markMessagesAsRead(orgID, contactID, &contact)
+	a.markMessagesAsRead(orgID, contactID, &contact, &userID)
 	return r.SendEnvelope(map[string]any{"status": "ok"})
 }
 
@@ -1396,7 +1396,17 @@ func (a *App) MarkContactRead(r *fastglue.Request) error {
 // survive chat opens and refreshes — sweeping it to "read" made the deleted
 // message render with its original content again (content is preserved on
 // revoke for the overlay view).
-func (a *App) markMessagesAsRead(orgID uuid.UUID, contactID uuid.UUID, contact *models.Contact) {
+//
+// The unread badge is per user (see read_state.go): a reader clears it for
+// themselves only; a nil reader (an automated reply handled the chat) clears
+// it for everyone. Message status and read receipts stay conversation-wide.
+func (a *App) markMessagesAsRead(orgID uuid.UUID, contactID uuid.UUID, contact *models.Contact, readerID *uuid.UUID) {
+	if readerID != nil {
+		a.markReadForUser(orgID, *readerID, contactID)
+	} else {
+		a.markReadForEveryone(contactID)
+	}
+
 	var unreadMessages []models.Message
 	a.DB.Where("contact_id = ? AND direction = ? AND status NOT IN ?",
 		contactID, models.DirectionIncoming,
