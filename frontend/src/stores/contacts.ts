@@ -255,6 +255,9 @@ export const useContactsStore = defineStore('contacts', () => {
   const contactsLimit = ref(50)
   const contactsTotal = ref(0)
   const isLoadingMoreContacts = ref(false)
+  // Bumped each time fetchContacts replaces the list and resets its paging, so
+  // a load-more still in flight from before the reset is dropped, not merged.
+  let listGeneration = 0
   // Page-based: closed rows merged in for the Closed tab (below) also live in
   // `contacts`, so its length no longer measures the general list.
   const hasMoreGeneralContacts = computed(() => contactsPage.value * contactsLimit.value < contactsTotal.value)
@@ -521,17 +524,22 @@ export const useContactsStore = defineStore('contacts', () => {
     isLoading.value = true
     try {
       const tagsParam = selectedTags.value.length > 0 ? selectedTags.value.join(',') : undefined
+      // Refreshes that pass no search (websocket events, lifecycle actions,
+      // tag toggles) keep the query still shown in the search box, like
+      // loadMoreContacts and listClosedPage do.
+      const search = params?.search ?? (normalizeContactSearch(searchQuery.value) || undefined)
       const [response, closedResponse] = await Promise.all([
         contactsService.list({
           page: 1,
           limit: contactsLimit.value,
           tags: tagsParam,
-          ...params
+          ...params,
+          search
         }),
         // First closed page alongside, so the Closed tab (and its count) is
         // populated however far down the closed chats rank.
         canSeeSupervisorTabs.value
-          ? listClosedPage(1, params?.search).catch((error) => {
+          ? listClosedPage(1, search).catch((error) => {
               console.error('Failed to fetch closed contacts:', error)
               return null
             })
@@ -545,6 +553,7 @@ export const useContactsStore = defineStore('contacts', () => {
       contactsPage.value = 1
       closedPage.value = 0
       closedTotal.value = 0
+      listGeneration++
       if (closedResponse) applyClosedPage(closedResponse, 1)
     } catch (error) {
       console.error('Failed to fetch contacts:', error)
@@ -628,6 +637,7 @@ export const useContactsStore = defineStore('contacts', () => {
     if (isLoadingMoreContacts.value || !hasMoreContacts.value) return
     if (isClosedTabActive()) return loadMoreClosedContacts()
 
+    const generation = listGeneration
     isLoadingMoreContacts.value = true
     try {
       const nextPage = contactsPage.value + 1
@@ -639,6 +649,9 @@ export const useContactsStore = defineStore('contacts', () => {
         tags: tagsParam,
         search
       })
+      // A fetchContacts that landed meanwhile replaced the list; this page
+      // belongs to the old one.
+      if (generation !== listGeneration) return
       const data = response.data.data || response.data
       const newContacts = data.contacts || []
 
@@ -658,10 +671,15 @@ export const useContactsStore = defineStore('contacts', () => {
   }
 
   async function loadMoreClosedContacts() {
+    const generation = listGeneration
     isLoadingMoreContacts.value = true
     try {
       const nextPage = closedPage.value + 1
-      applyClosedPage(await listClosedPage(nextPage), nextPage)
+      const response = await listClosedPage(nextPage)
+      // A fetchContacts that landed meanwhile replaced the list and reset
+      // the closed paging; this page belongs to the old one.
+      if (generation !== listGeneration) return
+      applyClosedPage(response, nextPage)
     } catch (error) {
       console.error('Failed to load more closed contacts:', error)
     } finally {
