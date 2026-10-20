@@ -1,11 +1,6 @@
-<a href="https://zerodha.tech"><img src="https://zerodha.tech/static/images/github-badge.svg" align="right" alt="Zerodha Tech Badge" /></a>
-
 # Gowa-UI
 
 Modern, open-source WhatsApp Business Platform. Single binary app.
-
-![Dashboard](docs/public/images/dashboard-light.png#gh-light-mode-only)
-![Dashboard](docs/public/images/dashboard-dark.png#gh-dark-mode-only)
 
 ## Features
 
@@ -51,41 +46,8 @@ Modern, open-source WhatsApp Business Platform. Single binary app.
 - **WhatsApp Status (Story)**
   Post text, image, and video WhatsApp Status updates from any connected account directly in the chat sidebar.
 
-<details>
-<summary>View more screenshots</summary>
-
-![Dashboard](docs/public/images/dashboard-light.png#gh-light-mode-only)
-![Dashboard](docs/public/images/dashboard-dark.png#gh-dark-mode-only)
-![Agent Analytics](docs/public/images/agent-analytics-light.png#gh-light-mode-only)
-![Agent Analytics](docs/public/images/agent-analytics-dark.png#gh-dark-mode-only)
-![Templates](docs/public/images/11-templates.png)
-![Campaigns](docs/public/images/13-campaigns.png)
-
-</details>
 
 ## Installation
-
-### Docker
-
-The latest image is available on Docker Hub at [`compnew2006/gowa-ui:latest`](https://hub.docker.com/r/compnew2006/gowa-ui)
-
-```bash
-# Download compose file, sample config, and env file
-curl -LO https://raw.githubusercontent.com/compnew2006/gowa-ui/main/docker/docker-compose.yml
-curl -LO https://raw.githubusercontent.com/compnew2006/gowa-ui/main/config.example.toml
-curl -L https://raw.githubusercontent.com/compnew2006/gowa-ui/main/docker/.env.example -o .env
-
-# Copy and edit config
-cp config.example.toml config.toml
-# Edit .env to set PostgreSQL credentials and timezone
-
-# Run services
-docker compose up -d
-```
-
-Go to `http://localhost:8080` and login with `admin@admin.com` / `admin`
-
-__________________
 
 ### Binary
 
