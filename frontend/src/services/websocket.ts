@@ -552,6 +552,10 @@ class WebSocketService {
       current.chat_status = payload.chat_status || 'open'
       if (Array.isArray(payload.collaborators)) current.collaborators = payload.collaborators
       // Re-fetch messages now that the chat is claimed/reopened/closed
+      // Re-fetch the contact too: access_mode and the write flags are
+      // server-computed, so a viewer who just gained or lost participation
+      // needs them refreshed (otherwise the read-only banner sticks).
+      store.fetchContact(payload.contact_id)
       store.fetchMessages(payload.contact_id)
     }
   }
@@ -583,6 +587,10 @@ class WebSocketService {
       }
       if (clearCollaborators) current.collaborators = []
       // Re-fetch messages to show the system message immediately
+      // Re-fetch the contact too: access_mode and the write flags are
+      // server-computed, so a viewer who just gained or lost participation
+      // needs them refreshed (otherwise the read-only banner sticks).
+      store.fetchContact(payload.contact_id)
       store.fetchMessages(payload.contact_id)
     }
   }
@@ -593,6 +601,10 @@ class WebSocketService {
     const current = store.currentContact
     if (current && current.id === payload.contact_id) {
       current.chat_status = payload.chat_status || 'open'
+      // Re-fetch the contact too: access_mode and the write flags are
+      // server-computed, so a viewer who just gained or lost participation
+      // needs them refreshed (otherwise the read-only banner sticks).
+      store.fetchContact(payload.contact_id)
       store.fetchMessages(payload.contact_id)
     }
   }
@@ -633,6 +645,10 @@ class WebSocketService {
         if (payload.last_message_at) current.last_message_at = payload.last_message_at
       }
       // Re-fetch messages to show the release system message immediately
+      // Re-fetch the contact too: access_mode and the write flags are
+      // server-computed, so a viewer who just gained or lost participation
+      // needs them refreshed (otherwise the read-only banner sticks).
+      store.fetchContact(payload.contact_id)
       store.fetchMessages(payload.contact_id)
     }
   }
@@ -658,6 +674,10 @@ class WebSocketService {
       if (!current.collaborators.find(x => x.user_id === payload.user_id)) {
         current.collaborators.push(newCollab)
       }
+      // Re-fetch the contact too: access_mode and the write flags are
+      // server-computed, so a viewer who just gained or lost participation
+      // needs them refreshed (otherwise the read-only banner sticks).
+      store.fetchContact(payload.contact_id)
       store.fetchMessages(payload.contact_id)
     }
   }
@@ -675,6 +695,10 @@ class WebSocketService {
           x => x.user_id !== payload.user_id
         )
       }
+      // Re-fetch the contact too: access_mode and the write flags are
+      // server-computed, so a viewer who just gained or lost participation
+      // needs them refreshed (otherwise the read-only banner sticks).
+      store.fetchContact(payload.contact_id)
       store.fetchMessages(payload.contact_id)
     }
   }

@@ -426,3 +426,48 @@ func TestClaimChat_NonParticipantAgentClaimsThenReads(t *testing.T) {
 	require.NoError(t, app.GetMessages(read))
 	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(read))
 }
+
+// After an outsider claims a pending chat they become its participant, so the
+// contact read used to refresh the conversation reports the assignee mode with
+// reply enabled, not the restricted viewer state from before the claim.
+func TestClaimChat_RefreshedContactReportsAssigneeAccess(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	agentRole := testutil.CreateAgentRole(t, app.DB, org.ID)
+	agent := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&agentRole.ID))
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+	contact.SetStatus(models.ChatStatusPending)
+	require.NoError(t, app.DB.Model(contact).Update("metadata", contact.Metadata).Error)
+
+	read := func() (string, bool) {
+		req := testutil.NewGETRequest(t)
+		testutil.SetAuthContext(req, org.ID, agent.ID)
+		testutil.SetPathParam(req, "id", contact.ID.String())
+		require.NoError(t, app.GetContact(req))
+		require.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+		var resp struct {
+			Data struct {
+				AccessMode string `json:"access_mode"`
+				CanReply   bool   `json:"can_reply"`
+			} `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+		return resp.Data.AccessMode, resp.Data.CanReply
+	}
+
+	mode, canReply := read()
+	assert.NotEqual(t, handlers.AccessModeCurrentAssignee, mode)
+	assert.False(t, canReply)
+
+	claim := testutil.NewRequest(t)
+	testutil.SetAuthContext(claim, org.ID, agent.ID)
+	testutil.SetPathParam(claim, "id", contact.ID.String())
+	require.NoError(t, app.ClaimChat(claim))
+	require.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(claim))
+
+	mode, canReply = read()
+	assert.Equal(t, handlers.AccessModeCurrentAssignee, mode)
+	assert.True(t, canReply)
+}

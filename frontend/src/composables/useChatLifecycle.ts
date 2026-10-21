@@ -268,8 +268,9 @@ export function useChatLifecycle(options: UseChatLifecycleOptions) {
         ...contactsStore.currentContact,
         assigned_user_id: userId || undefined
       })
-      // Refresh contacts list
+      // Refresh contacts list and the open conversation's server-computed access
       await contactsStore.fetchContacts()
+      if (contactsStore.currentContact) await contactsStore.fetchContact(contactsStore.currentContact.id)
     } catch (error: any) {
       const message = error.response?.data?.message || t('chat.assignFailed')
       toast.error(message)

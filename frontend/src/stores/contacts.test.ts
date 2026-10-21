@@ -1,18 +1,26 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
-const { list, listInternalConversations } = vi.hoisted(() => ({
+const { list, listInternalConversations, get, messagesList, put } = vi.hoisted(() => ({
   list: vi.fn(),
   listInternalConversations: vi.fn(),
+  get: vi.fn(),
+  messagesList: vi.fn(),
+  put: vi.fn(),
 }))
 
 vi.mock('@/services/api', () => ({
   contactsService: {
     list,
     listInternalConversations,
+    get,
   },
-  messagesService: {},
-  api: {},
+  messagesService: {
+    list: messagesList,
+  },
+  api: {
+    put,
+  },
 }))
 
 vi.mock('@/stores/auth', () => ({
@@ -195,5 +203,37 @@ describe('contacts store account filter', () => {
 
     store.selectedAccounts = []
     expect(store.internalCount).toBe(2)
+  })
+})
+
+describe('contacts store claim', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    listInternalConversations.mockResolvedValue({ data: { data: { conversations: [] } } })
+    messagesList.mockResolvedValue({ data: { data: { messages: [], total: 0, has_more: false } } })
+  })
+
+  it('re-reads the claimed conversation so its access mode comes from the server', async () => {
+    put.mockResolvedValue({ data: { data: { status: 'success' } } })
+    get.mockResolvedValue({
+      data: { data: { id: 'contact-1', assigned_user_id: 'user-1', chat_status: 'open', access_mode: 'current_assignee', can_reply: true } },
+    })
+
+    const store = useContactsStore()
+    store.setCurrentContact({
+      id: 'contact-1',
+      phone_number: '1',
+      name: 'Contact',
+      chat_status: 'pending',
+      access_mode: 'restricted',
+      can_reply: false,
+      tags: [],
+    } as never)
+
+    await store.claimChat('contact-1')
+
+    expect(get).toHaveBeenCalledWith('contact-1')
+    expect(store.currentContact?.access_mode).toBe('current_assignee')
+    expect(store.currentContact?.can_reply).toBe(true)
   })
 })

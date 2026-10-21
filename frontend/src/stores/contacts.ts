@@ -1060,6 +1060,8 @@ export const useContactsStore = defineStore('contacts', () => {
       currentContact.value.assigned_user_id = authStore.user?.id
       currentContact.value.assigned_user_name = authStore.user?.full_name || ''
       currentContact.value.chat_status = 'open'
+      // Access is server-computed: the claimer becomes a participant.
+      await fetchContact(contactId)
       // Re-fetch messages to show the system message immediately
       await fetchMessages(contactId)
     }
