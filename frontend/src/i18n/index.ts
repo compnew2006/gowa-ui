@@ -8,6 +8,12 @@ export type MessageSchema = typeof en
 // here defaults to LTR.
 const RTL_LOCALES = new Set(['ar', 'ur', 'he', 'fa'])
 
+// Text direction for a locale. Shared by <html dir> (setLocale) and reka-ui's
+// ConfigProvider (App.vue) so both follow the same rule.
+export function getLocaleDirection(locale: string): 'ltr' | 'rtl' {
+  return RTL_LOCALES.has(locale) ? 'rtl' : 'ltr'
+}
+
 // Auto-discover available locales from the locales folder
 // Vite imports all JSON files at build time
 // Using import: 'default' to get JSON content directly (required for Vite 5+)
@@ -81,7 +87,7 @@ export const i18n = createI18n({
 
 // Apply the document direction on first load so an RTL locale saved in
 // localStorage (e.g. Arabic/Urdu) renders correctly before any switch.
-document.documentElement.setAttribute('dir', RTL_LOCALES.has(i18n.global.locale.value) ? 'rtl' : 'ltr')
+document.documentElement.setAttribute('dir', getLocaleDirection(i18n.global.locale.value))
 
 // Helper to change locale
 export function setLocale(locale: string) {
@@ -94,5 +100,5 @@ export function setLocale(locale: string) {
   document.documentElement.setAttribute('lang', locale)
   // Flip the document direction for RTL languages (Arabic, Urdu, ...).
   // Logical CSS utilities (ms-, me-, start, end) follow this automatically.
-  document.documentElement.setAttribute('dir', RTL_LOCALES.has(locale) ? 'rtl' : 'ltr')
+  document.documentElement.setAttribute('dir', getLocaleDirection(locale))
 }
