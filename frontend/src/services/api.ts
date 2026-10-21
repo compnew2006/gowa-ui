@@ -210,8 +210,14 @@ export const accountsService = {
   list: () => api.get('/accounts')
 }
 
+// Conversation-state filter for GET /contacts: pending = unassigned and not
+// closed, internal = the Private tab's conversations.
+export type ContactChatStatusFilter = 'closed' | 'pending' | 'internal'
+
 export const contactsService = {
-  list: (params?: { search?: string; page?: number; limit?: number; tags?: string; account?: string; exclude_groups?: boolean; sort?: string; sort_dir?: 'asc' | 'desc'; chat_status?: 'closed' }) =>
+  // `accounts` (comma-separated account names) lists conversations on any of
+  // those accounts; `account` is the strict owning-account match.
+  list: (params?: { search?: string; page?: number; limit?: number; tags?: string; account?: string; accounts?: string; exclude_groups?: boolean; sort?: string; sort_dir?: 'asc' | 'desc'; chat_status?: ContactChatStatusFilter }) =>
     api.get('/contacts', { params }),
   get: (id: string) => api.get(`/contacts/${id}`),
   create: (data: any) => api.post('/contacts', data),
@@ -627,6 +633,27 @@ export interface CloseRatingStats {
   distribution: Record<string, number>
 }
 
+export type CloseRatingResponseStatus = 'rated' | 'pending' | 'expired'
+
+// One rating cycle with the customer it was sent to. phone_number is masked
+// when the organization masks phone numbers.
+export interface CloseRatingResponse {
+  id: string
+  contact_id: string
+  contact_name: string
+  phone_number: string
+  whatsapp_account: string
+  status: CloseRatingResponseStatus
+  rating?: number | null
+  rating_source?: string
+  raw_reply?: string
+  rated_at?: string | null
+  created_at: string
+  expires_at: string
+  closed_by_user_id?: string | null
+  closed_by_user_name?: string
+}
+
 // Per-account chat-close rating (settings live on the WhatsApp account)
 export const closeRatingService = {
   getSettings: (accountId: string) =>
@@ -634,7 +661,10 @@ export const closeRatingService = {
   updateSettings: (accountId: string, data: CloseRatingSettings) =>
     api.put(`/accounts/${accountId}/close-rating`, data),
   getStats: (accountId: string) =>
-    api.get<{ data: CloseRatingStats }>(`/accounts/${accountId}/close-rating/stats`)
+    api.get<{ data: CloseRatingStats }>(`/accounts/${accountId}/close-rating/stats`),
+  listResponses: (accountId: string, params?: { status?: CloseRatingResponseStatus; rating?: number; page?: number; limit?: number }) =>
+    api.get<{ data: { responses: CloseRatingResponse[]; total: number; page: number; limit: number } }>(
+      `/accounts/${accountId}/close-rating/responses`, { params })
 }
 
 export interface CallAutoRejectSettings {

@@ -154,6 +154,9 @@ export const useContactsStore = defineStore('contacts', () => {
   const hasMoreMessages = ref(false)
   const searchQuery = ref('')
   const selectedTags = ref<string[]>([])
+  // Account names (WhatsApp account Name, not id) picked in the sidebar Filters
+  // popover. Sent as `accounts`, so every tab lists only conversations on them.
+  const selectedAccounts = ref<string[]>([])
   // Sidebar visibility toggles. Default false (show everything) preserves the
   // pre-existing behavior. Toggling true hides the matching chats from the
   // sortedContacts list (and thus from the sidebar).
@@ -364,11 +367,18 @@ export const useContactsStore = defineStore('contacts', () => {
   const internalConversations = ref<InternalConversation[]>([])
   const internalContacts = computed(() => {
     const byId = new Map(contacts.value.map(c => [c.id, c]))
-    const rows = internalConversations.value.map(conv => internalConversationRow(conv, byId))
+    // The pair list is not filtered by the server, so the account filter is
+    // applied here: a pair stays when either of its accounts is picked.
+    const selected = selectedAccounts.value
+    const visible = selected.length > 0
+      ? internalConversations.value.filter(conv => conv.accounts.some(a => selected.includes(a)))
+      : internalConversations.value
+    const rows = visible.map(conv => internalConversationRow(conv, byId))
     // Internal contacts that are no side of any pair (e.g. a number's chat
     // with itself, or the pair list failed to load) keep a plain row, since
-    // the other tabs no longer list them.
-    const covered = new Set(rows.flatMap(r => r.internal_side_contact_ids ?? []))
+    // the other tabs no longer list them. Coverage counts every pair, so a
+    // pair hidden by the account filter does not resurface its side contacts.
+    const covered = new Set(internalConversations.value.flatMap(conv => conv.sides.map(s => s.contact_id)))
     const leftovers = sortedContacts.value.filter(c => c.is_internal && !covered.has(c.id))
     const time = (c: Contact) => (c.last_message_at ? new Date(c.last_message_at).getTime() : 0)
     return [...rows, ...leftovers].sort((a, b) => time(b) - time(a))
@@ -520,10 +530,18 @@ export const useContactsStore = defineStore('contacts', () => {
     return isAssignedToMe.value && (c.collaborators?.length ?? 0) === 0
   })
 
+  // Tag and account filters sent with every list request (general list, closed
+  // page, load-more). Each is comma-joined, or undefined when nothing is picked.
+  function listFilterParams() {
+    return {
+      tags: selectedTags.value.length > 0 ? selectedTags.value.join(',') : undefined,
+      accounts: selectedAccounts.value.length > 0 ? selectedAccounts.value.join(',') : undefined,
+    }
+  }
+
   async function fetchContacts(params?: { search?: string; page?: number; limit?: number; tags?: string }) {
     isLoading.value = true
     try {
-      const tagsParam = selectedTags.value.length > 0 ? selectedTags.value.join(',') : undefined
       // Refreshes that pass no search (websocket events, lifecycle actions,
       // tag toggles) keep the query still shown in the search box, like
       // loadMoreContacts and listClosedPage do.
@@ -532,7 +550,7 @@ export const useContactsStore = defineStore('contacts', () => {
         contactsService.list({
           page: 1,
           limit: contactsLimit.value,
-          tags: tagsParam,
+          ...listFilterParams(),
           ...params,
           search
         }),
@@ -605,11 +623,10 @@ export const useContactsStore = defineStore('contacts', () => {
   }
 
   function listClosedPage(page: number, search?: string) {
-    const tagsParam = selectedTags.value.length > 0 ? selectedTags.value.join(',') : undefined
     return contactsService.list({
       page,
       limit: contactsLimit.value,
-      tags: tagsParam,
+      ...listFilterParams(),
       search: search ?? (normalizeContactSearch(searchQuery.value) || undefined),
       chat_status: 'closed',
     })
@@ -641,12 +658,11 @@ export const useContactsStore = defineStore('contacts', () => {
     isLoadingMoreContacts.value = true
     try {
       const nextPage = contactsPage.value + 1
-      const tagsParam = selectedTags.value.length > 0 ? selectedTags.value.join(',') : undefined
       const search = normalizeContactSearch(searchQuery.value) || undefined
       const response = await contactsService.list({
         page: nextPage,
         limit: contactsLimit.value,
-        tags: tagsParam,
+        ...listFilterParams(),
         search
       })
       // A fetchContacts that landed meanwhile replaced the list; this page
@@ -1208,6 +1224,7 @@ export const useContactsStore = defineStore('contacts', () => {
     hasMoreMessages,
     searchQuery,
     selectedTags,
+    selectedAccounts,
     hideGroupChats,
     hideNewsletterChats,
     replyingTo,

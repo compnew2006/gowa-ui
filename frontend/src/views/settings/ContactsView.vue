@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { TagBadge } from '@/components/ui/tag-badge'
 import { PageHeader, SearchInput, DataTable, DeleteConfirmDialog, CreateContactDialog, ImportExportDialog, IconButton, ErrorState, type Column } from '@/components/shared'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { contactsService, accountsService, type ImportResult } from '@/services/api'
+import { contactsService, accountsService, type ImportResult, type ContactChatStatusFilter } from '@/services/api'
 import { toast } from 'vue-sonner'
 import { Plus, Users, Pencil, Trash2, MessageSquare, Download } from 'lucide-vue-next'
 import { getErrorMessage } from '@/lib/api-utils'
@@ -54,6 +54,9 @@ const contactToDelete = ref<Contact | null>(null)
 
 // Account filter state ('all' = no filter)
 const filterAccount = ref('all')
+
+// Conversation-status filter state ('all' = no filter; see backend semantics on the select)
+const filterChatStatus = ref<'all' | ContactChatStatusFilter>('all')
 
 // Sorting state
 const sortKey = ref('last_message_at')
@@ -116,6 +119,7 @@ async function fetchContacts() {
       page: currentPage.value,
       limit: pageSize,
       account: filterAccount.value === 'all' ? undefined : filterAccount.value,
+      chat_status: filterChatStatus.value === 'all' ? undefined : filterChatStatus.value,
       sort: sortKey.value,
       sort_dir: sortDirection.value
     })
@@ -155,6 +159,11 @@ watch([sortKey, sortDirection], () => {
 })
 
 function applyAccountFilter() {
+  currentPage.value = 1
+  fetchContacts()
+}
+
+function applyChatStatusFilter() {
   currentPage.value = 1
   fetchContacts()
 }
@@ -229,6 +238,17 @@ function getDisplayName(contact: Contact): string {
                       <SelectItem v-for="acc in availableAccounts" :key="acc.id" :value="acc.name">
                         {{ acc.name }}
                       </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select v-model="filterChatStatus" @update:model-value="applyChatStatusFilter">
+                    <SelectTrigger class="w-[180px]" :aria-label="$t('contacts.chatStatusFilter')">
+                      <SelectValue :placeholder="$t('contacts.chatStatusFilter')" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">{{ $t('contacts.chatStatusAll') }}</SelectItem>
+                      <SelectItem value="pending">{{ $t('contacts.chatStatusPending') }}</SelectItem>
+                      <SelectItem value="closed">{{ $t('contacts.chatStatusClosed') }}</SelectItem>
+                      <SelectItem value="internal">{{ $t('contacts.chatStatusPrivate') }}</SelectItem>
                     </SelectContent>
                   </Select>
                   <SearchInput v-model="searchQuery" :placeholder="$t('contacts.searchContacts') + '...'" class="w-64" />

@@ -728,15 +728,18 @@ const {
   usersStore,
 })
 
-// 8) Contacts list (tabs, tag filter, custom actions, multi-account, selectContact)
+// 8) Contacts list (tabs, Filters popover, custom actions, multi-account, selectContact)
 const {
   // Accounts that actually have messages with the selected contact — drives
   // the per-contact account tabs (showing every org account instead would
   // surface accounts with no conversation for this number).
   contactAccounts,
-  isTagFilterOpen,
+  isFilterOpen,
+  activeFilterCount,
+  filterAccountOptions,
   toggleTagFilter,
-  clearTagFilter,
+  toggleAccountFilter,
+  clearAllFilters,
   customActions,
   executingActionId,
   getActionIcon,
@@ -1017,70 +1020,115 @@ onUnmounted(() => {
             </TooltipTrigger>
             <TooltipContent>{{ $t('chat.addContact') }}</TooltipContent>
           </Tooltip>
-          <!-- Tag Filter -->
-          <Popover v-model:open="isTagFilterOpen">
+          <!-- Filters: accounts + tags -->
+          <Popover v-model:open="isFilterOpen">
             <PopoverTrigger as-child>
               <Button
                 variant="ghost"
                 size="icon"
                 class="h-8 w-8 shrink-0 relative"
-                :class="contactsStore.selectedTags.length > 0 ? 'text-emerald-400 bg-emerald-500/10' : 'text-white/40 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100'"
+                :aria-label="$t('chat.filters')"
+                :class="activeFilterCount > 0 ? 'text-emerald-400 bg-emerald-500/10' : 'text-white/40 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100'"
               >
                 <Filter class="h-4 w-4" />
-                <span v-if="contactsStore.selectedTags.length > 0" class="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-emerald-500 text-[10px] text-white flex items-center justify-center">
-                  {{ contactsStore.selectedTags.length }}
+                <span v-if="activeFilterCount > 0" class="absolute -top-1 -end-1 h-4 w-4 rounded-full bg-emerald-500 text-[10px] text-white flex items-center justify-center">
+                  {{ activeFilterCount }}
                 </span>
               </Button>
             </PopoverTrigger>
-            <PopoverContent align="end" class="w-56 p-2">
+            <PopoverContent align="end" class="w-64 p-2">
               <div class="space-y-2">
                 <div class="flex items-center justify-between px-1">
-                  <span class="text-sm font-medium">{{ $t('chat.filterByTags') }}</span>
+                  <span class="text-sm font-medium">{{ $t('chat.filters') }}</span>
                   <Button
-                    v-if="contactsStore.selectedTags.length > 0"
+                    v-if="activeFilterCount > 0"
                     variant="ghost"
                     size="sm"
                     class="h-6 px-2 text-xs"
-                    @click="clearTagFilter"
+                    @click="clearAllFilters"
                   >
-                    Clear
+                    {{ $t('common.clear') }}
                   </Button>
                 </div>
                 <Separator />
-                <div v-if="tagsStore.tags.length === 0" class="py-2 text-center text-sm text-muted-foreground">
-                  {{ $t('chat.noTagsAvailable') }}
+                <!-- Accounts -->
+                <div class="space-y-1">
+                  <div class="px-1">
+                    <p class="text-xs font-medium text-white/60 light:text-gray-600">{{ $t('chat.filterAccounts') }}</p>
+                    <p class="text-[11px] text-muted-foreground">{{ $t('chat.filterAccountsHint') }}</p>
+                  </div>
+                  <div v-if="filterAccountOptions.length === 0" class="py-2 text-center text-sm text-muted-foreground">
+                    {{ $t('chat.noAccountsAvailable') }}
+                  </div>
+                  <div v-else class="space-y-1 max-h-40 overflow-y-auto">
+                    <button
+                      v-for="account in filterAccountOptions"
+                      :key="account.name"
+                      type="button"
+                      class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-white/[0.08] light:hover:bg-gray-100 transition-colors"
+                      :class="contactsStore.selectedAccounts.includes(account.name) && 'bg-white/[0.08] light:bg-gray-100'"
+                      :aria-pressed="contactsStore.selectedAccounts.includes(account.name)"
+                      @click="toggleAccountFilter(account.name)"
+                    >
+                      <span class="flex-1 min-w-0 text-start truncate">{{ account.name }}</span>
+                      <span v-if="account.phone_number" dir="ltr" class="shrink-0 text-xs text-muted-foreground">{{ account.phone_number }}</span>
+                      <Check
+                        v-if="contactsStore.selectedAccounts.includes(account.name)"
+                        class="h-4 w-4 text-emerald-400 shrink-0"
+                      />
+                    </button>
+                  </div>
                 </div>
-                <div v-else class="space-y-1 max-h-48 overflow-y-auto">
-                  <button
-                    v-for="tag in tagsStore.tags"
-                    :key="tag.name"
-                    class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-white/[0.08] light:hover:bg-gray-100 transition-colors"
-                    :class="contactsStore.selectedTags.includes(tag.name) && 'bg-white/[0.08] light:bg-gray-100'"
-                    @click="toggleTagFilter(tag.name)"
-                  >
-                    <span :class="['w-2 h-2 rounded-full shrink-0', getTagColorClass(tag.color).split(' ')[0]]" />
-                    <span class="flex-1 text-left truncate">{{ tag.name }}</span>
-                    <Check
-                      v-if="contactsStore.selectedTags.includes(tag.name)"
-                      class="h-4 w-4 text-emerald-400 shrink-0"
-                    />
-                  </button>
+                <Separator />
+                <!-- Tags -->
+                <div class="space-y-1">
+                  <p class="px-1 text-xs font-medium text-white/60 light:text-gray-600">{{ $t('chat.filterTags') }}</p>
+                  <div v-if="tagsStore.tags.length === 0" class="py-2 text-center text-sm text-muted-foreground">
+                    {{ $t('chat.noTagsAvailable') }}
+                  </div>
+                  <div v-else class="space-y-1 max-h-48 overflow-y-auto">
+                    <button
+                      v-for="tag in tagsStore.tags"
+                      :key="tag.name"
+                      class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-white/[0.08] light:hover:bg-gray-100 transition-colors"
+                      :class="contactsStore.selectedTags.includes(tag.name) && 'bg-white/[0.08] light:bg-gray-100'"
+                      :aria-pressed="contactsStore.selectedTags.includes(tag.name)"
+                      @click="toggleTagFilter(tag.name)"
+                    >
+                      <span :class="['w-2 h-2 rounded-full shrink-0', getTagColorClass(tag.color).split(' ')[0]]" />
+                      <span class="flex-1 text-start truncate">{{ tag.name }}</span>
+                      <Check
+                        v-if="contactsStore.selectedTags.includes(tag.name)"
+                        class="h-4 w-4 text-emerald-400 shrink-0"
+                      />
+                    </button>
+                  </div>
                 </div>
               </div>
             </PopoverContent>
           </Popover>
         </div>
-        <!-- Active tag filters -->
-        <div v-if="contactsStore.selectedTags.length > 0" class="flex flex-wrap gap-1 mt-2">
+        <!-- Active filters: account chips, then tag chips; click one to remove it -->
+        <div v-if="activeFilterCount > 0" class="flex flex-wrap gap-1 mt-2">
+          <button
+            v-for="accountName in contactsStore.selectedAccounts"
+            :key="'account:' + accountName"
+            type="button"
+            class="inline-flex items-center rounded-full border border-transparent px-2.5 py-0.5 text-xs font-medium bg-violet-500/20 text-violet-400 light:bg-violet-100 light:text-violet-700 cursor-pointer hover:opacity-80 transition-opacity"
+            @click="toggleAccountFilter(accountName)"
+          >
+            {{ accountName }}
+            <X class="h-3 w-3 ms-1" />
+          </button>
           <TagBadge
             v-for="tagName in contactsStore.selectedTags"
-            :key="tagName"
+            :key="'tag:' + tagName"
             :color="tagsStore.getTagByName(tagName)?.color"
             class="cursor-pointer hover:opacity-80"
             @click="toggleTagFilter(tagName)"
           >
             {{ tagName }}
-            <X class="h-3 w-3 ml-1" />
+            <X class="h-3 w-3 ms-1" />
           </TagBadge>
         </div>
         <!-- Visibility toggles: show/hide group & newsletter chats -->

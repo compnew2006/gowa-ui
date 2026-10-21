@@ -109,6 +109,32 @@ func normalizeContactSearchDigits(s string) string {
 	return trimmed
 }
 
+// maxAccountFilterNames caps the accounts filter so one query string cannot
+// build an unbounded IN list.
+const maxAccountFilterNames = 50
+
+// chatStatusInternal is the chat_status filter value for Private-tab chats.
+const chatStatusInternal = "internal"
+
+// parseAccountNames splits a comma-separated list of WhatsApp account names,
+// trimming blanks and duplicates, and keeps at most maxAccountFilterNames.
+func parseAccountNames(raw string) []string {
+	seen := make(map[string]struct{})
+	names := make([]string, 0)
+	for _, part := range strings.Split(raw, ",") {
+		name := strings.TrimSpace(part)
+		if _, dup := seen[name]; name == "" || dup {
+			continue
+		}
+		seen[name] = struct{}{}
+		names = append(names, name)
+		if len(names) == maxAccountFilterNames {
+			break
+		}
+	}
+	return names
+}
+
 // ListContacts returns all contacts for the organization
 // Users without contacts:read permission only see contacts assigned to them
 func (a *App) ListContacts(r *fastglue.Request) error {
@@ -128,17 +154,28 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 	// campaign "Add Recipients" picker to only show contacts synced under the
 	// campaign's selected account.
 	accountParam := string(r.RequestCtx.QueryArgs().Peek("account"))
+	// accounts (comma-separated WhatsApp account names) keeps a contact that is
+	// owned by one of them or has a message on one of them. whats_app_account is
+	// a single owning account that goes stale for contacts messaged on several
+	// accounts. Narrows only: it applies on top of scopeAssignedContact.
+	accountNames := parseAccountNames(string(r.RequestCtx.QueryArgs().Peek("accounts")))
 	// When exclude_groups=true, hide group chats and newsletters. Campaign
 	// recipients must be individual numbers — groups/newsletters can't receive
 	// template broadcasts, so the recipient picker excludes them.
 	excludeGroups := string(r.RequestCtx.QueryArgs().Peek("exclude_groups"))
-	// chat_status=closed lists only closed customer conversations. The chat
-	// sidebar's Closed tab pages through it: closed chats stop receiving
-	// messages, so they rank far below the newest page of the default
-	// last-message ordering and would otherwise never be loaded.
+	// chat_status selects one sidebar tab server-side:
+	//   - closed: ended customer conversations. The Closed tab pages through it
+	//     because closed chats stop receiving messages, so they rank far below
+	//     the newest page of the default last-message ordering.
+	//   - pending: unassigned conversations with messages that are not closed
+	//     (a row with no chat_status counts as open).
+	//   - internal: Private-tab conversations only.
+	// Closed and pending never include internal chats.
 	chatStatus := string(r.RequestCtx.QueryArgs().Peek("chat_status"))
-	if chatStatus != "" && chatStatus != string(models.ChatStatusClosed) {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "chat_status must be 'closed'", nil, "")
+	switch chatStatus {
+	case "", string(models.ChatStatusClosed), string(models.ChatStatusPending), chatStatusInternal:
+	default:
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "chat_status must be 'closed', 'pending' or 'internal'", nil, "")
 	}
 
 	// Server-side sorting across the whole result set (not just the current
@@ -167,6 +204,12 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 		query = query.Where("whats_app_account = ?", accountParam)
 	}
 
+	if len(accountNames) > 0 {
+		query = query.Where(
+			"(contacts.whats_app_account IN ? OR EXISTS (SELECT 1 FROM messages m WHERE m.contact_id = contacts.id AND m.organization_id = contacts.organization_id AND m.whats_app_account IN ? AND m.deleted_at IS NULL))",
+			accountNames, accountNames)
+	}
+
 	// Exclude group chats and newsletters. Group/newsletter status lives in the
 	// metadata JSONB (is_group_chat/is_newsletter); older group rows are also
 	// detectable by the WhatsApp group-ID phone prefixes 120362/120363.
@@ -177,11 +220,18 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 				"phone_number NOT LIKE '120362%' AND phone_number NOT LIKE '120363%'")
 	}
 
-	// Internal conversations live only in the Private tab, so the Closed
-	// tab's server page leaves them out (the sidebar filters them the same way).
-	if chatStatus != "" {
+	switch chatStatus {
+	case string(models.ChatStatusClosed):
+		// Internal conversations live only in the Private tab, so the Closed
+		// tab's server page leaves them out (the sidebar filters them the same way).
 		query = query.Where("metadata->>'chat_status' = ?", chatStatus).
 			Where(models.ExcludeInternalContactsSQL)
+	case string(models.ChatStatusPending):
+		query = query.Where("assigned_user_id IS NULL AND COALESCE(metadata->>'chat_status', '') <> ? AND last_message_at IS NOT NULL",
+			string(models.ChatStatusClosed)).
+			Where(models.ExcludeInternalContactsSQL)
+	case chatStatusInternal:
+		query = query.Where(models.OnlyInternalContactsSQL)
 	}
 
 	if search != "" {

@@ -2,9 +2,13 @@ package handlers
 
 import (
 	"errors"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/compnew2006/gowa-ui/internal/models"
+	"github.com/compnew2006/gowa-ui/internal/utils"
+	"github.com/google/uuid"
 	"github.com/valyala/fasthttp"
 	"github.com/zerodha/fastglue"
 )
@@ -175,4 +179,162 @@ func (a *App) GetCloseRatingStats(r *fastglue.Request) error {
 	}
 
 	return r.SendEnvelope(stats)
+}
+
+// CloseRatingResponseItem is one CSAT cycle in the account's responses list:
+// who was asked, what they answered, and who closed the conversation.
+// Phone and name are masked when the organization enables phone masking.
+type CloseRatingResponseItem struct {
+	ID               uuid.UUID  `json:"id"`
+	ContactID        uuid.UUID  `json:"contact_id"`
+	ContactName      string     `json:"contact_name"`
+	PhoneNumber      string     `json:"phone_number"`
+	WhatsAppAccount  string     `json:"whatsapp_account"`
+	Status           string     `json:"status"`
+	Rating           *int       `json:"rating"`
+	RatingSource     string     `json:"rating_source"`
+	RawReply         string     `json:"raw_reply"`
+	RatedAt          *time.Time `json:"rated_at"`
+	CreatedAt        time.Time  `json:"created_at"`
+	ExpiresAt        time.Time  `json:"expires_at"`
+	ClosedByUserID   *uuid.UUID `json:"closed_by_user_id"`
+	ClosedByUserName string     `json:"closed_by_user_name"`
+}
+
+// ListCloseRatingResponses lists one WhatsApp account's CSAT cycles, filtered
+// by status (default rated) and optionally by a 1..5 rating. Rated cycles
+// come newest-rated first; other statuses newest-created first. Only cycles
+// whose contact the caller may see are returned (scopeAssignedContact), so the
+// list follows the same visibility as the chat list.
+func (a *App) ListCloseRatingResponses(r *fastglue.Request) error {
+	orgID, userID, err := a.requireAuth(r, models.ResourceAccounts, models.ActionRead)
+	if err != nil {
+		return nil
+	}
+
+	id, err := parsePathUUID(r, "id", "account")
+	if err != nil {
+		return nil
+	}
+
+	account, err := findByIDAndOrg[models.WhatsAppAccount](a.DB, r, id, orgID, "Account")
+	if err != nil {
+		return nil
+	}
+
+	status := string(r.RequestCtx.QueryArgs().Peek("status"))
+	if status == "" {
+		status = models.RatingStatusRated
+	}
+	switch status {
+	case models.RatingStatusRated, models.RatingStatusPending, models.RatingStatusExpired:
+	default:
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "status must be rated, pending or expired", nil, "")
+	}
+
+	var rating *int
+	if raw := string(r.RequestCtx.QueryArgs().Peek("rating")); raw != "" {
+		v, convErr := strconv.Atoi(raw)
+		if convErr != nil || v < 1 || v > 5 {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "rating must be an integer between 1 and 5", nil, "")
+		}
+		rating = &v
+	}
+
+	// Contact visibility goes through the single scope gate. Its clauses are
+	// unqualified, so they resolve against the subquery's contacts table.
+	// Soft-deleted contacts drop out via GORM's soft-delete clause.
+	visibleContacts := a.scopeAssignedContact(
+		a.DB.Model(&models.Contact{}).Select("contacts.id").Where("contacts.organization_id = ?", orgID),
+		userID, orgID)
+
+	query := a.DB.Model(&models.ChatClosureRating{}).
+		Where("organization_id = ? AND whats_app_account = ? AND status = ?", orgID, account.Name, status).
+		Where("contact_id IN (?)", visibleContacts)
+	if rating != nil {
+		query = query.Where("rating = ?", *rating)
+	}
+
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		a.Log.Error("Failed to count close-rating responses", "error", err)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load responses", nil, "")
+	}
+
+	order := "created_at DESC"
+	if status == models.RatingStatusRated {
+		order = "rated_at DESC NULLS LAST, created_at DESC"
+	}
+	pg := parsePagination(r)
+	var rows []models.ChatClosureRating
+	if err := pg.Apply(query.Order(order)).Find(&rows).Error; err != nil {
+		a.Log.Error("Failed to list close-rating responses", "error", err)
+		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load responses", nil, "")
+	}
+
+	// Batch-load the page's contacts and closing users (no per-row lookups).
+	contactIDs := make([]uuid.UUID, 0, len(rows))
+	closerIDs := make([]uuid.UUID, 0, len(rows))
+	for _, row := range rows {
+		contactIDs = append(contactIDs, row.ContactID)
+		if row.ClosedByUserID != nil {
+			closerIDs = append(closerIDs, *row.ClosedByUserID)
+		}
+	}
+
+	contacts := map[uuid.UUID]models.Contact{}
+	closerNames := map[uuid.UUID]string{}
+	if len(contactIDs) > 0 {
+		var list []models.Contact
+		if err := a.DB.Select("id", "profile_name", "phone_number").Where("id IN ?", contactIDs).Find(&list).Error; err != nil {
+			a.Log.Error("Failed to load close-rating contacts", "error", err)
+			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load responses", nil, "")
+		}
+		for _, c := range list {
+			contacts[c.ID] = c
+		}
+	}
+	if len(closerIDs) > 0 {
+		var users []models.User
+		if err := a.DB.Select("id", "full_name").Where("id IN ?", closerIDs).Find(&users).Error; err != nil {
+			a.Log.Error("Failed to load close-rating closers", "error", err)
+			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to load responses", nil, "")
+		}
+		for _, u := range users {
+			closerNames[u.ID] = u.FullName
+		}
+	}
+
+	shouldMask := a.ShouldMaskPhoneNumbers(orgID)
+
+	items := make([]CloseRatingResponseItem, 0, len(rows))
+	for _, row := range rows {
+		item := CloseRatingResponseItem{
+			ID:              row.ID,
+			ContactID:       row.ContactID,
+			WhatsAppAccount: row.WhatsAppAccount,
+			Status:          row.Status,
+			Rating:          row.Rating,
+			RatingSource:    row.RatingSource,
+			RawReply:        row.RawReply,
+			RatedAt:         row.RatedAt,
+			CreatedAt:       row.CreatedAt,
+			ExpiresAt:       row.ExpiresAt,
+			ClosedByUserID:  row.ClosedByUserID,
+		}
+		if c, ok := contacts[row.ContactID]; ok {
+			item.ContactName = c.ProfileName
+			item.PhoneNumber = c.PhoneNumber
+		}
+		if shouldMask {
+			item.PhoneNumber = utils.MaskPhoneNumber(item.PhoneNumber)
+			item.ContactName = utils.MaskIfPhoneNumber(item.ContactName)
+		}
+		if row.ClosedByUserID != nil {
+			item.ClosedByUserName = closerNames[*row.ClosedByUserID]
+		}
+		items = append(items, item)
+	}
+
+	return r.SendEnvelope(listEnvelope("responses", items, total, pg))
 }

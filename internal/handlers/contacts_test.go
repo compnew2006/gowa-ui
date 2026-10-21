@@ -1,8 +1,11 @@
 package handlers_test
 
 import (
+	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -1844,4 +1847,284 @@ func TestApp_ListContacts_ScopedByAssignedAccounts(t *testing.T) {
 	got, total = listContacts(superAdmin.ID)
 	assert.Equal(t, int64(2), total, "super admin must see all accounts despite having assignments")
 	assert.ElementsMatch(t, []string{assignedAcct.Name, otherAcct.Name}, got)
+}
+
+// seedContactMessage stores one inbound message on account for contact.
+func seedContactMessage(t *testing.T, app *handlers.App, orgID uuid.UUID, contact *models.Contact, account string) *models.Message {
+	t.Helper()
+
+	m := &models.Message{
+		BaseModel:       models.BaseModel{ID: uuid.New()},
+		OrganizationID:  orgID,
+		WhatsAppAccount: account,
+		ContactID:       contact.ID,
+		Direction:       models.DirectionIncoming,
+		MessageType:     models.MessageTypeText,
+		Content:         "hi",
+		Status:          models.MessageStatusDelivered,
+	}
+	require.NoError(t, app.DB.Create(m).Error)
+	return m
+}
+
+// listContactIDs calls ListContacts as userID with the given query params and
+// returns the contact IDs on the page plus the total count.
+func listContactIDs(t *testing.T, app *handlers.App, orgID, userID uuid.UUID, params map[string]string) ([]uuid.UUID, int64) {
+	t.Helper()
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, orgID, userID)
+	for k, v := range params {
+		testutil.SetQueryParam(req, k, v)
+	}
+	require.NoError(t, app.ListContacts(req))
+	require.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp struct {
+		Data struct {
+			Contacts []handlers.ContactResponse `json:"contacts"`
+			Total    int64                      `json:"total"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+	ids := make([]uuid.UUID, 0, len(resp.Data.Contacts))
+	for _, c := range resp.Data.Contacts {
+		ids = append(ids, c.ID)
+	}
+	return ids, resp.Data.Total
+}
+
+// TestApp_ListContacts_AccountsFilter pins the accounts filter. A contact
+// matches when it is owned by one of the named accounts OR has a live message
+// on one of them: whats_app_account goes stale for contacts messaged on several
+// accounts, so the message accounts must count too.
+func TestApp_ListContacts_AccountsFilter(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+
+	ownedAlpha := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount("Alpha"))
+	crossBeta := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount("Beta"))
+	betaOnly := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount("Beta"))
+	deletedOnly := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount("Gamma"))
+	gammaNoMessages := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount("Gamma"))
+
+	// crossBeta is owned by Beta but messaged on Alpha: it matches accounts=Alpha.
+	seedContactMessage(t, app, org.ID, crossBeta, "Alpha")
+	seedContactMessage(t, app, org.ID, betaOnly, "Beta")
+	// A soft-deleted message is not conversation activity on that account.
+	deleted := seedContactMessage(t, app, org.ID, deletedOnly, "Alpha")
+	require.NoError(t, app.DB.Delete(deleted).Error)
+
+	// Fields the combined-filter rows depend on. betaOnly carries the same
+	// fields but does not match accounts=Alpha, so each combined row only holds
+	// when the accounts filter really applies.
+	now := time.Now().UTC()
+	require.NoError(t, app.DB.Model(crossBeta).Updates(map[string]any{
+		"tags":            models.JSONBArray{"vip"},
+		"profile_name":    "Layla Crossover",
+		"last_message_at": now,
+	}).Error)
+	require.NoError(t, app.DB.Model(betaOnly).Updates(map[string]any{
+		"tags":            models.JSONBArray{"vip"},
+		"profile_name":    "Layla Beta",
+		"last_message_at": now,
+	}).Error)
+
+	all := []uuid.UUID{ownedAlpha.ID, crossBeta.ID, betaOnly.ID, deletedOnly.ID, gammaNoMessages.ID}
+	tests := []struct {
+		name   string
+		params map[string]string
+		want   []uuid.UUID
+	}{
+		{
+			name:   "one account matches owned contacts and contacts messaged on it",
+			params: map[string]string{"accounts": "Alpha"},
+			want:   []uuid.UUID{ownedAlpha.ID, crossBeta.ID},
+		},
+		{
+			name:   "several accounts return the union",
+			params: map[string]string{"accounts": "Alpha,Beta"},
+			want:   []uuid.UUID{ownedAlpha.ID, crossBeta.ID, betaOnly.ID},
+		},
+		{
+			name:   "names are trimmed and deduplicated",
+			params: map[string]string{"accounts": " Alpha , ,Alpha "},
+			want:   []uuid.UUID{ownedAlpha.ID, crossBeta.ID},
+		},
+		{
+			name:   "blank list applies no filter",
+			params: map[string]string{"accounts": " , "},
+			want:   all,
+		},
+		{
+			name:   "unknown account matches nothing",
+			params: map[string]string{"accounts": "Delta"},
+			want:   []uuid.UUID{},
+		},
+		{
+			name:   "combines with tags",
+			params: map[string]string{"accounts": "Alpha", "tags": "vip"},
+			want:   []uuid.UUID{crossBeta.ID},
+		},
+		{
+			name:   "combines with search",
+			params: map[string]string{"accounts": "Alpha", "search": "Layla"},
+			want:   []uuid.UUID{crossBeta.ID},
+		},
+		{
+			name:   "combines with has_messages",
+			params: map[string]string{"accounts": "Alpha", "has_messages": "true"},
+			want:   []uuid.UUID{crossBeta.ID},
+		},
+		{
+			name:   "combines with chat_status=pending",
+			params: map[string]string{"accounts": "Alpha", "chat_status": "pending"},
+			want:   []uuid.UUID{crossBeta.ID},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, total := listContactIDs(t, app, org.ID, user.ID, tc.params)
+			assert.Equal(t, int64(len(tc.want)), total)
+			assert.ElementsMatch(t, tc.want, got)
+		})
+	}
+}
+
+// The accounts filter only narrows scopeAssignedContact. A scoped user sees
+// contacts on their assigned account or ones they are involved in, and
+// accounts=<other> must never reveal a contact outside that set, even when the
+// contact's message history matches the filter.
+func TestApp_ListContacts_AccountsFilterRespectsScoping(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID) // contacts:read + write
+
+	assignedAcct := testutil.CreateTestWhatsAppAccountWith(t, app.DB, org.ID, testutil.WithAccountName("Beta"))
+
+	ownedAlpha := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount("Alpha"))
+	crossBeta := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount("Beta"))
+	gammaOwned := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount("Gamma"))
+	// Owned by Gamma with no Alpha message: must never match accounts=Alpha.
+	testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount("Gamma"))
+	seedContactMessage(t, app, org.ID, crossBeta, "Alpha")
+	seedContactMessage(t, app, org.ID, gammaOwned, "Alpha")
+
+	scopedUser := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	testutil.AssignAccountToUser(t, app.DB, scopedUser.ID, assignedAcct.ID)
+
+	got, total := listContactIDs(t, app, org.ID, scopedUser.ID, map[string]string{"accounts": "Alpha"})
+	assert.Equal(t, int64(1), total, "scoped user must only see contacts inside their account grant")
+	assert.ElementsMatch(t, []uuid.UUID{crossBeta.ID}, got,
+		"accounts=Alpha must not reveal Alpha-owned or Gamma-owned contacts outside the grant")
+
+	// Control: a user without assignments gets every match for the same filter.
+	fullUser := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	got, total = listContactIDs(t, app, org.ID, fullUser.ID, map[string]string{"accounts": "Alpha"})
+	assert.Equal(t, int64(3), total)
+	assert.ElementsMatch(t, []uuid.UUID{ownedAlpha.ID, crossBeta.ID, gammaOwned.ID}, got)
+}
+
+// The accounts list keeps at most 50 distinct names, so the 51st name in a
+// crafted query string is ignored and its contacts never match.
+func TestApp_ListContacts_AccountsFilterCapsNames(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+
+	within := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount("acc-01"))
+	beyondCap := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount("acc-51"))
+
+	names := make([]string, 0, 51)
+	for i := 1; i <= 51; i++ {
+		names = append(names, fmt.Sprintf("acc-%02d", i))
+	}
+	got, total := listContactIDs(t, app, org.ID, user.ID, map[string]string{"accounts": strings.Join(names, ",")})
+	assert.Equal(t, int64(1), total)
+	assert.ElementsMatch(t, []uuid.UUID{within.ID}, got)
+	assert.NotContains(t, got, beyondCap.ID)
+}
+
+// chat_status=pending is the unclaimed queue (unassigned, has messages, not
+// closed); chat_status=internal is the Private tab. Each excludes conversations
+// that belong to the other tabs.
+func TestApp_ListContacts_ChatStatusPendingAndInternal(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+
+	// The org's own connected number: a contact whose phone matches it is
+	// internal. gowa_jid is globally unique, so draw a number no other test uses.
+	jidSeed := uuid.New()
+	ownPhone := fmt.Sprintf("966%09d", binary.BigEndian.Uint32(jidSeed[:4])%1000000000)
+	account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+	require.NoError(t, app.DB.Model(account).Update("gowa_jid", ownPhone+"@s.whatsapp.net").Error)
+
+	recent := time.Now().UTC()
+	withState := func(c *models.Contact, updates map[string]any) *models.Contact {
+		require.NoError(t, app.DB.Model(c).Updates(updates).Error)
+		return c
+	}
+	newContact := func(opts ...testutil.ContactOption) *models.Contact {
+		return testutil.CreateTestContactWith(t, app.DB, org.ID, opts...)
+	}
+
+	pendingOK := withState(newContact(), map[string]any{"last_message_at": recent})
+	withState(newContact(), map[string]any{"last_message_at": recent, "assigned_user_id": user.ID})
+	withState(newContact(), map[string]any{
+		"last_message_at": recent,
+		"metadata":        models.JSONB{"chat_status": "closed"},
+	})
+	newContact() // no messages yet
+	manualInternal := withState(newContact(), map[string]any{
+		"last_message_at": recent,
+		"metadata":        models.JSONB{models.MetaInternalChat: true},
+	})
+	accountNumber := withState(newContact(testutil.WithPhoneNumber(ownPhone)),
+		map[string]any{"last_message_at": recent})
+
+	tests := []struct {
+		name   string
+		status string
+		want   []uuid.UUID
+	}{
+		{
+			name:   "pending lists unassigned open conversations with messages",
+			status: "pending",
+			want:   []uuid.UUID{pendingOK.ID},
+		},
+		{
+			name:   "internal lists manually marked and org-number conversations only",
+			status: "internal",
+			want:   []uuid.UUID{manualInternal.ID, accountNumber.ID},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, total := listContactIDs(t, app, org.ID, user.ID, map[string]string{"chat_status": tc.status})
+			assert.Equal(t, int64(len(tc.want)), total)
+			assert.ElementsMatch(t, tc.want, got)
+		})
+	}
+
+	for _, status := range []string{"bogus", "open"} {
+		req := testutil.NewGETRequest(t)
+		testutil.SetAuthContext(req, org.ID, user.ID)
+		testutil.SetQueryParam(req, "chat_status", status)
+		require.NoError(t, app.ListContacts(req))
+		assert.Equal(t, fasthttp.StatusBadRequest, testutil.GetResponseStatusCode(req), "chat_status=%s", status)
+		assert.Contains(t, string(testutil.GetResponseBody(req)), "chat_status must be 'closed', 'pending' or 'internal'")
+	}
 }

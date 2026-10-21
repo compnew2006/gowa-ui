@@ -287,6 +287,7 @@ func setupAccountRoutes(g *fastglue.Fastglue, app *handlers.App) {
 	g.GET("/api/accounts/{id}/close-rating", app.GetCloseRatingSettings)
 	g.PUT("/api/accounts/{id}/close-rating", app.UpdateCloseRatingSettings)
 	g.GET("/api/accounts/{id}/close-rating/stats", app.GetCloseRatingStats)
+	g.GET("/api/accounts/{id}/close-rating/responses", app.ListCloseRatingResponses)
 
 	// Per-account call auto-reject (settings live on the WhatsApp account)
 	g.GET("/api/accounts/{id}/call-auto-reject", app.GetCallAutoRejectSettings)

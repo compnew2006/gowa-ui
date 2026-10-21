@@ -27,6 +27,7 @@ export interface UseChatContactsListOptions {
     contacts: Contact[]
     messages: Message[]
     selectedTags: string[]
+    selectedAccounts: string[]
     activeListTab: ListTab
     canSeeSupervisorTabs: boolean
     myCount: number
@@ -63,7 +64,8 @@ export interface UseChatContactsListOptions {
 }
 
 /**
- * Contacts sidebar: tab navigation, tag filter, multi-account tabs, custom
+ * Contacts sidebar: tab navigation, the Filters popover (account and tag
+ * filters, both applied server-side to every tab), multi-account tabs, custom
  * actions, infinite-scroll (load more contacts), and the cross-contact
  * `selectContact` orchestration (account discovery + auto-select + WebSocket
  * binding). Owns the selectedAccount ref shared by the rest of the chat view.
@@ -84,8 +86,8 @@ export function useChatContactsList(options: UseChatContactsListOptions) {
   const contactAccounts = ref<string[]>([])
   const orgAccounts = ref<any[]>([])
 
-  // ─── Tag filter state ───
-  const isTagFilterOpen = ref(false)
+  // ─── Filters popover state (accounts + tags) ───
+  const isFilterOpen = ref(false)
 
   // ─── Custom actions state ───
   const customActions = ref<CustomAction[]>([])
@@ -121,21 +123,47 @@ export function useChatContactsList(options: UseChatContactsListOptions) {
     }
   }
 
-  function toggleTagFilter(tagName: string) {
-    const index = contactsStore.selectedTags.indexOf(tagName)
+  // ─── Filters (accounts + tags) ───
+  // Adds or removes one value in a filter list (in place, so the store stays reactive).
+  function toggleFilterValue(values: string[], value: string) {
+    const index = values.indexOf(value)
     if (index === -1) {
-      contactsStore.selectedTags.push(tagName)
+      values.push(value)
     } else {
-      contactsStore.selectedTags.splice(index, 1)
+      values.splice(index, 1)
     }
+  }
+
+  function toggleTagFilter(tagName: string) {
+    toggleFilterValue(contactsStore.selectedTags, tagName)
     // Refetch contacts with new filter
     contactsStore.fetchContacts()
   }
 
-  function clearTagFilter() {
-    contactsStore.selectedTags = []
+  function toggleAccountFilter(accountName: string) {
+    toggleFilterValue(contactsStore.selectedAccounts, accountName)
     contactsStore.fetchContacts()
   }
+
+  // Empties both filters and refetches once.
+  function clearAllFilters() {
+    contactsStore.selectedTags = []
+    contactsStore.selectedAccounts = []
+    contactsStore.fetchContacts()
+  }
+
+  // Badge count on the Filters trigger: picked accounts plus picked tags.
+  const activeFilterCount = computed(
+    () => contactsStore.selectedAccounts.length + contactsStore.selectedTags.length
+  )
+
+  // Account rows for the Filters popover, from the org accounts loaded by
+  // fetchOrgAccounts. The row value is the account name, which the server matches.
+  const filterAccountOptions = computed(() =>
+    orgAccounts.value
+      .filter(a => a?.name)
+      .map(a => ({ name: a.name as string, phone_number: (a.phone_number as string | undefined) ?? '' }))
+  )
 
   async function executeCustomAction(action: CustomAction) {
     if (!contactsStore.currentContact || executingActionId.value) return
@@ -401,10 +429,13 @@ export function useChatContactsList(options: UseChatContactsListOptions) {
     // Multi-account (selectedAccount is owned by the view; not re-returned)
     contactAccounts,
     orgAccounts,
-    // Tag filter
-    isTagFilterOpen,
+    // Filters popover (accounts + tags)
+    isFilterOpen,
+    activeFilterCount,
+    filterAccountOptions,
     toggleTagFilter,
-    clearTagFilter,
+    toggleAccountFilter,
+    clearAllFilters,
   // Custom actions
   customActions,
   executingActionId,

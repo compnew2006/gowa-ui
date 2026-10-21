@@ -1,12 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
-const { list } = vi.hoisted(() => ({ list: vi.fn() }))
+const { list, listInternalConversations } = vi.hoisted(() => ({
+  list: vi.fn(),
+  listInternalConversations: vi.fn(),
+}))
 
 vi.mock('@/services/api', () => ({
   contactsService: {
     list,
-    listInternalConversations: () => Promise.resolve({ data: { data: { conversations: [] } } }),
+    listInternalConversations,
   },
   messagesService: {},
   api: {},
@@ -29,9 +32,28 @@ function page(ids: string[], total: number, chatStatus = 'closed') {
   return Promise.resolve({ data: { data: { contacts, total } } })
 }
 
+// A Private-tab pair: the two org accounts' copies of one conversation.
+function pairConversation(a: string, b: string) {
+  const side = (account: string, peer: string) => ({
+    contact_id: `${account}-side`,
+    account,
+    peer_account: peer,
+    last_message_preview: '',
+    unread_count: 0,
+  })
+  return {
+    key: `${a}|${b}`,
+    accounts: [a, b] as [string, string],
+    last_message_preview: '',
+    unread_count: 0,
+    sides: [side(a, b), side(b, a)],
+  }
+}
+
 describe('contacts store list paging', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+    listInternalConversations.mockResolvedValue({ data: { data: { conversations: [] } } })
   })
 
   afterEach(() => {
@@ -111,5 +133,67 @@ describe('contacts store list paging', () => {
 
     const searches = list.mock.calls.map(([params]) => [params.chat_status ?? 'general', params.search])
     expect(searches).toEqual([['general', 'zed'], ['closed', 'zed']])
+  })
+})
+
+describe('contacts store account filter', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    listInternalConversations.mockResolvedValue({ data: { data: { conversations: [] } } })
+  })
+
+  it('sends selected accounts with the general, closed and load-more requests', async () => {
+    list.mockImplementation((params: ListParams) =>
+      params.chat_status === 'closed' ? page([`closed-${params.page}`], 120) : page([`open-${params.page}`], 120, 'open'))
+
+    const store = useContactsStore()
+    store.selectedAccounts = ['acc1', 'acc2']
+    store.selectedTags = ['vip']
+    store.activeListTab = 'closed'
+    await store.fetchContacts() // general page 1 + closed page 1
+    await store.loadMoreContacts() // closed page 2
+    store.activeListTab = 'all'
+    await store.loadMoreContacts() // general page 2
+
+    const requests = list.mock.calls.map(([params]) => [params.chat_status ?? 'general', params.page, params.tags, params.accounts])
+    expect(requests).toEqual([
+      ['general', 1, 'vip', 'acc1,acc2'],
+      ['closed', 1, 'vip', 'acc1,acc2'],
+      ['closed', 2, 'vip', 'acc1,acc2'],
+      ['general', 2, 'vip', 'acc1,acc2'],
+    ])
+  })
+
+  it('omits accounts from list requests when no account is selected', async () => {
+    list.mockImplementation(() => page([], 0))
+
+    const store = useContactsStore()
+    store.activeListTab = 'closed'
+    await store.fetchContacts()
+
+    expect(list.mock.calls.map(([params]) => params.accounts)).toEqual([undefined, undefined])
+  })
+
+  it('keeps only Private pair conversations on a selected account', async () => {
+    listInternalConversations.mockResolvedValue({
+      data: { data: { conversations: [pairConversation('acc1', 'acc2'), pairConversation('acc3', 'acc4')] } },
+    })
+
+    const store = useContactsStore()
+    store.activeListTab = 'internal'
+    await store.fetchInternalConversations()
+    // Private rows as the sidebar renders them (displayedContacts minus the pinned Status row).
+    const privateRows = () => store.displayedContacts.filter(c => c.is_internal).map(c => c.name)
+    expect(store.internalCount).toBe(2)
+
+    store.selectedAccounts = ['acc3']
+    expect(store.internalCount).toBe(1)
+    expect(privateRows()).toEqual(['acc3 ↔ acc4'])
+
+    store.selectedAccounts = ['acc2', 'acc4']
+    expect(privateRows()).toEqual(['acc1 ↔ acc2', 'acc3 ↔ acc4'])
+
+    store.selectedAccounts = []
+    expect(store.internalCount).toBe(2)
   })
 })

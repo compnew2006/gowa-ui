@@ -37,3 +37,8 @@ const ExcludeInternalContactsSQL = `COALESCE(contacts.metadata->>'internal_chat'
 	AND contacts.phone_number NOT IN (
 		SELECT split_part(split_part(wa.gowa_jid, '@', 1), ':', 1) FROM whatsapp_accounts wa
 		WHERE wa.organization_id = contacts.organization_id AND wa.gowa_jid <> '' AND wa.deleted_at IS NULL)`
+
+// OnlyInternalContactsSQL is the complement of ExcludeInternalContactsSQL: a
+// WHERE fragment for queries on the contacts table that keeps only internal
+// conversations (the Private tab).
+const OnlyInternalContactsSQL = "NOT (" + ExcludeInternalContactsSQL + ")"
