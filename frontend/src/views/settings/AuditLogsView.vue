@@ -16,7 +16,7 @@ import { auditLogsService, type AuditLogEntry } from '@/services/api'
 import { useUsersStore } from '@/stores/users'
 import { useDateRange } from '@/composables/useDateRange'
 import { ScrollText } from 'lucide-vue-next'
-import { formatDate, formatLabel, normalizeAuditChanges } from '@/lib/utils'
+import { formatDateTime, formatLabel, normalizeAuditChanges } from '@/lib/utils'
 
 const { t } = useI18n()
 const usersStore = useUsersStore()
@@ -230,7 +230,7 @@ onMounted(async () => {
 
                 <template #cell-created_at="{ item: log }">
                   <div class="py-1">
-                    <span class="text-muted-foreground text-sm">{{ formatDate(log.created_at) }}</span>
+                    <span class="text-muted-foreground text-sm">{{ formatDateTime(log.created_at) }}</span>
                   </div>
                 </template>
               </DataTable>
