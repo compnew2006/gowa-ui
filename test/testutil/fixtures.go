@@ -232,6 +232,13 @@ func WithContactAccount(accountName string) ContactOption {
 	}
 }
 
+// WithAssignee assigns the contact to a user, making that user a participant.
+func WithAssignee(userID uuid.UUID) ContactOption {
+	return func(c *models.Contact) {
+		c.AssignedUserID = &userID
+	}
+}
+
 // WithPhoneNumber sets the phone number on the contact.
 func WithPhoneNumber(phone string) ContactOption {
 	return func(c *models.Contact) {
@@ -362,8 +369,10 @@ func CreateTestRoleWithKeys(t *testing.T, db *gorm.DB, orgID uuid.UUID, name str
 func CreateAdminRole(t *testing.T, db *gorm.DB, orgID uuid.UUID) *models.CustomRole {
 	t.Helper()
 
+	// Matches the seeded administrator role: exact name "admin", system role.
+	// Handlers identify administrators by this name and flag (isAdministrator).
 	allPerms := GetOrCreateTestPermissions(t, db)
-	return CreateTestRole(t, db, orgID, "admin", allPerms)
+	return CreateTestRoleExact(t, db, orgID, "admin", true, false, allPerms)
 }
 
 // CreateAgentRole creates an agent role with limited permissions.

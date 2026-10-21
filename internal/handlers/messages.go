@@ -859,6 +859,9 @@ func (a *App) SendTemplateMessage(r *fastglue.Request) error {
 		if a.rejectHistoricalAssignmentAccess(r, &c, userID, orgID) {
 			return nil
 		}
+		if a.rejectNonParticipant(r, &c, userID, orgID) {
+			return nil
+		}
 		contact = &c
 	} else {
 		// Find or create contact from phone number
@@ -888,6 +891,9 @@ func (a *App) SendTemplateMessage(r *fastglue.Request) error {
 				return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to create contact", nil, "")
 			}
 			a.Log.Info("Contact created from API", "contact_id", c.ID, "phone", phoneNumber)
+		}
+		if err == nil && a.rejectNonParticipant(r, &c, userID, orgID) {
+			return nil
 		}
 		contact = &c
 	}
@@ -1117,14 +1123,10 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
 	}
 
-	// Managers/admins (contacts:write) can see any chat — no restrictions.
-	// Agents can only see messages if: they own it, are a collaborator, or have collaborate permission.
-	// Closed conversations are readable by everyone (read-only).
-	hasContactsWritePermission := a.HasPermission(userID, models.ResourceContacts, models.ActionWrite, orgID)
-	hasCollaboratePermission := a.HasPermission(userID, models.ResourceChatCollaborate, models.ActionWrite, orgID)
-	isAssigned := contact.AssignedUserID != nil && *contact.AssignedUserID == userID
-	isCollaborator := contact.IsCollaborator(userID.String())
-	canViewContent := hasContactsWritePermission || isAssigned || isCollaborator || hasCollaboratePermission
+	// Message content is visible only to administrators and to the conversation's
+	// participants: the assignee, a collaborator, or an ACTIVE access grant holder.
+	// Everyone else gets no content, including on closed chats.
+	canViewContent := a.canAccessConversationContent(&contact, userID, orgID)
 
 	if !canViewContent && contact.EffectiveStatus() == models.ChatStatusPending {
 		var pendingCount int64
@@ -1137,6 +1139,10 @@ func (a *App) GetMessages(r *fastglue.Request) error {
 			"Claim this chat to view messages",
 			map[string]any{"pending_message_count": pendingCount},
 			"chat_not_claimed")
+	}
+	if !canViewContent {
+		return r.SendErrorEnvelope(fasthttp.StatusForbidden,
+			"Only administrators and conversation participants can view these messages", nil, "conversation_restricted")
 	}
 	// ─── End privacy guard ───
 
@@ -1518,6 +1524,9 @@ func (a *App) SendMessage(r *fastglue.Request) error {
 	if a.rejectHistoricalAssignmentAccess(r, &contact, userID, orgID) {
 		return nil
 	}
+	if a.rejectNonParticipant(r, &contact, userID, orgID) {
+		return nil
+	}
 
 	// Get WhatsApp account - prefer request-specified account over contact default
 	accountName := contact.WhatsAppAccount
@@ -1766,6 +1775,9 @@ func (a *App) SendMediaMessage(r *fastglue.Request) error {
 	if a.rejectHistoricalAssignmentAccess(r, &contact, userID, orgID) {
 		return nil
 	}
+	if a.rejectNonParticipant(r, &contact, userID, orgID) {
+		return nil
+	}
 
 	// Get WhatsApp account - prefer form-specified account over contact default
 	mediaAccountName := contact.WhatsAppAccount
@@ -1891,6 +1903,9 @@ func (a *App) SendReaction(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
 	}
 	if a.rejectHistoricalAssignmentAccess(r, &contact, userID, orgID) {
+		return nil
+	}
+	if a.rejectNonParticipant(r, &contact, userID, orgID) {
 		return nil
 	}
 
@@ -2071,6 +2086,9 @@ func (a *App) SendTypingIndicator(r *fastglue.Request) error {
 	if a.rejectHistoricalAssignmentAccess(r, &contact, userID, orgID) {
 		return nil
 	}
+	if a.rejectNonParticipant(r, &contact, userID, orgID) {
+		return nil
+	}
 
 	account, err := a.resolveWhatsAppAccount(orgID, contact.WhatsAppAccount)
 	if err != nil {
@@ -2128,6 +2146,9 @@ func (a *App) RevokeMessage(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
 	}
 	if a.rejectHistoricalAssignmentAccess(r, &contact, userID, orgID) {
+		return nil
+	}
+	if a.rejectNonParticipant(r, &contact, userID, orgID) {
 		return nil
 	}
 

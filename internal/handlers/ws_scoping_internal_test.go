@@ -49,6 +49,10 @@ func TestWSContactRecipients_Matrix(t *testing.T) {
 	testutil.AssignAccountToUser(t, app.DB, subsetReader.ID, accA.ID)
 	subsetNoRead := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&noReadRole.ID))
 	testutil.AssignAccountToUser(t, app.DB, subsetNoRead.ID, accA.ID)
+	// An administrator keeps account-scoped visibility: account A only.
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	adminSubset := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	testutil.AssignAccountToUser(t, app.DB, adminSubset.ID, accA.ID)
 
 	contactA := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(accA.Name))
 	contactB := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithContactAccount(accB.Name))
@@ -101,21 +105,24 @@ func TestWSContactRecipients_Matrix(t *testing.T) {
 		return &c
 	}
 
-	// Account-A conversation: org-wide viewers + the account-A subset reader.
+	// Account-A conversation: administrators with account scope, and participants.
+	// Non-administrators get message events only for conversations they are in.
 	recA := app.wsContactRecipients(contactA, org.ID)
 	assert.True(t, in(t, recA, super.ID), "super admin always receives")
-	assert.True(t, in(t, recA, fullNoAssign.ID), "no assignments = org-wide fallback")
-	assert.True(t, in(t, recA, subsetReader.ID), "assigned account matches")
+	assert.True(t, in(t, recA, adminSubset.ID), "administrator inside the account subset receives")
+	assert.False(t, in(t, recA, fullNoAssign.ID), "non-administrators get no message events for others' conversations")
+	assert.False(t, in(t, recA, subsetReader.ID), "non-administrators get no message events for others' conversations")
 	assert.False(t, in(t, recA, subsetNoRead.ID),
 		"contacts:read-less subset user has involvement-only access")
 
 	// Account-B conversation: involvement beats the account subset.
 	recB := app.wsContactRecipients(freshContact(t), org.ID)
 	assert.True(t, in(t, recB, super.ID))
-	assert.True(t, in(t, recB, fullNoAssign.ID))
+	assert.False(t, in(t, recB, adminSubset.ID), "administrator outside the account subset does not receive")
 	assert.True(t, in(t, recB, assignee.ID), "assignee receives even cross-account")
 	assert.True(t, in(t, recB, collab.ID), "active collaborator receives")
 	assert.True(t, in(t, recB, grantHolder.ID), "active grant holder receives")
+	assert.False(t, in(t, recB, fullNoAssign.ID), "non-administrator, not involved: no message events")
 	assert.False(t, in(t, recB, subsetReader.ID),
 		"account-subset contacts:read user must NOT receive other accounts' messages")
 	assert.False(t, in(t, recB, subsetNoRead.ID))

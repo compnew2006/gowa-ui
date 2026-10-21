@@ -63,7 +63,9 @@ func TestReview2_ZipDropsOutOfScopeMedia(t *testing.T) {
 	f := newGrantFixture(t)
 	f.app.Config.Storage.LocalPath = t.TempDir()
 
-	contactA := testutil.CreateTestContactWith(t, f.app.DB, f.org.ID, testutil.WithContactAccount(f.accA.Name))
+	// The agent is a participant in contactA, so its media is in scope.
+	contactA := testutil.CreateTestContactWith(t, f.app.DB, f.org.ID,
+		testutil.WithContactAccount(f.accA.Name), testutil.WithAssignee(f.agent.ID))
 	visible := addMediaMessage(t, f.app, f.org.ID, contactA.ID, f.accA.Name,
 		filepath.Join("images", "visible.jpg"), "visible.jpg")
 	hidden := addMediaMessage(t, f.app, f.org.ID, f.contact.ID, f.accB.Name,
@@ -194,7 +196,9 @@ func TestReview2_UpdateContactAssignMintsGrant(t *testing.T) {
 func TestReview2_ScheduledListScopedByAccountSubset(t *testing.T) {
 	f := newGrantFixture(t)
 
-	contactA := testutil.CreateTestContactWith(t, f.app.DB, f.org.ID, testutil.WithContactAccount(f.accA.Name))
+	// Scheduled text is shown only for conversations the agent takes part in.
+	contactA := testutil.CreateTestContactWith(t, f.app.DB, f.org.ID,
+		testutil.WithContactAccount(f.accA.Name), testutil.WithAssignee(f.agent.ID))
 	newSched := func(contact *models.Contact, account *models.WhatsAppAccount, body string) *models.ScheduledMessage {
 		sm := &models.ScheduledMessage{
 			OrganizationID:  f.org.ID,

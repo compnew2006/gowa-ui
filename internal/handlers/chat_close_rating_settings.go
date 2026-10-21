@@ -307,6 +307,9 @@ func (a *App) ListCloseRatingResponses(r *fastglue.Request) error {
 
 	shouldMask := a.ShouldMaskPhoneNumbers(orgID)
 
+	// The customer's reply text is message content: administrators and the
+	// conversation's participants only.
+	involvedRatings := a.involvedContactIDs(userID, orgID, contactIDs)
 	items := make([]CloseRatingResponseItem, 0, len(rows))
 	for _, row := range rows {
 		item := CloseRatingResponseItem{
@@ -316,11 +319,13 @@ func (a *App) ListCloseRatingResponses(r *fastglue.Request) error {
 			Status:          row.Status,
 			Rating:          row.Rating,
 			RatingSource:    row.RatingSource,
-			RawReply:        row.RawReply,
 			RatedAt:         row.RatedAt,
 			CreatedAt:       row.CreatedAt,
 			ExpiresAt:       row.ExpiresAt,
 			ClosedByUserID:  row.ClosedByUserID,
+		}
+		if involvedRatings[row.ContactID] {
+			item.RawReply = row.RawReply
 		}
 		if c, ok := contacts[row.ContactID]; ok {
 			item.ContactName = c.ProfileName

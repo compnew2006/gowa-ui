@@ -79,6 +79,9 @@ func (a *App) CreateScheduledMessage(r *fastglue.Request) error {
 	if a.rejectHistoricalAssignmentAccess(r, &contact, userID, orgID) {
 		return nil
 	}
+	if a.rejectNonParticipant(r, &contact, userID, orgID) {
+		return nil
+	}
 
 	// Resolve the WhatsApp account now so a bad account fails at schedule
 	// time, not at fire time. Prefer request override over contact default.
@@ -182,6 +185,9 @@ func (a *App) ListContactScheduledMessages(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
 	}
 
+	if a.rejectNonParticipant(r, &contact, userID, orgID) {
+		return nil
+	}
 	pg := parsePagination(r)
 	baseQuery := a.DB.Model(&models.ScheduledMessage{}).
 		Where("organization_id = ? AND contact_id = ?", orgID, contactID)
@@ -213,6 +219,14 @@ func (a *App) ListScheduledMessages(r *fastglue.Request) error {
 
 	pg := parsePagination(r)
 	baseQuery := a.DB.Model(&models.ScheduledMessage{}).Where("organization_id = ?", orgID)
+	// Scheduled message text is conversation content: non-administrators see only
+	// the conversations they take part in.
+	if !a.isAdministrator(userID, orgID) {
+		condition, args := involvementCondition(userID)
+		participantIDs := a.DB.Model(&models.Contact{}).Select("id").
+			Where("organization_id = ?", orgID).Where("("+condition+")", args...)
+		baseQuery = baseQuery.Where("contact_id IN (?)", participantIDs)
+	}
 
 	if status := string(r.RequestCtx.QueryArgs().Peek("status")); status != "" {
 		baseQuery = baseQuery.Where("status = ?", status)
@@ -374,6 +388,9 @@ func (a *App) loadScopedScheduledMessage(r *fastglue.Request, id, orgID, userID 
 	// Both callers mutate the conversation (edit/cancel) — historical
 	// read-only holders are refused here.
 	if a.rejectHistoricalAssignmentAccess(r, &contact, userID, orgID) {
+		return nil, errEnvelopeSent
+	}
+	if a.rejectNonParticipant(r, &contact, userID, orgID) {
 		return nil, errEnvelopeSent
 	}
 

@@ -40,6 +40,9 @@ func (a *App) ListConversationNotes(r *fastglue.Request) error {
 	if !ok {
 		return nil
 	}
+	if a.rejectNonParticipant(r, &contact, userID, orgID) {
+		return nil
+	}
 	contactID := contact.ID
 
 	pg := parsePaginationWithDefaults(r, 30, 100)
@@ -105,6 +108,9 @@ func (a *App) CreateConversationNote(r *fastglue.Request) error {
 	if !ok {
 		return nil
 	}
+	if a.rejectNonParticipant(r, &contact, userID, orgID) {
+		return nil
+	}
 	contactID := contact.ID
 
 	var req ConversationNoteRequest
@@ -156,6 +162,9 @@ func (a *App) CreateConversationNote(r *fastglue.Request) error {
 func (a *App) resolveOwnedNote(r *fastglue.Request, orgID, userID uuid.UUID, verb string) (*models.ConversationNote, bool) {
 	contact, ok := a.loadContactByPath(r, orgID, userID)
 	if !ok {
+		return nil, false
+	}
+	if a.rejectNonParticipant(r, &contact, userID, orgID) {
 		return nil, false
 	}
 

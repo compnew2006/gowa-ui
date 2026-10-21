@@ -706,7 +706,7 @@ func (a *App) GetWidgetData(r *fastglue.Request) error {
 	}
 
 	// Execute the query
-	data, err := a.executeWidgetQuery(orgID, widget, fromStr, toStr)
+	data, err := a.executeWidgetQuery(orgID, userID, widget, fromStr, toStr)
 	if err != nil {
 		a.Log.Error("Failed to execute widget query", "error", err, "widget_id", id)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to get widget data", nil, "")
@@ -745,7 +745,7 @@ func (a *App) GetAllWidgetsData(r *fastglue.Request) error {
 	// Execute queries for all widgets
 	results := make(map[string]WidgetDataResponse)
 	for _, widget := range widgets {
-		data, err := a.executeWidgetQuery(orgID, widget, fromStr, toStr)
+		data, err := a.executeWidgetQuery(orgID, userID, widget, fromStr, toStr)
 		if err != nil {
 			a.Log.Error("Failed to execute widget query", "error", err, "widget_id", widget.ID)
 			continue
@@ -760,7 +760,7 @@ func (a *App) GetAllWidgetsData(r *fastglue.Request) error {
 }
 
 // executeWidgetQuery executes the query for a widget and returns the data
-func (a *App) executeWidgetQuery(orgID uuid.UUID, widget models.Widget, fromStr, toStr string) (WidgetDataResponse, error) {
+func (a *App) executeWidgetQuery(orgID, viewerID uuid.UUID, widget models.Widget, fromStr, toStr string) (WidgetDataResponse, error) {
 	now := time.Now()
 
 	var periodStart, periodEnd time.Time
@@ -810,7 +810,7 @@ func (a *App) executeWidgetQuery(orgID uuid.UUID, widget models.Widget, fromStr,
 			response.DataPoints = a.getGroupedData(orgID, widget, filters, periodStart, periodEnd)
 		} else {
 			// Table rows: query last 10 records
-			response.TableRows = a.getTableRows(orgID, widget, filters, periodStart, periodEnd)
+			response.TableRows = a.getTableRows(orgID, viewerID, widget, filters, periodStart, periodEnd)
 		}
 		return response, nil
 	}
@@ -1343,13 +1343,17 @@ var tableQuerySQL = map[string]struct{ base, orderBy string }{
 }
 
 // getTableRows returns the last 10 rows for a table widget based on the data source.
-func (a *App) getTableRows(orgID uuid.UUID, widget models.Widget, filters []FilterInput, periodStart, periodEnd time.Time) []TableRow {
+func (a *App) getTableRows(orgID, viewerID uuid.UUID, widget models.Widget, filters []FilterInput, periodStart, periodEnd time.Time) []TableRow {
 	sql, ok := tableQuerySQL[widget.DataSource]
 	if !ok {
 		return nil
 	}
 
 	query := sql.base
+	if widget.DataSource == "messages" && !a.isAdministrator(viewerID, orgID) {
+		// Message text is for administrators only; other viewers see the row without it.
+		query = strings.Replace(query, "LEFT(m.content, 80) as sub_label", "'' as sub_label", 1)
+	}
 	args := []any{orgID, periodStart, periodEnd}
 	query, args = appendFilterSQL(widget.DataSource, query, args, filters)
 	query += sql.orderBy

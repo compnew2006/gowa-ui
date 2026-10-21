@@ -58,7 +58,7 @@ func TestApp_ServeMedia_Success_WithContactsRead(t *testing.T) {
 	org := testutil.CreateTestOrganization(t, app.DB)
 	contactsReadPerms := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "media-reader", []string{"contacts:read"})
 	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&contactsReadPerms.ID))
-	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithAssignee(user.ID))
 
 	rel := withStorageDir(t, app, "images/cat.jpg", []byte("\xFF\xD8\xFF\xE0jpeg-bytes"))
 	msg := makeMediaMessage(t, app, org.ID, contact.ID, rel)
@@ -81,7 +81,7 @@ func TestApp_ServeMedia_RejectsDirectoryTraversal(t *testing.T) {
 	org := testutil.CreateTestOrganization(t, app.DB)
 	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "media-r", []string{"contacts:read"})
 	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&role.ID))
-	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithAssignee(user.ID))
 
 	dir := t.TempDir()
 	app.Config = &config.Config{
@@ -111,7 +111,7 @@ func TestApp_ServeMedia_RejectsSymlink(t *testing.T) {
 	org := testutil.CreateTestOrganization(t, app.DB)
 	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "media-r-sym", []string{"contacts:read"})
 	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&role.ID))
-	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithAssignee(user.ID))
 
 	dir := t.TempDir()
 	app.Config = &config.Config{
@@ -147,7 +147,7 @@ func TestApp_ServeMedia_FileMissingOnDisk(t *testing.T) {
 	org := testutil.CreateTestOrganization(t, app.DB)
 	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "media-missing", []string{"contacts:read"})
 	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&role.ID))
-	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithAssignee(user.ID))
 
 	dir := t.TempDir()
 	app.Config = &config.Config{
@@ -184,7 +184,7 @@ func TestApp_ServeMedia_InlineDispositionUsesStoredFilename(t *testing.T) {
 	org := testutil.CreateTestOrganization(t, app.DB)
 	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "media-cd-1", []string{"contacts:read"})
 	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&role.ID))
-	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithAssignee(user.ID))
 
 	rel := withStorageDir(t, app, "images/photo.jpg", []byte("\xFF\xD8\xFF\xE0jpeg-bytes"))
 	msg := makeMediaMessage(t, app, org.ID, contact.ID, rel)
@@ -205,7 +205,7 @@ func TestApp_ServeMedia_ImageWithoutFilenameFallsBackToTypedName(t *testing.T) {
 	org := testutil.CreateTestOrganization(t, app.DB)
 	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "media-cd-2", []string{"contacts:read"})
 	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&role.ID))
-	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithAssignee(user.ID))
 
 	rel := withStorageDir(t, app, "images/no-name.jpg", []byte("\xFF\xD8\xFF\xE0jpeg-bytes"))
 	msg := makeMediaMessage(t, app, org.ID, contact.ID, rel)
@@ -226,7 +226,7 @@ func TestApp_ServeMedia_DocumentDownloadsAsAttachment(t *testing.T) {
 	org := testutil.CreateTestOrganization(t, app.DB)
 	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "media-cd-3", []string{"contacts:read"})
 	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&role.ID))
-	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithAssignee(user.ID))
 
 	rel := withStorageDir(t, app, "documents/invoice.pdf", []byte("%PDF-1.4"))
 	msg := makeMediaMessage(t, app, org.ID, contact.ID, rel)
@@ -247,7 +247,7 @@ func TestApp_ServeMedia_DownloadQueryForcesAttachment(t *testing.T) {
 	org := testutil.CreateTestOrganization(t, app.DB)
 	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "media-cd-4", []string{"contacts:read"})
 	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&role.ID))
-	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithAssignee(user.ID))
 
 	rel := withStorageDir(t, app, "images/forced.jpg", []byte("\xFF\xD8\xFF\xE0jpeg-bytes"))
 	msg := makeMediaMessage(t, app, org.ID, contact.ID, rel)
@@ -268,7 +268,7 @@ func TestApp_ServeMedia_NonASCIIFilenameGetsRFC5987Form(t *testing.T) {
 	org := testutil.CreateTestOrganization(t, app.DB)
 	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "media-cd-5", []string{"contacts:read"})
 	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&role.ID))
-	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithAssignee(user.ID))
 
 	rel := withStorageDir(t, app, "documents/arabic.pdf", []byte("%PDF-1.4"))
 	msg := makeMediaMessage(t, app, org.ID, contact.ID, rel)
@@ -360,7 +360,7 @@ func TestApp_ServeMedia_NoMediaInMessage(t *testing.T) {
 	org := testutil.CreateTestOrganization(t, app.DB)
 	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "media-empty", []string{"contacts:read"})
 	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&role.ID))
-	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithAssignee(user.ID))
 
 	msg := &models.Message{
 		BaseModel:      models.BaseModel{ID: uuid.New()},
@@ -404,7 +404,7 @@ func TestApp_ServeMedia_EmptyMediaURL_TextStillBails(t *testing.T) {
 	org := testutil.CreateTestOrganization(t, app.DB)
 	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "media-text-empty", []string{"contacts:read"})
 	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&role.ID))
-	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithAssignee(user.ID))
 
 	// A text message with empty MediaURL AND a WhatsAppMessageID: text is not a
 	// recoverable media type, so this must still 404 "No media found" without
@@ -441,7 +441,7 @@ func TestApp_ServeMedia_EmptyMediaURL_ImageWithWAMIDReachesRecovery(t *testing.T
 	org := testutil.CreateTestOrganization(t, app.DB)
 	role := testutil.CreateTestRoleWithKeys(t, app.DB, org.ID, "media-img-recover", []string{"contacts:read"})
 	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&role.ID))
-	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithAssignee(user.ID))
 
 	// An image message with empty MediaURL but a WhatsAppMessageID: this is the
 	// history-sync shape. With no GOWA provider wired up in this unit test,

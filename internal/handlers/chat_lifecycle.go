@@ -132,12 +132,13 @@ func (a *App) ReleaseChat(r *fastglue.Request) error {
 		return nil
 	}
 
-	// Authorization: assignee or admin/manager (ghost-release). The service
-	// double-checks this as defense-in-depth, but the HTTP-friendly error
-	// message is produced here so the response body stays user-facing.
+	// Authorization: the assignee, or an administrator (ghost-release of a chat
+	// they are not assigned to). The service double-checks this as
+	// defense-in-depth, but the HTTP-friendly error message is produced here so
+	// the response body stays user-facing.
 	isAssignee := contact.AssignedUserID != nil && *contact.AssignedUserID == userID
 	isAdminOrManager := a.HasPermission(userID, models.ResourceContacts, models.ActionWrite, orgID)
-	if !isAssignee && !isAdminOrManager {
+	if !isAssignee && !a.isAdministrator(userID, orgID) {
 		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "You are not allowed to release this chat", nil, "")
 	}
 
@@ -270,14 +271,15 @@ func (a *App) LeaveChat(r *fastglue.Request) error {
 
 	isOwner := contact.AssignedUserID != nil && *contact.AssignedUserID == userID
 	isCollaborator := contact.IsCollaborator(userID.String())
-	isAdminOrManager := a.HasPermission(userID, models.ResourceContacts, models.ActionWrite, orgID)
+	// Ghost exit (leaving a chat you are not part of) is administrator-only.
+	isAdministrator := a.isAdministrator(userID, orgID)
 
-	if !isOwner && !isCollaborator && !isAdminOrManager {
+	if !isOwner && !isCollaborator && !isAdministrator {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest,
 			"You are not a participant in this conversation", nil, "")
 	}
 
-	res, err := a.ChatLifecycle.Leave(r.RequestCtx, orgID, userID, &contact, isOwner, isCollaborator, isAdminOrManager)
+	res, err := a.ChatLifecycle.Leave(r.RequestCtx, orgID, userID, &contact, isOwner, isCollaborator, isAdministrator)
 	if err != nil {
 		a.Log.Error("Failed to leave chat", "error", err, "contact_id", contact.ID)
 		return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to leave chat", nil, "")
@@ -494,7 +496,7 @@ func (a *App) BulkReleaseChats(r *fastglue.Request) error {
 				return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to release chats", nil, "")
 			}
 			for i := range rows {
-				if a.conversationAccessMode(&rows[i], userID, orgID) == AccessModeHistoricalReadOnly {
+				if isReadOnlyAccessMode(a.conversationAccessMode(&rows[i], userID, orgID)) {
 					historical[rows[i].ID] = true
 				}
 			}
@@ -521,7 +523,7 @@ func (a *App) BulkReleaseChats(r *fastglue.Request) error {
 			// Distinguish "invisible because read-only" from "not found".
 			var probe models.Contact
 			if err := a.DB.Select("id").First(&probe, "id = ? AND organization_id = ?", id, orgID).Error; err == nil {
-				if a.conversationAccessMode(&probe, userID, orgID) == AccessModeHistoricalReadOnly {
+				if isReadOnlyAccessMode(a.conversationAccessMode(&probe, userID, orgID)) {
 					failed = append(failed, map[string]any{"contact_id": raw, "reason": "read-only"})
 					continue
 				}

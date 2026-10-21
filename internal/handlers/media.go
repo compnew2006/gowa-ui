@@ -544,13 +544,10 @@ func (a *App) ServeMedia(r *fastglue.Request) error {
 		return nil
 	}
 
-	// Media access follows the SAME visibility as the chat list for every
-	// caller — scopeAssignedContact (account grant ∪ involvement grant).
-	// Gating only non-contacts:read users here let an account-scoped agent
-	// read any org account's media files by message ID. Historical grant
-	// holders keep read access (the scope includes active grants).
+	// Media is message content: administrators and the conversation's participants
+	// only (scopeConversationMessages). Active grant holders keep read access.
 	var contact models.Contact
-	q := a.scopeAssignedContact(a.DB.Where("id = ? AND organization_id = ?", message.ContactID, orgID), userID, orgID)
+	q := a.scopeConversationMessages(a.DB.Where("id = ? AND organization_id = ?", message.ContactID, orgID), userID, orgID)
 	if err := q.First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Access denied", nil, "")
 	}

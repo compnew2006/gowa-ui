@@ -262,7 +262,7 @@ func TestServeMediaZip_AgentWithoutExport(t *testing.T) {
 	agentRole := testutil.CreateAgentRole(t, app.DB, org.ID)
 	agent := testutil.CreateTestUser(t, app.DB, org.ID,
 		testutil.WithRoleID(&agentRole.ID))
-	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+	contact := testutil.CreateTestContactWith(t, app.DB, org.ID, testutil.WithAssignee(agent.ID))
 
 	require.NoError(t, os.MkdirAll(filepath.Join(mediaDir, "images"), 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(mediaDir, "images", "doc.png"), []byte("png"), 0644))

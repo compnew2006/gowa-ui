@@ -54,7 +54,7 @@ func (a *App) RedownloadMedia(r *fastglue.Request) error {
 	// contact-visibility gate (account subset + involvement), mirroring
 	// ServeMedia. contacts:read alone is NOT org-wide access.
 	var contact models.Contact
-	if err := a.scopeAssignedContact(
+	if err := a.scopeConversationMessages(
 		a.DB.Where("id = ? AND organization_id = ?", message.ContactID, orgID), userID, orgID,
 	).First(&contact).Error; err != nil {
 		return r.SendErrorEnvelope(fasthttp.StatusForbidden, "Access denied", nil, "")

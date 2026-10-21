@@ -15,9 +15,13 @@ package handlers
 //
 //   - involvement on ANY account: current assignee, current collaborator, or
 //     ACTIVE contact_assignment_access_grants holder; OR
-//   - contacts:read AND account scope covers the contact's account
-//     (super admin, or no account assignments = org-wide fallback, or the
-//     contact's account is inside the user's assigned subset).
+//   - an administrator (super admin or the admin role) with contacts:read AND
+//     account scope covering the contact's account (super admin, or no account
+//     assignments = org-wide fallback, or the contact's account is inside the
+//     user's assigned subset).
+//
+// Message content is administrator-or-participant only: managers and agents
+// get events for conversations they are part of, and nothing else.
 //
 // Errors fail CLOSED: an empty recipient list drops the broadcast (UI falls
 // back to refetch/refresh) rather than leaking to the whole org.
@@ -114,8 +118,12 @@ func (a *App) wsContactRecipients(contact *models.Contact, orgID uuid.UUID) []uu
 			recipients = append(recipients, uid)
 			continue
 		}
-		// Account-scope users need contacts:read — without it, involvement is
-		// the sole source of access (same as scopeAssignedContact).
+		// Message content is for administrators and participants only. Everyone
+		// else receives events for conversations they are part of, above.
+		if !a.isAdministrator(uid, orgID) {
+			continue
+		}
+		// Administrators with account scope additionally need contacts:read.
 		if !a.HasPermission(uid, models.ResourceContacts, models.ActionRead, orgID) {
 			continue
 		}

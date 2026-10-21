@@ -332,7 +332,30 @@ const (
 	// access grant while the assignment has moved on — search and read only;
 	// every write/lifecycle action is refused server-side.
 	AccessModeHistoricalReadOnly = "historical_assignment_read_only"
+	// AccessModeRestricted: the conversation is visible by account scope, but
+	// the viewer is neither an administrator nor a participant. Only the contact
+	// row is visible — no message content, no reply, no close.
+	AccessModeRestricted = "restricted"
 )
+
+// isReadOnlyAccessMode reports whether a mode allows no conversation writes:
+// the historical grant-only viewer and the restricted non-participant.
+func isReadOnlyAccessMode(mode string) bool {
+	return mode == AccessModeHistoricalReadOnly || mode == AccessModeRestricted
+}
+
+// hasActiveAccessGrant reports whether the user holds an ACTIVE assignment access
+// grant on the contact. Lookup errors fail closed (false).
+func (a *App) hasActiveAccessGrant(contactID, userID uuid.UUID) bool {
+	var grants int64
+	if err := a.DB.Model(&models.ContactAssignmentAccessGrant{}).
+		Where("contact_id = ? AND user_id = ? AND revoked_at IS NULL", contactID, userID).
+		Count(&grants).Error; err != nil {
+		a.Log.Error("Failed to check access grants", "error", err, "contact_id", contactID)
+		return false
+	}
+	return grants > 0
+}
 
 // activeGrantExists reports whether the user holds an ACTIVE (non-revoked)
 // assignment access grant for the contact.
@@ -386,7 +409,8 @@ func isCurrentCollaborator(contact *models.Contact, userID uuid.UUID) bool {
 // for those, it never returns an empty mode. Defaults fail CLOSED to
 // read-only: an unclassified viewer must never gain write access.
 func (a *App) conversationAccessMode(contact *models.Contact, userID, orgID uuid.UUID) string {
-	if a.hasAccountAccess(contact, userID, orgID) {
+	administrator := a.isAdministrator(userID, orgID)
+	if administrator && a.hasAccountAccess(contact, userID, orgID) {
 		return AccessModeStandard
 	}
 	if contact.AssignedUserID != nil && *contact.AssignedUserID == userID {
@@ -401,7 +425,11 @@ func (a *App) conversationAccessMode(contact *models.Contact, userID, orgID uuid
 	}
 	// closed_by is audit-only (see scope comment) — the grant is the sole
 	// durable access, so its revocation always ends the access.
-	return AccessModeHistoricalReadOnly
+	if a.hasActiveAccessGrant(contact.ID, userID) || administrator {
+		return AccessModeHistoricalReadOnly
+	}
+	// Visible through account scope only: no content, no writes.
+	return AccessModeRestricted
 }
 
 // rejectHistoricalAssignmentAccess enforces the READ-ONLY rule for holders of
@@ -443,25 +471,101 @@ func (a *App) rejectHistoricalAssignmentAccess(r *fastglue.Request, contact *mod
 // Keeping this in one place ensures every contact endpoint enforces the same
 // visibility (ListContacts, GetMessages, media serving, scheduled messages,
 // lifecycle actions, … — every call site that already applied scopeAssignedContact).
+// involvementCondition is the WHERE fragment for conversations the user is part
+// of: the assignee, a collaborator, or an ACTIVE assignment access grant holder.
+// Its args go in order after the fragment. Shared by scopeAssignedContact and
+// scopeConversationMessages so both gates agree on what "involved" means.
+//
+// Involvement grant: assigned_user_id, the collaborators JSONB key, or an
+// ACTIVE assignment access grant (the permanent per-conversation grant
+// created by direct admin assignment — see upsertAssignmentGrant).
+// metadata.closed_by is deliberately NOT a visibility path: it is an
+// audit record only. After a Release revokes the grant, the released
+// user must lose access even if they were the one who closed the
+// conversation. @> containment reuses the same GIN-indexed pattern as
+// the tags filter above.
+func involvementCondition(userID uuid.UUID) (string, []any) {
+	collaboratorJSON := fmt.Sprintf(`{"collaborators":[{"user_id":"%s"}]}`, userID.String())
+	activeGrant := fmt.Sprintf(
+		`EXISTS (SELECT 1 FROM contact_assignment_access_grants gag WHERE gag.contact_id = contacts.id AND gag.user_id = '%s' AND gag.revoked_at IS NULL)`,
+		userID.String())
+	return "assigned_user_id = ? OR metadata @> ?::jsonb OR " + activeGrant, []any{userID, collaboratorJSON}
+}
+
+// scopeConversationMessages narrows a contact query to conversations whose
+// message content the user may read. Administrators keep the full visibility
+// scopeAssignedContact grants. Everyone else reads messages only in conversations
+// they are involved in. Contact-level visibility (list, claim) is unchanged.
+func (a *App) scopeConversationMessages(query *gorm.DB, userID, orgID uuid.UUID) *gorm.DB {
+	if a.isAdministrator(userID, orgID) {
+		return a.scopeAssignedContact(query, userID, orgID)
+	}
+	involvement, involvementArgs := involvementCondition(userID)
+	return query.Where("("+involvement+")", involvementArgs...)
+}
+
+// canAccessConversationContent reports whether the user may read or send message
+// content in this conversation: administrators, the assignee, active
+// collaborators, and active access grant holders. Lookup errors fail closed.
+func (a *App) canAccessConversationContent(contact *models.Contact, userID, orgID uuid.UUID) bool {
+	if contact.AssignedUserID != nil && *contact.AssignedUserID == userID {
+		return true
+	}
+	if contact.IsCollaborator(userID.String()) {
+		return true
+	}
+	if a.isAdministrator(userID, orgID) {
+		return true
+	}
+	return a.hasActiveAccessGrant(contact.ID, userID)
+}
+
+// rejectNonParticipant sends a 403 and returns true when the user may not read or
+// send content in this conversation. Use it after the contact lookup.
+func (a *App) rejectNonParticipant(r *fastglue.Request, contact *models.Contact, userID, orgID uuid.UUID) bool {
+	if a.canAccessConversationContent(contact, userID, orgID) {
+		return false
+	}
+	_ = r.SendErrorEnvelope(fasthttp.StatusForbidden,
+		"Only administrators and conversation participants can access this conversation", nil, "conversation_restricted")
+	return true
+}
+
+// involvedContactIDs returns which of contactIDs the user may read message
+// content for: administrators get all of them, everyone else only conversations
+// they are part of. One query for the whole set; errors fail closed.
+func (a *App) involvedContactIDs(userID, orgID uuid.UUID, contactIDs []uuid.UUID) map[uuid.UUID]bool {
+	involved := make(map[uuid.UUID]bool, len(contactIDs))
+	if len(contactIDs) == 0 {
+		return involved
+	}
+	if a.isAdministrator(userID, orgID) {
+		for _, id := range contactIDs {
+			involved[id] = true
+		}
+		return involved
+	}
+	condition, args := involvementCondition(userID)
+	var ids []uuid.UUID
+	if err := a.DB.Model(&models.Contact{}).
+		Where("organization_id = ? AND id IN ?", orgID, contactIDs).
+		Where("("+condition+")", args...).
+		Pluck("id", &ids).Error; err != nil {
+		a.Log.Error("Failed to load involved contacts", "error", err, "user_id", userID)
+		return involved
+	}
+	for _, id := range ids {
+		involved[id] = true
+	}
+	return involved
+}
+
 func (a *App) scopeAssignedContact(query *gorm.DB, userID, orgID uuid.UUID) *gorm.DB {
 	if a.IsSuperAdmin(userID) {
 		return query
 	}
 
-	// Involvement grant: assigned_user_id, the collaborators JSONB key, or an
-	// ACTIVE assignment access grant (the permanent per-conversation grant
-	// created by direct admin assignment — see upsertAssignmentGrant).
-	// metadata.closed_by is deliberately NOT a visibility path: it is an
-	// audit record only. After a Release revokes the grant, the released
-	// user must lose access even if they were the one who closed the
-	// conversation. @> containment reuses the same GIN-indexed pattern as
-	// the tags filter above.
-	collaboratorJSON := fmt.Sprintf(`{"collaborators":[{"user_id":"%s"}]}`, userID.String())
-	activeGrant := fmt.Sprintf(
-		`EXISTS (SELECT 1 FROM contact_assignment_access_grants gag WHERE gag.contact_id = contacts.id AND gag.user_id = '%s' AND gag.revoked_at IS NULL)`,
-		userID.String())
-	involvement := "assigned_user_id = ? OR metadata @> ?::jsonb OR " + activeGrant
-	involvementArgs := []any{userID, collaboratorJSON}
+	involvement, involvementArgs := involvementCondition(userID)
 
 	if !a.HasPermission(userID, models.ResourceContacts, models.ActionRead, orgID) {
 		// Agents without contacts:read can only access conversations they are
@@ -938,20 +1042,21 @@ func (a *App) DeleteContact(r *fastglue.Request) error {
 	})
 }
 
-// filterCollaboratorsForViewer applies Ghost Mode: when the viewer is an agent
-// (lacks contacts:write), admins/managers are stripped from the collaborators
-// list so agents can never see that an admin is present in the chat. Admins and
-// managers see the full list. The viewer's own entry is always preserved so a
-// collaborator still sees themselves.
+// filterCollaboratorsForViewer applies Ghost Mode: when the viewer is not an
+// administrator, administrator collaborators are stripped from the collaborators
+// list so nobody else can see that an admin is present in the chat. Administrators
+// see the full list. Managers and agents are visible like any participant. The
+// viewer's own entry is always preserved so a collaborator still sees themselves.
+// canManageContacts maps each user to whether they are an administrator.
 func filterCollaboratorsForViewer(collabs []models.Collaborator, viewerID uuid.UUID, canManageContacts map[uuid.UUID]bool) []models.Collaborator {
 	if len(collabs) == 0 {
 		return collabs
 	}
-	// Admins/managers see everyone.
+	// Administrators see everyone.
 	if canManageContacts[viewerID] {
 		return collabs
 	}
-	// Agents: strip admin/manager collaborators (Ghost Mode), keep self + other agents.
+	// Non-administrators: strip administrator collaborators (Ghost Mode), keep self + everyone else.
 	viewerIDStr := viewerID.String()
 	filtered := make([]models.Collaborator, 0, len(collabs))
 	for _, c := range collabs {
@@ -966,7 +1071,7 @@ func filterCollaboratorsForViewer(collabs []models.Collaborator, viewerID uuid.U
 			continue
 		}
 		if canManageContacts[uid] {
-			continue // admin/manager → hide from agent
+			continue // administrator → hide from non-administrators
 		}
 		filtered = append(filtered, c)
 	}
@@ -983,8 +1088,9 @@ func failClosedCollaboratorPermissions(userIDs []uuid.UUID, viewerID uuid.UUID) 
 	return permissions
 }
 
-// loadCollaboratorManagementPermissions loads the viewer and every distinct
-// collaborator's contacts:write permission in one query for a contact page.
+// loadCollaboratorManagementPermissions loads, for the viewer and every distinct
+// collaborator, whether that user is an administrator (super admin or the admin
+// role), in one query for a contact page. Only administrators are ghost-hidden.
 // Permission checks here must be batched: response construction can include
 // many contacts and each contact can have multiple collaborators.
 func (a *App) loadCollaboratorManagementPermissions(contacts []models.Contact, viewerID, orgID uuid.UUID) map[uuid.UUID]bool {
@@ -1020,24 +1126,22 @@ func (a *App) loadCollaboratorManagementPermissions(contacts []models.Contact, v
 	}
 
 	type permissionRow struct {
-		UserID            uuid.UUID `gorm:"column:user_id"`
-		CanManageContacts bool      `gorm:"column:can_manage_contacts"`
+		UserID          uuid.UUID `gorm:"column:user_id"`
+		IsAdministrator bool      `gorm:"column:is_administrator"`
 	}
 	var rows []permissionRow
 	err := a.DB.Model(&models.User{}).
 		Select(`users.id AS user_id,
 			(users.is_super_admin OR EXISTS (
 				SELECT 1
-				FROM role_permissions AS rp
-				JOIN custom_roles AS cr ON cr.id = rp.custom_role_id AND cr.deleted_at IS NULL
-				JOIN permissions AS p ON p.id = rp.permission_id AND p.deleted_at IS NULL
-				WHERE rp.custom_role_id = COALESCE(
+				FROM custom_roles AS cr
+				WHERE cr.id = COALESCE(
 					(SELECT uo.role_id FROM user_organizations AS uo
 					 WHERE uo.user_id = users.id AND uo.organization_id = ? AND uo.deleted_at IS NULL LIMIT 1),
 					users.role_id
 				)
-				AND p.resource = ? AND p.action = ?
-			)) AS can_manage_contacts`, orgID, models.ResourceContacts, models.ActionWrite).
+				AND cr.name = 'admin' AND cr.is_system = TRUE AND cr.deleted_at IS NULL
+			)) AS is_administrator`, orgID).
 		Where("users.id IN ?", userIDs).
 		Scan(&rows).Error
 	if err != nil {
@@ -1049,7 +1153,7 @@ func (a *App) loadCollaboratorManagementPermissions(contacts []models.Contact, v
 
 	permissions := make(map[uuid.UUID]bool, len(rows))
 	for _, row := range rows {
-		permissions[row.UserID] = row.CanManageContacts
+		permissions[row.UserID] = row.IsAdministrator
 	}
 	return permissions
 }
@@ -1063,6 +1167,7 @@ func (a *App) decorateAccessModes(responses []ContactResponse, contacts []models
 		return
 	}
 	superAdmin := a.IsSuperAdmin(userID)
+	administrator := a.isAdministrator(userID, orgID)
 	var accountNames []string
 	hasAssignments := false
 	if !superAdmin {
@@ -1096,9 +1201,9 @@ func (a *App) decorateAccessModes(responses []ContactResponse, contacts []models
 
 	for i := range responses {
 		c := &contacts[i]
-		mode := AccessModeStandard
+		mode := AccessModeRestricted
 		switch {
-		case superAdmin || !hasAssignments || accountSet[c.WhatsAppAccount]:
+		case administrator && (superAdmin || !hasAssignments || accountSet[c.WhatsAppAccount]):
 			mode = AccessModeStandard
 		case c.AssignedUserID != nil && *c.AssignedUserID == userID:
 			mode = AccessModeCurrentAssignee
@@ -1106,13 +1211,13 @@ func (a *App) decorateAccessModes(responses []ContactResponse, contacts []models
 			// Active participant — full access (must match
 			// conversationAccessMode; keep the two in sync).
 			mode = AccessModeCollaborator
-		case granted[c.ID]:
+		case granted[c.ID] || administrator:
 			// closed_by is audit-only — the grant is the sole durable access.
 			mode = AccessModeHistoricalReadOnly
 		}
 		responses[i].AccessMode = mode
-		responses[i].CanReply = mode != AccessModeHistoricalReadOnly
-		responses[i].CanClose = mode != AccessModeHistoricalReadOnly
+		responses[i].CanReply = !isReadOnlyAccessMode(mode)
+		responses[i].CanClose = !isReadOnlyAccessMode(mode)
 	}
 }
 
@@ -1151,6 +1256,9 @@ func (a *App) buildContactResponseMasked(contact *models.Contact, orgID, viewerU
 
 	canManageContacts := a.loadCollaboratorManagementPermissions([]models.Contact{*contact}, viewerUserID, orgID)
 	resp := a.buildContactResponseMaskedWithData(contact, orgID, viewerUserID, shouldMask, unreadCount, lastMessageAccount, assignedUserName, canManageContacts)
+	if !a.involvedContactIDs(viewerUserID, orgID, []uuid.UUID{contact.ID})[contact.ID] {
+		resp.LastMessagePreview = "" // message content: participants and administrators only
+	}
 	markInternalContact(&resp, contact, a.orgAccountPhones(orgID))
 	return resp
 }
@@ -1209,6 +1317,11 @@ func (a *App) buildContactResponsesMasked(contacts []models.Contact, orgID, view
 	}
 	canManageContacts := a.loadCollaboratorManagementPermissions(contacts, viewerUserID, orgID)
 	accountPhones := a.orgAccountPhones(orgID)
+	pageIDs := make([]uuid.UUID, 0, len(contacts))
+	for i := range contacts {
+		pageIDs = append(pageIDs, contacts[i].ID)
+	}
+	involved := a.involvedContactIDs(viewerUserID, orgID, pageIDs)
 
 	for i := range contacts {
 		assignedUserName := ""
@@ -1219,6 +1332,9 @@ func (a *App) buildContactResponsesMasked(contacts []models.Contact, orgID, view
 			&contacts[i], orgID, viewerUserID, shouldMask,
 			unreadCounts[contacts[i].ID], lastMessageAccounts[contacts[i].ID], assignedUserName, canManageContacts,
 		)
+		if !involved[contacts[i].ID] {
+			responses[i].LastMessagePreview = "" // message content: participants and administrators only
+		}
 		markInternalContact(&responses[i], &contacts[i], accountPhones)
 	}
 

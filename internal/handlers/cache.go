@@ -252,6 +252,18 @@ func (a *App) IsSuperAdmin(userID uuid.UUID) bool {
 	return perms.IsSuperAdmin
 }
 
+// isAdministrator reports whether the user is a super admin or holds the
+// system admin role in this org. Only administrators read messages of
+// conversations they are not part of and use ghost-mode actions. Managers and
+// agents do not qualify. Lookup errors fail closed.
+func (a *App) isAdministrator(userID, orgID uuid.UUID) bool {
+	perms, err := a.getUserPermissionsCached(userID, orgID)
+	if err != nil {
+		return false
+	}
+	return perms.IsSuperAdmin || (perms.IsSystem && perms.RoleName == "admin")
+}
+
 // ScopeToOrg adds organization scoping to an existing query
 // Always filters by organization - uuid.Nil is not allowed
 func (a *App) ScopeToOrg(query *gorm.DB, userID, orgID uuid.UUID) *gorm.DB {

@@ -68,8 +68,9 @@ export interface Contact {
   /** How the VIEWER reaches this conversation: standard (own account),
    *  current_assignee (cross-account via current assignment — full access),
    *  historical_assignment_read_only (cross-account via an old assignment
-   *  grant — search/read only; server refuses every write). */
-  access_mode?: 'standard' | 'current_assignee' | 'historical_assignment_read_only'
+   *  grant — search/read only; server refuses every write), restricted (visible
+   *  by account only — not a participant, no message content). */
+  access_mode?: 'standard' | 'current_assignee' | 'collaborator' | 'historical_assignment_read_only' | 'restricted'
   /** Server-computed write flags mirroring access_mode. */
   can_reply?: boolean
   can_close?: boolean
@@ -515,10 +516,15 @@ export const useContactsStore = defineStore('contacts', () => {
     authStore.hasPermission('chat.collaborate', 'write')
   )
 
-  // Admins/managers ghost-view chats: they see content without being a
-  // collaborator. Used to gate the Leave (ghost exit) button and ghost UI.
+  // Admins/managers manage collaborators on chats (contacts:write).
   const isAdminOrManager = computed(() =>
     authStore.hasPermission('contacts', 'write')
+  )
+
+  // Ghost mode (acting on or appearing in a chat you are not part of) is
+  // administrator-only: the admin role or a super admin.
+  const isAdministrator = computed(() =>
+    !!authStore.user?.is_super_admin || authStore.userRole === 'admin'
   )
 
   // The current user is the last remaining participant (owner + no other
@@ -1271,6 +1277,7 @@ export const useContactsStore = defineStore('contacts', () => {
     canViewMessages,
     canCollaborate,
     isAdminOrManager,
+    isAdministrator,
     isLastParticipant,
     claimChat,
     releaseChat,

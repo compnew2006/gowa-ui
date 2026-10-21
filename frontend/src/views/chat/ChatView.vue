@@ -147,11 +147,14 @@ const contactId = computed(() => route.params.contactId as string | undefined)
 // Declared in the view so vue-tsc reliably tracks their template usage; the
 // composables that need them receive them as params.
 const messagesEndRef = ref<HTMLElement | null>(null)
-// Cross-account historical access: this conversation was previously assigned
-// to the current user and the assignment has moved on — the server allows
-// search/read only (access_mode from ContactResponse).
-const isHistoricalReadOnly = computed(() =>
-  contactsStore.currentContact?.access_mode === 'historical_assignment_read_only'
+// Read-only access (access_mode from ContactResponse): the historical grant
+// holder, whose assignment has moved on, may search and read only; the
+// restricted viewer is not a participant and gets no message content.
+const isRestrictedAccess = computed(() =>
+  contactsStore.currentContact?.access_mode === 'restricted'
+)
+const isReadOnlyAccess = computed(() =>
+  contactsStore.currentContact?.access_mode === 'historical_assignment_read_only' || isRestrictedAccess.value
 )
 
 // Two-step Release confirm state in the assign dialog's previous-access list.
@@ -821,7 +824,7 @@ function isCurrentInternalSide(side: InternalConversationSide): boolean {
 const canToggleContactInternal = computed(() => {
   const c = contactsStore.currentContact
   return !!c && !isStatusContact(c.id) && !c.internal_account_name
-    && !isHistoricalReadOnly.value && authStore.hasPermission('chat', 'write')
+    && !isReadOnlyAccess.value && authStore.hasPermission('chat', 'write')
 })
 async function toggleContactInternal() {
   const c = contactsStore.currentContact
@@ -1425,8 +1428,8 @@ onUnmounted(() => {
                     <X class="h-2.5 w-2.5" />
                   </button>
                 </div>
-                <!-- Ghost badge: admin/manager viewing is not in collaborators, show self as ghost -->
-                <div v-if="contactsStore.isAdminOrManager && !contactsStore.isCollaborator"
+                <!-- Ghost badge: an administrator viewing is not in collaborators, show self as ghost -->
+                <div v-if="contactsStore.isAdministrator && !contactsStore.isCollaborator"
                      class="h-7 w-7 rounded-full bg-purple-500/20 ring-2 ring-background flex items-center justify-center text-xs font-medium text-purple-300"
                      :title="$t('chat.youAreGhosting')">
                   <Ghost class="h-3.5 w-3.5" />
@@ -1437,7 +1440,7 @@ onUnmounted(() => {
                    edge case (D3 fix): an agent assignee of a closed chat must NOT see
                    Release — they would otherwise silently transition closed → pending.
                    RotateCcw = "send back / undo claim", distinct from Leave. -->
-              <Button v-if="(contactsStore.isAssignedToMe && !contactsStore.isChatClosed) || (contactsStore.isAdminOrManager && !contactsStore.isPendingClaim && !contactsStore.isChatClosed)"
+              <Button v-if="(contactsStore.isAssignedToMe && !contactsStore.isChatClosed) || (contactsStore.isAdministrator && !contactsStore.isPendingClaim && !contactsStore.isChatClosed)"
                       variant="ghost" size="sm"
                       class="h-8 gap-1.5 px-3 text-xs text-white/60 hover:text-amber-400 hover:bg-amber-500/10 light:text-gray-500"
                       @click="handleRelease">
@@ -1488,7 +1491,7 @@ onUnmounted(() => {
             <!-- Close conversation button.
                  Admins/managers always see it (force-close & kick all).
                  Agents see it when they are a participant (owner/collaborator). -->
-            <Tooltip v-if="!isHistoricalReadOnly && contactsStore.currentContact && contactsStore.currentContact.chat_status === 'open' && !contactsStore.isPendingClaim && (contactsStore.isAdminOrManager || contactsStore.isAssignedToMe || contactsStore.isCollaborator)">
+            <Tooltip v-if="!isReadOnlyAccess && contactsStore.currentContact && contactsStore.currentContact.chat_status === 'open' && !contactsStore.isPendingClaim && (contactsStore.isAdminOrManager || contactsStore.isAssignedToMe || contactsStore.isCollaborator)">
               <TooltipTrigger as-child>
                 <Button variant="ghost" size="icon" class="h-8 w-8 text-white/50 hover:text-red-400 hover:bg-red-500/10 light:text-gray-500" @click="handleClose">
                   <CheckCheck class="h-4 w-4" />
@@ -2518,12 +2521,12 @@ onUnmounted(() => {
         <!-- Message Input (hidden for unclaimed pending and closed conversations) -->
         <div v-else-if="!contactsStore.isPendingClaim && !contactsStore.isChatClosed" class="p-4 border-t border-white/[0.08] light:border-gray-200 bg-[#0f0f10] light:bg-white">
           <!-- Read-only badge: viewer holds only an old assignment grant. -->
-          <div v-if="isHistoricalReadOnly"
+          <div v-if="isReadOnlyAccess"
                class="mb-2 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-600 light:text-amber-700">
             <EyeOff class="h-3.5 w-3.5 shrink-0" />
-            {{ $t('chat.readOnlyBadge') }}
+            {{ $t(isRestrictedAccess ? 'chat.restrictedBadge' : 'chat.readOnlyBadge') }}
           </div>
-          <form @submit.prevent="!isHistoricalReadOnly && sendMessage" class="flex items-center gap-2 p-2 rounded-xl bg-white/[0.06] light:bg-gray-100 border border-white/[0.08] light:border-gray-200">
+          <form @submit.prevent="!isReadOnlyAccess && sendMessage" class="flex items-center gap-2 p-2 rounded-xl bg-white/[0.06] light:bg-gray-100 border border-white/[0.08] light:border-gray-200">
             <Tooltip>
               <TooltipTrigger as-child>
                 <span>
@@ -2604,8 +2607,8 @@ onUnmounted(() => {
             <textarea
               ref="messageInputRef"
               v-model="messageInput"
-              :placeholder="isHistoricalReadOnly ? $t('chat.readOnlyPlaceholder') : $t('chat.typeMessage') + '...'"
-              :disabled="isHistoricalReadOnly"
+              :placeholder="isReadOnlyAccess ? $t(isRestrictedAccess ? 'chat.restrictedPlaceholder' : 'chat.readOnlyPlaceholder') : $t('chat.typeMessage') + '...'"
+              :disabled="isReadOnlyAccess"
               rows="1"
               class="flex-1 bg-transparent text-[14px] text-white light:text-gray-900 placeholder:text-white/30 light:placeholder:text-gray-400 focus:outline-none resize-none min-h-[36px] max-h-[120px] py-2 overflow-y-auto disabled:cursor-not-allowed"
               @keydown.enter.exact.prevent="sendMessage"
@@ -2613,7 +2616,7 @@ onUnmounted(() => {
               @blur="stopTypingIndicator"
               @paste="handlePaste"
             />
-            <button type="submit" class="w-9 h-9 rounded-lg bg-emerald-600 hover:bg-emerald-500 light:bg-emerald-500 light:hover:bg-emerald-600 flex items-center justify-center transition-colors disabled:opacity-50" :disabled="isHistoricalReadOnly || !messageInput.trim() || isSending">
+            <button type="submit" class="w-9 h-9 rounded-lg bg-emerald-600 hover:bg-emerald-500 light:bg-emerald-500 light:hover:bg-emerald-600 flex items-center justify-center transition-colors disabled:opacity-50" :disabled="isReadOnlyAccess || !messageInput.trim() || isSending">
               <Send class="w-4 h-4 text-white" />
             </button>
           </form>

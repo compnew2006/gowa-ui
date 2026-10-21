@@ -415,7 +415,7 @@ func accessModeFor(t *testing.T, app *handlers.App, orgID, userID uuid.UUID, con
 // for each of the three states.
 func TestAccessModes_InListResponse(t *testing.T) {
 	f := newGrantFixture(t)
-	// Own-account contact for the agent → standard.
+	// Own-account contact the agent is not part of → restricted: visible by account, no content, no reply.
 	ownContact := testutil.CreateTestContactWith(t, f.app.DB, f.org.ID, testutil.WithContactAccount(f.accA.Name))
 	f.assignViaAPI(t, f.agent)
 
@@ -438,8 +438,8 @@ func TestAccessModes_InListResponse(t *testing.T) {
 	}
 
 	modes := listModes(f.agent)
-	assert.Equal(t, "standard", modes[ownContact.ID.String()].AccessMode)
-	assert.True(t, modes[ownContact.ID.String()].CanReply)
+	assert.Equal(t, "restricted", modes[ownContact.ID.String()].AccessMode)
+	assert.False(t, modes[ownContact.ID.String()].CanReply)
 	assigned := modes[f.contact.ID.String()]
 	assert.Equal(t, "current_assignee", assigned.AccessMode)
 	assert.True(t, assigned.CanReply)

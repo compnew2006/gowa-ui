@@ -136,7 +136,7 @@ func (a *App) ServeMediaZip(r *fastglue.Request) error {
 		contactIDs = append(contactIDs, messages[i].ContactID)
 	}
 	var visibleIDs []uuid.UUID
-	if err := a.scopeAssignedContact(
+	if err := a.scopeConversationMessages(
 		a.DB.Model(&models.Contact{}).Select("id"), userID, orgID,
 	).Where("id IN ?", contactIDs).Pluck("id", &visibleIDs).Error; err != nil {
 		a.Log.Error("Failed to scope zip contacts", "error", err, "user_id", userID)

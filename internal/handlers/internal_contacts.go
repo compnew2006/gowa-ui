@@ -259,6 +259,7 @@ func (a *App) internalConversations(orgID, userID uuid.UUID) ([]InternalConversa
 	}
 
 	byKey := map[string]*InternalConversation{}
+	involved := a.involvedContactIDs(userID, orgID, contactIDs)
 	for _, row := range latestRows {
 		peer := peerByContact[row.ContactID]
 		if peer == "" || peer == row.WhatsAppAccount {
@@ -266,12 +267,15 @@ func (a *App) internalConversations(orgID, userID uuid.UUID) ([]InternalConversa
 		}
 		at := row.CreatedAt
 		side := InternalConversationSide{
-			ContactID:          row.ContactID,
-			Account:            row.WhatsAppAccount,
-			PeerAccount:        peer,
-			LastMessageAt:      &at,
-			LastMessagePreview: getMessagePreviewFromContent(row.MessageType, row.Content),
-			UnreadCount:        unread[sideKey{row.ContactID, row.WhatsAppAccount}],
+			ContactID:     row.ContactID,
+			Account:       row.WhatsAppAccount,
+			PeerAccount:   peer,
+			LastMessageAt: &at,
+			UnreadCount:   unread[sideKey{row.ContactID, row.WhatsAppAccount}],
+		}
+		if involved[row.ContactID] {
+			// Message content: participants and administrators only.
+			side.LastMessagePreview = getMessagePreviewFromContent(row.MessageType, row.Content)
 		}
 		pair := [2]string{side.Account, side.PeerAccount}
 		if pair[0] > pair[1] {

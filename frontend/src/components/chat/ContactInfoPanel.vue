@@ -56,12 +56,13 @@ const isResizing = ref(false)
 const canEditTags = computed(() => authStore.hasPermission('contacts', 'write'))
 
 // ─── Active Participants (Ghost Mode aware) ───
-// Admins/managers ghost-view chats: they are not persisted as collaborators,
-// so we surface them as a "(Ghost)" entry on themselves. Agents never see
-// admins here — the backend filters them out of the collaborators list.
+// Administrators who view a chat are not persisted as collaborators, so we
+// surface them as a "(Ghost)" entry on themselves. Everyone else never sees
+// administrators here — the backend filters them out of the collaborators list.
 const isAdminOrManager = computed(() => authStore.hasPermission('contacts', 'write'))
+const isAdministrator = computed(() => !!authStore.user?.is_super_admin || authStore.userRole === 'admin')
 const isGhosting = computed(() =>
-  isAdminOrManager.value &&
+  isAdministrator.value &&
   props.contact.assigned_user_id !== authStore.user?.id &&
   !props.contact.collaborators?.some(c => c.user_id === authStore.user?.id)
 )

@@ -199,7 +199,9 @@ func saveInternalCopy(t *testing.T, app *App, orgID uuid.UUID, account string, c
 func TestInternalConversations_MergesBothSidesIntoOnePair(t *testing.T) {
 	app := newProcessorTestApp(t)
 	f := newInternalChatFixture(t, app)
-	admin := orgContactsReader(t, app, f.org.ID)
+	// Message previews are for administrators and participants, so the viewer is an administrator.
+	adminRole := testutil.CreateAdminRole(t, app.DB, f.org.ID)
+	admin := testutil.CreateTestUser(t, app.DB, f.org.ID, testutil.WithRoleID(&adminRole.ID))
 	cairo := testutil.CreateTestWhatsAppAccountWith(t, app.DB, f.org.ID,
 		testutil.WithAccountName("cairo-"+uuid.New().String()[:8]))
 	cairoPhone := internalTestPhone()
