@@ -52,6 +52,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
@@ -95,7 +96,8 @@ import {
   ListChecks,
   Package,
   FolderInput,
-  FolderOutput
+  FolderOutput,
+  ArrowRightLeft
 } from 'lucide-vue-next'
 import { getInitials, getAvatarGradient, avatarSrc, linkifySegments, normalizePhoneDigits, samePhoneDigits, phoneSearchVariants } from '@/lib/utils'
 import { contactsService } from '@/services/api'
@@ -724,6 +726,17 @@ const {
   handleInvite,
   handleRemoveCollaborator,
   assignContactToUser,
+  isTransferDialogOpen,
+  transferTargets,
+  isLoadingTransferTargets,
+  transferTargetsFailed,
+  transferSearchQuery,
+  selectedTransferTargetId,
+  isTransferring,
+  canTransferChat,
+  filteredTransferTargets,
+  loadTransferTargets,
+  transferChat,
 } = useChatLifecycle({
   t,
   contactsStore,
@@ -1508,6 +1521,17 @@ onUnmounted(() => {
               </TooltipTrigger>
               <TooltipContent>{{ $t('chat.assignToAgent') }}</TooltipContent>
             </Tooltip>
+
+            <!-- Transfer: the current assignee hands the chat to a colleague
+                 (admins/managers use Assign above instead). -->
+            <Tooltip v-if="canTransferChat">
+              <TooltipTrigger as-child>
+                <Button variant="ghost" size="icon" :aria-label="$t('chat.transferConversation')" class="h-8 w-8 text-white/50 hover:text-white hover:bg-white/[0.08] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-100" @click="isTransferDialogOpen = true">
+                  <ArrowRightLeft class="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{{ $t('chat.transferConversation') }}</TooltipContent>
+            </Tooltip>
             <!-- Custom Action Buttons -->
             <Tooltip v-for="action in customActions" :key="action.id">
               <TooltipTrigger as-child>
@@ -1621,6 +1645,10 @@ onUnmounted(() => {
                 <DropdownMenuItem v-if="canAssignContacts" @click="isAssignDialogOpen = true">
                   <UserPlus class="mr-2 h-4 w-4" />
                   <span>{{ $t('chat.assignToAgent') }}</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem v-if="canTransferChat" @click="isTransferDialogOpen = true">
+                  <ArrowRightLeft class="me-2 h-4 w-4" />
+                  <span>{{ $t('chat.transferConversation') }}</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem @click="isInfoPanelOpen = !isInfoPanelOpen">
                   <Info class="mr-2 h-4 w-4" />
@@ -2907,6 +2935,79 @@ onUnmounted(() => {
             </div>
           </div>
         </div>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Transfer Conversation Dialog: the current assignee picks a colleague
+         who shares one of their WhatsApp accounts, then confirms. -->
+    <Dialog v-model:open="isTransferDialogOpen">
+      <DialogContent class="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>{{ $t('chat.transferConversation') }}</DialogTitle>
+          <DialogDescription>
+            {{ $t('chat.transferConversationDesc') }}
+          </DialogDescription>
+        </DialogHeader>
+        <div class="py-4 space-y-3">
+          <div class="relative">
+            <Search class="absolute start-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              v-model="transferSearchQuery"
+              :placeholder="$t('chat.searchUsers') + '...'"
+              :aria-label="$t('chat.searchUsers')"
+              :disabled="isLoadingTransferTargets || transferTargets.length === 0"
+              class="ps-9 h-9"
+            />
+          </div>
+          <!-- p-1 keeps the rows' focus ring inside the scroll clip. -->
+          <div class="max-h-[280px] overflow-y-auto p-1">
+            <div v-if="isLoadingTransferTargets" class="flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground">
+              <Loader2 class="h-4 w-4 animate-spin" />
+              {{ $t('common.loading') }}
+            </div>
+            <div v-else-if="transferTargetsFailed" class="flex flex-col items-center gap-2 py-4 text-sm text-muted-foreground">
+              <span>{{ $t('chat.loadTransferTargetsFailed') }}</span>
+              <Button variant="ghost" size="sm" @click="loadTransferTargets">
+                <RotateCw class="h-4 w-4" />
+                {{ $t('common.retry') }}
+              </Button>
+            </div>
+            <p v-else-if="transferTargets.length === 0" class="text-sm text-muted-foreground text-center py-4">
+              {{ $t('chat.noTransferTargets') }}
+            </p>
+            <p v-else-if="filteredTransferTargets.length === 0" class="text-sm text-muted-foreground text-center py-4">
+              {{ $t('chat.noUsersFound') }}
+            </p>
+            <div v-else class="space-y-1">
+              <Button
+                v-for="user in filteredTransferTargets"
+                :key="user.id"
+                :variant="selectedTransferTargetId === user.id ? 'secondary' : 'ghost'"
+                :aria-pressed="selectedTransferTargetId === user.id"
+                class="w-full justify-start"
+                @click="selectedTransferTargetId = user.id"
+              >
+                <User class="h-4 w-4" />
+                <span class="flex-1 truncate text-start">{{ user.full_name }}</span>
+                <span v-if="!user.is_available" class="text-xs text-muted-foreground">{{ $t('userMenu.away') }}</span>
+                <Check v-if="selectedTransferTargetId === user.id" class="h-4 w-4 text-primary" />
+                <Badge v-else-if="user.role_name" variant="outline" class="text-xs">
+                  {{ user.role_name }}
+                </Badge>
+              </Button>
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" @click="isTransferDialogOpen = false">
+            {{ $t('common.cancel') }}
+          </Button>
+          <Button :disabled="!selectedTransferTargetId || isTransferring" @click="transferChat">
+            <Loader2 v-if="isTransferring" class="h-4 w-4 animate-spin" />
+            <ArrowRightLeft v-else class="h-4 w-4" />
+            {{ $t('chat.transferAction') }}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
 

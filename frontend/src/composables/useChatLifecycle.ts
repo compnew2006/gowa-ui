@@ -1,13 +1,13 @@
 import { ref, computed, watch } from 'vue'
 import { toast } from 'vue-sonner'
-import { api, contactsService } from '@/services/api'
+import { api, contactsService, type TransferTarget } from '@/services/api'
 
 export interface UseChatLifecycleOptions {
   /** i18n translator. */
   t: (key: string, params?: Record<string, unknown>) => string
   /** Contacts store reactive surface. */
   contactsStore: {
-    currentContact: { id: string; assigned_user_id?: string } | null
+    currentContact: { id: string; assigned_user_id?: string; chat_status?: string } | null
     selectedContactIds: Set<string>
     setCurrentContact: (c: any) => void
     fetchContacts: () => Promise<void>
@@ -276,6 +276,81 @@ export function useChatLifecycle(options: UseChatLifecycleOptions) {
     }
   }
 
+  // ─── Transfer: the current assignee hands an open conversation to a
+  // colleague who shares one of their WhatsApp accounts (chat.assign:write).
+  // Admins/managers keep the Assign dialog, which already covers this.
+  const isTransferDialogOpen = ref(false)
+  const transferTargets = ref<TransferTarget[]>([])
+  const isLoadingTransferTargets = ref(false)
+  const transferTargetsFailed = ref(false)
+  const transferSearchQuery = ref('')
+  const selectedTransferTargetId = ref<string | null>(null)
+  const isTransferring = ref(false)
+
+  const canTransferChat = computed(() => {
+    const contact = contactsStore.currentContact
+    const myId = authStore.user?.id
+    return !!contact && !!myId
+      && contact.assigned_user_id === myId
+      && contact.chat_status === 'open'
+      && !canAssignContacts.value
+      && authStore.hasPermission('chat.assign', 'write')
+  })
+
+  const filteredTransferTargets = computed(() => {
+    const query = transferSearchQuery.value.toLowerCase().trim()
+    if (!query) return transferTargets.value
+    return transferTargets.value.filter(u => u.full_name.toLowerCase().includes(query))
+  })
+
+  async function loadTransferTargets() {
+    isLoadingTransferTargets.value = true
+    transferTargetsFailed.value = false
+    try {
+      const response = await contactsService.transferTargets()
+      const data = response.data?.data || response.data
+      transferTargets.value = data?.users || []
+    } catch {
+      transferTargets.value = []
+      transferTargetsFailed.value = true
+    } finally {
+      isLoadingTransferTargets.value = false
+    }
+  }
+
+  // Colleagues reload on every open (account assignments and availability
+  // change); search and selection reset on every close.
+  watch(isTransferDialogOpen, (open) => {
+    if (open) {
+      loadTransferTargets()
+    } else {
+      transferSearchQuery.value = ''
+      selectedTransferTargetId.value = null
+    }
+  })
+
+  async function transferChat() {
+    const contact = contactsStore.currentContact
+    const target = transferTargets.value.find(u => u.id === selectedTransferTargetId.value)
+    if (!contact || !target || isTransferring.value) return
+
+    isTransferring.value = true
+    try {
+      await contactsService.transfer(contact.id, target.id)
+      toast.success(t('chat.conversationTransferred', { name: target.full_name }))
+      isTransferDialogOpen.value = false
+      // The caller is no longer the assignee, so their access mode changed:
+      // resync the list and the open conversation.
+      await contactsStore.fetchContacts().catch(() => {})
+      const fresh = await contactsStore.fetchContact(contact.id).catch(() => null)
+      if (fresh) contactsStore.setCurrentContact(fresh)
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || t('chat.transferFailed'))
+    } finally {
+      isTransferring.value = false
+    }
+  }
+
   return {
     // State
     isClaiming,
@@ -300,5 +375,17 @@ export function useChatLifecycle(options: UseChatLifecycleOptions) {
     handleInvite,
     handleRemoveCollaborator,
     assignContactToUser,
+    // Transfer
+    isTransferDialogOpen,
+    transferTargets,
+    isLoadingTransferTargets,
+    transferTargetsFailed,
+    transferSearchQuery,
+    selectedTransferTargetId,
+    isTransferring,
+    canTransferChat,
+    filteredTransferTargets,
+    loadTransferTargets,
+    transferChat,
   }
 }

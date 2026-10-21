@@ -214,6 +214,14 @@ export const accountsService = {
 // closed, internal = the Private tab's conversations.
 export type ContactChatStatusFilter = 'closed' | 'pending' | 'internal'
 
+// One row of GET /contacts/transfer-targets.
+export interface TransferTarget {
+  id: string
+  full_name: string
+  role_name: string
+  is_available: boolean
+}
+
 export const contactsService = {
   // `accounts` (comma-separated account names) lists conversations on any of
   // those accounts; `account` is the strict owning-account match.
@@ -225,6 +233,11 @@ export const contactsService = {
   delete: (id: string) => api.delete(`/contacts/${id}`),
   assign: (id: string, userId: string | null) =>
     api.put(`/contacts/${id}/assign`, { user_id: userId }),
+  // Agent-initiated transfer: the current assignee hands the conversation to
+  // a colleague who shares one of their WhatsApp accounts.
+  transferTargets: () => api.get('/contacts/transfer-targets'),
+  transfer: (id: string, userId: string) =>
+    api.put(`/contacts/${id}/transfer`, { user_id: userId }),
   updateTags: (id: string, tags: string[]) =>
     api.put(`/contacts/${id}/tags`, { tags }),
   markRead: (id: string) => api.post(`/contacts/${encodeURIComponent(id)}/mark-read`),

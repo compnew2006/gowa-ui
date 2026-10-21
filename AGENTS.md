@@ -109,6 +109,12 @@ responsibility. Do not re-merge these.
     `updateGowaDeviceAccountStatus`.
   - `campaign_pacing_settings.go` — per-account send-pacing block (the
     worker side lives in `internal/worker/pacing.go`).
+  - `chat_transfer.go` — agent-initiated transfer: the current assignee
+    (`chat.assign:write`) hands an open chat to an active `chat:read`
+    colleague who shares one of the caller's WhatsApp accounts (users with
+    no account assignment always qualify). `GET /api/contacts/transfer-targets`
+    lists them; `PUT /api/contacts/{id}/transfer` re-checks eligibility and
+    calls `ChatLifecycle.Assign`, so the target gets the access grant.
 - **Frontend views (`frontend/src/views/`)** — a view stays an orchestration
   shell (route/contacts/messages watchers + lifecycle + simple view state).
   Domain logic lives in a composable under `frontend/src/composables/`.
@@ -209,9 +215,9 @@ responsibility. Do not re-merge these.
   device/app status) stay org-wide BY DESIGN: they carry no conversation content
   and the user who LOST access must still receive the one event that tells their
   UI to drop the chat. Assignment changes must go through `ChatLifecycle.Assign`
-  (AssignContact AND UpdateContact's `assigned_user_id`/`clear_assigned_agent`
-  fields) — a raw `assigned_user_id` write would create an assignment with no
-  access grant. Access modes: `standard` | `current_assignee` | `collaborator`
+  (AssignContact, TransferChat, AND UpdateContact's `assigned_user_id`/
+  `clear_assigned_agent` fields) — a raw `assigned_user_id` write would create
+  an assignment with no access grant. Access modes: `standard` | `current_assignee` | `collaborator`
   (ACTIVE collaborator = full access) | `historical_assignment_read_only`.
 
 ## Conventions

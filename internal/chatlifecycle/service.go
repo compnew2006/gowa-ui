@@ -264,6 +264,10 @@ func (s *Service) Assign(ctx context.Context, orgID, adminID uuid.UUID, contact 
 
 	contact.AssignedUserID = targetID
 	contact.SetStatus(models.ChatStatusOpen)
+	// A collaborator promoted to owner leaves the collaborators list, so the
+	// owner is never listed twice (Leave would otherwise "transfer" ownership
+	// back to the owner). Persisted with the metadata update below.
+	contact.RemoveCollaborator(targetID.String())
 	adminName := audit.GetUserName(s.db, adminID)
 	targetName := audit.GetUserName(s.db, *targetID)
 	// Assignment update + permanent access grant land in ONE transaction: a

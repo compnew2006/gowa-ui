@@ -385,6 +385,10 @@ func setupChatLifecycleRoutes(g *fastglue.Fastglue, app *handlers.App) {
 	g.DELETE("/api/contacts/{id}/collaborators/{target_user_id}", app.RemoveCollaborator)
 	g.POST("/api/contacts/{id}/collaborators/{target_user_id}", app.InviteCollaborator)
 
+	// Agent-initiated transfer (current assignee → eligible colleague)
+	g.GET("/api/contacts/transfer-targets", app.ListTransferTargets)
+	g.PUT("/api/contacts/{id}/transfer", app.TransferChat)
+
 	// Assignment access grants (previous-access management + Release)
 	g.GET("/api/contacts/{id}/access-grants", app.ListAccessGrants)
 	g.DELETE("/api/contacts/{id}/access-grants/{target_user_id}", app.RevokeAccessGrant)
