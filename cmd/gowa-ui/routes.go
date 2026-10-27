@@ -422,6 +422,7 @@ func setupMessageRoutes(g *fastglue.Fastglue, app *handlers.App) {
 	g.POST("/api/contacts/{id}/messages/{message_id}/reaction", app.SendReaction)
 	g.POST("/api/contacts/{id}/messages/{message_id}/revoke", app.RevokeMessage)
 	g.POST("/api/contacts/{id}/typing", app.SendTypingIndicator)
+	g.GET("/api/contacts/{id}/send-accounts", app.ListContactSendAccounts)
 	g.POST("/api/messages", app.SendMessage) // Legacy route
 	g.POST("/api/messages/template", app.SendTemplateMessage)
 	g.POST("/api/messages/media", app.SendMediaMessage)

@@ -170,6 +170,12 @@ func (p *ScheduledMessageProcessor) buildOutgoingRequest(sm *models.ScheduledMes
 		return nil, fmt.Errorf("contact not found")
 	}
 
+	// The creator's account assignment may have been revoked since the
+	// message was scheduled: re-check it now and never send on a denial.
+	if err := p.app.authorizeBackgroundSend(sm.CreatedBy, sm.OrganizationID, &contact, account, "scheduled_message"); err != nil {
+		return nil, fmt.Errorf("creator is not allowed to send from WhatsApp account %q", sm.WhatsAppAccount)
+	}
+
 	req := &OutgoingMessageRequest{
 		Account: account,
 		Contact: &contact,

@@ -54,7 +54,7 @@ type statusResponse struct {
 //
 // Auth scope: ResourceChat / ActionWrite — same as normal messaging.
 func (a *App) SendStatus(r *fastglue.Request) error {
-	orgID, _, err := a.requireAuth(r, models.ResourceChat, models.ActionWrite)
+	orgID, userID, err := a.requireAuth(r, models.ResourceChat, models.ActionWrite)
 	if err != nil {
 		return nil
 	}
@@ -121,10 +121,14 @@ func (a *App) SendStatus(r *fastglue.Request) error {
 		statusType = "text"
 	}
 
-	// Resolve the sending account (default outgoing if not specified).
-	account, err := a.resolveWhatsAppAccount(orgID, accountName)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
+	// Resolve the sending account (default outgoing if not specified); the
+	// caller must be allowed to post from it.
+	account, ok := a.resolveSendAccount(r, userID, orgID, nil, sendAccountQuery{
+		Requested: accountName,
+		Endpoint:  "send_status",
+	})
+	if !ok {
+		return nil
 	}
 
 	provider := a.resolveProvider(account)

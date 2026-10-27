@@ -898,18 +898,15 @@ func (a *App) SendTemplateMessage(r *fastglue.Request) error {
 		contact = &c
 	}
 
-	// Determine which WhatsApp account to use (explicit > template > contact > default)
-	accountName := req.AccountName
-	if accountName == "" {
-		accountName = template.WhatsAppAccount
-	}
-	if accountName == "" && contact != nil {
-		accountName = contact.WhatsAppAccount
-	}
-
-	account, err := a.resolveWhatsAppAccount(orgID, accountName)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
+	// Determine which WhatsApp account to use (explicit > template > contact >
+	// default), restricted to accounts the caller may send from.
+	account, ok := a.resolveSendAccount(r, userID, orgID, contact, sendAccountQuery{
+		Requested: req.AccountName,
+		Preferred: []string{template.WhatsAppAccount},
+		Endpoint:  "send_template",
+	})
+	if !ok {
+		return nil
 	}
 
 	// Extract parameter names and resolve values
@@ -1528,14 +1525,14 @@ func (a *App) SendMessage(r *fastglue.Request) error {
 		return nil
 	}
 
-	// Get WhatsApp account - prefer request-specified account over contact default
-	accountName := contact.WhatsAppAccount
-	if req.WhatsAppAccount != "" {
-		accountName = req.WhatsAppAccount
-	}
-	account, err := a.resolveWhatsAppAccount(orgID, accountName)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Failed to resolve WhatsApp account", nil, "")
+	// Sending account: the requested one, else an allowed one for this
+	// conversation. Checked after the read-only/participant gates above.
+	account, ok := a.resolveSendAccount(r, userID, orgID, &contact, sendAccountQuery{
+		Requested: req.WhatsAppAccount,
+		Endpoint:  "send_message",
+	})
+	if !ok {
+		return nil
 	}
 
 	// Handle reply context
@@ -1779,14 +1776,14 @@ func (a *App) SendMediaMessage(r *fastglue.Request) error {
 		return nil
 	}
 
-	// Get WhatsApp account - prefer form-specified account over contact default
-	mediaAccountName := contact.WhatsAppAccount
-	if formWhatsAppAccount != "" {
-		mediaAccountName = formWhatsAppAccount
-	}
-	account, err := a.resolveWhatsAppAccount(orgID, mediaAccountName)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
+	// Sending account: the form-specified one, else an allowed one for this
+	// conversation.
+	account, ok := a.resolveSendAccount(r, userID, orgID, &contact, sendAccountQuery{
+		Requested: formWhatsAppAccount,
+		Endpoint:  "send_media",
+	})
+	if !ok {
+		return nil
 	}
 
 	// Save file locally first
@@ -1916,13 +1913,14 @@ func (a *App) SendReaction(r *fastglue.Request) error {
 	}
 
 	// Get WhatsApp account from the message being reacted to (not from contact, which may be stale)
-	reactionAccountName := message.WhatsAppAccount
-	if reactionAccountName == "" {
-		reactionAccountName = contact.WhatsAppAccount
-	}
-	account, err := a.resolveWhatsAppAccount(orgID, reactionAccountName)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
+	// The reaction goes out from that account, so the caller must be
+	// allowed to send from it.
+	account, ok := a.resolveSendAccount(r, userID, orgID, &contact, sendAccountQuery{
+		Requested: message.WhatsAppAccount,
+		Endpoint:  "send_reaction",
+	})
+	if !ok {
+		return nil
 	}
 
 	// Parse existing reactions from Metadata
@@ -2090,9 +2088,14 @@ func (a *App) SendTypingIndicator(r *fastglue.Request) error {
 		return nil
 	}
 
-	account, err := a.resolveWhatsAppAccount(orgID, contact.WhatsAppAccount)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
+	// A typing indicator is shown as coming from the account, so the caller
+	// must be allowed to send from it (no spoofed presence).
+	account, ok := a.resolveSendAccount(r, userID, orgID, &contact, sendAccountQuery{
+		Requested: contact.WhatsAppAccount,
+		Endpoint:  "send_typing",
+	})
+	if !ok {
+		return nil
 	}
 
 	provider := a.resolveProvider(account)
@@ -2168,13 +2171,14 @@ func (a *App) RevokeMessage(r *fastglue.Request) error {
 
 	// Resolve the account from the message (authoritative) falling back to the
 	// contact's account, exactly like SendReaction.
-	revokeAccountName := message.WhatsAppAccount
-	if revokeAccountName == "" {
-		revokeAccountName = contact.WhatsAppAccount
-	}
-	account, err := a.resolveWhatsAppAccount(orgID, revokeAccountName)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, err.Error(), nil, "")
+	// Revoking acts as that account, so the caller must be allowed to send
+	// from it.
+	account, ok := a.resolveSendAccount(r, userID, orgID, &contact, sendAccountQuery{
+		Requested: message.WhatsAppAccount,
+		Endpoint:  "revoke_message",
+	})
+	if !ok {
+		return nil
 	}
 
 	provider := a.resolveProvider(account)

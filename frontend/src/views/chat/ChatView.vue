@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useContactsStore, type Contact, type Message } from '@/stores/contacts'
 import type { InternalConversationSide } from '@/lib/internalConversations'
+import { isSendDenied } from '@/lib/sendAccounts'
 import { useAuthStore } from '@/stores/auth'
 import { useUsersStore } from '@/stores/users'
 import { wsService } from '@/services/websocket'
@@ -657,6 +658,10 @@ const {
   getIsUploadingMedia: () => isUploadingMedia.value,
   setIsUploadingMedia: (v: boolean) => { isUploadingMedia.value = v },
   messageInputRef,
+  // sendAccountLocked / refreshSendAccounts come from the contacts list below;
+  // these callbacks only run at send time, after setup.
+  isSendAccountLocked: () => sendAccountLocked.value,
+  onSendAccountDenied: () => { void refreshSendAccounts() },
 })
 // Resolve the lazy holder now that messaging has produced the real sendStatusMedia.
 _sendStatusMedia = sendStatusMedia
@@ -702,6 +707,9 @@ const {
   messageInput,
   resetTextareaHeight,
   scrollToBottom,
+  // Same deferred lookups as the messaging options above.
+  isSendAccountLocked: () => sendAccountLocked.value,
+  onSendAccountDenied: () => { void refreshSendAccounts() },
 })
 
 // 7) Chat lifecycle (claim / join / release / close / assign)
@@ -750,6 +758,8 @@ const {
   // the per-contact account tabs (showing every org account instead would
   // surface accounts with no conversation for this number).
   contactAccounts,
+  sendAccountStatus,
+  refreshSendAccounts,
   isFilterOpen,
   activeFilterCount,
   filterAccountOptions,
@@ -802,6 +812,18 @@ const {
   resetUnreadOnSwitch: resetOnContactSwitch,
   scrollToBottom,
 })
+
+// Send-account policy: the server refused sending from the selected account
+// (or, with none selected, from every account of this conversation). Messages
+// stay readable; only the composer locks. Unknown (not loaded) never locks.
+const sendAccountLocked = computed(() =>
+  !isReadOnlyAccess.value
+  && !!contactsStore.currentContact
+  && !isStatusContact(contactsStore.currentContact.id)
+  && isSendDenied(sendAccountStatus.value, selectedAccount.value)
+)
+// The composer refuses input: read-only access or a refused sending account.
+const composerLocked = computed(() => isReadOnlyAccess.value || sendAccountLocked.value)
 
 // ─── Internal conversations (chats between the org's own numbers) ───
 // A merged Internal-tab row opens one side; the header toggle switches sides
@@ -1664,25 +1686,31 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <!-- Account Tabs (per-contact: only the accounts that have messages
-             with this number, and only when more than one such account exists) -->
+        <!-- Account Tabs (per-contact: only the accounts of this conversation,
+             and only when more than one such account exists). Accounts the
+             user may not send from stay readable and carry a lock. -->
         <div
-          v-if="contactAccounts.length > 1 && selectedAccount"
+          v-if="contactAccounts.length > 1"
           class="flex-shrink-0 px-4 py-2 border-b border-white/[0.08] light:border-gray-200 bg-[#0a0a0b] light:bg-gray-50"
         >
           <div class="inline-flex items-center gap-1 rounded-lg bg-white/[0.06] light:bg-gray-100 p-1">
             <button
               v-for="acct in contactAccounts"
               :key="acct"
+              type="button"
+              :aria-pressed="acct === selectedAccount"
+              :title="sendAccountStatus?.[acct] === false ? $t('chat.sendAccountTabLocked') : undefined"
               :class="[
-                'rounded-md px-3 py-1 text-xs font-medium whitespace-nowrap transition-all',
+                'inline-flex items-center gap-1 rounded-md px-3 py-1 text-xs font-medium whitespace-nowrap transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60',
                 acct === selectedAccount
                   ? 'bg-emerald-600 text-white shadow-sm'
                   : 'bg-white/[0.08] text-white/70 hover:text-white/90 hover:bg-white/[0.12] light:bg-gray-200 light:text-gray-600 light:hover:text-gray-800 light:hover:bg-gray-300'
               ]"
               @click="switchAccount(acct)"
             >
+              <Lock v-if="sendAccountStatus?.[acct] === false" class="h-3 w-3 shrink-0" aria-hidden="true" />
               {{ acct }}
+              <span v-if="sendAccountStatus?.[acct] === false" class="sr-only">— {{ $t('chat.sendAccountTabLocked') }}</span>
             </button>
           </div>
         </div>
@@ -2554,6 +2582,15 @@ onUnmounted(() => {
             <EyeOff class="h-3.5 w-3.5 shrink-0" />
             {{ $t(isRestrictedAccess ? 'chat.restrictedBadge' : 'chat.readOnlyBadge') }}
           </div>
+          <!-- Send-account badge: the selected account is not one the user may
+               send from. Messages stay readable; pick an assigned account tab. -->
+          <div v-else-if="sendAccountLocked"
+               role="status"
+               data-testid="send-account-locked"
+               class="mb-2 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-600 light:text-amber-700">
+            <Lock class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            {{ $t(selectedAccount ? 'chat.sendAccountLockedBadge' : 'chat.sendAccountNoneBadge') }}
+          </div>
           <form @submit.prevent="!isReadOnlyAccess && sendMessage" class="flex items-center gap-2 p-2 rounded-xl bg-white/[0.06] light:bg-gray-100 border border-white/[0.08] light:border-gray-200">
             <Tooltip>
               <TooltipTrigger as-child>
@@ -2603,7 +2640,7 @@ onUnmounted(() => {
             </Tooltip>
             <Tooltip>
               <TooltipTrigger as-child>
-                <button type="button" class="w-9 h-9 rounded-lg hover:bg-white/[0.08] light:hover:bg-gray-200 flex items-center justify-center transition-colors" @click="openFilePicker">
+                <button type="button" class="w-9 h-9 rounded-lg hover:bg-white/[0.08] light:hover:bg-gray-200 flex items-center justify-center transition-colors disabled:opacity-40 disabled:cursor-not-allowed" :disabled="sendAccountLocked" @click="openFilePicker">
                   <Paperclip class="w-[18px] h-[18px] text-white/40 light:text-gray-500" />
                 </button>
               </TooltipTrigger>
@@ -2615,7 +2652,7 @@ onUnmounted(() => {
                   type="button"
                   id="schedule-message-button"
                   class="w-9 h-9 rounded-lg hover:bg-white/[0.08] light:hover:bg-gray-200 flex items-center justify-center transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  :disabled="!messageInput.trim()"
+                  :disabled="sendAccountLocked || !messageInput.trim()"
                   @click="isScheduleDialogOpen = true"
                 >
                   <CalendarClock class="w-[18px] h-[18px] text-white/40 light:text-gray-500" />
@@ -2635,8 +2672,8 @@ onUnmounted(() => {
             <textarea
               ref="messageInputRef"
               v-model="messageInput"
-              :placeholder="isReadOnlyAccess ? $t(isRestrictedAccess ? 'chat.restrictedPlaceholder' : 'chat.readOnlyPlaceholder') : $t('chat.typeMessage') + '...'"
-              :disabled="isReadOnlyAccess"
+              :placeholder="isReadOnlyAccess ? $t(isRestrictedAccess ? 'chat.restrictedPlaceholder' : 'chat.readOnlyPlaceholder') : sendAccountLocked ? $t('chat.sendAccountLockedPlaceholder') : $t('chat.typeMessage') + '...'"
+              :disabled="composerLocked"
               rows="1"
               class="flex-1 bg-transparent text-[14px] text-white light:text-gray-900 placeholder:text-white/30 light:placeholder:text-gray-400 focus:outline-none resize-none min-h-[36px] max-h-[120px] py-2 overflow-y-auto disabled:cursor-not-allowed"
               @keydown.enter.exact.prevent="sendMessage"
@@ -2644,7 +2681,7 @@ onUnmounted(() => {
               @blur="stopTypingIndicator"
               @paste="handlePaste"
             />
-            <button type="submit" class="w-9 h-9 rounded-lg bg-emerald-600 hover:bg-emerald-500 light:bg-emerald-500 light:hover:bg-emerald-600 flex items-center justify-center transition-colors disabled:opacity-50" :disabled="isReadOnlyAccess || !messageInput.trim() || isSending">
+            <button type="submit" class="w-9 h-9 rounded-lg bg-emerald-600 hover:bg-emerald-500 light:bg-emerald-500 light:hover:bg-emerald-600 flex items-center justify-center transition-colors disabled:opacity-50" :disabled="composerLocked || !messageInput.trim() || isSending">
               <Send class="w-4 h-4 text-white" />
             </button>
           </form>

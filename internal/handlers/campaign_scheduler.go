@@ -199,6 +199,18 @@ func (p *CampaignSchedulerProcessor) launchOne(campaign *models.BulkMessageCampa
 		return
 	}
 
+	// The creator must still be allowed to send from the campaign's account
+	// when it fires; their assignment may have been revoked since scheduling.
+	account, err := p.app.findSendAccount(campaign.OrganizationID, campaign.WhatsAppAccount)
+	if err != nil {
+		p.failCampaign(campaign, "campaign WhatsApp account no longer exists")
+		return
+	}
+	if err := p.app.authorizeBackgroundSend(campaign.CreatedBy, campaign.OrganizationID, nil, account, "campaign_launch"); err != nil {
+		p.failCampaign(campaign, "campaign creator is not allowed to send from its WhatsApp account")
+		return
+	}
+
 	enqueued, err := p.app.enqueuePendingRecipients(context.Background(), campaign.OrganizationID, campaign.ID)
 	if err != nil {
 		p.app.Log.Error("Failed to enqueue scheduled campaign recipients; will retry next tick",

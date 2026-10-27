@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 
+	"github.com/compnew2006/gowa-ui/internal/accountaccess"
 	"github.com/compnew2006/gowa-ui/internal/crypto"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/pkg/gowa"
@@ -54,12 +55,7 @@ type AccountResponse struct {
 // user has no assignments in this org, in which case callers fall back to
 // full organization visibility.
 func (a *App) assignedAccountIDs(userID, orgID uuid.UUID) ([]uuid.UUID, error) {
-	var ids []uuid.UUID
-	err := a.DB.Model(&models.UserWhatsAppAccount{}).
-		Joins("JOIN whatsapp_accounts ON whatsapp_accounts.id = user_whatsapp_accounts.whats_app_account_id AND whatsapp_accounts.deleted_at IS NULL").
-		Where("user_whatsapp_accounts.user_id = ? AND whatsapp_accounts.organization_id = ?", userID, orgID).
-		Pluck("user_whatsapp_accounts.whats_app_account_id", &ids).Error
-	return ids, err
+	return accountaccess.AssignedAccountIDs(a.DB, userID, orgID)
 }
 
 // scopeAccountsToUser narrows an org-scoped whatsapp_accounts query to the

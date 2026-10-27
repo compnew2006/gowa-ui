@@ -4,6 +4,7 @@ import { toast } from 'vue-sonner'
 import { statusService, messagesService } from '@/services/api'
 import { getErrorMessage } from '@/lib/api-utils'
 import { STATUS_CONTACT_ID, isStatusContact } from '@/lib/status'
+import { sendAccountErrorKey } from '@/lib/sendAccounts'
 import type { Message } from '@/stores/contacts'
 
 export interface UseChatMessagingOptions {
@@ -39,6 +40,10 @@ export interface UseChatMessagingOptions {
   setIsUploadingMedia: (v: boolean) => void
   /** Composer textarea template ref. Owned by the view (template ref). */
   messageInputRef: Ref<HTMLTextAreaElement | null>
+  /** True when the server refused sending from the selected account. */
+  isSendAccountLocked?: () => boolean
+  /** Called after the server refused the sending account (reload decisions). */
+  onSendAccountDenied?: () => void
 }
 
 /**
@@ -68,6 +73,16 @@ export function useChatMessaging(options: UseChatMessagingOptions) {
     textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px'
   }
 
+  // Shows the server's send-account refusal in the user's language and reloads
+  // the per-account decisions. Returns false for any other error.
+  function handleSendAccountError(error: unknown): boolean {
+    const key = sendAccountErrorKey(error)
+    if (!key) return false
+    toast.error(t(key))
+    options.onSendAccountDenied?.()
+    return true
+  }
+
   function resetTextareaHeight() {
     const textarea = messageInputRef.value
     if (!textarea) return
@@ -80,6 +95,13 @@ export function useChatMessaging(options: UseChatMessagingOptions) {
     // Status conversation posts to status@broadcast via a dedicated path.
     if (isStatusContact(contactsStore.currentContact.id)) {
       await sendStatusText(messageInput.value)
+      return
+    }
+
+    // Never send from an account the server refused; the composer is locked
+    // in that state, this also covers the Enter-key path.
+    if (options.isSendAccountLocked?.()) {
+      toast.error(t('chat.sendAccountNotAllowed'))
       return
     }
 
@@ -101,7 +123,9 @@ export function useChatMessaging(options: UseChatMessagingOptions) {
       await nextTick()
       options.scrollToBottom()
     } catch (error) {
-      toast.error(getErrorMessage(error, t('chat.sendMessageFailed')))
+      if (!handleSendAccountError(error)) {
+        toast.error(getErrorMessage(error, t('chat.sendMessageFailed')))
+      }
     } finally {
       isSending.value = false
     }
@@ -205,7 +229,9 @@ export function useChatMessaging(options: UseChatMessagingOptions) {
 
       toast.success(t('chat.messageSent'))
     } catch (error) {
-      toast.error(getErrorMessage(error, t('chat.sendMessageFailed')))
+      if (!handleSendAccountError(error)) {
+        toast.error(getErrorMessage(error, t('chat.sendMessageFailed')))
+      }
     } finally {
       retryingMessageId.value = null
     }

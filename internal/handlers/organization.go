@@ -3,6 +3,7 @@ package handlers
 import (
 	"time"
 
+	"github.com/compnew2006/gowa-ui/internal/accountaccess"
 	"github.com/compnew2006/gowa-ui/internal/audit"
 	"github.com/compnew2006/gowa-ui/internal/database"
 	"github.com/compnew2006/gowa-ui/internal/models"
@@ -21,6 +22,8 @@ func generalSettingsSnapshot(name string, settings models.JSONB) map[string]any 
 		"timezone":           settings["timezone"],
 		"date_format":        settings["date_format"],
 		"mask_phone_numbers": settings["mask_phone_numbers"],
+		accountaccess.SettingAllowCrossAccountSend:    settings[accountaccess.SettingAllowCrossAccountSend],
+		accountaccess.SettingEnforceSendAccountPolicy: settings[accountaccess.SettingEnforceSendAccountPolicy],
 	}
 }
 
@@ -29,6 +32,10 @@ type OrganizationSettings struct {
 	MaskPhoneNumbers bool   `json:"mask_phone_numbers"`
 	Timezone         string `json:"timezone"`
 	DateFormat       string `json:"date_format"`
+	// Send-account policy (see send_authz.go). Defaults: cross-account off,
+	// enforcement on.
+	AllowCrossAccountSend    bool `json:"allow_cross_account_send"`
+	EnforceSendAccountPolicy bool `json:"enforce_send_account_policy"`
 }
 
 // GetOrganizationSettings returns the organization settings
@@ -44,10 +51,13 @@ func (a *App) GetOrganizationSettings(r *fastglue.Request) error {
 	}
 
 	// Parse settings from JSONB
+	policy := accountaccess.ParseSendPolicy(org.Settings)
 	settings := OrganizationSettings{
-		MaskPhoneNumbers: false,
-		Timezone:         "UTC",
-		DateFormat:       "YYYY-MM-DD",
+		MaskPhoneNumbers:         false,
+		Timezone:                 "UTC",
+		DateFormat:               "YYYY-MM-DD",
+		AllowCrossAccountSend:    policy.AllowCrossAccount,
+		EnforceSendAccountPolicy: policy.Enforce,
 	}
 
 	if org.Settings != nil {
@@ -80,6 +90,9 @@ func (a *App) UpdateOrganizationSettings(r *fastglue.Request) error {
 		Timezone         *string `json:"timezone"`
 		DateFormat       *string `json:"date_format"`
 		Name             *string `json:"name"`
+		// Send-account policy switches; omitted fields stay unchanged.
+		AllowCrossAccountSend    *bool `json:"allow_cross_account_send"`
+		EnforceSendAccountPolicy *bool `json:"enforce_send_account_policy"`
 	}
 
 	if err := a.decodeRequest(r, &req); err != nil {
@@ -93,7 +106,8 @@ func (a *App) UpdateOrganizationSettings(r *fastglue.Request) error {
 
 	// Snapshot before mutation so we can compute the audit diff.
 	oldGeneral := generalSettingsSnapshot(org.Name, org.Settings)
-	generalTouched := req.MaskPhoneNumbers != nil || req.Timezone != nil || req.DateFormat != nil || (req.Name != nil && *req.Name != "")
+	generalTouched := req.MaskPhoneNumbers != nil || req.Timezone != nil || req.DateFormat != nil || (req.Name != nil && *req.Name != "") ||
+		req.AllowCrossAccountSend != nil || req.EnforceSendAccountPolicy != nil
 
 	// Update settings
 	if org.Settings == nil {
@@ -111,6 +125,12 @@ func (a *App) UpdateOrganizationSettings(r *fastglue.Request) error {
 	}
 	if req.Name != nil && *req.Name != "" {
 		org.Name = *req.Name
+	}
+	if req.AllowCrossAccountSend != nil {
+		org.Settings[accountaccess.SettingAllowCrossAccountSend] = *req.AllowCrossAccountSend
+	}
+	if req.EnforceSendAccountPolicy != nil {
+		org.Settings[accountaccess.SettingEnforceSendAccountPolicy] = *req.EnforceSendAccountPolicy
 	}
 
 	if err := a.DB.Save(&org).Error; err != nil {

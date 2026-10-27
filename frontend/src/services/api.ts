@@ -1,5 +1,6 @@
 import axios, { type AxiosInstance, type AxiosError, type InternalAxiosRequestConfig } from 'axios'
 import { toast } from 'vue-sonner'
+import type { SendAccountOption } from '@/lib/sendAccounts'
 
 // Get base path from server-injected config or fallback
 const basePath = ((window as any).__BASE_PATH__ ?? '').replace(/\/$/, '')
@@ -366,7 +367,11 @@ export const messagesService = {
     api.post(`/contacts/${contactId}/typing`, { action }),
   // GOWA-only: unsends a message for everyone in the chat (delete-for-everyone).
   revokeMessage: (contactId: string, messageId: string) =>
-    api.post(`/contacts/${contactId}/messages/${messageId}/revoke`)
+    api.post(`/contacts/${contactId}/messages/${messageId}/revoke`),
+  // The conversation's accounts with the server's decision on whether the
+  // current user may send from each (send-account policy).
+  sendAccounts: (contactId: string) =>
+    api.get<{ data: { accounts: SendAccountOption[] } }>(`/contacts/${contactId}/send-accounts`)
 }
 
 /**

@@ -166,14 +166,19 @@ func (a *App) CreateCampaign(r *fastglue.Request) error {
 		return nil
 	}
 
-	// Validate WhatsApp account exists
-	if _, err := a.resolveWhatsAppAccount(orgID, req.WhatsAppAccount); err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "WhatsApp account not found", nil, "")
+	// Validate the WhatsApp account exists and the creator may send from it.
+	// The worker re-checks the creator at execution time.
+	account, ok := a.resolveSendAccount(r, userID, orgID, nil, sendAccountQuery{
+		Requested: req.WhatsAppAccount,
+		Endpoint:  "create_campaign",
+	})
+	if !ok {
+		return nil
 	}
 
 	campaign := models.BulkMessageCampaign{
 		OrganizationID:  orgID,
-		WhatsAppAccount: req.WhatsAppAccount,
+		WhatsAppAccount: account.Name,
 		Name:            req.Name,
 		TemplateID:      templateID,
 		HeaderMediaID:   req.HeaderMediaID,
@@ -324,6 +329,12 @@ func (a *App) UpdateCampaign(r *fastglue.Request) error {
 	}
 
 	if req.WhatsAppAccount != "" {
+		if _, ok := a.resolveSendAccount(r, userID, orgID, nil, sendAccountQuery{
+			Requested: req.WhatsAppAccount,
+			Endpoint:  "update_campaign",
+		}); !ok {
+			return nil
+		}
 		updates["whats_app_account"] = req.WhatsAppAccount
 	}
 
@@ -497,6 +508,12 @@ func (a *App) StartCampaign(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Campaign has no pending recipients", nil, "")
 	}
 
+	// Starting a campaign sends from its account: the caller must be allowed
+	// to send from it (the worker separately re-checks the creator).
+	if !a.authorizeCampaignActor(r, orgID, campaign, "start_campaign") {
+		return nil
+	}
+
 	// Validate template still exists
 	if campaign.TemplateID != uuid.Nil {
 		var template models.Template
@@ -604,6 +621,10 @@ func (a *App) RetryFailed(r *fastglue.Request) error {
 
 	if len(failedRecipients) == 0 {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "No failed messages to retry", nil, "")
+	}
+
+	if !a.authorizeCampaignActor(r, orgID, campaign, "retry_campaign") {
+		return nil
 	}
 
 	// Reset failed recipients to pending
@@ -884,7 +905,7 @@ func (a *App) DeleteCampaignRecipient(r *fastglue.Request) error {
 
 // UploadCampaignMedia uploads media for a campaign's template header
 func (a *App) UploadCampaignMedia(r *fastglue.Request) error {
-	orgID, _, err := a.requireAuth(r, models.ResourceCampaigns, models.ActionWrite)
+	orgID, userID, err := a.requireAuth(r, models.ResourceCampaigns, models.ActionWrite)
 	if err != nil {
 		return nil
 	}
@@ -912,10 +933,13 @@ func (a *App) UploadCampaignMedia(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Template does not have a media header", nil, "")
 	}
 
-	// Get WhatsApp account
-	account, err := a.resolveWhatsAppAccount(orgID, campaign.WhatsAppAccount)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "WhatsApp account not found", nil, "")
+	// Get WhatsApp account; uploading acts as that account.
+	account, ok := a.resolveSendAccount(r, userID, orgID, nil, sendAccountQuery{
+		Requested: campaign.WhatsAppAccount,
+		Endpoint:  "upload_campaign_media",
+	})
+	if !ok {
+		return nil
 	}
 
 	// Parse multipart form

@@ -3,6 +3,7 @@ import { toast } from 'vue-sonner'
 import { cannedResponsesService, type CannedResponse } from '@/services/api'
 import { getErrorMessage } from '@/lib/api-utils'
 import { useHeaderMedia } from '@/composables/useHeaderMedia'
+import { sendAccountErrorKey } from '@/lib/sendAccounts'
 
 export interface UseChatCannedTemplatesOptions {
   /** i18n translator. */
@@ -29,6 +30,10 @@ export interface UseChatCannedTemplatesOptions {
   resetTextareaHeight: () => void
   /** Called after a canned response lands so the room scrolls to the new bubble. */
   scrollToBottom: (instant?: boolean) => void
+  /** True when the server refused sending from the selected account. */
+  isSendAccountLocked?: () => boolean
+  /** Called when the server refuses the send account (reloads the decisions). */
+  onSendAccountDenied?: () => void
 }
 
 /**
@@ -45,6 +50,22 @@ export interface UseChatCannedTemplatesOptions {
  */
 export function useChatCannedTemplates(options: UseChatCannedTemplatesOptions) {
   const { t, contactsStore, selectedAccount, messageInput } = options
+
+  // Canned and template dialogs send directly, so they repeat the composer's
+  // send-account lock and its handling of the server's refusal.
+  function sendAccountLocked(): boolean {
+    if (!options.isSendAccountLocked?.()) return false
+    toast.error(t('chat.sendAccountNotAllowed'))
+    return true
+  }
+
+  function handleSendAccountError(error: unknown): boolean {
+    const key = sendAccountErrorKey(error)
+    if (!key) return false
+    toast.error(t(key))
+    options.onSendAccountDenied?.()
+    return true
+  }
 
   // Tokens that the chat already knows how to fill from the current contact /
   // signed-in agent. Shared by canned responses (resolved client-side into the
@@ -162,6 +183,7 @@ export function useChatCannedTemplates(options: UseChatCannedTemplatesOptions) {
 
   async function sendCannedResponse() {
     if (!contactsStore.currentContact || !selectedCannedResponse.value) return
+    if (sendAccountLocked()) return
 
     const missing = cannedParamNames.value.some(n => !cannedParamValues.value[n]?.trim())
     if (missing) {
@@ -227,7 +249,9 @@ export function useChatCannedTemplates(options: UseChatCannedTemplatesOptions) {
       await new Promise(resolve => setTimeout(resolve, 0))
       options.scrollToBottom()
     } catch (error) {
-      toast.error(getErrorMessage(error, t('chat.sendMessageFailed')))
+      if (!handleSendAccountError(error)) {
+        toast.error(getErrorMessage(error, t('chat.sendMessageFailed')))
+      }
     } finally {
       isSendingCanned.value = false
     }
@@ -314,6 +338,7 @@ export function useChatCannedTemplates(options: UseChatCannedTemplatesOptions) {
 
   async function sendTemplateMessage() {
     if (!contactsStore.currentContact || !selectedTemplate.value) return
+    if (sendAccountLocked()) return
 
     // Validate header param (separate ref so it can hold its own value even
     // when the body has a {{1}} that would otherwise collide). Auto-resolved
@@ -377,8 +402,10 @@ export function useChatCannedTemplates(options: UseChatCannedTemplatesOptions) {
       clearTemplateHeaderMedia()
       templateButtonUrlParams.value = []
     } catch (error: any) {
-      const message = error.response?.data?.message || t('chat.templateSendFailed')
-      toast.error(message)
+      if (!handleSendAccountError(error)) {
+        const message = error.response?.data?.message || t('chat.templateSendFailed')
+        toast.error(message)
+      }
     } finally {
       isSendingTemplate.value = false
     }

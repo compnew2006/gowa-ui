@@ -112,6 +112,10 @@ func TestReview_TemplateSendPhoneBypassForbidden(t *testing.T) {
 // conversation.
 func TestReview_ScheduledMutationsForbiddenForHistorical(t *testing.T) {
 	f := newGrantFixture(t)
+	// The agent is assigned account A only and the conversation is on B, so
+	// scheduling from B needs the org's cross-account send setting.
+	f.org.Settings = models.JSONB{"allow_cross_account_send": true}
+	require.NoError(t, f.app.DB.Save(f.org).Error)
 	f.assignViaAPI(t, f.agent)
 
 	// Agent schedules a message (allowed as current assignee).

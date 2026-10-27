@@ -1,7 +1,8 @@
 import { ref, computed, nextTick } from 'vue'
 import type { Ref } from 'vue'
 import { toast } from 'vue-sonner'
-import { customActionsService, accountsService, type CustomAction, type ActionResult } from '@/services/api'
+import { customActionsService, accountsService, messagesService, type CustomAction, type ActionResult } from '@/services/api'
+import { pickSendAccount, toSendAccountStatus, type SendAccountStatus } from '@/lib/sendAccounts'
 import { wsService } from '@/services/websocket'
 import { useInfiniteScroll } from '@/composables/useInfiniteScroll'
 import { STATUS_VIRTUAL_CONTACT, isStatusContact } from '@/lib/status'
@@ -85,6 +86,30 @@ export function useChatContactsList(options: UseChatContactsListOptions) {
   const selectedAccount = options.selectedAccount
   const contactAccounts = ref<string[]>([])
   const orgAccounts = ref<any[]>([])
+  // Server decision per account: may the current user send from it? null when
+  // not loaded (request failed, or a read-only viewer the endpoint refuses).
+  const sendAccountStatus = ref<SendAccountStatus>(null)
+
+  async function loadSendAccountStatus(contactId: string): Promise<SendAccountStatus> {
+    try {
+      const res = await messagesService.sendAccounts(contactId)
+      return toSendAccountStatus(res.data.data?.accounts || [])
+    } catch {
+      return null
+    }
+  }
+
+  /** Re-reads the send decision for the open conversation (e.g. after a 403). */
+  async function refreshSendAccounts() {
+    const id = contactsStore.currentContact?.id
+    if (!id || isStatusContact(id)) return
+    const status = await loadSendAccountStatus(id)
+    if (contactsStore.currentContact?.id !== id) return
+    sendAccountStatus.value = status
+    if (status) {
+      contactAccounts.value = Array.from(new Set([...contactAccounts.value, ...Object.keys(status)])).sort()
+    }
+  }
 
   // ─── Filters popover state (accounts + tags) ───
   const isFilterOpen = ref(false)
@@ -324,6 +349,7 @@ export function useChatContactsList(options: UseChatContactsListOptions) {
       options.resetUnreadOnSwitch()
       selectedAccount.value = null
       contactAccounts.value = []
+      sendAccountStatus.value = null
       contactsStore.setAccountFilter(null)
       contactsStore.setCurrentContact({ ...STATUS_VIRTUAL_CONTACT } as Contact)
       await contactsStore.fetchMessages(id)
@@ -347,37 +373,39 @@ export function useChatContactsList(options: UseChatContactsListOptions) {
       // Reset account selection when switching contacts
       selectedAccount.value = null
       contactAccounts.value = []
+      sendAccountStatus.value = null
       contactsStore.setAccountFilter(null)
 
       contactsStore.setCurrentContact(contact)
-      await contactsStore.fetchMessages(id)
+      const [, status] = await Promise.all([contactsStore.fetchMessages(id), loadSendAccountStatus(id)])
+      if (contactsStore.currentContact?.id !== id) return
+      sendAccountStatus.value = status
 
-      // Discover distinct accounts from the unfiltered message set
-      const accounts = new Set<string>()
+      // Discover distinct accounts from the unfiltered message set, plus the
+      // conversation accounts the server reported (e.g. the contact's own
+      // account before it has any message).
+      const accounts = new Set<string>(status ? Object.keys(status) : [])
+      const incomingAccounts: string[] = []
       for (const msg of contactsStore.messages) {
-        if (msg.whatsapp_account) accounts.add(msg.whatsapp_account)
+        if (!msg.whatsapp_account) continue
+        accounts.add(msg.whatsapp_account)
+        if (msg.direction === 'incoming') incomingAccounts.push(msg.whatsapp_account)
       }
       contactAccounts.value = Array.from(accounts).sort()
-      const preferred = preferredAccount && accounts.has(preferredAccount) ? preferredAccount : null
 
       // Auto-select account and filter client-side (avoids a second fetch).
-      // Account tabs are shown per-CONTACT, based on the accounts that actually
-      // have messages with this number — not all org accounts. A contact with
-      // messages on a single account (or none) gets no tabs.
+      // Account tabs are shown per-CONTACT, based on the accounts of this
+      // conversation — not all org accounts. A contact on a single account (or
+      // none) gets no tabs. Never auto-select an account the server refused.
+      const picked = pickSendAccount({
+        preferred: preferredAccount && accounts.has(preferredAccount) ? preferredAccount : null,
+        contactAccount: contact.whatsapp_account,
+        incomingAccounts,
+        accounts: contactAccounts.value,
+        status,
+      })
       if (contactAccounts.value.length > 1) {
-        if (preferred) selectedAccount.value = preferred
-        // Find account of the most recent incoming message
-        for (let i = contactsStore.messages.length - 1; i >= 0 && !selectedAccount.value; i--) {
-          const msg = contactsStore.messages[i]
-          if (msg.direction === 'incoming' && msg.whatsapp_account) {
-            selectedAccount.value = msg.whatsapp_account
-            break
-          }
-        }
-        // Fallback to contact's default account, then first org account
-        if (!selectedAccount.value) {
-          selectedAccount.value = contact.whatsapp_account || contactAccounts.value[0] || orgAccounts.value[0]?.name
-        }
+        selectedAccount.value = picked
         if (selectedAccount.value) {
           contactsStore.setAccountFilter(selectedAccount.value)
           // Filter messages client-side instead of re-fetching. System messages
@@ -388,8 +416,8 @@ export function useChatContactsList(options: UseChatContactsListOptions) {
           )
         }
       } else if (contactAccounts.value.length === 1) {
-        selectedAccount.value = contactAccounts.value[0]
-      } else if (contact.whatsapp_account) {
+        selectedAccount.value = status ? picked : contactAccounts.value[0]
+      } else if (contact.whatsapp_account && !status) {
         selectedAccount.value = contact.whatsapp_account
       }
 
@@ -428,6 +456,8 @@ export function useChatContactsList(options: UseChatContactsListOptions) {
   return {
     // Multi-account (selectedAccount is owned by the view; not re-returned)
     contactAccounts,
+    sendAccountStatus,
+    refreshSendAccounts,
     orgAccounts,
     // Filters popover (accounts + tags)
     isFilterOpen,

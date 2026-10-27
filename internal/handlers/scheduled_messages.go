@@ -83,15 +83,15 @@ func (a *App) CreateScheduledMessage(r *fastglue.Request) error {
 		return nil
 	}
 
-	// Resolve the WhatsApp account now so a bad account fails at schedule
-	// time, not at fire time. Prefer request override over contact default.
-	accountName := contact.WhatsAppAccount
-	if req.WhatsAppAccount != "" {
-		accountName = req.WhatsAppAccount
-	}
-	account, err := a.resolveWhatsAppAccount(orgID, accountName)
-	if err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Failed to resolve WhatsApp account", nil, "")
+	// Resolve and authorize the WhatsApp account now so a bad or forbidden
+	// account fails at schedule time. The processor re-checks the creator at
+	// fire time in case their assignment was revoked meanwhile.
+	account, ok := a.resolveSendAccount(r, userID, orgID, &contact, sendAccountQuery{
+		Requested: req.WhatsAppAccount,
+		Endpoint:  "schedule_message",
+	})
+	if !ok {
+		return nil
 	}
 
 	sm := models.ScheduledMessage{

@@ -7,6 +7,11 @@ const (
 	AuditActionCreated AuditAction = "created"
 	AuditActionUpdated AuditAction = "updated"
 	AuditActionDeleted AuditAction = "deleted"
+	// AuditActionSendDenied records a send refused by the send-account policy.
+	AuditActionSendDenied AuditAction = "send_denied"
+	// AuditActionSendWouldBeDenied records a send the policy would refuse,
+	// allowed through because the org runs the policy in audit-only mode.
+	AuditActionSendWouldBeDenied AuditAction = "send_would_be_denied"
 )
 
 // TeamRole represents a user's role within a specific team (not organizational role)

@@ -91,6 +91,8 @@ func TestApp_CreateScheduledMessage_Validation(t *testing.T) {
 	tests := []struct {
 		name string
 		body map[string]any
+		// wantStatus defaults to 400.
+		wantStatus int
 	}{
 		{
 			name: "past scheduled_at",
@@ -144,6 +146,7 @@ func TestApp_CreateScheduledMessage_Validation(t *testing.T) {
 				"whatsapp_account": "no-such-account",
 				"scheduled_at":     future,
 			},
+			wantStatus: fasthttp.StatusNotFound,
 		},
 	}
 
@@ -154,7 +157,11 @@ func TestApp_CreateScheduledMessage_Validation(t *testing.T) {
 			testutil.SetPathParam(req, "id", contact.ID.String())
 
 			require.NoError(t, app.CreateScheduledMessage(req))
-			assert.Equal(t, fasthttp.StatusBadRequest, testutil.GetResponseStatusCode(req))
+			want := tt.wantStatus
+			if want == 0 {
+				want = fasthttp.StatusBadRequest
+			}
+			assert.Equal(t, want, testutil.GetResponseStatusCode(req))
 		})
 	}
 }

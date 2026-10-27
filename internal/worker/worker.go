@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/compnew2006/gowa-ui/internal/accountaccess"
+	"github.com/compnew2006/gowa-ui/internal/audit"
 	"github.com/compnew2006/gowa-ui/internal/config"
 	"github.com/compnew2006/gowa-ui/internal/contactutil"
 	"github.com/compnew2006/gowa-ui/internal/models"
@@ -110,6 +112,14 @@ func (w *Worker) HandleRecipientJob(ctx context.Context, job *queue.RecipientJob
 		return nil // Don't retry, mark as failed
 	}
 	w.decryptAccountSecrets(&account)
+
+	// The campaign creator must still be allowed to send from this account:
+	// their assignment may have been revoked after the campaign was queued.
+	if !w.creatorMaySend(&campaign, &account) {
+		w.updateRecipientStatus(job.RecipientID, models.MessageStatusFailed, "", "Campaign creator is not allowed to send from this WhatsApp account")
+		w.incrementCampaignCount(job.CampaignID, "failed_count")
+		return nil // Don't retry, mark as failed
+	}
 
 	// Get or create contact for this recipient
 	contact, _, err := contactutil.GetOrCreateContact(w.DB, job.OrganizationID, job.PhoneNumber, job.RecipientName)
@@ -358,4 +368,35 @@ func (w *Worker) Close() error {
 		return w.Consumer.Close()
 	}
 	return nil
+}
+
+// creatorMaySend applies the send-account policy to the campaign creator at
+// execution time. Lookup errors fail closed. In audit-only mode a denial is
+// recorded as send_would_be_denied and the send proceeds.
+func (w *Worker) creatorMaySend(campaign *models.BulkMessageCampaign, account *models.WhatsAppAccount) bool {
+	allowed, err := accountaccess.UserMayUseAccount(w.DB, campaign.CreatedBy, campaign.OrganizationID, account.ID)
+	if err != nil {
+		w.Log.Error("Failed to check campaign creator account access", "error", err, "campaign_id", campaign.ID)
+	}
+	if allowed {
+		return true
+	}
+	enforced := accountaccess.LoadSendPolicy(w.DB, campaign.OrganizationID).Enforce
+	action := models.AuditActionSendDenied
+	if !enforced {
+		action = models.AuditActionSendWouldBeDenied
+	}
+	audit.LogAudit(w.DB, campaign.OrganizationID, campaign.CreatedBy, audit.GetUserName(w.DB, campaign.CreatedBy),
+		"send_account", account.ID, action, nil, map[string]any{
+			"endpoint":     "campaign_send",
+			"reason":       "account_not_allowed",
+			"account_id":   account.ID.String(),
+			"account_name": account.Name,
+			"campaign_id":  campaign.ID.String(),
+		})
+	if enforced {
+		w.Log.Warn("Campaign creator lost access to the campaign account; recipient failed",
+			"campaign_id", campaign.ID, "account", account.Name)
+	}
+	return !enforced
 }

@@ -1006,3 +1006,41 @@ func TestWorker_HandleRecipientJob_DuplicateJobSkipsClaimedRecipient(t *testing.
 	require.NoError(t, w.DB.First(&updatedCampaign, campaign.ID).Error)
 	assert.Zero(t, updatedCampaign.SentCount, "duplicate job must not double-count")
 }
+
+// A campaign must not send once its creator lost access to the campaign's
+// account (assigned a different account only): the recipient fails, no send.
+func TestWorker_HandleRecipientJob_CreatorLostAccountAccess(t *testing.T) {
+	w := testWorker(t)
+	org, _, _, campaign, recipient := createTestCampaignData(t, w)
+
+	other := &models.WhatsAppAccount{
+		OrganizationID: org.ID,
+		Name:           "other-account-" + uuid.New().String()[:8],
+		GowaBaseURL:    "http://gowa.test:3000",
+		GowaDeviceID:   "device-" + uuid.New().String()[:8],
+	}
+	require.NoError(t, w.DB.Create(other).Error)
+	require.NoError(t, w.DB.Create(&models.UserWhatsAppAccount{
+		UserID:            campaign.CreatedBy,
+		WhatsAppAccountID: other.ID,
+	}).Error)
+
+	job := &queue.RecipientJob{
+		CampaignID:     campaign.ID,
+		RecipientID:    recipient.ID,
+		OrganizationID: org.ID,
+		PhoneNumber:    recipient.PhoneNumber,
+		RecipientName:  recipient.RecipientName,
+	}
+	require.NoError(t, w.HandleRecipientJob(context.Background(), job))
+
+	var updated models.BulkMessageRecipient
+	require.NoError(t, w.DB.First(&updated, recipient.ID).Error)
+	assert.Equal(t, models.MessageStatusFailed, updated.Status)
+	assert.Contains(t, updated.ErrorMessage, "not allowed to send")
+
+	var sent int64
+	require.NoError(t, w.DB.Model(&models.Message{}).
+		Where("metadata->>'campaign_id' = ?", campaign.ID.String()).Count(&sent).Error)
+	assert.Zero(t, sent, "no message may be created for a refused recipient")
+}
