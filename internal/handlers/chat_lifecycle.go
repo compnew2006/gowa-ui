@@ -43,6 +43,19 @@ func (a *App) ensureClaimableChatStatus(orgID uuid.UUID, contact *models.Contact
 // pointer) so callers keep passing &contact to the lifecycle service
 // unchanged.
 func (a *App) loadContactByPath(r *fastglue.Request, orgID, userID uuid.UUID) (models.Contact, bool) {
+	return a.loadScopedContactByPath(r, orgID, userID, false)
+}
+
+// loadContactForClaim is loadContactByPath for the claim route. A stale grant
+// holder (assignment moved on) who ALSO has account access to the conversation
+// is an ordinary agent of that account, so the read-only gate must not stop
+// them claiming it — exactly like a non-grant agent of the same account.
+// Cross-account grant holders stay read-only.
+func (a *App) loadContactForClaim(r *fastglue.Request, orgID, userID uuid.UUID) (models.Contact, bool) {
+	return a.loadScopedContactByPath(r, orgID, userID, true)
+}
+
+func (a *App) loadScopedContactByPath(r *fastglue.Request, orgID, userID uuid.UUID, allowAccountHolder bool) (models.Contact, bool) {
 	var contact models.Contact
 	contactID, err := parsePathUUID(r, "id", "contact")
 	if err != nil {
@@ -52,6 +65,9 @@ func (a *App) loadContactByPath(r *fastglue.Request, orgID, userID uuid.UUID) (m
 	if err := query.First(&contact).Error; err != nil {
 		_ = r.SendErrorEnvelope(fasthttp.StatusNotFound, "Contact not found", nil, "")
 		return contact, false
+	}
+	if allowAccountHolder && a.hasAccountAccess(&contact, userID, orgID) {
+		return contact, true
 	}
 	if a.rejectHistoricalAssignmentAccess(r, &contact, userID, orgID) {
 		return contact, false
@@ -68,7 +84,7 @@ func (a *App) ClaimChat(r *fastglue.Request) error {
 		return nil
 	}
 
-	contact, ok := a.loadContactByPath(r, orgID, userID)
+	contact, ok := a.loadContactForClaim(r, orgID, userID)
 	if !ok {
 		return nil
 	}

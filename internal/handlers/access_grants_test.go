@@ -134,6 +134,48 @@ func TestClaim_DoesNotCreateGrant(t *testing.T) {
 	assert.EqualValues(t, 0, f.activeGrantCount(t, bAgent.ID), "claim must not create an access grant")
 }
 
+// TestClaim_StaleGrantHolderWithAccountAccessCanClaim: an agent who once got a
+// direct-assignment grant on a conversation of their OWN account must still be
+// able to claim it when it is pending again — the grant is history, not a
+// lock. Production repro: stale grants made every claim 403 "Read-only access".
+func TestClaim_StaleGrantHolderWithAccountAccessCanClaim(t *testing.T) {
+	f := newGrantFixture(t)
+	inAccount := testutil.CreateTestContactWith(t, f.app.DB, f.org.ID, testutil.WithContactAccount(f.accA.Name))
+	require.NoError(t, f.app.DB.Create(&models.ContactAssignmentAccessGrant{
+		OrganizationID: f.org.ID, ContactID: inAccount.ID, UserID: f.agent.ID, GrantedBy: f.admin.ID,
+	}).Error)
+
+	req := newPUTRequest(t)
+	testutil.SetAuthContext(req, f.org.ID, f.agent.ID)
+	testutil.SetPathParam(req, "id", inAccount.ID.String())
+	require.NoError(t, f.app.ClaimChat(req))
+	require.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req),
+		"stale grant holder with account access must claim, got: %s", string(testutil.GetResponseBody(req)))
+
+	var claimed models.Contact
+	require.NoError(t, f.app.DB.First(&claimed, "id = ?", inAccount.ID).Error)
+	require.NotNil(t, claimed.AssignedUserID)
+	assert.Equal(t, f.agent.ID, *claimed.AssignedUserID)
+}
+
+// TestClaim_CrossAccountGrantHolderStaysReadOnly: the same stale grant on a
+// conversation OUTSIDE the agent's accounts keeps the read-only rule — claim
+// is still refused.
+func TestClaim_CrossAccountGrantHolderStaysReadOnly(t *testing.T) {
+	f := newGrantFixture(t) // agent scoped to account A; f.contact is under B
+	require.NoError(t, f.app.DB.Create(&models.ContactAssignmentAccessGrant{
+		OrganizationID: f.org.ID, ContactID: f.contact.ID, UserID: f.agent.ID, GrantedBy: f.admin.ID,
+	}).Error)
+
+	req := newPUTRequest(t)
+	testutil.SetAuthContext(req, f.org.ID, f.agent.ID)
+	testutil.SetPathParam(req, "id", f.contact.ID.String())
+	require.NoError(t, f.app.ClaimChat(req))
+	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req),
+		"cross-account stale grant holder must remain read-only")
+	assert.Nil(t, f.loadFresh(t).AssignedUserID)
+}
+
 // TestGrant_PersistsAfterCloseAndReassign: close then reassign to someone
 // else — the original holder keeps ONE active grant and read-only access.
 func TestGrant_PersistsAfterCloseAndReassign(t *testing.T) {

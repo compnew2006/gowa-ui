@@ -164,7 +164,11 @@ responsibility. Do not re-merge these.
   whose assignment has moved on is READ-ONLY: every write/lifecycle path
   refuses via `rejectHistoricalAssignmentAccess` (central in
   `loadContactByPath` + `findScopedMutableContact` + inline in message/
-  template/scheduled/media write paths). `metadata.closed_by` is an AUDIT
+  template/scheduled/media write paths). The one exception is claiming:
+  `ClaimChat` loads through `loadContactForClaim`, so a stale grant holder who
+  ALSO has account access to the conversation can claim it again like any
+  other agent of that account; cross-account holders stay read-only.
+  `metadata.closed_by` is an AUDIT
   stamp only — never a visibility path; revoking the grant ends access even
   for the agent who closed the conversation. Release grant + release
   assignment commit in ONE transaction (`ChatLifecycle.ReleaseWithDB`).
