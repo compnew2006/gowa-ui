@@ -7,9 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/compnew2006/gowa-ui/internal/middleware"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/internal/websocket"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -145,6 +146,9 @@ func (a *App) getUserPermissionsCached(userID uuid.UUID, orgIDs ...uuid.UUID) (*
 	var orgID uuid.UUID
 	if len(orgIDs) > 0 && orgIDs[0] != uuid.Nil {
 		orgID = orgIDs[0]
+		if !middleware.HasOrganizationAccess(a.DB, userID, orgID) {
+			return nil, gorm.ErrRecordNotFound
+		}
 		cacheKey = fmt.Sprintf("%s%s:%s", userPermissionsCachePrefix, userID.String(), orgID.String())
 	} else {
 		cacheKey = fmt.Sprintf("%s%s", userPermissionsCachePrefix, userID.String())
@@ -172,10 +176,14 @@ func (a *App) getUserPermissionsCached(userID uuid.UUID, orgIDs ...uuid.UUID) (*
 	if orgID != uuid.Nil {
 		// Look up role from user_organizations for this specific org
 		var userOrg models.UserOrganization
-		if err := a.DB.Where("user_id = ? AND organization_id = ?", userID, orgID).First(&userOrg).Error; err == nil && userOrg.RoleID != nil {
+		if err := a.DB.Where("user_id = ? AND organization_id = ?", userID, orgID).First(&userOrg).Error; err != nil {
+			if !user.IsSuperAdmin {
+				return nil, err
+			}
+			roleID = user.RoleID
+		} else if userOrg.RoleID != nil {
 			roleID = userOrg.RoleID
-		} else {
-			// Fall back to user's default role
+		} else if user.OrganizationID == orgID || user.IsSuperAdmin {
 			roleID = user.RoleID
 		}
 	} else {

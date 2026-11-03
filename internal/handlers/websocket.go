@@ -87,6 +87,9 @@ func (a *App) validateWSTokenFn() ws.AuthenticateFn {
 		if claims.TokenType == middleware.TokenTypeRefresh || claims.ID != "" {
 			return uuid.Nil, uuid.Nil, jwt.ErrTokenInvalidClaims
 		}
+		if !middleware.HasOrganizationAccess(a.DB, claims.UserID, claims.OrganizationID) {
+			return uuid.Nil, uuid.Nil, jwt.ErrTokenInvalidClaims
+		}
 
 		return claims.UserID, claims.OrganizationID, nil
 	}

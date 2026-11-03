@@ -9,6 +9,7 @@ import (
 
 	"github.com/compnew2006/gowa-ui/internal/chatlifecycle"
 	"github.com/compnew2006/gowa-ui/internal/config"
+	"github.com/compnew2006/gowa-ui/internal/middleware"
 	"github.com/compnew2006/gowa-ui/internal/queue"
 	"github.com/compnew2006/gowa-ui/internal/websocket"
 	"github.com/compnew2006/gowa-ui/pkg/whatsapp"
@@ -107,6 +108,11 @@ func (a *App) getOrgID(r *fastglue.Request) (uuid.UUID, error) {
 		}
 	}
 
+	// A token can outlive a cross-organization membership. Do not trust its
+	// organization claim after the membership has been removed.
+	if !middleware.HasOrganizationAccess(a.DB, userID, defaultOrgID) {
+		return uuid.Nil, errors.New("organization membership not found")
+	}
 	return defaultOrgID, nil
 }
 

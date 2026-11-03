@@ -200,6 +200,25 @@ func AuthWithDB(secret string, db *gorm.DB) fastglue.FastMiddleware {
 	return AuthWithDBAndRedis(secret, db, nil, nopLogger)
 }
 
+// HasOrganizationAccess checks current membership, rather than trusting a
+// potentially stale organization claim in a token or API key.
+func HasOrganizationAccess(db *gorm.DB, userID, orgID uuid.UUID) bool {
+	if db == nil || userID == uuid.Nil || orgID == uuid.Nil {
+		return false
+	}
+	var user models.User
+	if err := db.Select("id", "is_active", "is_super_admin").First(&user, "id = ?", userID).Error; err != nil || !user.IsActive {
+		return false
+	}
+	if user.IsSuperAdmin {
+		return true
+	}
+	var count int64
+	return db.Model(&models.UserOrganization{}).
+		Where("user_id = ? AND organization_id = ?", userID, orgID).
+		Count(&count).Error == nil && count > 0
+}
+
 // AuthWithDBAndRedis validates both JWT tokens and API keys and, when a Redis
 // client is supplied, enforces per-user access-token revocation via the
 // TokenVersion claim (H3). After the token's signature/expiry are verified,
@@ -269,6 +288,10 @@ func AuthWithDBAndRedis(secret string, db *gorm.DB, rdb *redis.Client, log logf.
 		// that covers both. WS handshake tokens carry token_type=ws and are
 		// only valid for the socket auth message.
 		if claims.TokenType == TokenTypeRefresh || claims.TokenType == TokenTypeWS || claims.ID != "" {
+			_ = r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid or expired token", nil, "")
+			return nil
+		}
+		if db != nil && !HasOrganizationAccess(db, claims.UserID, claims.OrganizationID) {
 			_ = r.SendErrorEnvelope(fasthttp.StatusUnauthorized, "Invalid or expired token", nil, "")
 			return nil
 		}
@@ -357,7 +380,7 @@ func validateAPIKey(r *fastglue.Request, key string, db *gorm.DB) bool {
 			if apiKey.User != nil {
 				// A deactivated owner's keys stay dead until the account is
 				// re-enabled — revocation must not hinge on token expiry.
-				if !apiKey.User.IsActive {
+				if !HasOrganizationAccess(db, apiKey.UserID, apiKey.OrganizationID) {
 					return false
 				}
 				r.RequestCtx.SetUserValue(ContextKeyUserID, apiKey.UserID)
