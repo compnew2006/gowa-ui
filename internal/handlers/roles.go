@@ -257,16 +257,16 @@ func (a *App) UpdateRole(r *fastglue.Request) error {
 		// Check if user is super admin
 		isSuperAdmin, _ := r.RequestCtx.UserValue("is_super_admin").(bool)
 
-		// Only allow description updates for non-super admins
-		if req.Description != "" {
-			role.Description = req.Description
+		// System-role permissions are defined in code (SystemRolePermissions)
+		// and reconciled on startup; not even a super admin may change them
+		// through the API — reject instead of silently ignoring.
+		if isSuperAdmin && len(req.Permissions) > 0 {
+			return r.SendErrorEnvelope(fasthttp.StatusForbidden, "System role permissions cannot be changed", nil, "")
 		}
 
-		// Super admins can update permissions for system roles
-		if isSuperAdmin && len(req.Permissions) > 0 {
-			if !a.replaceRolePermissions(r, &role, req.Permissions) {
-				return nil
-			}
+		// Only description updates are allowed for system roles
+		if req.Description != "" {
+			role.Description = req.Description
 		}
 
 		if err := a.DB.Save(&role).Error; err != nil {

@@ -286,6 +286,57 @@ func TestApp_UpdateRole_SystemRoleOnlyDescription(t *testing.T) {
 	assert.Len(t, resp.Data.Permissions, len(permissions))
 }
 
+func TestApp_UpdateRole_SystemRolePermissionsRejectedForSuperAdmin(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	permissions := testutil.GetOrCreateTestPermissions(t, app.DB)
+
+	// System agent role with exactly the 10 defined permissions.
+	permByKey := make(map[string]models.Permission, len(permissions))
+	for _, p := range permissions {
+		permByKey[p.Resource+":"+p.Action] = p
+	}
+	var agentPerms []models.Permission
+	for _, key := range models.SystemRolePermissions()["agent"] {
+		perm, ok := permByKey[key]
+		require.True(t, ok, "permission %s should exist", key)
+		agentPerms = append(agentPerms, perm)
+	}
+	systemRole := testutil.CreateTestRoleExact(t, app.DB, org.ID, "agent", true, false, agentPerms)
+	// The requesting user must pass requireAuth(roles:write): a super admin
+	// still needs a role row, otherwise getUserPermissionsCached fails with
+	// "record not found" and the request 403s before reaching UpdateRole.
+	adminRole := testutil.CreateTestRoleExact(t, app.DB, org.ID, "admin", true, false, permissions)
+	user := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("update-sys-role-sa")),
+		testutil.WithSuperAdmin(), testutil.WithRoleID(&adminRole.ID))
+
+	reqBody := handlers.RoleRequest{
+		Description: "Updated description",
+		Permissions: []string{"accounts:read", "accounts:delete"},
+	}
+
+	req := testutil.NewJSONRequest(t, reqBody)
+	req.RequestCtx.SetUserValue("user_id", user.ID)
+	req.RequestCtx.SetUserValue("organization_id", org.ID)
+	req.RequestCtx.SetUserValue("id", systemRole.ID.String())
+	req.RequestCtx.SetUserValue("is_super_admin", true)
+
+	err := app.UpdateRole(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusForbidden, testutil.GetResponseStatusCode(req))
+
+	// Permissions in the DB must be unchanged.
+	var dbRole models.CustomRole
+	require.NoError(t, app.DB.Preload("Permissions").First(&dbRole, "id = ?", systemRole.ID).Error)
+	assert.Len(t, dbRole.Permissions, 10)
+	gotKeys := make([]string, 0, len(dbRole.Permissions))
+	for _, p := range dbRole.Permissions {
+		gotKeys = append(gotKeys, p.Resource+":"+p.Action)
+	}
+	assert.ElementsMatch(t, models.SystemRolePermissions()["agent"], gotKeys)
+}
+
 func TestApp_UpdateRole_NotFound(t *testing.T) {
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
