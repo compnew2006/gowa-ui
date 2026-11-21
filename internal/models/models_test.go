@@ -338,3 +338,41 @@ func TestAccountsAssignPermission(t *testing.T) {
 	assert.Contains(t, rolePerms["manager"], "accounts:assign", "manager should have accounts:assign")
 	assert.NotContains(t, rolePerms["agent"], "accounts:assign", "agent should not have accounts:assign")
 }
+
+// TestSystemRolePermissions_AgentIsLeastPrivilege pins the exact agent
+// permission set: the live CRM audit (2026-11-21) found the agent role
+// holding 21 permissions in the database, including full WhatsApp account
+// management and contacts:delete. The model defines only these 10, so any
+// drift here is a regression — the sync in SyncSystemRolePermissions is
+// what prunes the stored role back to this set.
+func TestSystemRolePermissions_AgentIsLeastPrivilege(t *testing.T) {
+	t.Parallel()
+
+	rolePerms := models.SystemRolePermissions()
+	expected := []string{
+		"accounts:read",
+		"chat:read", "chat:write", "chat.revoke:write", "chat.assign:write",
+		"contacts:read",
+		"tags:read",
+		"analytics.agents:read",
+		"canned_responses:read",
+		"custom_actions:execute",
+	}
+	assert.Len(t, rolePerms["agent"], 10, "agent should have exactly 10 permissions")
+	assert.ElementsMatch(t, expected, rolePerms["agent"])
+
+	for _, forbidden := range []string{
+		"accounts:write", "accounts:delete", "accounts:assign",
+		"contacts:write", "contacts:delete", "contacts:import", "contacts:export",
+		"analytics:write", "analytics:delete",
+		"templates:read", "templates:write", "templates:delete",
+		"campaigns:read", "campaigns:write", "campaigns:delete",
+		"users:read", "users:write",
+		"roles:read", "roles:write",
+		"api_keys:read", "api_keys:write", "api_keys:delete",
+		"webhooks:read", "webhooks:write", "webhooks:delete",
+		"settings.general:read", "settings.general:write",
+	} {
+		assert.NotContains(t, rolePerms["agent"], forbidden, "agent must not have %s", forbidden)
+	}
+}
