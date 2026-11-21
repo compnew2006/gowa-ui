@@ -210,9 +210,11 @@ of org accounts that messaged each other, from `ListInternalConversations`
 One pair = one row even though the underlying data is two contact rows (one per
 account's copy). Manually flagged contacts (`metadata.internal_chat`, `OnlyInternalContactsSQL`,
 `internal/models/internal_chat.go:44`) that are not part of any pair appear as extra
-rows. **Definition (DEFINED, narrowly):** *the number of merged org-account pairs
-plus unpaired manually-flagged internal contacts currently loaded for the viewer.*
-But the *product* meaning of "39 private conversations" is **UNDEFINED — needs a
+rows. **Definition: UNDEFINED — needs a product decision for sign-off.** The
+sentence below describes only what the UI currently shows, not an agreed
+definition: *the number of merged org-account pairs plus unpaired
+manually-flagged internal contacts currently loaded for the viewer.* The
+*product* meaning of "39 private conversations" is **UNDEFINED — needs a
 product decision**: should the count be pairs, or the underlying contact rows (which
 would be up to ~2× the pair count)? The audit's 39 cannot be checked against the
 contact-row count without knowing which unit was intended.
@@ -242,7 +244,26 @@ GROUP BY m.contact_id
 ```
 
 (`read_seq` is insert order, not `created_at` — see the header comment in
-`read_state.go`.) The badge is **per viewer**: opening a chat moves only that
+`read_state.go`.) The exact threshold expression is
+`m.read_seq > COALESCE(GREATEST(c.read_watermark_seq, r.last_read_seq), 0)`
+(`read_state.go:30`).
+
+**NULL-collapse defect (recorded for the fix tasks, not a definition question).**
+In PostgreSQL `GREATEST` returns NULL if any argument is NULL, so the
+"whichever is greater" reading holds only when both values exist. Either value can
+be NULL: `r.last_read_seq` is NULL when the LEFT JOIN finds no
+`contact_read_states` row for that viewer and contact (the viewer has never opened
+the conversation — the column itself is `NOT NULL DEFAULT 0`,
+`internal/models/contact_read_state.go:22–28`, but an absent row still yields NULL
+from the join), and `c.read_watermark_seq` is a nullable `BIGINT` with no NOT NULL
+or default (`internal/database/postgres.go:509` adds the column; the migration at
+`:510–514` sets it only for contacts that had a read incoming message). When either
+is NULL, `GREATEST(...)` is NULL, `COALESCE(NULL, 0)` is 0, and the badge counts
+**all** incoming, non-revoked, non-failed messages in the conversation — the
+watermark and the viewer's read position are both discarded. That contradicts the
+intended semantics stated in the model's own comment ("a message is unread for a
+user when its `read_seq` is above both `LastReadSeq` and the conversation's shared
+`read_watermark_seq`", `contact_read_state.go:9–20`).
 user's `contact_read_states.last_read_seq` (`markReadForUser`, `:57`); the
 conversation-wide floor `contacts.read_watermark_seq` advances only for automated
 handling (`markReadForEveryone`, `:72`). Rendered raw, with no cap
@@ -250,18 +271,23 @@ handling (`markReadForEveryone`, `:72`). Rendered raw, with no cap
 contacts on the loaded page (`buildContactResponsesMasked`, `contacts.go:1291`).
 There is **no org-wide "total unread" number anywhere** in the code.
 
-**Definition (DEFINED, per contact).** *For one viewer and one conversation: the
-number of incoming, non-revoked, non-failed, non-deleted messages whose `read_seq`
-is past that viewer's read position (or the conversation-wide watermark, whichever
-is greater).*
+**Definition (DEFINED, per contact — as the code actually behaves).** *For one
+viewer and one conversation: the number of incoming, non-revoked, non-failed,
+non-deleted messages whose `read_seq` is past the greater of that viewer's read
+position and the conversation-wide watermark — but only when both values exist;
+when either is missing (no `contact_read_states` row for the viewer, or no
+watermark set on the contact) the threshold collapses to 0 and the badge counts
+the conversation's whole inbound history.*
 
 **Reconciliation / flags.**
 
 - A badge as large as 3427 **is producible by this query** (e.g. a conversation the
-  viewer has never opened, so `last_read_seq` is 0) — the query has no cap and no
-  time window. Whether 3427 is *correct* for that conversation cannot be settled
-  from code alone; it needs a live check of that contact's `read_watermark_seq`,
-  the viewer's `contact_read_states` row, and the message count above it.
+  viewer has never opened, so there is no `contact_read_states` row) — the query
+  has no cap and no time window, and the NULL-collapse above means such a viewer
+  gets the conversation's entire inbound history, watermark included. Whether 3427
+  is *correct* for that conversation cannot be settled from code alone; it needs a
+  live check of that contact's `read_watermark_seq`, the viewer's
+  `contact_read_states` row, and the message count above it.
   **Flagged as not reconcilable from the audit data alone.**
 - **Double-counting in the Private tab (flagged):** internal messages are stored
   twice (once per account's copy). `ListInternalConversations` sums the two sides'
@@ -305,9 +331,11 @@ account filter never reaches the query.*
 **CONTRADICTION — "1 template available".** If the org's Templates page shows N
 templates, the campaign picker should show min(N, 50) — not 1 — under the traced
 behaviour. A reading of "1 template available" in Create Campaign cannot be
-reconciled with a Templates-page total ≠ 1 from the same moment. Possible causes:
-different moments (templates created/deleted between readings), a search filter on
-one surface, or the audit's "1" referring to a filtered view that was not recorded.
+reconciled with a Templates-page total ≠ 1 from the same moment. Untested hypotheses
+(not verified — no live check was run, so these are guesses to test, not candidate
+explanations): different moments (templates created/deleted between readings), a
+search filter on one surface, or the audit's "1" referring to a filtered view that
+was not recorded.
 **Needs a user decision:** (a) should the campaign picker be filtered to the
 selected account's templates (presumably yes — that is what the UI code intends);
 (b) is the Templates-page total org-wide, or per-account? Until (a)/(b) are decided,
@@ -346,7 +374,8 @@ active WebSocket connection in that org. If the hub is nil, the list is nil → 
 
 **Definition (DEFINED, narrowly).** *`online_count` = the number of user IDs with at
 least one live WebSocket connection to this org at the moment of the request,
-ignoring the list's search/role/page filters; 0 when the WebSocket hub is absent.*
+ignoring the list's search/role/page filters; 0 when the WebSocket hub is absent —
+for any caller in the org, at request time.*
 
 **UNDEFINED — needs a product decision from the user.** "Online" as a product concept
 is undecided: (a) live WebSocket connection (current behaviour — an open tab counts,
@@ -373,9 +402,12 @@ WHERE user_id = ? AND is_available = false
 Logs are written only by `UpdateAvailability` (`internal/handlers/users.go:1156`):
 when the availability flag *changes*, the open log (if any) is closed and a new log
 is opened. **No log exists for a user's initial state**, and a flag changed outside
-that endpoint leaves no log. Note also that the query has **no `organization_id`
-filter** even though the table carries one — a user in two orgs has their breaks
-counted in both.
+that endpoint leaves no log. **Defect for the fix tasks (not a product question):**
+the query has **no `organization_id` filter** even though the table carries one
+(`internal/models/models.go:203`) — a user in two orgs has their breaks counted in
+both, contradicting the per-organization standing rule in the header of this
+document. The fix tasks should add the org filter; no user decision is needed for
+that.
 
 - Per-agent rows: `calculateAgentStats` (`agent_analytics.go:134`) fills
   `total_break_time_mins` / `break_count` from this function; the table in
@@ -400,12 +432,13 @@ the number of such overlapping intervals.*
 viewer's own value in the all-agents view. The user must decide what the card
 should show (org total, org average, or the viewer's own). (b) Is *any* away period
 a "break", or only some away reasons? The log records no reason — only the flag
-flip. (c) Should cross-org log rows be excluded (add the missing org filter)?
+flip.
 
 ## 10. Agent Analytics agent list — 12 listed, salama missing
 
 **Traced query.** The table rows come from `calculateAllAgentStats`,
-`internal/handlers/agent_analytics.go:191`:
+`internal/handlers/agent_analytics.go:191`. The GORM call at `:196–204` generates
+literally this SQL (not pseudo-SQL — `Find(&agents)` on `[]models.User`):
 
 ```sql
 SELECT * FROM users WHERE users.organization_id = ?
@@ -415,6 +448,14 @@ AND ( users.id IN (SELECT team_members.user_id FROM team_members
    OR users.id IN (SELECT closed_by_user_id FROM chat_closure_ratings
                    WHERE organization_id = ? AND closed_by_user_id IS NOT NULL) )
 ```
+
+This does not contradict §8: `users` does have a home-organization column
+(`organization_id`, `internal/models/models.go:109`). `ListUsers` scopes by that
+column *plus* the `user_organizations` join (`users.go:207–208`), so it additionally
+includes cross-org members (guests whose home org differs). This query scopes by
+the home-org column only — so a cross-org member who is a team agent in this org
+is excluded from the analytics table. That is a scoping inconsistency recorded as
+a defect for the fix tasks, not a product-definition question.
 
 Membership is **period-independent** (anyone who ever closed a rated conversation
 appears forever; team membership is current). Crucially, `team_members.role` is a
@@ -438,7 +479,8 @@ branch).
 
 **Definition (DEFINED, as implemented).** *Table = users who are current team-members
 with team-role `agent` in this org, plus anyone who ever closed a rated conversation
-in this org. Dropdown = first 50 users of the org, any role.*
+in this org — membership period-independent; per-agent numbers for the selected
+period. Dropdown = first 50 users of the org, any role.*
 
 **Reconciliation.** Salama missing from the table while 12 others are listed is
 **consistent with the code** if salama is not a team member with team-role `agent`
@@ -471,6 +513,9 @@ created in the org inside the selected window (default: current month to date).*
 The audit recorded 0 campaigns, which is consistent with a count of rows created in
 the window — but note this is *created in window*, not *currently existing*.
 
+Note: this section is supplementary to the Task 1 brief (which did not list the
+campaigns widget); it is included because the same widget machinery produces it.
+
 ## Summary — what needs a user decision
 
 The following are flagged **UNDEFINED — needs a product decision from the user** and
@@ -498,8 +543,9 @@ for sign-off before any fix task starts (Task 1, Step 3).
    recently-active; and whether `online_count` should follow the list filters or
    stay org-wide.
 9. **Break Time (§9):** what the summary card should show in the all-agents view
-   (org total / average / viewer's own); whether every away period is a "break";
-   whether to add the missing org filter to the log query.
+   (org total / average / viewer's own); whether every away period is a "break".
+   (The missing `organization_id` filter on the break-time log query is a scoping
+   defect for the fix tasks, not a product decision — see §9.)
 10. **Who is an "agent" for analytics (§10):** agent-role holders vs team-role
     agents vs anyone active in the period; table and dropdown must use the same
     population; whether zero-activity agents are listed.
@@ -516,7 +562,9 @@ for sign-off before any fix task starts (Task 1, Step 3).
   mismatch (`whatsapp_account` sent, `account` read) that makes the picker
   unfiltered by account.
 - **Unread badge up to 3427 (§6):** producible by the query but not verifiable from
-  audit data alone; needs a live check of read positions for that conversation.
+  audit data alone; the NULL-collapse defect (§6) now partly explains it — a viewer
+  with no read-state row gets the whole inbound history. Still needs a live check
+  of read positions for that conversation.
 - **6.3K vs 6.5K active contacts and 86.3K vs 90.3K messages (§2–§3):** reconciled
   as month-to-date growth at different moments — not contradictions.
 - **12 agents listed, salama missing (§10):** consistent with the code's
@@ -531,11 +579,22 @@ for sign-off before any fix task starts (Task 1, Step 3).
   Live values are taken from the 2026-11-21 audit as reported; no live DB query was
   run, so per-row facts (e.g. whether salama has a rated closure, or the exact read
   position behind the 3427 badge) are stated as code-conditional, not verified.
-- Every file:line above was checked at HEAD `21556d4`. Two plan references needed
+- Every file:line above was checked at HEAD `1819a0e` (re-verified in fix round 1;
+  the first version was checked at `21556d4`). Two plan references needed
   correction/expansion while verifying: the dashboard has no single stats endpoint
   (all dashboard numbers are widget queries, §0), and the frontend never sends
   `has_messages` (so Chat and Settings totals both include never-messaged contacts,
   §1/§4).
+- **Revision note (fix round 1/5):** three review findings corrected and re-verified
+  against the code at `1819a0e` — the missing org filter on the break-time query is
+  now recorded as a scoping defect, not a product decision (§9); the unread-badge
+  threshold is corrected for PostgreSQL `GREATEST` NULL semantics, with the
+  NULL-collapse recorded as a defect (§6); the §10 SQL block is labelled as literal
+  GORM-generated SQL and reconciled with §8's `user_organizations` join, with the
+  cross-org-member exclusion recorded as a defect (§10). Four minor fixes applied
+  in the same round: Private labelled UNDEFINED for sign-off (§5), the §8/§10
+  definition sentences completed, the §7 "1 template" causes marked as untested
+  hypotheses, and §11 noted as supplementary to the brief.
 - Incidental finding, recorded for the fix tasks (not fixed here): the campaign
   template picker sends `whatsapp_account` while `ListTemplates` reads `account`
   (§7).
