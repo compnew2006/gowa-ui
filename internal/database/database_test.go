@@ -235,6 +235,100 @@ func TestSeedSystemRolesForOrg_AdminRoleHasAllPermissions(t *testing.T) {
 	assert.Equal(t, totalPerms, len(perms), "admin role should have all permissions")
 }
 
+// --- SyncSystemRolePermissions ---
+
+func rolePermissionKeys(t *testing.T, db *gorm.DB, roleID uuid.UUID) []string {
+	t.Helper()
+	var perms []models.Permission
+	require.NoError(t, db.Model(&models.CustomRole{BaseModel: models.BaseModel{ID: roleID}}).Association("Permissions").Find(&perms))
+	keys := make([]string, 0, len(perms))
+	for _, p := range perms {
+		keys = append(keys, p.Resource+":"+p.Action)
+	}
+	return keys
+}
+
+func TestSyncSystemRolePermissions_RemovesExcessAndRestoresMissingAgentPermissions(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	cleanAll(t, db)
+
+	require.NoError(t, database.SeedPermissionsAndRoles(db))
+
+	org := models.Organization{
+		BaseModel: models.BaseModel{ID: uuid.New()},
+		Name:      "Sync Excess Org",
+		Settings:  models.JSONB{},
+	}
+	require.NoError(t, db.Create(&org).Error)
+	require.NoError(t, database.SeedSystemRolesForOrg(db, org.ID))
+
+	var agentRole models.CustomRole
+	require.NoError(t, db.Where("organization_id = ? AND name = ? AND is_system = ?", org.ID, "agent", true).First(&agentRole).Error)
+
+	// Simulate the live drift: grant excess permissions and drop one defined one.
+	var allPerms []models.Permission
+	require.NoError(t, db.Find(&allPerms).Error)
+	permByKey := make(map[string]models.Permission, len(allPerms))
+	for _, p := range allPerms {
+		permByKey[p.Resource+":"+p.Action] = p
+	}
+
+	excessKeys := []string{
+		"accounts:write", "accounts:delete", "accounts:assign",
+		"contacts:delete", "analytics:write", "analytics:delete",
+	}
+	var excess []models.Permission
+	for _, key := range excessKeys {
+		perm, ok := permByKey[key]
+		require.True(t, ok, "permission %s should exist", key)
+		excess = append(excess, perm)
+	}
+	require.NoError(t, db.Model(&agentRole).Association("Permissions").Append(excess))
+
+	// Drop a defined permission so sync must re-add it.
+	require.NoError(t, db.Model(&agentRole).Association("Permissions").Delete(permByKey["chat:write"]))
+
+	require.NoError(t, database.SyncSystemRolePermissions(db))
+
+	assert.ElementsMatch(t, models.SystemRolePermissions()["agent"], rolePermissionKeys(t, db, agentRole.ID),
+		"agent role should end with exactly the 10 defined permissions")
+}
+
+func TestSyncSystemRolePermissions_LeavesCustomRolesUntouched(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	cleanAll(t, db)
+
+	require.NoError(t, database.SeedPermissionsAndRoles(db))
+
+	org := models.Organization{
+		BaseModel: models.BaseModel{ID: uuid.New()},
+		Name:      "Sync Custom Org",
+		Settings:  models.JSONB{},
+	}
+	require.NoError(t, db.Create(&org).Error)
+	require.NoError(t, database.SeedSystemRolesForOrg(db, org.ID))
+
+	// A custom role with deliberately broad permissions must not be pruned.
+	custom := testutil.CreateTestRoleExact(t, db, org.ID, "Support Lead", false, false, nil)
+	var allPerms []models.Permission
+	require.NoError(t, db.Find(&allPerms).Error)
+	permByKey := make(map[string]models.Permission, len(allPerms))
+	for _, p := range allPerms {
+		permByKey[p.Resource+":"+p.Action] = p
+	}
+	wantKeys := []string{"accounts:delete", "contacts:delete", "chat:write"}
+	var want []models.Permission
+	for _, key := range wantKeys {
+		want = append(want, permByKey[key])
+	}
+	require.NoError(t, db.Model(custom).Association("Permissions").Replace(want))
+
+	require.NoError(t, database.SyncSystemRolePermissions(db))
+
+	assert.ElementsMatch(t, wantKeys, rolePermissionKeys(t, db, custom.ID),
+		"custom roles must be untouched by system-role sync")
+}
+
 // --- CreateDefaultAdmin ---
 
 func TestCreateDefaultAdmin_CreatesOrgAndUser(t *testing.T) {
