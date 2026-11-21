@@ -1195,7 +1195,7 @@ onUnmounted(() => {
         <div
           ref="tabStripRef"
           role="tablist"
-          aria-label="$t('chat.conversationTabs')"
+          :aria-label="$t('chat.conversationTabs')"
           :class="[
             'grid gap-1 rounded-lg bg-white/[0.04] light:bg-gray-100 p-1 mt-2',
             tabGridClass()

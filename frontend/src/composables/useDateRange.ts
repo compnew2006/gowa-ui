@@ -122,8 +122,15 @@ export function useDateRange(options: UseDateRangeOptions = {}) {
     }
   }
 
-  // Persist on preset change
-  watch(selectedRange, () => savePreferences())
+  // Persist on preset change; selecting Custom Range auto-opens the picker
+  // (the Popover in DateRangePicker only renders for 'custom' and is driven
+  // by isDatePickerOpen, which nothing else ever set to true).
+  watch(selectedRange, (newValue) => {
+    savePreferences()
+    if (newValue === 'custom') {
+      isDatePickerOpen.value = true
+    }
+  })
 
   return {
     selectedRange,
