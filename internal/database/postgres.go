@@ -704,7 +704,8 @@ func SeedSystemRolesForAllOrgs(db *gorm.DB) error {
 		return fmt.Errorf("failed to fix role permissions: %w", err)
 	}
 
-	// Additively grant newly-mapped permissions to existing system roles
+	// Reconcile existing system roles to exactly their defined permissions
+	// (grants missing ones, removes excess ones)
 	if err := SyncSystemRolePermissions(db); err != nil {
 		return fmt.Errorf("failed to sync role permissions: %w", err)
 	}
@@ -777,11 +778,14 @@ func FixSystemRolePermissions(db *gorm.DB) error {
 	return nil
 }
 
-// SyncSystemRolePermissions additively grants any permissions from
-// SystemRolePermissions that an existing system role is missing. It never
-// removes permissions, so super-admin customizations of system roles are
-// preserved while new default grants (e.g. permissions added in an upgrade)
-// still reach already-seeded organizations.
+// SyncSystemRolePermissions reconciles every system role's permissions to
+// exactly the set defined in SystemRolePermissions: permissions the role is
+// missing are granted, and permissions no longer in the definition are
+// removed. This prunes drift (e.g. excess grants made before the defaults
+// were tightened) on the next server start, since SeedSystemRolesForAllOrgs
+// calls it. Custom (non-system) roles are never touched, roles whose name
+// is not in SystemRolePermissions are skipped, and Permission rows
+// themselves are never deleted — only the role→permission links change.
 func SyncSystemRolePermissions(db *gorm.DB) error {
 	var permissions []models.Permission
 	if err := db.Find(&permissions).Error; err != nil {
@@ -809,29 +813,15 @@ func SyncSystemRolePermissions(db *gorm.DB) error {
 			continue // Unknown role name
 		}
 
-		// Collect the permission IDs the role already holds
-		var existingIDs []uuid.UUID
-		if err := db.Table("role_permissions").
-			Where("custom_role_id = ?", role.ID).
-			Pluck("permission_id", &existingIDs).Error; err != nil {
-			return fmt.Errorf("failed to fetch role permissions for %s: %w", role.Name, err)
-		}
-		existing := make(map[uuid.UUID]bool, len(existingIDs))
-		for _, id := range existingIDs {
-			existing[id] = true
-		}
-
-		var permsToAdd []models.Permission
+		desired := make([]models.Permission, 0, len(permKeys))
 		for _, key := range permKeys {
-			if perm, ok := permMap[key]; ok && !existing[perm.ID] {
-				permsToAdd = append(permsToAdd, perm)
+			if perm, ok := permMap[key]; ok {
+				desired = append(desired, perm)
 			}
 		}
 
-		if len(permsToAdd) > 0 {
-			if err := db.Model(&role).Association("Permissions").Append(permsToAdd); err != nil {
-				return fmt.Errorf("failed to grant permissions to role %s: %w", role.Name, err)
-			}
+		if err := db.Model(&role).Association("Permissions").Replace(desired); err != nil {
+			return fmt.Errorf("failed to sync permissions for role %s: %w", role.Name, err)
 		}
 	}
 

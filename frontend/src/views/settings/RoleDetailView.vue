@@ -53,7 +53,7 @@ const isSuperAdmin = computed(() => authStore.user?.is_super_admin ?? false)
 const canWrite = computed(() => authStore.hasPermission('roles', 'write'))
 const canDelete = computed(() => authStore.hasPermission('roles', 'delete'))
 const isSystem = computed(() => role.value?.is_system ?? false)
-const canEditPermissions = computed(() => !isSystem.value || isSuperAdmin.value)
+const canEditPermissions = computed(() => !isSystem.value)
 const canEditForm = computed(() => canWrite.value && (!isSystem.value || isSuperAdmin.value))
 
 const form = ref({
@@ -203,7 +203,7 @@ onMounted(async () => {
         </CardHeader>
         <CardContent class="space-y-4">
           <p v-if="isSystem" class="text-xs text-muted-foreground">
-            {{ isSuperAdmin ? $t('roles.superAdminCanEdit') : $t('roles.systemRoleViewOnly') }}
+            {{ $t('roles.systemRoleViewOnly') }}
           </p>
           <div class="space-y-1.5">
             <Label class="text-xs">{{ $t('roles.name') }} <span class="text-destructive">*</span></Label>
