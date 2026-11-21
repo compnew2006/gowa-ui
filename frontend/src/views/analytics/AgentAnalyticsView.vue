@@ -241,8 +241,9 @@ const comparisonChartData = computed(() => {
       },
       {
         label: t('agentAnalytics.customerRating'),
-        data: analytics.value.agent_stats.map(a => a.ratings_count),
-        backgroundColor: 'rgba(234, 179, 8, 0.8)'
+        data: analytics.value.agent_stats.map(a => a.avg_rating),
+        backgroundColor: 'rgba(234, 179, 8, 0.8)',
+        yAxisID: 'y1'
       }
     ]
   }
@@ -259,6 +260,20 @@ const comparisonChartOptions = {
   scales: {
     y: {
       beginAtZero: true
+    },
+    // Rating is 0–5; it needs its own axis or the bars vanish next to
+    // message counts (previously the ratings_count dataset shared this axis).
+    y1: {
+      type: 'linear' as const,
+      position: 'right' as const,
+      min: 0,
+      max: 5,
+      ticks: {
+        stepSize: 1
+      },
+      grid: {
+        drawOnChartArea: false
+      }
     }
   }
 }

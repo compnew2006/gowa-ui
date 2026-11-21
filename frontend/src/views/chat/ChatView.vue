@@ -1195,7 +1195,7 @@ onUnmounted(() => {
         <div
           ref="tabStripRef"
           role="tablist"
-          aria-label="$t('chat.conversationTabs')"
+          :aria-label="$t('chat.conversationTabs')"
           :class="[
             'grid gap-1 rounded-lg bg-white/[0.04] light:bg-gray-100 p-1 mt-2',
             tabGridClass()
@@ -2672,7 +2672,7 @@ onUnmounted(() => {
             <textarea
               ref="messageInputRef"
               v-model="messageInput"
-              :placeholder="isReadOnlyAccess ? $t(isRestrictedAccess ? 'chat.restrictedPlaceholder' : 'chat.readOnlyPlaceholder') : sendAccountLocked ? $t('chat.sendAccountLockedPlaceholder') : $t('chat.typeMessage') + '...'"
+              :placeholder="isReadOnlyAccess ? $t(isRestrictedAccess ? 'chat.restrictedPlaceholder' : 'chat.readOnlyPlaceholder') : sendAccountLocked ? $t('chat.sendAccountLockedPlaceholder') : isStatusContact(contactsStore.currentContact?.id) ? $t('chat.statusHint') : $t('chat.typeMessage') + '...'"
               :disabled="composerLocked"
               rows="1"
               class="flex-1 bg-transparent text-[14px] text-white light:text-gray-900 placeholder:text-white/30 light:placeholder:text-gray-400 focus:outline-none resize-none min-h-[36px] max-h-[120px] py-2 overflow-y-auto disabled:cursor-not-allowed"

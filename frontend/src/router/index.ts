@@ -7,6 +7,7 @@ declare module 'vue-router' {
   interface RouteMeta {
     requiresAuth?: boolean
     permission?: string // Resource permission required (e.g., 'analytics', 'chat')
+    title?: string // Shown in the browser tab as "<title> | Gowa-UI"
   }
 }
 
@@ -44,14 +45,14 @@ const router = createRouter({
           path: '',
           name: 'dashboard',
           component: () => import('@/views/dashboard/DashboardView.vue'),
-          meta: { permission: 'analytics' }
+          meta: { permission: 'analytics', title: 'Dashboard' }
         },
         {
           path: 'chat/:contactId?',
           name: 'chat-conversation',
           component: () => import('@/views/chat/ChatView.vue'),
           props: true,
-          meta: { permission: 'chat', stableKey: true }
+          meta: { permission: 'chat', stableKey: true, title: 'Chat' }
         },
         {
           path: 'profile',
@@ -63,7 +64,7 @@ const router = createRouter({
           path: 'campaigns',
           name: 'campaigns',
           component: () => import('@/views/settings/CampaignsView.vue'),
-          meta: { permission: 'campaigns' }
+          meta: { permission: 'campaigns', title: 'Campaigns' }
         },
         {
           path: 'campaigns/:id',
@@ -75,13 +76,13 @@ const router = createRouter({
           path: 'analytics/agents',
           name: 'agent-analytics',
           component: () => import('@/views/analytics/AgentAnalyticsView.vue'),
-          meta: { permission: 'analytics.agents' }
+          meta: { permission: 'analytics.agents', title: 'Agent Analytics' }
         },
         {
           path: 'settings',
           name: 'settings',
           component: () => import('@/views/settings/SettingsView.vue'),
-          meta: { permission: 'settings.general' }
+          meta: { permission: 'settings.general', title: 'Settings' }
         },
         {
           path: 'settings/general',
@@ -309,6 +310,12 @@ router.beforeEach(async (to, _from, next) => {
   }
 
   next()
+})
+
+// Browser tab title: "<route title> | Gowa-UI", falling back to "Gowa-UI"
+// for routes without a title (login, 404, profile, ...).
+router.afterEach((to) => {
+  document.title = to.meta.title ? `${to.meta.title} | Gowa-UI` : 'Gowa-UI'
 })
 
 export default router
