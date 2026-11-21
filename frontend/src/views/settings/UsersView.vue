@@ -414,16 +414,18 @@ async function copyInviteLink() {
         <div v-if="canAssignAccounts && accounts.length > 0" class="space-y-2 border-t pt-4">
           <Label>{{ $t('users.accountAssignments') }}</Label>
           <p class="text-xs text-muted-foreground">{{ $t('users.accountAssignmentsDesc') }}</p>
-          <div class="space-y-2 pt-1">
-            <div v-for="account in accounts" :key="account.id" class="flex items-center gap-2">
-              <Checkbox
-                :id="`create-assign-${account.id}`"
-                :checked="formData.whatsapp_account_ids.includes(account.id)"
-                @update:checked="(checked: boolean | 'indeterminate') => toggleAccount(account.id, checked === true)"
-              />
-              <label :for="`create-assign-${account.id}`" class="text-sm cursor-pointer">{{ account.name }}</label>
+          <ScrollArea type="always" class="max-h-72">
+            <div class="space-y-2 pr-2">
+              <div v-for="account in accounts" :key="account.id" class="flex items-center gap-2">
+                <Checkbox
+                  :id="`create-assign-${account.id}`"
+                  :checked="formData.whatsapp_account_ids.includes(account.id)"
+                  @update:checked="(checked: boolean | 'indeterminate') => toggleAccount(account.id, checked === true)"
+                />
+                <label :for="`create-assign-${account.id}`" class="text-sm cursor-pointer">{{ account.name }}</label>
+              </div>
             </div>
-          </div>
+          </ScrollArea>
         </div>
         <div v-if="isSuperAdmin" class="flex items-center justify-between border-t pt-4"><div><Label for="is_super_admin" class="font-normal cursor-pointer">{{ $t('users.superAdminLabel') }}</Label><p class="text-xs text-muted-foreground">{{ $t('users.superAdminDesc') }}</p></div><Switch id="is_super_admin" :checked="formData.is_super_admin" @update:checked="formData.is_super_admin = $event" /></div>
       </div>
@@ -448,7 +450,7 @@ async function copyInviteLink() {
           <p v-else-if="accounts.length === 0" class="text-sm text-muted-foreground py-4 text-center">
             {{ $t('accounts.noAccounts', 'No WhatsApp accounts linked') }}
           </p>
-          <ScrollArea v-else class="max-h-72">
+          <ScrollArea v-else type="always" class="max-h-72">
             <div class="space-y-2 pr-2">
               <div v-for="account in accounts" :key="account.id" class="flex items-center gap-2">
                 <Checkbox
