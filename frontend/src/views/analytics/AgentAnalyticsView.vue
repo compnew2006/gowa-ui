@@ -264,8 +264,8 @@ const comparisonChartOptions = {
     // Rating is 0–5; it needs its own axis or the bars vanish next to
     // message counts (previously the ratings_count dataset shared this axis).
     y1: {
-      type: 'linear',
-      position: 'right',
+      type: 'linear' as const,
+      position: 'right' as const,
       min: 0,
       max: 5,
       ticks: {
