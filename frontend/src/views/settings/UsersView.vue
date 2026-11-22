@@ -414,7 +414,7 @@ async function copyInviteLink() {
         <div v-if="canAssignAccounts && accounts.length > 0" class="space-y-2 border-t pt-4">
           <Label>{{ $t('users.accountAssignments') }}</Label>
           <p class="text-xs text-muted-foreground">{{ $t('users.accountAssignmentsDesc') }}</p>
-          <ScrollArea type="always" class="max-h-72">
+          <ScrollArea type="always" class="h-72">
             <div class="space-y-2 pr-2">
               <div v-for="account in accounts" :key="account.id" class="flex items-center gap-2">
                 <Checkbox
@@ -450,7 +450,7 @@ async function copyInviteLink() {
           <p v-else-if="accounts.length === 0" class="text-sm text-muted-foreground py-4 text-center">
             {{ $t('accounts.noAccounts', 'No WhatsApp accounts linked') }}
           </p>
-          <ScrollArea v-else type="always" class="max-h-72">
+          <ScrollArea v-else type="always" class="h-72">
             <div class="space-y-2 pr-2">
               <div v-for="account in accounts" :key="account.id" class="flex items-center gap-2">
                 <Checkbox
