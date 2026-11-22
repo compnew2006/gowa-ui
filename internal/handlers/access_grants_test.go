@@ -370,6 +370,65 @@ func countAuditRowsWithChange(t *testing.T, db *gorm.DB, contactID uuid.UUID, fi
 	return n
 }
 
+// auditRowChangeFields returns the set of change-field keys recorded in the
+// audit row that contains the given field (nil when no row records it).
+// Change entries are the flat maps LogAuditSync appends, so one row can
+// carry several fields — e.g. a merged release + grant row records
+// chat_status, assigned_user_id and access_grant_released together.
+func auditRowChangeFields(t *testing.T, db *gorm.DB, contactID uuid.UUID, field string) map[string]bool {
+	t.Helper()
+	var logs []models.AuditLog
+	require.NoError(t, db.Where("resource_type = ? AND resource_id = ?", "contact", contactID).
+		Find(&logs).Error)
+	for _, l := range logs {
+		fields := map[string]bool{}
+		found := false
+		for _, c := range l.Changes {
+			m, ok := c.(map[string]any)
+			if !ok {
+				continue
+			}
+			for k := range m {
+				fields[k] = true
+				if k == field {
+					found = true
+				}
+			}
+			if f, _ := m["field"].(string); f != "" {
+				fields[f] = true
+				if f == field {
+					found = true
+				}
+			}
+		}
+		if found {
+			return fields
+		}
+	}
+	return nil
+}
+
+// auditChangeValue returns the recorded value of one change field in the
+// audit row that contains it (nil when no row records it).
+func auditChangeValue(t *testing.T, db *gorm.DB, contactID uuid.UUID, field string) any {
+	t.Helper()
+	var logs []models.AuditLog
+	require.NoError(t, db.Where("resource_type = ? AND resource_id = ?", "contact", contactID).
+		Find(&logs).Error)
+	for _, l := range logs {
+		for _, c := range l.Changes {
+			m, ok := c.(map[string]any)
+			if !ok {
+				continue
+			}
+			if v, ok := m[field]; ok {
+				return v
+			}
+		}
+	}
+	return nil
+}
+
 // TestRevokeAccessGrant_OpenAssignee_WritesSingleAuditRow: releasing the
 // current assignee of an open conversation is ONE action, so it must write
 // ONE audit row. Before the fix ReleaseWithDB wrote the release row and
@@ -391,6 +450,21 @@ func TestRevokeAccessGrant_OpenAssignee_WritesSingleAuditRow(t *testing.T) {
 	// polling: assign (1) + release (1). The extra grant row is gone.
 	assert.EqualValues(t, 2, countContactAuditLogs(t, f.app.DB, f.contact.ID),
 		"assign + revoke must write exactly 2 audit rows, not 3")
+
+	// ...but the surviving release row must still record the grant
+	// revocation: ReleaseWithDB never touches the grant table, so without
+	// the merged fact an auditor could not tell a plain self-release from
+	// an admin grant-revocation, or whether the grant still exists.
+	assert.EqualValues(t, 1, countAuditRowsWithChange(t, f.app.DB, f.contact.ID, "access_grant_released"),
+		"exactly one row must record the grant revocation")
+	fields := auditRowChangeFields(t, f.app.DB, f.contact.ID, "access_grant_released")
+	require.NotNil(t, fields, "a row recording the grant revocation must exist")
+	assert.True(t, fields["chat_status"], "the grant fact must share the release row (chat_status)")
+	assert.True(t, fields["assigned_user_id"], "the grant fact must share the release row (assigned_user_id)")
+	payload, ok := auditChangeValue(t, f.app.DB, f.contact.ID, "access_grant_released").(map[string]any)
+	require.True(t, ok, "the grant revocation must carry its payload")
+	assert.Equal(t, true, payload["grant_existed"], "row must record that a grant existed and was revoked")
+	assert.Equal(t, true, payload["was_assignee"], "row must record the target was the assignee")
 }
 
 // TestRevokeAccessGrant_ClosedAssignee_StillAuditsGrantRevocation: the
@@ -421,6 +495,59 @@ func TestRevokeAccessGrant_ClosedAssignee_StillAuditsGrantRevocation(t *testing.
 		return countAuditRowsWithChange(t, f.app.DB, f.contact.ID, "access_grant_released") == 1
 	}, 2*time.Second, 50*time.Millisecond,
 		"revoking a closed chat's assignee must still leave exactly one grant-revocation audit row")
+}
+
+// TestRevokeAccessGrant_ClosedAssigneeWithoutGrant_StillAuditsAssigneeRelease:
+// the legacy closed-but-assigned case with NO active grant row. The revoke
+// clears assigned_user_id directly (no ReleaseWithDB row), so the grant row
+// is the only possible audit record — with no grant to revoke, the old
+// `revoked && !releaseAudited` condition wrote zero rows and the
+// assignee-clearing left no audit trail at all.
+func TestRevokeAccessGrant_ClosedAssigneeWithoutGrant_StillAuditsAssigneeRelease(t *testing.T) {
+	f := newGrantFixture(t)
+	f.assignViaAPI(t, f.agent)
+
+	closeReq := newPUTRequest(t)
+	testutil.SetAuthContext(closeReq, f.org.ID, f.agent.ID)
+	testutil.SetPathParam(closeReq, "id", f.contact.ID.String())
+	require.NoError(t, f.app.CloseChat(closeReq))
+	require.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(closeReq))
+
+	// No active grant at revoke time: the grant was already revoked, but
+	// the assignee was never released with it (legacy closed-but-assigned).
+	require.NoError(t, f.app.DB.Model(&models.ContactAssignmentAccessGrant{}).
+		Where("contact_id = ? AND user_id = ? AND revoked_at IS NULL", f.contact.ID, f.agent.ID).
+		Updates(map[string]any{"revoked_at": time.Now(), "revoked_by": f.admin.ID}).Error)
+
+	// Legacy closed-but-assigned row: Close normally clears the assignee,
+	// so reconstruct the state the handler's closed branch names — closed
+	// in metadata, but assigned_user_id still set.
+	require.NoError(t, f.app.DB.Model(&models.Contact{}).Where("id = ?", f.contact.ID).
+		Update("assigned_user_id", f.agent.ID).Error)
+	require.NotNil(t, f.loadFresh(t).AssignedUserID, "fixture must be a closed-but-assigned row")
+
+	req := testutil.NewRequest(t)
+	req.RequestCtx.Request.Header.SetMethod("DELETE")
+	testutil.SetAuthContext(req, f.org.ID, f.admin.ID)
+	testutil.SetPathParam(req, "id", f.contact.ID.String())
+	testutil.SetPathParam(req, "target_user_id", f.agent.ID.String())
+	require.NoError(t, f.app.RevokeAccessGrant(req))
+	require.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	fresh := f.loadFresh(t)
+	assert.Equal(t, models.ChatStatusClosed, fresh.EffectiveStatus(), "closed stays closed")
+	assert.Nil(t, fresh.AssignedUserID, "assignee must be cleared")
+
+	// CloseChat audits asynchronously, so poll for the row rather than
+	// asserting a total.
+	require.Eventually(t, func() bool {
+		return countAuditRowsWithChange(t, f.app.DB, f.contact.ID, "access_grant_released") == 1
+	}, 2*time.Second, 50*time.Millisecond,
+		"revoking a closed chat's assignee with no active grant must still leave exactly one audit row")
+	payload, ok := auditChangeValue(t, f.app.DB, f.contact.ID, "access_grant_released").(map[string]any)
+	require.True(t, ok, "the audit row must carry the access_grant_released payload")
+	assert.Equal(t, false, payload["grant_existed"], "row must record that no grant existed to revoke")
+	assert.Equal(t, true, payload["was_assignee"], "row must record the target was the assignee")
 }
 
 // TestRevokeAccessGrant_OtherAssignee: when assigned to someone else, only

@@ -133,7 +133,11 @@ func (s *Service) Release(ctx context.Context, orgID, userID uuid.UUID, contact 
 // access-grant Release endpoint to make "revoke grant + release assignment"
 // one transaction. All database writes run synchronously on db. The caller
 // owns the transaction and must broadcast only after its commit succeeds.
-func (s *Service) ReleaseWithDB(ctx context.Context, db *gorm.DB, orgID, userID uuid.UUID, contact *models.Contact, isAssignee, isAdminOrManager bool) (bool, error) {
+// Optional extraAuditChanges are merged into the release audit row, so a
+// caller whose action carries an extra auditable fact (e.g. a grant
+// revocation, which ReleaseWithDB itself never records — it never touches
+// the grant table) keeps one row per action instead of a second row.
+func (s *Service) ReleaseWithDB(ctx context.Context, db *gorm.DB, orgID, userID uuid.UUID, contact *models.Contact, isAssignee, isAdminOrManager bool, extraAuditChanges ...map[string]any) (bool, error) {
 	db = db.WithContext(ctx)
 	// Authorization is checked first in the handler; double-check here as a
 	// defense-in-depth invariant (the handler is the source of truth but the
@@ -196,12 +200,14 @@ func (s *Service) ReleaseWithDB(ctx context.Context, db *gorm.DB, orgID, userID 
 	// explicit old→new map forces the entry to persist. old/new are nil on
 	// purpose: passing the full contact here dumped every field into the row
 	// (audit-log flooding) — only the explicit changes below are recorded.
+	// Caller-supplied extraAuditChanges are merged into this same row, so
+	// one action still writes one row.
 	if err := audit.LogAuditSync(db, orgID, userID, agentName,
 		"contact", contact.ID, models.AuditActionUpdated, nil, nil,
-		map[string]any{
+		append([]map[string]any{{
 			"chat_status":      map[string]any{"old": oldStatus, "new": string(models.ChatStatusPending)},
 			"assigned_user_id": map[string]any{"old": oldAssigned, "new": nil},
-		}); err != nil {
+		}}, extraAuditChanges...)...); err != nil {
 		s.log.Error("Failed to create release audit log", "error", err, "contact_id", contact.ID)
 		return false, fmt.Errorf("chat: failed to create release audit log: %w", err)
 	}

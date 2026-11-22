@@ -149,7 +149,10 @@ func (a *App) RevokeAccessGrant(r *fastglue.Request) error {
 	// releaseAudited is true only when ReleaseWithDB actually wrote its
 	// release row (open-chat assignee case). The closed-chat branch below
 	// clears the assignee directly and writes no row, so the grant row
-	// stays the only audit record there.
+	// stays the only audit record there. In the open-chat case the grant
+	// fact is merged into the release row (see below) — ReleaseWithDB
+	// never touches the grant table, so a plain release row alone could
+	// not tell an auditor the grant was revoked.
 	releaseAudited := false
 	txErr := a.DB.WithContext(r.RequestCtx).Transaction(func(tx *gorm.DB) error {
 		now := time.Now()
@@ -175,7 +178,25 @@ func (a *App) RevokeAccessGrant(r *fastglue.Request) error {
 				contact.AssignedUserID = nil
 				assigneeReleased = true
 			} else {
-				released, rerr := a.ChatLifecycle.ReleaseWithDB(r.RequestCtx, tx, orgID, userID, contact, false, true)
+				// When a grant was revoked, the release row is the only
+				// audit row for this action, so the grant fact is merged
+				// into it via ReleaseWithDB instead of a second row. The
+				// extra is only persisted on a real release, which always
+				// lands the conversation in pending — hence the fixed
+				// conversation_now. If ReleaseWithDB no-ops, the fallback
+				// grant row below still records the revocation.
+				var releaseExtras []map[string]any
+				if revoked {
+					releaseExtras = []map[string]any{{
+						"access_grant_released": map[string]any{
+							"user_id":          targetID.String(),
+							"was_assignee":     true,
+							"grant_existed":    revoked,
+							"conversation_now": string(models.ChatStatusPending),
+						},
+					}}
+				}
+				released, rerr := a.ChatLifecycle.ReleaseWithDB(r.RequestCtx, tx, orgID, userID, contact, false, true, releaseExtras...)
 				if rerr != nil {
 					return rerr
 				}
@@ -184,13 +205,15 @@ func (a *App) RevokeAccessGrant(r *fastglue.Request) error {
 			}
 		}
 		// One action, one audit row: when ReleaseWithDB already wrote the
-		// release row, a second row here duplicated the same action (and,
-		// with the full contact as newData, a full-contact dump on top).
-		// The grant row is still written when only a grant was revoked, or
-		// when the release wrote no row (closed chat) — the revocation
-		// itself must stay in the audit trail. old/new are nil: only the
-		// explicit access_grant_released change is recorded.
-		if revoked && !releaseAudited {
+		// release row (now merged with the grant fact), a second row here
+		// duplicated the same action (and, with the full contact as newData,
+		// a full-contact dump on top). The grant row is still written when
+		// no release row exists: only a grant was revoked, the release
+		// wrote no row (closed chat), or the assignee was cleared with no
+		// active grant at all — that clearing must still leave an audit
+		// trail. old/new are nil: only the explicit
+		// access_grant_released change is recorded.
+		if (revoked || assigneeReleased) && !releaseAudited {
 			actorName := audit.GetUserName(tx, userID)
 			if err := audit.LogAuditSync(tx, orgID, userID, actorName,
 				"contact", contact.ID, models.AuditActionUpdated, nil, nil,
