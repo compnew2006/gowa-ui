@@ -1,4 +1,4 @@
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, unref, type Ref } from 'vue'
 import { toast } from 'vue-sonner'
 import { api, contactsService, type TransferTarget } from '@/services/api'
 
@@ -8,6 +8,11 @@ export interface UseChatLifecycleOptions {
   /** Contacts store reactive surface. */
   contactsStore: {
     currentContact: { id: string; assigned_user_id?: string; chat_status?: string } | null
+    /** Close-gate flags (contacts store computeds; plain booleans or refs). */
+    isPendingClaim?: boolean | Ref<boolean>
+    isAdminOrManager?: boolean | Ref<boolean>
+    isAssignedToMe?: boolean | Ref<boolean>
+    isCollaborator?: boolean | Ref<boolean>
     selectedContactIds: Set<string>
     setCurrentContact: (c: any) => void
     fetchContacts: () => Promise<void>
@@ -176,12 +181,51 @@ export function useChatLifecycle(options: UseChatLifecycleOptions) {
     }
   }
 
+  // ─── Close: single gate + two-step confirmation ───
+  // canCloseConversation is THE close gate (Task 6 reuses it): it encodes
+  // exactly the ChatView v-if — open, not pending-claim, and the viewer is
+  // an admin/manager, the assignee, or a collaborator. An unclaimed
+  // conversation fails both the pending check and the participant check, so
+  // no Close affordance exists for it (live evidence 2026-11-21). The
+  // view-level read-only-access check stays in the template v-if.
+  const canCloseConversation = computed(() => {
+    const contact = contactsStore.currentContact
+    if (!contact || contact.chat_status !== 'open') return false
+    if (unref(contactsStore.isPendingClaim)) return false
+    return !!(
+      unref(contactsStore.isAdminOrManager) ||
+      unref(contactsStore.isAssignedToMe) ||
+      unref(contactsStore.isCollaborator)
+    )
+  })
+
+  // Confirm-dialog state for closing. handleClose only OPENS the dialog;
+  // confirmClose performs the close. isClosing guards double-submit.
+  const isCloseDialogOpen = ref(false)
+  const isClosing = ref(false)
+
+  // handleClose opens the confirmation dialog instead of closing instantly
+  // (before this task it called closeChat directly, with no confirmation).
   async function handleClose() {
-    if (!contactsStore.currentContact) return
+    if (!contactsStore.currentContact || !canCloseConversation.value) return
+    isCloseDialogOpen.value = true
+  }
+
+  async function confirmClose() {
+    if (!isCloseDialogOpen.value || isClosing.value) return
+    if (!contactsStore.currentContact) {
+      isCloseDialogOpen.value = false
+      return
+    }
+    isClosing.value = true
     try {
       await contactsStore.closeChat(contactsStore.currentContact.id)
+      isCloseDialogOpen.value = false
     } catch {
+      // Keep the dialog open so the user can retry or cancel.
       console.error('Failed to close chat')
+    } finally {
+      isClosing.value = false
     }
   }
 
@@ -371,6 +415,10 @@ export function useChatLifecycle(options: UseChatLifecycleOptions) {
     handleLeave,
     handleRelease,
     handleClose,
+    confirmClose,
+    isCloseDialogOpen,
+    isClosing,
+    canCloseConversation,
     handleReopen,
     handleBulkRelease,
     handleInvite,

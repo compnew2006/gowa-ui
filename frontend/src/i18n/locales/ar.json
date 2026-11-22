@@ -483,6 +483,7 @@
     "removeFromConversation": "إزالة من المحادثة",
     "removeCollaborator": "إزالة",
     "closeConversation": "إغلاق المحادثة",
+    "closeConversationConfirm": "إغلاق هذه المحادثة؟ ستنتقل إلى المغلقة. يمكنك إعادة فتحها لاحقًا.",
     "conversationClosed": "هذه المحادثة مغلقة",
     "reopenConversation": "إعادة فتح المحادثة",
     "reopenHint": "هذه المحادثة مغلقة. أعد فتحها لمتابعة المحادثة.",

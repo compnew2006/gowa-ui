@@ -483,6 +483,7 @@
     "removeFromConversation": "Remove from conversation",
     "removeCollaborator": "Remove",
     "closeConversation": "Close Conversation",
+    "closeConversationConfirm": "Close this conversation? It will move to Closed. You can reopen it later.",
     "conversationClosed": "This conversation is closed",
     "reopenConversation": "Reopen Conversation",
     "reopenHint": "This conversation is closed. Reopen it to continue chatting.",

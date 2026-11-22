@@ -729,6 +729,10 @@ const {
   handleLeave,
   handleRelease,
   handleClose,
+  confirmClose,
+  isCloseDialogOpen,
+  isClosing,
+  canCloseConversation,
   handleReopen,
   handleBulkRelease,
   handleInvite,
@@ -1523,13 +1527,18 @@ onUnmounted(() => {
               <TooltipContent>{{ $t('chat.inviteCollaborator') }}</TooltipContent>
             </Tooltip>
 
-            <!-- Close conversation button.
-                 Admins/managers always see it (force-close & kick all).
-                 Agents see it when they are a participant (owner/collaborator). -->
-            <Tooltip v-if="!isReadOnlyAccess && contactsStore.currentContact && contactsStore.currentContact.chat_status === 'open' && !contactsStore.isPendingClaim && (contactsStore.isAdminOrManager || contactsStore.isAssignedToMe || contactsStore.isCollaborator)">
+            <!-- Close conversation button. The v-if is canCloseConversation
+                 (open, not pending-claim, admin/manager or participant) —
+                 the gate lives in useChatLifecycle so later Chat tasks reuse
+                 it. Labeled (not a bare icon) so it is discoverable: before
+                 this fix it was a CheckCheck icon with only a tooltip, and
+                 it only appears after claiming. Clicking opens a confirm
+                 dialog; handleClose never closes directly. -->
+            <Tooltip v-if="!isReadOnlyAccess && canCloseConversation">
               <TooltipTrigger as-child>
-                <Button variant="ghost" size="icon" class="h-8 w-8 text-white/50 hover:text-red-400 hover:bg-red-500/10 light:text-gray-500" @click="handleClose">
-                  <CheckCheck class="h-4 w-4" />
+                <Button variant="ghost" size="sm" :aria-label="$t('chat.closeConversation')" class="h-8 gap-1.5 px-3 text-xs text-white/50 hover:text-red-400 hover:bg-red-500/10 light:text-gray-500" @click="handleClose">
+                  <CheckCheck class="h-3.5 w-3.5" />
+                  {{ $t('chat.closeConversation') }}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>{{ $t('chat.closeConversation') }}</TooltipContent>
@@ -3182,6 +3191,20 @@ onUnmounted(() => {
       @confirm="confirmRevoke"
     >
       <template #description>{{ $t('chat.revokeConfirm') }}</template>
+    </ConfirmDialog>
+
+    <!-- Close confirmation. handleClose only opens this dialog; confirmClose
+         runs the actual close. Closing used to happen instantly on click. -->
+    <ConfirmDialog
+      v-model:open="isCloseDialogOpen"
+      :title="$t('chat.closeConversation')"
+      variant="destructive"
+      :confirm-label="$t('chat.closeConversation')"
+      :cancel-label="$t('common.cancel')"
+      :is-submitting="isClosing"
+      @confirm="confirmClose"
+    >
+      <template #description>{{ $t('chat.closeConversationConfirm') }}</template>
     </ConfirmDialog>
   </div>
 </template>
