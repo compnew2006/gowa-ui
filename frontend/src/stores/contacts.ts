@@ -601,6 +601,9 @@ export const useContactsStore = defineStore('contacts', () => {
       closedTotal.value = 0
       listGeneration++
       if (closedResponse) applyClosedPage(closedResponse, 1)
+      // closedTotal comes from the closed page above, not the count request:
+      // the page is the Closed tab's own data. refreshTabTotals applies the
+      // closed count instead, after lifecycle actions that move a chat.
       if (tabTotals.all !== null) serverAllTotal.value = tabTotals.all
       if (tabTotals.pending !== null) serverPendingTotal.value = tabTotals.pending
       if (tabTotals.me !== null) serverMyTotal.value = tabTotals.me
@@ -617,10 +620,11 @@ export const useContactsStore = defineStore('contacts', () => {
   // only `total` is read). The pending total uses the server pending rule
   // (chat_status=pending: unassigned, has a message, not closed, not
   // internal); the Me total uses the viewer's rule — supervisors watch every
-  // assigned conversation, agents only their own.
+  // assigned conversation, agents only their own. The closed total uses the
+  // closed page's own definition (chat_status=closed, has a message).
   async function fetchTabTotals(search?: string) {
     const base = { ...listFilterParams(), search, limit: 1 }
-    const [all, pending, me] = await Promise.all([
+    const [all, pending, me, closed] = await Promise.all([
       totalOf(contactsService.list({ ...base, has_messages: true, exclude_internal: true })),
       totalOf(contactsService.list({ ...base, chat_status: 'pending' })),
       totalOf(contactsService.list({
@@ -630,8 +634,9 @@ export const useContactsStore = defineStore('contacts', () => {
         exclude_closed: true,
         assigned: canSeeSupervisorTabs.value ? 'any' : 'me',
       })),
+      totalOf(contactsService.list({ ...base, chat_status: 'closed', has_messages: true })),
     ])
-    return { all, pending, me }
+    return { all, pending, me, closed }
   }
 
   // Reads the `total` off a list response, or null when the request failed or
@@ -649,10 +654,11 @@ export const useContactsStore = defineStore('contacts', () => {
   }
 
   // Re-read the server tab totals after a lifecycle action that moves a
-  // conversation between tabs (claim). The badges read these totals first
-  // (Decision 3), so the local assignment update in claimChat alone leaves
-  // them showing the pre-claim numbers until the next full list fetch.
-  // Only the totals are re-fetched (three limit=1 requests) — no list
+  // conversation between tabs (claim, close, release, reopen, bulk
+  // close/release, leave-and-close). The badges read these totals first
+  // (Decision 3), so the local assignment update in the action alone leaves
+  // them showing the pre-action numbers until the next full list fetch.
+  // Only the totals are re-fetched (four limit=1 requests) — no list
   // reload, no page reset. Never throws: a failed totals request keeps the
   // previous totals (or the loaded-rows fallback) instead of breaking the
   // action that triggered it.
@@ -663,6 +669,7 @@ export const useContactsStore = defineStore('contacts', () => {
       if (tabTotals.all !== null) serverAllTotal.value = tabTotals.all
       if (tabTotals.pending !== null) serverPendingTotal.value = tabTotals.pending
       if (tabTotals.me !== null) serverMyTotal.value = tabTotals.me
+      if (tabTotals.closed !== null) closedTotal.value = tabTotals.closed
     } catch (error) {
       console.error('Failed to refresh tab totals:', error)
     }
@@ -1184,6 +1191,11 @@ export const useContactsStore = defineStore('contacts', () => {
       contact.chat_status = 'pending'
       contact.collaborators = []
     }
+    // The badges read the server totals — re-read them FIRST, before the
+    // re-read below, so the counters move even if re-fetching the messages
+    // is slow or throws (Task 7a pattern from claimChat). The release PUT
+    // above already succeeded by this point.
+    await refreshTabTotals()
     if (currentContact.value?.id === contactId) {
       currentContact.value.assigned_user_id = undefined
       currentContact.value.assigned_user_name = undefined
@@ -1224,6 +1236,10 @@ export const useContactsStore = defineStore('contacts', () => {
       const response = await api.post('/contacts/bulk-release', { contact_ids: contactIds })
       const data = response.data.data || response.data
       const releasedIds: string[] = data?.released_ids || data?.released || []
+      // Re-read the tab totals before the per-chat updates below, so the
+      // badges move even if a later step throws (Task 7a pattern). The
+      // bulk-release POST above already succeeded by this point.
+      await refreshTabTotals()
       // Optimistically apply the same local mutation as releaseChat for each
       // successfully released chat. Failed ones keep their current state.
       for (const id of releasedIds) {
@@ -1258,6 +1274,11 @@ export const useContactsStore = defineStore('contacts', () => {
       const response = await api.post('/contacts/bulk-close', { contact_ids: contactIds })
       const data = response.data.data || response.data
       const closedIds: string[] = data?.closed_ids || data?.closed || []
+      // Re-read the tab totals before the per-chat re-reads below, so the
+      // badges move even if re-reading a contact or its messages is slow or
+      // throws (Task 7a pattern). The bulk-close POST above already
+      // succeeded by this point.
+      await refreshTabTotals()
       // Optimistically apply the same local mutation as closeChat for each
       // successfully closed chat. Failed ones keep their current state.
       for (const id of closedIds) {
@@ -1324,6 +1345,10 @@ export const useContactsStore = defineStore('contacts', () => {
         contact.assigned_user_name = undefined
         contact.collaborators = []
       }
+      // Leaving closed the conversation: re-read the tab totals before the
+      // re-reads below, so the badges move even if re-reading the contact or
+      // its messages is slow or throws (Task 7a pattern).
+      await refreshTabTotals()
       if (currentContact.value?.id === contactId) {
         currentContact.value.chat_status = 'closed'
         currentContact.value.assigned_user_id = undefined
@@ -1350,6 +1375,11 @@ export const useContactsStore = defineStore('contacts', () => {
       contact.assigned_user_name = undefined
       contact.collaborators = []
     }
+    // The badges read the server totals — re-read them FIRST, before the
+    // re-reads below, so the counters move even if re-reading the contact or
+    // its messages is slow or throws (Task 7a pattern from claimChat). The
+    // close PUT above already succeeded by this point.
+    await refreshTabTotals()
     if (currentContact.value?.id === contactId) {
       currentContact.value.chat_status = 'closed'
       currentContact.value.assigned_user_id = undefined
@@ -1376,6 +1406,11 @@ export const useContactsStore = defineStore('contacts', () => {
     if (contact) {
       contact.chat_status = 'open'
     }
+    // The badges read the server totals — re-read them FIRST, before the
+    // re-read below, so the counters move even if re-fetching the messages
+    // is slow or throws (Task 7a pattern from claimChat). The reopen PUT
+    // above already succeeded by this point.
+    await refreshTabTotals()
     if (currentContact.value?.id === contactId) {
       currentContact.value.chat_status = 'open'
       await fetchMessages(contactId)

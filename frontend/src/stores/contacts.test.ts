@@ -61,6 +61,7 @@ function page(ids: string[], total: number, chatStatus = 'closed') {
 function callKind(params: ListParams): string {
   if (params.limit === 1) {
     if (params.chat_status === 'pending') return 'pending-count'
+    if (params.chat_status === 'closed') return 'closed-count'
     if (params.assigned) return 'me-count'
     if (params.has_messages && params.exclude_internal) return 'all-count'
     return 'other-count'
@@ -98,6 +99,7 @@ describe('contacts store list paging', () => {
 
   it('appends the next closed page when no list fetch intervenes', async () => {
     list.mockImplementation((params: ListParams) => {
+      if (params.limit === 1) return page([], 0) // tab-total count request
       if (params.chat_status !== 'closed') return page([], 0)
       return page([`closed-${params.page}`], 120)
     })
@@ -114,6 +116,7 @@ describe('contacts store list paging', () => {
   it('drops a closed load-more response that a newer list fetch superseded', async () => {
     let resolveStalePage!: (value: unknown) => void
     list.mockImplementation((params: ListParams) => {
+      if (params.limit === 1) return page([], 0) // tab-total count request
       if (params.chat_status !== 'closed') return page([], 0)
       if (params.search === 'zed') return page(['closed-zed'], 1)
       if (params.page === 1) return page(['closed-1'], 120)
@@ -175,6 +178,7 @@ describe('contacts store list paging', () => {
       ['all-count', 'zed'],
       ['pending-count', 'zed'],
       ['me-count', 'zed'],
+      ['closed-count', 'zed'],
     ])
   })
 })
@@ -187,6 +191,7 @@ describe('contacts store account filter', () => {
 
   it('sends selected accounts with the general, closed and load-more requests', async () => {
     list.mockImplementation((params: ListParams) =>
+      params.limit === 1 ? page([], 0) : // tab-total count request
       params.chat_status === 'closed' ? page([`closed-${params.page}`], 120) : page([`open-${params.page}`], 120, 'open'))
 
     const store = useContactsStore()
@@ -205,6 +210,7 @@ describe('contacts store account filter', () => {
       ['all-count', undefined, 'vip', 'acc1,acc2'],
       ['pending-count', undefined, 'vip', 'acc1,acc2'],
       ['me-count', undefined, 'vip', 'acc1,acc2'],
+      ['closed-count', undefined, 'vip', 'acc1,acc2'],
       ['closed', 2, 'vip', 'acc1,acc2'],
       ['general', 2, 'vip', 'acc1,acc2'],
     ])
@@ -217,9 +223,9 @@ describe('contacts store account filter', () => {
     store.activeListTab = 'closed'
     await store.fetchContacts()
 
-    // General + closed pages and the three tab-total count requests.
+    // General + closed pages and the four tab-total count requests.
     expect(list.mock.calls.map(([params]) => params.accounts)).toEqual(
-      [undefined, undefined, undefined, undefined, undefined])
+      [undefined, undefined, undefined, undefined, undefined, undefined])
   })
 
   it('keeps only Private pair conversations on a selected account', async () => {
@@ -259,6 +265,7 @@ describe('contacts store conversation counts (Decision 3)', () => {
     list.mockImplementation((params: ListParams) => {
       if (params.limit === 1) {
         if (params.chat_status === 'pending') return page([], 27)
+        if (params.chat_status === 'closed') return page([], 33)
         if (params.assigned === 'any') return page([], 9)
         if (params.assigned === 'me') return page([], 4)
         if (params.has_messages && params.exclude_internal) return page([], 86)
@@ -296,7 +303,7 @@ describe('contacts store conversation counts (Decision 3)', () => {
 
     // The count requests carry the same filters as the list itself.
     const countCalls = list.mock.calls.map(([p]) => p).filter(p => p.limit === 1)
-    expect(countCalls.map(p => callKind(p))).toEqual(['all-count', 'pending-count', 'me-count'])
+    expect(countCalls.map(p => callKind(p))).toEqual(['all-count', 'pending-count', 'me-count', 'closed-count'])
     const meCount = countCalls.find(p => callKind(p) === 'me-count')!
     expect(meCount.assigned).toBe('any')
     expect(meCount.has_messages).toBe(true)
@@ -306,6 +313,11 @@ describe('contacts store conversation counts (Decision 3)', () => {
     expect(allCount.has_messages).toBe(true)
     expect(allCount.exclude_internal).toBe(true)
     expect(allCount.chat_status).toBeUndefined()
+    // The closed count uses the closed page's own definition (closed
+    // conversations with a message), not a bare status filter.
+    const closedCount = countCalls.find(p => callKind(p) === 'closed-count')!
+    expect(closedCount.chat_status).toBe('closed')
+    expect(closedCount.has_messages).toBe(true)
   })
 
   it('keeps has_messages on load-more so page 2 stays conversations', async () => {
@@ -388,10 +400,12 @@ describe('contacts store claim', () => {
     // the claim PUT lands, like the real backend does.
     let serverPending = 30
     let serverMe = 0
+    let serverClosed = 0
     const serverAll = 31
     list.mockImplementation((params: ListParams) => {
       if (params.limit === 1) {
         if (params.chat_status === 'pending') return page([], serverPending)
+        if (params.chat_status === 'closed') return page([], serverClosed)
         if (params.assigned) return page([], serverMe)
         return page([], serverAll)
       }
@@ -439,9 +453,9 @@ describe('contacts store claim', () => {
     expect(store.pendingCount).toBe(29)
     expect(store.myCount).toBe(1)
     expect(store.allCount).toBe(31)
-    // The claim re-asked the server for the totals (3 count requests on top
-    // of the 3 from the initial fetch).
-    expect(list.mock.calls.map(([p]) => p).filter(p => p.limit === 1)).toHaveLength(6)
+    // The claim re-asked the server for the totals (4 count requests on top
+    // of the 4 from the initial fetch).
+    expect(list.mock.calls.map(([p]) => p).filter(p => p.limit === 1)).toHaveLength(8)
   })
 
   it('moves the tab counters before the message re-read finishes (Task 7a fix round 1)', async () => {
@@ -455,6 +469,7 @@ describe('contacts store claim', () => {
     list.mockImplementation((params: ListParams) => {
       if (params.limit === 1) {
         if (params.chat_status === 'pending') return page([], serverPending)
+        if (params.chat_status === 'closed') return page([], 0)
         if (params.assigned) return page([], serverMe)
         return page([], 31)
       }
@@ -632,5 +647,220 @@ describe('contacts store close (Task 7b)', () => {
 
     expect(get).not.toHaveBeenCalled()
     expect(store.currentContact?.chat_status).toBe('open')
+  })
+})
+
+describe('contacts store lifecycle totals refresh (final review)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    listInternalConversations.mockResolvedValue({ data: { data: { conversations: [] } } })
+    messagesList.mockResolvedValue({ data: { data: { messages: [], total: 0, has_more: false } } })
+    list.mockImplementation(() => page([], 0))
+  })
+
+  // Server totals that move when a lifecycle endpoint lands, like the real
+  // backend does. The general page holds one conversation assigned to the
+  // current user; the closed page holds none (only its total matters).
+  function mockMovingTotals(state: { pending: number; me: number; all: number; closed: number }) {
+    list.mockImplementation((params: ListParams) => {
+      if (params.limit === 1) {
+        if (params.chat_status === 'pending') return page([], state.pending)
+        if (params.chat_status === 'closed') return page([], state.closed)
+        if (params.assigned) return page([], state.me)
+        if (params.has_messages && params.exclude_internal) return page([], state.all)
+        return page([], 0)
+      }
+      if (params.chat_status === 'closed') return page([], state.closed)
+      return Promise.resolve({ data: { data: {
+        contacts: [
+          { id: 'contact-1', phone_number: '966500000001', name: 'Mine', chat_status: 'open', last_message_at: '2026-11-22T00:00:00Z', assigned_user_id: 'user-1', tags: [] },
+        ],
+        total: state.all,
+      } } })
+    })
+  }
+
+  function countCalls() {
+    return list.mock.calls.map(([p]) => p).filter(p => p.limit === 1)
+  }
+
+  function mineContact() {
+    return {
+      id: 'contact-1',
+      phone_number: '966500000001',
+      name: 'Mine',
+      chat_status: 'open',
+      assigned_user_id: 'user-1',
+      tags: [],
+    } as never
+  }
+
+  function closedContact() {
+    return {
+      id: 'contact-1',
+      phone_number: '966500000001',
+      name: 'Mine',
+      chat_status: 'closed',
+      tags: [],
+      metadata: {
+        chat_status: 'closed',
+        closed_by: { user_id: 'user-1', name: 'Salama', closed_at: '2026-11-21T12:00:00Z' },
+      },
+    }
+  }
+
+  it('closeChat refreshes the tab totals so the Me badge drops and Closed rises without a reload', async () => {
+    // Final-review Important #1: closing moved the row between tabs but the
+    // badges kept the pre-close numbers until the next full fetch — "Me (5)"
+    // listing 4 rows. The badges read the server totals first (Decision 3),
+    // so the close must re-read them, like claimChat does (Task 7a).
+    const state = { pending: 1, me: 5, all: 10, closed: 33 }
+    mockMovingTotals(state)
+    put.mockImplementation(async () => {
+      state.me = 4
+      state.closed = 34
+      return { data: { data: { status: 'success' } } }
+    })
+    get.mockResolvedValue({ data: { data: closedContact() } })
+
+    const store = useContactsStore()
+    await store.fetchContacts()
+    expect(store.myCount).toBe(5)
+    expect(store.closedCount).toBe(33)
+
+    store.setCurrentContact(mineContact())
+
+    await store.closeChat('contact-1')
+
+    // The row moved tabs locally …
+    expect(store.myContacts).toHaveLength(0)
+    // … and the badges moved with it, without a reload.
+    expect(store.myCount).toBe(4)
+    expect(store.closedCount).toBe(34)
+    expect(store.pendingCount).toBe(1)
+    expect(store.allCount).toBe(10)
+    // The close re-asked the server for the totals (4 count requests on top
+    // of the 4 from the initial fetch).
+    expect(countCalls()).toHaveLength(8)
+  })
+
+  it('closeChat moves the counters before the message re-read finishes (Task 7a pattern)', async () => {
+    // The totals refresh must not sit behind the current-contact re-reads in
+    // closeChat: a slow (or failing) message re-fetch would otherwise leave
+    // the badges stale even though the close PUT already succeeded. The
+    // message request is deferred here, so the close blocks on it — the
+    // counters must already have moved by then.
+    const state = { pending: 1, me: 5, all: 10, closed: 33 }
+    mockMovingTotals(state)
+    put.mockImplementation(async () => {
+      state.me = 4
+      state.closed = 34
+      return { data: { data: { status: 'success' } } }
+    })
+    get.mockResolvedValue({ data: { data: closedContact() } })
+    let resolveMessages!: (value: unknown) => void
+    const messagesDeferred = new Promise(resolve => { resolveMessages = resolve })
+    messagesList.mockImplementation(() => messagesDeferred)
+
+    const store = useContactsStore()
+    await store.fetchContacts()
+    expect(store.myCount).toBe(5)
+    expect(store.closedCount).toBe(33)
+
+    store.setCurrentContact(mineContact())
+
+    const closing = store.closeChat('contact-1')
+    // Let the close run until it blocks on the deferred message re-fetch;
+    // the PUT and the totals refresh are plain microtasks, so two timer
+    // turns are enough for them to land.
+    await new Promise(resolve => setTimeout(resolve, 0))
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    // Counters moved already, without waiting for the re-read to finish.
+    expect(store.myCount).toBe(4)
+    expect(store.closedCount).toBe(34)
+
+    resolveMessages({ data: { data: { messages: [], total: 0, has_more: false } } })
+    await closing
+    expect(store.myCount).toBe(4)
+    expect(store.closedCount).toBe(34)
+  })
+
+  it('release, reopen, bulk close, bulk release and leave-and-close refresh the tab totals', async () => {
+    // Same staleness as closeChat: every lifecycle action that moves a
+    // conversation between tabs must re-read the server totals, or its badge
+    // keeps the pre-action number until the next full fetch.
+    const state = { pending: 2, me: 3, all: 10, closed: 4 }
+    mockMovingTotals(state)
+    put.mockImplementation(async (url: string) => {
+      if (url.endsWith('/release')) { state.me -= 1; state.pending += 1 }
+      if (url.endsWith('/reopen')) { state.closed -= 1 }
+      return { data: { data: { status: 'success' } } }
+    })
+    post.mockImplementation(async (url: string) => {
+      if (url.endsWith('/bulk-close')) {
+        state.me -= 1
+        state.closed += 1
+        return { data: { data: { closed_ids: ['contact-1'], failed: [], requested: 1 } } }
+      }
+      if (url.endsWith('/bulk-release')) {
+        state.me -= 1
+        state.pending += 1
+        return { data: { data: { released_ids: ['contact-1'], failed: [], requested: 1 } } }
+      }
+      return { data: { data: {} } }
+    })
+    del.mockImplementation(async () => {
+      state.closed += 1
+      return { data: { data: { left: true, closed: true } } }
+    })
+
+    const store = useContactsStore()
+    await store.fetchContacts()
+    expect(store.pendingCount).toBe(2)
+    expect(store.myCount).toBe(3)
+    expect(store.closedCount).toBe(4)
+    expect(countCalls()).toHaveLength(4)
+
+    await store.releaseChat('contact-1')
+    expect(store.pendingCount).toBe(3)
+    expect(store.myCount).toBe(2)
+
+    await store.reopenChat('contact-1')
+    expect(store.closedCount).toBe(3)
+
+    const bulkClosed = await store.bulkCloseChats(['contact-1'])
+    expect(bulkClosed.closed).toBe(1)
+    expect(store.myCount).toBe(1)
+    expect(store.closedCount).toBe(4)
+
+    const bulkReleased = await store.bulkReleaseChats(['contact-1'])
+    expect(bulkReleased.released).toBe(1)
+    expect(store.myCount).toBe(0)
+    expect(store.pendingCount).toBe(4)
+
+    await store.leaveChat('contact-1')
+    expect(store.closedCount).toBe(5)
+
+    // One totals refresh (4 count requests) per lifecycle action.
+    expect(countCalls()).toHaveLength(4 + 5 * 4)
+  })
+
+  it('leaveChat does not refresh the totals when leaving did not close the conversation', async () => {
+    const state = { pending: 2, me: 3, all: 10, closed: 4 }
+    mockMovingTotals(state)
+    del.mockResolvedValue({ data: { data: { left: true } } })
+
+    const store = useContactsStore()
+    await store.fetchContacts()
+    expect(countCalls()).toHaveLength(4)
+
+    await store.leaveChat('contact-1')
+
+    // No tab move happened, so no totals refresh was needed.
+    expect(countCalls()).toHaveLength(4)
+    expect(store.myCount).toBe(3)
+    expect(store.closedCount).toBe(4)
   })
 })
