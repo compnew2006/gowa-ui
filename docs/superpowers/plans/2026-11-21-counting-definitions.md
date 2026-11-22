@@ -346,9 +346,10 @@ implements the intended semantics stated in the model's own comment ("a message
 is unread for a user when its `read_seq` is above both `LastReadSeq` and the
 conversation's shared `read_watermark_seq`", `contact_read_state.go:9–20`) — no
 query change was needed, and `read_state.go` now carries a comment saying so.
-user's `contact_read_states.last_read_seq` (`markReadForUser`, `:57`); the
-conversation-wide floor `contacts.read_watermark_seq` advances only for automated
-handling (`markReadForEveryone`, `:72`). Rendered raw, with no cap
+The per-viewer position is the user's `contact_read_states.last_read_seq`
+(`markReadForUser`, `read_state.go:67`); the conversation-wide floor
+`contacts.read_watermark_seq` advances only for automated handling
+(`markReadForEveryone`, `read_state.go:82`). Rendered raw, with no cap
 (`frontend/src/views/chat/ChatView.vue:1328–1329`). Counts are computed only for
 contacts on the loaded page (`buildContactResponsesMasked`, `contacts.go:1291`).
 There is **no org-wide "total unread" number anywhere** in the code.
@@ -373,14 +374,17 @@ the conversation's whole inbound history.*
   **Flagged as not reconcilable from the audit data alone.**
 - **Double-counting in the Private tab (DECIDED, best practice, 2026-11-22):**
   internal messages are stored twice (once per account's copy).
-  `ListInternalConversations` sums the two sides' unread counts into the merged row
-  (`internal_contacts.go:291`), so one logical internal message counts **2×** in the
-  Private tab badge. **Decided: it must NOT double-count** — one logical internal
-  message counts once, even though it is stored twice. *Rationale: a message stored
+  `ListInternalConversations` used to sum the two sides' unread counts into the merged row,
+  so one logical internal message counted **2×** in the Private tab badge.
+  **Decided: it must NOT double-count** — one logical internal message counts once, even though it is stored twice. *Rationale: a message stored
   twice is still one message.* Fixed in Task 3 (2026-11-22): the merged count now
   de-duplicates by WhatsApp message ID — one logical message counts once even
   when both of its copies are incoming; rows without an ID are counted one by
-  one. Note the fix only bites when a logical message has an incoming copy on
+  one. The merged count is now `pairUnread` (`internal_contacts.go:388`), not a sum of the sides.
+  Reading a merged thread also clears both sides for that viewer (fix round 1,
+  2026-11-22): `markMessagesAsRead` advances the viewer's read position on the
+  pair's other contact too, so the merged badge reaches 0; no extra WhatsApp
+  read receipt is sent for the other account's copy. Note the fix only bites when a logical message has an incoming copy on
   both sides; under the current ingest paths each logical message normally has
   exactly one incoming copy (the sender's copy is outgoing), so the old sum was
   already right for fresh data — the de-duplication hardens the invariant for

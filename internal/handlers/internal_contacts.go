@@ -61,6 +61,56 @@ func (a *App) isInternalPhone(orgID uuid.UUID, phone string) bool {
 	return ok
 }
 
+// pairedInternalContactIDs returns the other side(s) of the merged Private
+// conversation(s) this contact belongs to: contacts holding the counterpart
+// copies of a chat between two of the org's own numbers. A contact whose
+// phone is not an org account number has no pair. The peers are derived from
+// the accounts whose message copies live on this contact, so reading the
+// Saudi↔Egypt thread advances the Egypt-number contact, not every internal
+// contact in the org. Read state is per contact, not per pair, so if this
+// contact also holds copies of another pair (e.g. Saudi↔Cairo), that pair's
+// other side is advanced too — the same granularity the opened contact
+// itself already has: opening it advances past every message on that row,
+// whatever pair they belong to.
+func (a *App) pairedInternalContactIDs(orgID uuid.UUID, contact *models.Contact) []uuid.UUID {
+	accountPhones := a.orgAccountPhones(orgID)
+	ownAccount, ok := accountPhones[contact.PhoneNumber]
+	if !ok {
+		return nil
+	}
+	var peerAccounts []string
+	if err := a.DB.Model(&models.Message{}).Distinct().
+		Where("contact_id = ? AND whats_app_account <> '' AND whats_app_account <> ?", contact.ID, ownAccount).
+		Pluck("whats_app_account", &peerAccounts).Error; err != nil {
+		a.Log.Error("Failed to load paired internal accounts", "error", err, "contact_id", contact.ID)
+		return nil
+	}
+	if len(peerAccounts) == 0 {
+		return nil
+	}
+	phoneByAccount := make(map[string]string, len(accountPhones))
+	for phone, name := range accountPhones {
+		phoneByAccount[name] = phone
+	}
+	phones := make([]string, 0, len(peerAccounts))
+	for _, peer := range peerAccounts {
+		if phone, ok := phoneByAccount[peer]; ok {
+			phones = append(phones, phone)
+		}
+	}
+	if len(phones) == 0 {
+		return nil
+	}
+	var ids []uuid.UUID
+	if err := a.DB.Model(&models.Contact{}).
+		Where("organization_id = ? AND phone_number IN ? AND id <> ?", orgID, phones, contact.ID).
+		Pluck("id", &ids).Error; err != nil {
+		a.Log.Error("Failed to load paired internal contacts", "error", err, "contact_id", contact.ID)
+		return nil
+	}
+	return ids
+}
+
 // isInternalContact is the single check every customer automation uses:
 // the conversation was moved to the Private tab by hand, or its phone is one
 // of the org's own connected numbers.
@@ -245,6 +295,11 @@ func (a *App) internalConversations(orgID, userID uuid.UUID) ([]InternalConversa
 	// incoming message, not a count: the merged conversation must count one
 	// logical message once even when both of its copies are incoming (they
 	// share the WhatsApp message ID), so the de-duplication needs the IDs.
+	// The row count is bounded by the unread backlog on internal contacts
+	// only — a handful of org accounts, not the customer base — so a
+	// multi-thousand backlog here returns that many short rows, which is
+	// acceptable for this endpoint; do not reuse this shape for a
+	// customer-facing list.
 	if err := a.unreadMessagesQuery(orgID, userID, contactIDs).
 		Select("m.contact_id, m.whats_app_account, m.whats_app_message_id").
 		Where("m.whats_app_account IN ?", accountNames).

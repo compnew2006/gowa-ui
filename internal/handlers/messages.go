@@ -1403,9 +1403,20 @@ func (a *App) MarkContactRead(r *fastglue.Request) error {
 // The unread badge is per user (see read_state.go): a reader clears it for
 // themselves only; a nil reader (an automated reply handled the chat) clears
 // it for everyone. Message status and read receipts stay conversation-wide.
+//
+// A reader opening a merged Private thread read the whole logical thread,
+// so their read position advances on BOTH sides of the pair
+// (pairedInternalContactIDs) — otherwise the other side's unread count would
+// keep the merged badge non-zero after the thread was read. This is local
+// read-state only: the receipt block below still covers just the opened
+// contact's messages, so no extra WhatsApp read receipt goes out for the
+// other account's copy.
 func (a *App) markMessagesAsRead(orgID uuid.UUID, contactID uuid.UUID, contact *models.Contact, readerID *uuid.UUID) {
 	if readerID != nil {
 		a.markReadForUser(orgID, *readerID, contactID)
+		for _, pairedID := range a.pairedInternalContactIDs(orgID, contact) {
+			a.markReadForUser(orgID, *readerID, pairedID)
+		}
 	} else {
 		a.markReadForEveryone(contactID)
 	}

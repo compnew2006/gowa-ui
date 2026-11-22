@@ -288,6 +288,111 @@ func TestInternalConversations_UnreadCountsEachLogicalMessageOnce(t *testing.T) 
 	require.Len(t, convs, 1)
 	assert.Equal(t, 2, convs[0].UnreadCount,
 		"one logical internal message counts once even when stored twice")
+	// Per-side counts stay per-copy: the double-incoming message counts on
+	// both sides, the single-incoming one only on its side.
+	require.Len(t, convs[0].Sides, 2)
+	sideUnread := make(map[string]int, 2)
+	for _, side := range convs[0].Sides {
+		sideUnread[side.Account] = side.UnreadCount
+	}
+	assert.Equal(t, 1, sideUnread[f.egypt.Name], "egypt's copies on the saudi-number contact: the double-incoming message only")
+	assert.Equal(t, 2, sideUnread[f.saudi.Name], "saudi's copies on the egypt-number contact: the double-incoming message plus the single-incoming one")
+
+	// A scoped viewer who sees one side only gets that side's count: the
+	// pairUnread de-duplication runs over the already-scoped contact list,
+	// so the unseen copy cannot contribute.
+	scopedRole := testutil.CreateTestRoleWithKeys(t, app.DB, f.org.ID, "scoped-"+uuid.New().String()[:8], []string{"chat:read"})
+	scoped := testutil.CreateTestUser(t, app.DB, f.org.ID, testutil.WithRoleID(&scopedRole.ID))
+	require.NoError(t, app.DB.Model(egyptC).Update("assigned_user_id", scoped.ID).Error)
+	scopedConvs, err := app.internalConversations(f.org.ID, scoped.ID)
+	require.NoError(t, err)
+	require.Len(t, scopedConvs, 1)
+	require.Len(t, scopedConvs[0].Sides, 1, "the side the viewer cannot open must not be listed")
+	assert.Equal(t, egyptC.ID, scopedConvs[0].Sides[0].ContactID)
+	assert.Equal(t, 2, scopedConvs[0].Sides[0].UnreadCount, "the visible side's own unread copies")
+	assert.Equal(t, 2, scopedConvs[0].UnreadCount, "merged badge from one visible side counts that side only")
+}
+
+// TestInternalConversations_ReadingMergedThreadClearsBothSides pins the
+// merged-read rule (Decision 6): a viewer who reads the whole merged Private
+// thread through one side clears the badge for that viewer on both sides of
+// the pair. Before the fix, markMessagesAsRead advanced the read position on
+// the opened contact only, so the other side's unread count kept the merged
+// badge non-zero after the thread was read.
+func TestInternalConversations_ReadingMergedThreadClearsBothSides(t *testing.T) {
+	app := newProcessorTestApp(t)
+	f := newInternalChatFixture(t, app)
+	adminRole := testutil.CreateAdminRole(t, app.DB, f.org.ID)
+	admin := testutil.CreateTestUser(t, app.DB, f.org.ID, testutil.WithRoleID(&adminRole.ID))
+	otherAdmin := testutil.CreateTestUser(t, app.DB, f.org.ID, testutil.WithRoleID(&adminRole.ID))
+
+	saudiC := testutil.CreateTestContactWith(t, app.DB, f.org.ID, testutil.WithPhoneNumber(f.saudiPhone))
+	egyptC := testutil.CreateTestContactWith(t, app.DB, f.org.ID, testutil.WithPhoneNumber(f.egyptPhone))
+
+	// An unrelated pair (two more org accounts) whose badge must survive
+	// reading the Saudi↔Egypt thread.
+	cairo := testutil.CreateTestWhatsAppAccountWith(t, app.DB, f.org.ID,
+		testutil.WithAccountName("cairo-"+uuid.New().String()[:8]))
+	dubai := testutil.CreateTestWhatsAppAccountWith(t, app.DB, f.org.ID,
+		testutil.WithAccountName("dubai-"+uuid.New().String()[:8]))
+	cairoPhone, dubaiPhone := internalTestPhone(), internalTestPhone()
+	require.NoError(t, app.DB.Model(cairo).Update("gowa_jid", cairoPhone+"@s.whatsapp.net").Error)
+	require.NoError(t, app.DB.Model(dubai).Update("gowa_jid", dubaiPhone+"@s.whatsapp.net").Error)
+	cairoC := testutil.CreateTestContactWith(t, app.DB, f.org.ID, testutil.WithPhoneNumber(cairoPhone))
+
+	t0 := time.Now().Add(-time.Hour).UTC().Truncate(time.Second)
+	saveInternalCopyWamid(t, app, f.org.ID, f.egypt.Name, saudiC.ID, models.DirectionIncoming, models.MessageStatusDelivered, "hi", t0, "WAMID-DOUBLE-1")
+	saveInternalCopyWamid(t, app, f.org.ID, f.saudi.Name, egyptC.ID, models.DirectionIncoming, models.MessageStatusDelivered, "hi", t0, "WAMID-DOUBLE-1")
+	saveInternalCopyWamid(t, app, f.org.ID, f.saudi.Name, egyptC.ID, models.DirectionIncoming, models.MessageStatusDelivered, "reply", t0.Add(time.Minute), "WAMID-SINGLE-2")
+	saveInternalCopyWamid(t, app, f.org.ID, dubai.Name, cairoC.ID, models.DirectionIncoming, models.MessageStatusDelivered, "other pair", t0, "WAMID-OTHER-1")
+
+	convs, err := app.internalConversations(f.org.ID, admin.ID)
+	require.NoError(t, err)
+	require.Len(t, convs, 2)
+	byKey := make(map[string]InternalConversation, 2)
+	for _, conv := range convs {
+		byKey[conv.Key] = conv
+	}
+	// Pair keys are the two account names sorted, as internalConversations builds them.
+	saudiEgyptKey := f.saudi.Name + "|" + f.egypt.Name
+	if f.saudi.Name > f.egypt.Name {
+		saudiEgyptKey = f.egypt.Name + "|" + f.saudi.Name
+	}
+	cairoDubaiKey := cairo.Name + "|" + dubai.Name
+	if cairo.Name > dubai.Name {
+		cairoDubaiKey = dubai.Name + "|" + cairo.Name
+	}
+	assert.Equal(t, 2, byKey[saudiEgyptKey].UnreadCount)
+	assert.Equal(t, 1, byKey[cairoDubaiKey].UnreadCount)
+
+	// Read the merged Saudi↔Egypt thread through the saudi-number side.
+	// GetMessages and MarkContactRead both funnel through markMessagesAsRead.
+	app.markMessagesAsRead(f.org.ID, saudiC.ID, saudiC, &admin.ID)
+
+	convs, err = app.internalConversations(f.org.ID, admin.ID)
+	require.NoError(t, err)
+	require.Len(t, convs, 2)
+	byKey = make(map[string]InternalConversation, 2)
+	for _, conv := range convs {
+		byKey[conv.Key] = conv
+	}
+	readPair := byKey[saudiEgyptKey]
+	assert.Equal(t, 0, readPair.UnreadCount, "the merged badge is 0 after the viewer read the thread through one side")
+	for _, side := range readPair.Sides {
+		assert.Equal(t, 0, side.UnreadCount, "both sides' unread counts clear for the reader")
+	}
+	assert.Equal(t, 1, byKey[cairoDubaiKey].UnreadCount,
+		"an unrelated pair's badge is untouched by reading this thread")
+
+	// Read state is per viewer: another admin still sees the unread pair.
+	otherConvs, err := app.internalConversations(f.org.ID, otherAdmin.ID)
+	require.NoError(t, err)
+	require.Len(t, otherConvs, 2)
+	for _, conv := range otherConvs {
+		if conv.Key == saudiEgyptKey {
+			assert.Equal(t, 2, conv.UnreadCount, "reading clears the badge for that viewer only")
+		}
+	}
 }
 
 func TestInternalConversations_NeedsTwoConnectedAccounts(t *testing.T) {
