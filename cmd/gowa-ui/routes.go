@@ -378,6 +378,7 @@ func setupChatLifecycleRoutes(g *fastglue.Fastglue, app *handlers.App) {
 	g.PUT("/api/contacts/{id}/claim", app.ClaimChat)
 	g.PUT("/api/contacts/{id}/release", app.ReleaseChat)
 	g.POST("/api/contacts/bulk-release", app.BulkReleaseChats)
+	g.POST("/api/contacts/bulk-close", app.BulkCloseChats)
 	g.PUT("/api/contacts/{id}/close", app.CloseChat)
 	g.PUT("/api/contacts/{id}/reopen", app.ReopenChat)
 	g.POST("/api/contacts/{id}/join", app.JoinChat)

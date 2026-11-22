@@ -1210,6 +1210,48 @@ export const useContactsStore = defineStore('contacts', () => {
     }
   }
 
+  // Bulk close (Task 6). Closes many conversations in one call. Server-side
+  // loop (the endpoint accepts an array of contact IDs) so we get one request
+  // and per-id results so the UI can report partial fails honestly. Used by
+  // the sidebar multi-select mode. Returns per-id results.
+  const bulkCloseInProgress = ref(false)
+
+  async function bulkCloseChats(contactIds: string[]) {
+    if (!contactIds.length) return { closed: 0, failed: 0 }
+    bulkCloseInProgress.value = true
+    try {
+      const response = await api.post('/contacts/bulk-close', { contact_ids: contactIds })
+      const data = response.data.data || response.data
+      const closedIds: string[] = data?.closed_ids || data?.closed || []
+      // Optimistically apply the same local mutation as closeChat for each
+      // successfully closed chat. Failed ones keep their current state.
+      for (const id of closedIds) {
+        const c = contacts.value.find(x => x.id === id)
+        if (c) {
+          c.chat_status = 'closed'
+          c.assigned_user_id = undefined
+          c.assigned_user_name = undefined
+          c.collaborators = []
+        }
+        if (currentContact.value?.id === id) {
+          currentContact.value.chat_status = 'closed'
+          currentContact.value.assigned_user_id = undefined
+          currentContact.value.assigned_user_name = undefined
+          currentContact.value.collaborators = []
+          // Re-fetch messages to show the system message immediately
+          await fetchMessages(id)
+        }
+      }
+      clearBulkSelection()
+      return {
+        closed: closedIds.length,
+        failed: contactIds.length - closedIds.length,
+      }
+    } finally {
+      bulkCloseInProgress.value = false
+    }
+  }
+
   async function joinChat(contactId: string) {
     const response = await api.post(`/contacts/${contactId}/join`)
     const data = response.data.data || response.data
@@ -1334,6 +1376,9 @@ export const useContactsStore = defineStore('contacts', () => {
     toggleBulkSelect,
     clearBulkSelection,
     bulkReleaseChats,
+    // Bulk close (Task 6)
+    bulkCloseInProgress,
+    bulkCloseChats,
     // Chat lifecycle
     pendingMessageCount,
     isPendingClaim,

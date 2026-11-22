@@ -733,6 +733,12 @@ const {
   isCloseDialogOpen,
   isClosing,
   canCloseConversation,
+  closableSelectedContacts,
+  canBulkClose,
+  handleBulkClose,
+  confirmBulkClose,
+  isBulkCloseDialogOpen,
+  isBulkClosing,
   handleReopen,
   handleBulkRelease,
   handleInvite,
@@ -1367,6 +1373,20 @@ onUnmounted(() => {
             <Loader2 v-if="contactsStore.bulkReleaseInProgress" class="h-3 w-3 mr-1 animate-spin" />
             <RotateCcw v-else class="h-3 w-3 mr-1" />
             {{ $t('chat.releasedConversation') }}
+          </Button>
+          <!-- Bulk close. Same gate as single close, applied per selected
+               conversation (canBulkClose): an unclaimed conversation in the
+               selection never enables this button on its own, and the server
+               refuses it per conversation. Clicking opens ONE confirmation
+               dialog for the whole batch; handleBulkClose never closes
+               directly. -->
+          <Button size="sm" variant="ghost" class="h-7 text-xs hover:text-red-400 hover:bg-red-500/10"
+                  :disabled="!canBulkClose || contactsStore.bulkCloseInProgress || contactsStore.bulkReleaseInProgress"
+                  :aria-label="$t('chat.closeConversation')"
+                  @click="handleBulkClose">
+            <Loader2 v-if="contactsStore.bulkCloseInProgress" class="h-3 w-3 mr-1 animate-spin" />
+            <CheckCheck v-else class="h-3 w-3 mr-1" />
+            {{ $t('chat.closeConversation') }}
           </Button>
         </div>
       </div>
@@ -3205,6 +3225,23 @@ onUnmounted(() => {
       @confirm="confirmClose"
     >
       <template #description>{{ $t('chat.closeConversationConfirm') }}</template>
+    </ConfirmDialog>
+
+    <!-- Bulk-close confirmation: ONE dialog for the whole batch.
+         handleBulkClose only opens this dialog; confirmBulkClose closes the
+         batch. The count is the closable selection — the conversations the
+         batch will actually close; the server refuses the rest per
+         conversation and the result toast reports them. -->
+    <ConfirmDialog
+      v-model:open="isBulkCloseDialogOpen"
+      :title="$t('chat.closeConversation')"
+      variant="destructive"
+      :confirm-label="$t('chat.closeConversation')"
+      :cancel-label="$t('common.cancel')"
+      :is-submitting="isBulkClosing"
+      @confirm="confirmBulkClose"
+    >
+      <template #description>{{ $t('chat.bulkCloseConfirm', { count: closableSelectedContacts.length }) }}</template>
     </ConfirmDialog>
   </div>
 </template>

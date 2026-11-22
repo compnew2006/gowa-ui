@@ -421,6 +421,80 @@ func (s *Service) BulkRelease(ctx context.Context, orgID, userID uuid.UUID, ids 
 	return result
 }
 
+// closeOne is the per-item body of BulkClose. It reuses Service.Close — the
+// same transition the single-close handler performs — after the Task 5 gate:
+// the conversation must be open (a pending/unclaimed conversation is refused,
+// not closed) and the caller must be the assignee, a collaborator, or an
+// admin/manager. On policy violations it returns a structured failure for
+// the bulk result instead of aborting the batch.
+func (s *Service) closeOne(orgID, userID uuid.UUID, rawID string, isAdminOrManager bool) (closed bool, failure map[string]any) {
+	contactID, err := uuid.Parse(rawID)
+	if err != nil {
+		return false, map[string]any{"contact_id": rawID, "reason": "invalid uuid"}
+	}
+
+	var contact models.Contact
+	if err := s.db.Where("id = ? AND organization_id = ?", contactID, orgID).First(&contact).Error; err != nil {
+		return false, map[string]any{"contact_id": rawID, "reason": "not found"}
+	}
+
+	if contact.EffectiveStatus() != models.ChatStatusOpen {
+		if contact.EffectiveStatus() == models.ChatStatusClosed {
+			return false, map[string]any{"contact_id": rawID, "reason": "already closed"}
+		}
+		return false, map[string]any{"contact_id": rawID, "reason": "not open"}
+	}
+
+	isOwner := contact.AssignedUserID != nil && *contact.AssignedUserID == userID
+	if !isOwner && !contact.IsCollaborator(userID.String()) && !isAdminOrManager {
+		return false, map[string]any{"contact_id": rawID, "reason": "not authorized"}
+	}
+
+	if err := s.Close(context.Background(), orgID, userID, &contact); err != nil {
+		if errors.Is(err, ErrAlreadyClosed) {
+			return false, map[string]any{"contact_id": rawID, "reason": "already closed"}
+		}
+		return false, map[string]any{"contact_id": rawID, "reason": "close failed"}
+	}
+	return true, nil
+}
+
+// BulkCloseResult is the structured outcome of BulkClose. The handler maps
+// this directly onto the {closed_ids, closed, failed, requested} envelope.
+type BulkCloseResult struct {
+	ClosedIDs []string
+	// Failed holds one entry per contact that could not be closed, each
+	// carrying {contact_id, reason} so the UI can surface partial outcomes.
+	Failed []map[string]any
+}
+
+// BulkClose processes a batch of close requests. Authorization mirrors the
+// single-close gate: per-item open status AND assignee / collaborator /
+// admin-or-manager. Deduplicates the input list, caps at 500 (the handler
+// enforces the cap; this is defense-in-depth).
+//
+// Returns ClosedIDs for the conversations that actually closed. Failures
+// never abort the batch.
+func (s *Service) BulkClose(ctx context.Context, orgID, userID uuid.UUID, ids []string, isAdminOrManager bool) BulkCloseResult {
+	result := BulkCloseResult{ClosedIDs: []string{}, Failed: []map[string]any{}}
+	seen := make(map[string]bool, len(ids))
+
+	for _, rawID := range ids {
+		if seen[rawID] {
+			continue
+		}
+		seen[rawID] = true
+
+		closed, failure := s.closeOne(orgID, userID, rawID, isAdminOrManager)
+		if closed {
+			result.ClosedIDs = append(result.ClosedIDs, rawID)
+		} else if failure != nil {
+			result.Failed = append(result.Failed, failure)
+		}
+	}
+	return result
+}
+
 // CustomerReopen reopens a closed conversation when the customer sends a new
 // inbound message (or one is sent from the connected phone). It unassigns the
 // owner, clears collaborators, sets status to pending, writes the

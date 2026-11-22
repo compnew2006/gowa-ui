@@ -561,3 +561,114 @@ func (a *App) BulkReleaseChats(r *fastglue.Request) error {
 		"requested":    len(req.ContactIDs),
 	})
 }
+
+// BulkCloseChats closes many conversations in one request, after ONE
+// confirmation for the whole batch (the frontend dialog — a bulk close that
+// silently closed N conversations would violate the Task 5 ruling). Thin
+// adapter over Service.BulkClose — the body parse + cap + scope pre-filter
+// stay here, the per-item loop (open-status gate, participant gate, mutation,
+// audit, WS) lives in the service, reusing Service.Close per conversation.
+// Route: POST /api/contacts/bulk-close  Body: { "contact_ids": ["<uuid>", ...] }
+func (a *App) BulkCloseChats(r *fastglue.Request) error {
+	// No route-level permission: like CloseChat, any authenticated org user
+	// may attempt it — the per-conversation gate (open + assignee /
+	// collaborator / admin-or-manager) decides each item.
+	orgID, userID, err := a.requireOrgAndUserID(r)
+	if err != nil {
+		return nil
+	}
+
+	var req struct {
+		ContactIDs []string `json:"contact_ids"`
+	}
+	bodyBytes := r.RequestCtx.PostBody()
+	if len(bodyBytes) > 0 {
+		if err := json.Unmarshal(bodyBytes, &req); err != nil {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid request body", nil, "")
+		}
+	}
+	if len(req.ContactIDs) == 0 {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "contact_ids is required and must be non-empty", nil, "")
+	}
+	if len(req.ContactIDs) > 500 {
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Cannot close more than 500 chats at once", nil, "")
+	}
+
+	isAdminOrManager := a.HasPermission(userID, models.ResourceContacts, models.ActionWrite, orgID)
+
+	// Scope the batch up-front: only contacts visible through
+	// scopeAssignedContact may be closed. Invisible IDs are reported as
+	// "not found" failures instead of being acted on, and contacts the
+	// caller reaches only through a historical (read-only) grant are refused
+	// as "read-only" — the same pre-filter BulkReleaseChats applies.
+	visible := make(map[uuid.UUID]bool, len(req.ContactIDs))
+	readOnly := make(map[uuid.UUID]bool)
+	contactsByID := make(map[uuid.UUID]models.Contact, len(req.ContactIDs))
+	parsedIDs := make([]uuid.UUID, 0, len(req.ContactIDs))
+	for _, raw := range req.ContactIDs {
+		if id, err := uuid.Parse(raw); err == nil {
+			parsedIDs = append(parsedIDs, id)
+		}
+	}
+	if len(parsedIDs) > 0 {
+		var visibleIDs []uuid.UUID
+		if err := a.scopeAssignedContact(
+			a.DB.Model(&models.Contact{}).Select("id"), userID, orgID,
+		).Where("id IN ?", parsedIDs).Pluck("id", &visibleIDs).Error; err != nil {
+			a.Log.Error("Failed to scope bulk-close contacts", "error", err, "user_id", userID)
+			return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to close chats", nil, "")
+		}
+		for _, id := range visibleIDs {
+			visible[id] = true
+		}
+		if len(visibleIDs) > 0 {
+			var rows []models.Contact
+			if err := a.DB.Where("id IN ?", visibleIDs).Find(&rows).Error; err != nil {
+				a.Log.Error("Failed to load bulk-close contacts", "error", err, "user_id", userID)
+				return r.SendErrorEnvelope(fasthttp.StatusInternalServerError, "Failed to close chats", nil, "")
+			}
+			for i := range rows {
+				contactsByID[rows[i].ID] = rows[i]
+				if isReadOnlyAccessMode(a.conversationAccessMode(&rows[i], userID, orgID)) {
+					readOnly[rows[i].ID] = true
+				}
+			}
+		}
+	}
+	scopedIDs := make([]string, 0, len(req.ContactIDs))
+	failed := make([]map[string]any, 0)
+	for _, raw := range req.ContactIDs {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			scopedIDs = append(scopedIDs, raw) // let the service report "invalid uuid"
+			continue
+		}
+		if readOnly[id] {
+			failed = append(failed, map[string]any{"contact_id": raw, "reason": "read-only"})
+			continue
+		}
+		if !visible[id] {
+			failed = append(failed, map[string]any{"contact_id": raw, "reason": "not found"})
+			continue
+		}
+		scopedIDs = append(scopedIDs, raw)
+	}
+	result := a.ChatLifecycle.BulkClose(r.RequestCtx, orgID, userID, scopedIDs, isAdminOrManager)
+	result.Failed = append(result.Failed, failed...)
+
+	// Same CSAT trigger as a single close, once per conversation closed.
+	for _, raw := range result.ClosedIDs {
+		if id, err := uuid.Parse(raw); err == nil {
+			if contact, ok := contactsByID[id]; ok {
+				go a.maybeSendCloseRatingPrompt(orgID, userID, contact)
+			}
+		}
+	}
+
+	return r.SendEnvelope(map[string]any{
+		"closed_ids": result.ClosedIDs,
+		"closed":     result.ClosedIDs,
+		"failed":     result.Failed,
+		"requested":  len(req.ContactIDs),
+	})
+}

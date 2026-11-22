@@ -2,6 +2,16 @@ import { ref, computed, watch, unref, type Ref } from 'vue'
 import { toast } from 'vue-sonner'
 import { api, contactsService, type TransferTarget } from '@/services/api'
 
+/** One list row as the bulk-close gate sees it (status, assignee,
+ *  collaborators, access_mode). */
+export interface BulkCloseContactRow {
+  id: string
+  chat_status?: string
+  assigned_user_id?: string
+  collaborators?: Array<{ user_id: string }>
+  access_mode?: string
+}
+
 export interface UseChatLifecycleOptions {
   /** i18n translator. */
   t: (key: string, params?: Record<string, unknown>) => string
@@ -14,6 +24,9 @@ export interface UseChatLifecycleOptions {
     isAssignedToMe?: boolean | Ref<boolean>
     isCollaborator?: boolean | Ref<boolean>
     selectedContactIds: Set<string>
+    /** List rows, for the per-row bulk-close gate (status, assignee,
+     *  collaborators, access_mode). Plain array or a ref of one. */
+    contacts?: Array<BulkCloseContactRow> | Ref<Array<BulkCloseContactRow>>
     setCurrentContact: (c: any) => void
     fetchContacts: () => Promise<void>
     fetchContact: (id: string) => Promise<any>
@@ -25,6 +38,7 @@ export interface UseChatLifecycleOptions {
     closeChat: (id: string) => Promise<void>
     reopenChat: (id: string) => Promise<void>
     bulkReleaseChats: (ids: string[]) => Promise<unknown>
+    bulkCloseChats: (ids: string[]) => Promise<{ closed: number; failed: number }>
     inviteCollaborator: (id: string, userId: string) => Promise<void>
     removeCollaborator: (id: string, userId: string) => Promise<void>
   }
@@ -238,6 +252,74 @@ export function useChatLifecycle(options: UseChatLifecycleOptions) {
     }
   }
 
+  // ─── Bulk close: ONE confirmation for the whole batch ───
+  // Per-row form of the canCloseConversation gate, applied to a list row
+  // instead of currentContact: open, not read-only access, and the viewer is
+  // an admin/manager, the assignee, or a collaborator. A pending (unclaimed)
+  // row fails the status check, so it can never be bulk-closed. The server
+  // re-checks the same gate per conversation; the row gate here only decides
+  // the button state and the dialog count.
+  function canCloseContact(contact: Omit<BulkCloseContactRow, 'id'> | null | undefined): boolean {
+    if (!contact || contact.chat_status !== 'open') return false
+    if (contact.access_mode === 'historical_assignment_read_only' || contact.access_mode === 'restricted') return false
+    if (unref(contactsStore.isAdminOrManager)) return true
+    const myId = authStore.user?.id
+    if (!myId) return false
+    if (contact.assigned_user_id === myId) return true
+    return contact.collaborators?.some(c => c.user_id === myId) ?? false
+  }
+
+  // Selected rows that pass the gate — the conversations the batch will
+  // actually close. Rows missing from the list (stale selection) are not
+  // closable; the server is the final arbiter either way.
+  const closableSelectedContacts = computed(() => {
+    const rows = new Map((unref(contactsStore.contacts) ?? []).map(c => [c.id, c]))
+    return Array.from(contactsStore.selectedContactIds)
+      .map(id => rows.get(id))
+      .filter((c): c is NonNullable<typeof c> => !!c && canCloseContact(c))
+  })
+
+  const canBulkClose = computed(() => closableSelectedContacts.value.length > 0)
+
+  // Confirm-dialog state for bulk closing. handleBulkClose only OPENS the
+  // dialog; confirmBulkClose performs the batch. isBulkClosing guards
+  // double-submit. The whole selection is sent — the server refuses the
+  // unclosable rows per conversation and reports them, so the result toast
+  // can report closed N / refused M honestly instead of silently skipping.
+  const isBulkCloseDialogOpen = ref(false)
+  const isBulkClosing = ref(false)
+
+  async function handleBulkClose() {
+    if (!canBulkClose.value) return
+    isBulkCloseDialogOpen.value = true
+  }
+
+  async function confirmBulkClose() {
+    if (!isBulkCloseDialogOpen.value || isBulkClosing.value) return
+    const ids = Array.from(contactsStore.selectedContactIds)
+    if (!ids.length) {
+      isBulkCloseDialogOpen.value = false
+      return
+    }
+    isBulkClosing.value = true
+    try {
+      const result = await contactsStore.bulkCloseChats(ids)
+      const closed = result?.closed ?? 0
+      const failed = result?.failed ?? 0
+      isBulkCloseDialogOpen.value = false
+      if (failed > 0) {
+        toast.warning(t('chat.bulkClosePartial', { count: closed, failed }))
+      } else {
+        toast.success(t('chat.bulkCloseSuccess', { count: closed }))
+      }
+    } catch {
+      // Keep the dialog open so the user can retry or cancel.
+      console.error('Failed to bulk close chats')
+    } finally {
+      isBulkClosing.value = false
+    }
+  }
+
   // Bulk release (M4). Wraps the store action with the standard try/catch +
   // error log used by the other lifecycle handlers.
   async function handleBulkRelease() {
@@ -419,6 +501,13 @@ export function useChatLifecycle(options: UseChatLifecycleOptions) {
     isCloseDialogOpen,
     isClosing,
     canCloseConversation,
+    canCloseContact,
+    closableSelectedContacts,
+    canBulkClose,
+    handleBulkClose,
+    confirmBulkClose,
+    isBulkCloseDialogOpen,
+    isBulkClosing,
     handleReopen,
     handleBulkRelease,
     handleInvite,
