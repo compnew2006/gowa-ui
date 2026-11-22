@@ -146,7 +146,17 @@ function getRowKey(item: T, index: number): string {
 </script>
 
 <template>
-  <div :class="maxHeight ? 'overflow-auto' : ''" :style="maxHeight ? { maxHeight } : {}">
+  <!--
+    The table wrapper is always its own horizontal scroll container. Without
+    this, a wide table propagates its min-content width up through the page
+    (settings views sit inside a Radix ScrollArea viewport) and the whole
+    page scrolls sideways, sliding the row and its Actions column away
+    together. With overflow-x-auto here the table scrolls in place and the
+    Actions column stays reachable. (overflow != visible also gives the
+    wrapper an automatic minimum size of zero, so it never forces its
+    ancestors wider.) maxHeight additionally enables vertical scrolling.
+  -->
+  <div data-testid="data-table-scroll" :class="maxHeight ? 'overflow-auto' : 'overflow-x-auto'" :style="maxHeight ? { maxHeight } : {}">
   <Table>
     <TableHeader>
       <TableRow>

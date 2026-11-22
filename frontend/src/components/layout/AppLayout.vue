@@ -19,7 +19,9 @@ import OrganizationSwitcher from './OrganizationSwitcher.vue'
 import UserMenu from './UserMenu.vue'
 import GlobalSearch from './GlobalSearch.vue'
 import { useGlobalSearch } from '@/composables/useGlobalSearch'
+import { useRouteLoading } from '@/composables/useRouteLoading'
 import { ScrollToTop } from '@/components/shared'
+import { Skeleton } from '@/components/ui/skeleton'
 import { navigationSections, type NavSection } from './navigation'
 import NavItem from './NavItem.vue'
 
@@ -29,6 +31,9 @@ const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const globalSearch = useGlobalSearch()
+// True while a navigation to a lazily-loaded route is still waiting on its
+// chunk (past a short delay, so instant navigations never flash it).
+const { isNavigating } = useRouteLoading()
 const isCollapsed = ref(true)
 const isMobileMenuOpen = ref(false)
 
@@ -272,11 +277,31 @@ const handleLogout = async () => {
 
     <!-- Main content -->
     <main id="main-content" class="flex-1 overflow-hidden pt-12 md:pt-0 bg-[#0a0a0b] light:bg-gray-50" role="main">
-      <RouterView v-slot="{ Component, route: viewRoute }">
-        <Transition name="page" mode="out-in">
-          <component :is="Component" :key="viewRoute.meta.stableKey ? String(viewRoute.name) : viewRoute.path" />
-        </Transition>
-      </RouterView>
+      <!--
+        Navigation loading state: while the next route's chunk is still
+        loading, show a skeleton instead of a black screen (or the stale
+        page). The outgoing view stays mounted behind v-show so the pending
+        navigation resolves into it normally.
+      -->
+      <div
+        v-if="isNavigating"
+        data-testid="route-loading-skeleton"
+        role="status"
+        :aria-label="$t('common.loading')"
+        class="p-4 md:p-6 space-y-4"
+      >
+        <Skeleton class="h-8 w-48" />
+        <Skeleton class="h-4 w-2/3" />
+        <Skeleton class="h-4 w-1/2" />
+        <Skeleton class="h-64 w-full" />
+      </div>
+      <div v-show="!isNavigating" class="contents">
+        <RouterView v-slot="{ Component, route: viewRoute }">
+          <Transition name="page" mode="out-in">
+            <component :is="Component" :key="viewRoute.meta.stableKey ? String(viewRoute.name) : viewRoute.path" />
+          </Transition>
+        </RouterView>
+      </div>
       <ScrollToTop />
     </main>
 

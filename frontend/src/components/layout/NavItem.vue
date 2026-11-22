@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { RouterLink, useRoute } from 'vue-router'
 import type { Component } from 'vue'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 /**
  * A single sidebar navigation entry: the top-level RouterLink plus its
@@ -33,23 +34,34 @@ const route = useRoute()
 </script>
 
 <template>
-  <RouterLink
-    :to="item.path"
-    :class="[
-      'nav-active-indicator btn-press flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-all duration-200',
-      item.active
-        ? 'bg-white/[0.08] text-white light:bg-gray-100 light:text-gray-900'
-        : 'text-white/50 hover:text-white hover:bg-white/[0.06] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-50',
-      isCollapsed && 'md:justify-center md:px-2'
-    ]"
-    :data-active="item.active"
-    role="menuitem"
-    :aria-current="item.active ? 'page' : undefined"
-    @click="emit('navigate')"
-  >
-    <component :is="item.icon" class="h-4 w-4 shrink-0" aria-hidden="true" />
-    <span :class="isCollapsed && 'md:sr-only'">{{ $t(item.name) }}</span>
-  </RouterLink>
+  <!--
+    Collapsed sidebar: only the icon is visible, so the label is exposed
+    on hover/focus via a tooltip (delay 0 — an icon-only nav item must not
+    make the user wait for its name) and to assistive tech via aria-label.
+  -->
+  <Tooltip :delay-duration="0">
+    <TooltipTrigger as-child>
+      <RouterLink
+        :to="item.path"
+        :class="[
+          'nav-active-indicator btn-press flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-all duration-200',
+          item.active
+            ? 'bg-white/[0.08] text-white light:bg-gray-100 light:text-gray-900'
+            : 'text-white/50 hover:text-white hover:bg-white/[0.06] light:text-gray-500 light:hover:text-gray-900 light:hover:bg-gray-50',
+          isCollapsed && 'md:justify-center md:px-2'
+        ]"
+        :data-active="item.active"
+        role="menuitem"
+        :aria-current="item.active ? 'page' : undefined"
+        :aria-label="$t(item.name)"
+        @click="emit('navigate')"
+      >
+        <component :is="item.icon" class="h-4 w-4 shrink-0" aria-hidden="true" />
+        <span :class="isCollapsed && 'md:sr-only'">{{ $t(item.name) }}</span>
+      </RouterLink>
+    </TooltipTrigger>
+    <TooltipContent v-if="isCollapsed" side="right">{{ $t(item.name) }}</TooltipContent>
+  </Tooltip>
 
   <!-- Submenu items -->
   <template v-if="item.children && item.active && !isCollapsed">
