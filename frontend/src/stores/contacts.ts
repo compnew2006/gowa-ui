@@ -1142,6 +1142,11 @@ export const useContactsStore = defineStore('contacts', () => {
       contact.assigned_user_name = authStore.user?.full_name || ''
       contact.chat_status = 'open'
     }
+    // The badges read the server totals, not the local lists — re-read the
+    // totals FIRST, before the re-reads below, so the counters move even if
+    // re-reading the contact or its messages is slow or throws. The claim
+    // PUT above already succeeded by this point.
+    await refreshTabTotals()
     if (currentContact.value?.id === contactId) {
       currentContact.value.assigned_user_id = authStore.user?.id
       currentContact.value.assigned_user_name = authStore.user?.full_name || ''
@@ -1151,9 +1156,6 @@ export const useContactsStore = defineStore('contacts', () => {
       // Re-fetch messages to show the system message immediately
       await fetchMessages(contactId)
     }
-    // The badges read the server totals, not the local lists — re-read the
-    // totals so Pending drops by one and Me gains one without a reload.
-    await refreshTabTotals()
     return data
   }
 

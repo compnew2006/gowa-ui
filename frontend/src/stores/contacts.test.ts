@@ -439,4 +439,70 @@ describe('contacts store claim', () => {
     // of the 3 from the initial fetch).
     expect(list.mock.calls.map(([p]) => p).filter(p => p.limit === 1)).toHaveLength(6)
   })
+
+  it('moves the tab counters before the message re-read finishes (Task 7a fix round 1)', async () => {
+    // The totals refresh must not sit behind the current-contact re-reads in
+    // claimChat: a slow (or failing) message re-fetch would otherwise leave
+    // the badges stale even though the claim PUT already succeeded. The
+    // message request is deferred here, so the claim blocks on it — the
+    // counters must already have moved by then.
+    let serverPending = 30
+    let serverMe = 0
+    list.mockImplementation((params: ListParams) => {
+      if (params.limit === 1) {
+        if (params.chat_status === 'pending') return page([], serverPending)
+        if (params.assigned) return page([], serverMe)
+        return page([], 31)
+      }
+      if (params.chat_status === 'closed') return page([], 0)
+      return Promise.resolve({ data: { data: {
+        contacts: [
+          { id: 'contact-1', phone_number: '1', name: 'Contact', chat_status: 'pending', last_message_at: '2026-11-21T00:00:00Z', tags: [] },
+        ],
+        total: 31,
+      } } })
+    })
+    put.mockImplementation(async () => {
+      serverPending = 29
+      serverMe = 1
+      return { data: { data: { status: 'success' } } }
+    })
+    get.mockResolvedValue({
+      data: { data: { id: 'contact-1', assigned_user_id: 'user-1', chat_status: 'open', access_mode: 'current_assignee', can_reply: true } },
+    })
+    let resolveMessages!: (value: unknown) => void
+    const messagesDeferred = new Promise(resolve => { resolveMessages = resolve })
+    messagesList.mockImplementation(() => messagesDeferred)
+
+    const store = useContactsStore()
+    await store.fetchContacts()
+    expect(store.pendingCount).toBe(30)
+    expect(store.myCount).toBe(0)
+
+    store.setCurrentContact({
+      id: 'contact-1',
+      phone_number: '1',
+      name: 'Contact',
+      chat_status: 'pending',
+      access_mode: 'restricted',
+      can_reply: false,
+      tags: [],
+    } as never)
+
+    const claiming = store.claimChat('contact-1')
+    // Let the claim run until it blocks on the deferred message re-fetch;
+    // the PUT and the totals refresh are plain microtasks, so two timer
+    // turns are enough for them to land.
+    await new Promise(resolve => setTimeout(resolve, 0))
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    // Counters moved already, without waiting for the re-read to finish.
+    expect(store.pendingCount).toBe(29)
+    expect(store.myCount).toBe(1)
+
+    resolveMessages({ data: { data: { messages: [], total: 0, has_more: false } } })
+    await claiming
+    expect(store.pendingCount).toBe(29)
+    expect(store.myCount).toBe(1)
+  })
 })
