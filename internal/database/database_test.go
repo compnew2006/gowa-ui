@@ -417,6 +417,51 @@ func TestSeedDefaultWidgets_IncludesMessagesOverTimeChart(t *testing.T) {
 	assert.Equal(t, "Messages Over Time", chart.Name)
 }
 
+// Task 8 fix round: an org that already has widgets (the pre-existing-org
+// case, including the user's org) still gains the "Messages Over Time"
+// chart when the default seed runs — and its existing widgets are not
+// duplicated.
+func TestSeedDefaultWidgets_BackfillsChartForOrgWithExistingWidgets(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	cleanAll(t, db)
+	org := testutil.CreateTestOrganization(t, db)
+	admin := testutil.CreateTestUser(t, db, org.ID,
+		testutil.WithEmail("seed-backfill-admin@example.com"),
+		testutil.WithPassword("seed-backfill-password"),
+	)
+	require.NoError(t, db.Model(&models.User{}).Where("id = ?", admin.ID).Update("is_super_admin", true).Error)
+
+	// The org already has one widget (as existing orgs do) — but no chart.
+	existing := models.Widget{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		UserID:         &admin.ID,
+		Name:           "Total Messages",
+		Description:    "Pre-existing widget",
+		DataSource:     "messages",
+		Metric:         "count",
+		DisplayType:    "number",
+		DisplayOrder:   1,
+		IsShared:       true,
+		IsDefault:      true,
+	}
+	require.NoError(t, db.Create(&existing).Error)
+
+	require.NoError(t, database.SeedDefaultWidgets(db))
+
+	var chart models.Widget
+	err := db.Where("organization_id = ? AND name = ?", org.ID, "Messages Over Time").First(&chart).Error
+	require.NoError(t, err, "expected an org with pre-existing widgets to gain the Messages Over Time chart")
+	assert.Equal(t, "messages", chart.DataSource)
+	assert.Equal(t, "chart", chart.DisplayType)
+	assert.Equal(t, "line", chart.ChartType)
+
+	// The pre-existing widget must not be duplicated by the backfill.
+	var totalMessages int64
+	require.NoError(t, db.Model(&models.Widget{}).Where("organization_id = ? AND name = ?", org.ID, "Total Messages").Count(&totalMessages).Error)
+	assert.Equal(t, int64(1), totalMessages, "backfill must not duplicate an existing default widget")
+}
+
 func TestCreateDefaultAdmin_Idempotent(t *testing.T) {
 	db := testutil.SetupTestDB(t)
 	cleanAll(t, db)

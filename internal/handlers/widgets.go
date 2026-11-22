@@ -91,6 +91,12 @@ type WidgetDataResponse struct {
 	DataPoints    []DataPoint        `json:"data_points"`    // Breakdown data
 	GroupedSeries *GroupedSeriesData `json:"grouped_series"` // For grouped time-series (line charts with group_by)
 	TableRows     []TableRow         `json:"table_rows"`     // For table display type
+	// SentCount / ReceivedCount split the messages count headline into its
+	// valid-only outgoing / incoming parts (Decision 2). Pointers so the
+	// frontend can tell "no split applies" (nil, any other data source or
+	// metric) from "split is zero". Only set for messages + count widgets.
+	SentCount     *float64 `json:"sent_count,omitempty"`
+	ReceivedCount *float64 `json:"received_count,omitempty"`
 }
 
 // GroupedSeriesData represents multiple datasets for grouped time-series charts
@@ -836,6 +842,17 @@ func (a *App) executeWidgetQuery(orgID, viewerID uuid.UUID, widget models.Widget
 	response.PrevValue = previousValue
 	response.Change = calculatePercentageChange(int64(previousValue), int64(currentValue))
 
+	// Decision 2 (counting definitions, Task 1b): the messages number
+	// widget shows one valid-only headline with the sent/received split
+	// underneath it. The split reuses queryMessages (same valid-only rule,
+	// same widget filters), so sent + received always sums to the headline.
+	if widget.DataSource == "messages" && widget.Metric == "count" {
+		sent := a.queryMessagesDirectionCount(orgID, models.DirectionOutgoing, filters, periodStart, periodEnd)
+		received := a.queryMessagesDirectionCount(orgID, models.DirectionIncoming, filters, periodStart, periodEnd)
+		response.SentCount = &sent
+		response.ReceivedCount = &received
+	}
+
 	// Get chart data if display type is chart
 	if widget.DisplayType == "chart" {
 		if widget.GroupByField != "" {
@@ -853,6 +870,18 @@ func (a *App) executeWidgetQuery(orgID, viewerID uuid.UUID, widget models.Widget
 	}
 
 	return response, nil
+}
+
+// queryMessagesDirectionCount counts valid messages in one direction only
+// (outgoing = sent, incoming = received), reusing queryMessages so the
+// valid-only rule and the widget's own filters apply unchanged. The
+// direction filter is appended to a copy of the widget filters: a widget
+// already filtered to one direction then yields 0 for the other side, so
+// sent + received still sums to the headline.
+func (a *App) queryMessagesDirectionCount(orgID uuid.UUID, direction models.Direction, filters []FilterInput, start, end time.Time) float64 {
+	dirFilters := append(append([]FilterInput{}, filters...),
+		FilterInput{Field: "direction", Operator: "equals", Value: string(direction)})
+	return a.queryMessages(orgID, "count", "", dirFilters, start, end)
 }
 
 // Query helper functions for each data source
@@ -1078,6 +1107,15 @@ func (a *App) getGroupedData(orgID uuid.UUID, widget models.Widget, filters []Fi
 	args := []any{orgID, start, end}
 	query, args = appendFilterSQL(widget.DataSource, query, args, filters)
 
+	// Decision 2 (counting definitions, Task 1b): grouped messages series
+	// count valid messages only — revoked and failed messages are excluded,
+	// same as the headline and the plain chart series. Consequence: a
+	// widget grouped BY status shows only valid statuses — the revoked and
+	// failed groups are absent, not zero.
+	if widget.DataSource == "messages" {
+		query += " AND status NOT IN ('revoked', 'failed')"
+	}
+
 	query += fmt.Sprintf(" GROUP BY %s ORDER BY value DESC", widget.GroupByField)
 
 	type GroupedCount struct {
@@ -1160,6 +1198,15 @@ func (a *App) getGroupedTimeSeriesData(orgID uuid.UUID, widget models.Widget, fi
 
 	args := []any{orgID, start, end}
 	query, args = appendFilterSQL(widget.DataSource, query, args, filters)
+
+	// Decision 2 (counting definitions, Task 1b): grouped messages
+	// time-series count valid messages only — revoked and failed messages
+	// are excluded, same as the headline and the plain chart series.
+	// Consequence: a widget grouped BY status shows only valid statuses —
+	// the revoked and failed groups are absent, not zero.
+	if widget.DataSource == "messages" {
+		query += " AND status NOT IN ('revoked', 'failed')"
+	}
 
 	query += fmt.Sprintf(" GROUP BY DATE_TRUNC('day', %s), %s ORDER BY date ASC", dateField, widget.GroupByField)
 

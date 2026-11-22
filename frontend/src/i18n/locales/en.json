@@ -1458,6 +1458,8 @@
     "displayChart": "Chart",
     "displayTable": "Table",
     "displayShortcuts": "Shortcuts",
+    "sent": "Sent",
+    "received": "Received",
     "chartType": "Chart Type",
     "selectChartType": "Select chart type",
     "chartLine": "Line",

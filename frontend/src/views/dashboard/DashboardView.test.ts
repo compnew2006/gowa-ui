@@ -134,9 +134,31 @@ const recentWidget = baseWidget({
   grid_h: 8,
 })
 
+const totalWidget = baseWidget({
+  id: 'w-total',
+  name: 'Total Messages',
+  display_type: 'number',
+  grid_x: 0,
+  grid_y: 0,
+  grid_w: 3,
+  grid_h: 3,
+})
+
 // Messages series (chart_data) vs a contacts-shaped decoy series
 // (data_points): the chart must render the former, never the latter.
 const widgetData = {
+  // Task 8 fix round: the Total Messages headline carries the valid-only
+  // sent/received split underneath it.
+  'w-total': {
+    widget_id: 'w-total',
+    value: 3,
+    change: 0,
+    prev_value: 0,
+    sent_count: 1,
+    received_count: 2,
+    chart_data: [],
+    data_points: [],
+  },
   'w-chart': {
     widget_id: 'w-chart',
     value: 46,
@@ -204,7 +226,7 @@ const widgetsServiceMock = widgetsService as unknown as Record<string, ReturnTyp
 
 async function mountDashboard() {
   widgetsServiceMock.list.mockResolvedValue({
-    data: { data: { widgets: [chartWidget, recentWidget] } },
+    data: { data: { widgets: [totalWidget, chartWidget, recentWidget] } },
   })
   widgetsServiceMock.getAllData.mockResolvedValue({
     data: { data: { data: widgetData } },
@@ -239,6 +261,14 @@ describe('DashboardView — Task 8 charts + Recent Messages', () => {
     expect(data.datasets[0].data).toEqual([12, 34])
     expect(JSON.stringify(data)).not.toContain('contacts-decoy')
     expect(JSON.stringify(data)).not.toContain('999')
+  })
+
+  it('renders the sent/received split under the Total Messages headline', async () => {
+    const wrapper = await mountDashboard()
+    // $t is the identity mock, so the i18n keys render literally.
+    expect(wrapper.text()).toContain('1 dashboard.sent')
+    expect(wrapper.text()).toContain('2 dashboard.received')
+    expect(wrapper.text()).toContain('Total Messages')
   })
 
   it('dedupes Recent Messages rows by message id', async () => {

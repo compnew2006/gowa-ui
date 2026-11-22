@@ -546,6 +546,10 @@ export interface WidgetData {
   value: number
   change: number
   prev_value: number
+  // Valid-only sent/received split of the messages count headline
+  // (Decision 2). Present only for messages + count widgets.
+  sent_count?: number
+  received_count?: number
   chart_data: Array<{ label: string; value: number }>
   data_points: Array<{ label: string; value: number; color?: string }>
   grouped_series?: {

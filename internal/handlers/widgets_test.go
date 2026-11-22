@@ -684,3 +684,178 @@ func TestApp_GetAllWidgetsData_MessagesExcludeRevokedAndFailed(t *testing.T) {
 	}
 	assert.Equal(t, float64(2), seriesTotal, "messages time series must count valid messages only")
 }
+
+// --- Task 8 fix round: sent/received split (Decision 2) ---
+
+// TestApp_GetAllWidgetsData_MessagesSentReceivedSplit pins the second half
+// of Decision 2: the Total Messages number widget returns the valid-only
+// headline split into sent (outgoing) and received (incoming) counts, with
+// revoked and failed messages excluded from both sides of the split.
+func TestApp_GetAllWidgetsData_MessagesSentReceivedSplit(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	perms := getAnalyticsPermissions(t, app)
+	role := testutil.CreateTestRoleExact(t, app.DB, org.ID, "Analytics User", false, false, perms)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("widgets-split")), testutil.WithPassword("password"), testutil.WithRoleID(&role.ID))
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	now := time.Now().UTC()
+	seedMessage := func(status models.MessageStatus, direction models.Direction) {
+		msg := &models.Message{
+			BaseModel:       models.BaseModel{ID: uuid.New(), CreatedAt: now, UpdatedAt: now},
+			OrganizationID:  org.ID,
+			WhatsAppAccount: "test-account",
+			ContactID:       contact.ID,
+			Direction:       direction,
+			MessageType:     models.MessageTypeText,
+			Status:          status,
+			Content:         "hello",
+		}
+		require.NoError(t, app.DB.Create(msg).Error)
+	}
+	// 1 valid incoming, 2 valid outgoing, 1 revoked incoming, 1 failed outgoing.
+	seedMessage(models.MessageStatusReceived, models.DirectionIncoming)
+	seedMessage(models.MessageStatusSent, models.DirectionOutgoing)
+	seedMessage(models.MessageStatusDelivered, models.DirectionOutgoing)
+	seedMessage(models.MessageStatusRevoked, models.DirectionIncoming)
+	seedMessage(models.MessageStatusFailed, models.DirectionOutgoing)
+
+	numberWidget := createTestWidget(t, app, org.ID, &user.ID, "Total Messages", true, false)
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetQueryParam(req, "from", now.AddDate(0, 0, -1).Format("2006-01-02"))
+	testutil.SetQueryParam(req, "to", now.Format("2006-01-02"))
+
+	err := app.GetAllWidgetsData(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	// Decode with a local shape so the test compiles (and fails on values)
+	// before the backend exposes the split fields.
+	var resp struct {
+		Data struct {
+			Data map[string]struct {
+				Value         float64  `json:"value"`
+				SentCount     *float64 `json:"sent_count"`
+				ReceivedCount *float64 `json:"received_count"`
+			} `json:"data"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+
+	numberData, ok := resp.Data.Data[numberWidget.ID.String()]
+	require.True(t, ok, "number widget data missing")
+	assert.Equal(t, float64(3), numberData.Value, "Total Messages must count valid messages only")
+	require.NotNil(t, numberData.SentCount, "messages number widget must return a sent count")
+	require.NotNil(t, numberData.ReceivedCount, "messages number widget must return a received count")
+	assert.Equal(t, float64(2), *numberData.SentCount, "sent split must count valid outgoing messages only")
+	assert.Equal(t, float64(1), *numberData.ReceivedCount, "received split must count valid incoming messages only")
+}
+
+// --- Task 8 fix round: grouped messages series valid-only (Decision 2) ---
+
+// TestApp_GetAllWidgetsData_GroupedMessagesExcludeRevokedAndFailed pins the
+// valid-only rule for user-built grouped messages widgets: both the grouped
+// counts (bar/pie) and the grouped time series (line) exclude revoked and
+// failed messages. Consequence, pinned here: a widget grouped BY status
+// shows only valid statuses — the revoked/failed groups are absent.
+func TestApp_GetAllWidgetsData_GroupedMessagesExcludeRevokedAndFailed(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	perms := getAnalyticsPermissions(t, app)
+	role := testutil.CreateTestRoleExact(t, app.DB, org.ID, "Analytics User", false, false, perms)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("widgets-grouped-valid")), testutil.WithPassword("password"), testutil.WithRoleID(&role.ID))
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	now := time.Now().UTC()
+	seedMessage := func(status models.MessageStatus, direction models.Direction) {
+		msg := &models.Message{
+			BaseModel:       models.BaseModel{ID: uuid.New(), CreatedAt: now, UpdatedAt: now},
+			OrganizationID:  org.ID,
+			WhatsAppAccount: "test-account",
+			ContactID:       contact.ID,
+			Direction:       direction,
+			MessageType:     models.MessageTypeText,
+			Status:          status,
+			Content:         "hello",
+		}
+		require.NoError(t, app.DB.Create(msg).Error)
+	}
+	// 3 valid messages (sent, delivered, read), 1 revoked, 1 failed.
+	seedMessage(models.MessageStatusSent, models.DirectionOutgoing)
+	seedMessage(models.MessageStatusDelivered, models.DirectionOutgoing)
+	seedMessage(models.MessageStatusRead, models.DirectionIncoming)
+	seedMessage(models.MessageStatusRevoked, models.DirectionIncoming)
+	seedMessage(models.MessageStatusFailed, models.DirectionOutgoing)
+
+	groupedWidget := func(name, chartType string) *models.Widget {
+		w := &models.Widget{
+			BaseModel:      models.BaseModel{ID: uuid.New()},
+			OrganizationID: org.ID,
+			UserID:         &user.ID,
+			Name:           name,
+			DataSource:     "messages",
+			Metric:         "count",
+			DisplayType:    "chart",
+			ChartType:      chartType,
+			GroupByField:   "status",
+			ShowChange:     false,
+			Color:          "blue",
+			Size:           "small",
+			DisplayOrder:   2,
+			IsShared:       true,
+		}
+		require.NoError(t, app.DB.Create(w).Error)
+		return w
+	}
+	barWidget := groupedWidget("Messages by Status", "bar")
+	lineWidget := groupedWidget("Messages by Status Over Time", "line")
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetQueryParam(req, "from", now.AddDate(0, 0, -1).Format("2006-01-02"))
+	testutil.SetQueryParam(req, "to", now.Format("2006-01-02"))
+
+	err := app.GetAllWidgetsData(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp struct {
+		Data struct {
+			Data map[string]handlers.WidgetDataResponse `json:"data"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+
+	// Grouped counts (bar): only valid statuses, totalling 3.
+	barData, ok := resp.Data.Data[barWidget.ID.String()]
+	require.True(t, ok, "grouped bar widget data missing")
+	barLabels := make([]string, 0, len(barData.DataPoints))
+	var barTotal float64
+	for _, p := range barData.DataPoints {
+		barLabels = append(barLabels, p.Label)
+		barTotal += p.Value
+	}
+	assert.Equal(t, float64(3), barTotal, "grouped messages counts must exclude revoked and failed")
+	assert.NotContains(t, barLabels, "revoked", "grouped BY status must not show a revoked group")
+	assert.NotContains(t, barLabels, "failed", "grouped BY status must not show a failed group")
+	assert.ElementsMatch(t, []string{"sent", "delivered", "read"}, barLabels, "grouped BY status shows only valid statuses")
+
+	// Grouped time series (line): only valid statuses, totalling 3.
+	lineData, ok := resp.Data.Data[lineWidget.ID.String()]
+	require.True(t, ok, "grouped line widget data missing")
+	require.NotNil(t, lineData.GroupedSeries, "grouped line widget must return a grouped series")
+	lineLabels := make([]string, 0, len(lineData.GroupedSeries.Datasets))
+	var lineTotal float64
+	for _, ds := range lineData.GroupedSeries.Datasets {
+		lineLabels = append(lineLabels, ds.Label)
+		for _, v := range ds.Data {
+			lineTotal += v
+		}
+	}
+	assert.Equal(t, float64(3), lineTotal, "grouped messages time series must exclude revoked and failed")
+	assert.NotContains(t, lineLabels, "revoked", "grouped time series BY status must not show a revoked group")
+	assert.NotContains(t, lineLabels, "failed", "grouped time series BY status must not show a failed group")
+	assert.ElementsMatch(t, []string{"sent", "delivered", "read"}, lineLabels, "grouped time series BY status shows only valid statuses")
+}

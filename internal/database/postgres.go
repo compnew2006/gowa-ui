@@ -984,14 +984,14 @@ func SeedDefaultWidgets(db *gorm.DB) error {
 		return fmt.Errorf("failed to fetch organizations: %w", err)
 	}
 
+	// Every org gets the full default set, including orgs that already have
+	// widgets: SeedDefaultWidgetsForOrg is idempotent per widget (matched
+	// by name), so it backfills only the defaults an org is missing —
+	// e.g. the "Messages Over Time" chart for orgs created before Task 8 —
+	// without duplicating widgets the org already has. This runs as part
+	// of the migration/setup pass (RunMigrationWithProgress), not on every
+	// request.
 	for _, org := range orgs {
-		// Skip orgs that already have widgets
-		var exists int64
-		db.Model(&models.Widget{}).Where("organization_id = ?", org.ID).Count(&exists)
-		if exists > 0 {
-			continue
-		}
-
 		if err := SeedDefaultWidgetsForOrg(db, org.ID, superAdmin.ID); err != nil {
 			return err
 		}
@@ -1001,7 +1001,14 @@ func SeedDefaultWidgets(db *gorm.DB) error {
 }
 
 // SeedDefaultWidgetsForOrg creates default dashboard widgets for a single organization.
-// Used when a new organization is created at runtime.
+// Used when a new organization is created at runtime, and by
+// SeedDefaultWidgets to backfill missing defaults for existing orgs.
+//
+// Idempotent per widget (matched by organization + name): a default the
+// org already has is skipped, a missing one is created. Consequence: a
+// default widget a user deliberately deleted is re-created on the next
+// migration/setup run that calls SeedDefaultWidgets — there is no
+// per-widget "deleted on purpose" marker to distinguish the two cases.
 func SeedDefaultWidgetsForOrg(db *gorm.DB, orgID, userID uuid.UUID) error {
 	defaultWidgetsData := []struct {
 		Name         string
@@ -1029,6 +1036,17 @@ func SeedDefaultWidgetsForOrg(db *gorm.DB, orgID, userID uuid.UUID) error {
 	}
 
 	for _, wd := range defaultWidgetsData {
+		// Idempotent per widget: skip a default the org already has
+		// (matched by name), so re-seeding backfills missing defaults
+		// without duplicating existing widgets.
+		var exists int64
+		if err := db.Model(&models.Widget{}).Where("organization_id = ? AND name = ?", orgID, wd.Name).Count(&exists).Error; err != nil {
+			return fmt.Errorf("failed to check widget %s: %w", wd.Name, err)
+		}
+		if exists > 0 {
+			continue
+		}
+
 		displayType := wd.DisplayType
 		if displayType == "" {
 			displayType = "number"

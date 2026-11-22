@@ -846,6 +846,12 @@ onMounted(() => {
                     </Transition>
                   </template>
                 </div>
+                <div
+                  v-if="getWidgetById(item.i)?.data_source === 'messages' && widgetData[item.i]?.sent_count !== undefined && widgetData[item.i]?.received_count !== undefined"
+                  class="text-xs text-white/40 light:text-gray-500 mt-1"
+                >
+                  {{ formatNumber(widgetData[item.i]?.sent_count || 0) }} {{ $t('dashboard.sent') }} · {{ formatNumber(widgetData[item.i]?.received_count || 0) }} {{ $t('dashboard.received') }}
+                </div>
                 <div v-if="getWidgetById(item.i)!.show_change && widgetData[item.i]" class="flex items-center text-xs text-white/40 light:text-gray-500 mt-1">
                   <component
                     :is="widgetData[item.i]?.change > 0 ? TrendingUp : widgetData[item.i]?.change < 0 ? TrendingDown : Minus"
