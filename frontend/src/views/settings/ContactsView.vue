@@ -21,6 +21,7 @@ const { t } = useI18n()
 const router = useRouter()
 const authStore = useAuthStore()
 const canWriteContacts = authStore.hasPermission('contacts', 'write')
+const canDeleteContacts = authStore.hasPermission('contacts', 'delete')
 const canImportContacts = authStore.hasPermission('contacts', 'import')
 const canExportContacts = authStore.hasPermission('contacts', 'export')
 
@@ -303,7 +304,7 @@ function getDisplayName(contact: Contact): string {
                     <RouterLink :to="`/settings/contacts/${contact.id}`">
                       <IconButton :icon="Pencil" :label="$t('common.edit')" class="h-8 w-8" />
                     </RouterLink>
-                    <IconButton :label="$t('common.delete')" class="h-8 w-8" @click="openDeleteDialog(contact)">
+                    <IconButton v-if="canDeleteContacts" :label="$t('common.delete')" class="h-8 w-8" @click="openDeleteDialog(contact)">
                       <Trash2 class="h-4 w-4 text-destructive" />
                     </IconButton>
                   </div>
