@@ -47,6 +47,61 @@ codebase. The dashboard's numbers are per-widget values, not a single stats quer
   dependent.** A user can edit/delete a widget, so "the dashboard says X" is only
   reproducible for a named widget row in a named window.
 
+## Decisions (best practice, approved 2026-11-22)
+
+The user (2026-11-22) is not technical and delegated all 11 open items below to
+best-practice decisions by Muse. Each decision states what the number *should* mean;
+where it differs from the traced behaviour in §§1–10, the section says so explicitly.
+The traced behaviour descriptions are left intact — decisions change the definition,
+not what the code does today.
+
+1. **"Active Contacts" (§2): DECIDED** — a contact is active when it sent at least
+   one *inbound* message inside the selected window; internal/group/newsletter
+   contacts are excluded. *Rationale: activity means the customer engaged;
+   outbound-only is agent activity, not contact activity.*
+2. **"Total Messages" (§3): DECIDED** — split sent vs received; count only valid
+   messages, excluding revoked and failed. The dashboard widget shows the total of
+   valid messages, with the split as the underlying definition. *Rationale: mixing
+   directions and dead messages hides what actually happened.*
+3. **"Conversations" in Chat (§4): DECIDED** — a conversation is a contact row with
+   `last_message_at IS NOT NULL` (the `has_messages=true` filter the backend already
+   supports); server-side totals are canonical and tab badges must be server totals,
+   not loaded-rows counts. *Rationale: loaded-rows counts are paging artefacts and
+   unreproducible.*
+4. **Pending tab (§5): DECIDED** — one rule in both places: the server rule
+   (unassigned, not closed, has a message, not internal). *Rationale: a
+   never-messaged row is not a conversation awaiting a reply.*
+5. **Private tab unit (§5): DECIDED** — count merged org-account pairs (one logical
+   conversation = one row), not underlying contact rows. *Rationale: the tab lists
+   conversations, and a pair is one conversation.*
+6. **Unread (§6): DECIDED** — keep the per-conversation badge; do NOT invent an
+   org-wide total-unread figure; the Private tab badge must NOT double-count — one
+   logical internal message counts once. *Rationale: per-viewer read state makes a
+   single total misleading, and a message stored twice is still one message.*
+7. **Templates (§7): DECIDED** — campaign picker filtered to the selected account's
+   templates; Templates-page total is org-wide; "Available" means Meta-approved /
+   sendable. *Rationale: the picker UI intends account filtering, and a local row
+   that is not approved cannot be sent.* Data gap: the local `templates` table
+   carries no approval status (see §7).
+8. **"Online" (§8): DECIDED** — online = live WebSocket connection (presence);
+   `is_available` is a separate availability flag, not presence; `online_count`
+   follows the list's filters. *Rationale: presence and availability are different
+   facts, and a count must agree with the rows shown.*
+9. **Break Time (§9): DECIDED** — in the all-agents view the summary card shows the
+   org total (sum of all agents' break minutes in the period); every away period
+   counts as a break. *Rationale: the card is an org summary, and the log records
+   no reason, so no finer distinction is possible.*
+10. **Who is an "agent" for analytics (§10): DECIDED** — holders of the agent system
+    role in the org; table and dropdown built from the *same* population; list all
+    agents including zero-activity ones. *Rationale: the system role is the one
+    stable, org-wide definition of "agent", and zeros are informative, not noise.*
+11. **Canonical contact total (§1): DECIDED (definition only)** — the canonical
+    *definition* is the scoped `ListContacts` total per §1. *Rationale: best
+    practice cannot settle a data contradiction — the definition must be
+    reproducible, so the 29,803 vs 30,641 values still need a live re-check with
+    viewer/time/filters in Task 15 (after deploy); neither figure is canonical as
+    a value.*
+
 ## 1. Total contacts — 29,803 (and 30,641)
 
 **Traced query.** `GET /api/contacts` → `ListContacts`,
@@ -91,9 +146,16 @@ They can only be reconciled if the readings differ in viewer, in filters, or in 
 on one reading). One direction is especially suspicious: the 30,641 reading was seen
 while signed in as the agent salama, whose scope is *narrower* than a super admin's,
 so under `scopeAssignedContact` his total should be ≤ the super admin's, not greater.
-**Needs a user decision:** which reading (viewer + moment + filters) is canonical,
-and a live re-check of both totals with viewer/time recorded. Until then, do not treat
-either figure as "the" contact count.
+**DECIDED (best practice, 2026-11-22) — definition only.** The canonical
+*definition* is the scoped `ListContacts` total above (the DEFINED definition):
+the number of contact rows in the viewer's org (or, for a scoped viewer, in the
+viewer's account/involvement scope) matching the caller's filters, counted at
+request time, soft-deleted rows excluded. *Rationale: best practice cannot settle
+a data contradiction — the definition must be reproducible (viewer + filters +
+moment), so the 29,803 vs 30,641 discrepancy is not resolved by picking a value.*
+The two values still require a live re-check with viewer/time/filters recorded in
+Task 15 (after deploy). Until then, do not treat either figure as "the" contact
+count.
 
 ## 2. Active Contacts — 6.3K / 6.5K
 
@@ -123,12 +185,14 @@ the number grows through the month, and the two readings were taken at different
 moments (and possibly with different persisted date ranges). It is not, on its own,
 evidence of a bug.
 
-**UNDEFINED — needs a product decision from the user.** The query defines what the
-widget *does*, but "active" as a product concept is undecided: should it mean
-(a) any message in the window (current behaviour), (b) an *inbound* message in the
-window, (c) a message in the last 30 days regardless of the dashboard window, or
-(d) something else (e.g. excluding internal/group contacts)? The fix task must not
-pick one of these by guessing.
+**DECIDED (best practice, 2026-11-22).** "Active" means the *customer* engaged: a
+contact counts as active when it sent at least one *inbound* message inside the
+selected window (default: current month to date, §0); internal, group and newsletter
+contacts are excluded. *Rationale: activity means the customer engaged;
+outbound-only is agent activity, not contact activity.* This **differs from current
+behaviour**: the widget today counts any message in either direction and includes
+internal/group/newsletter contacts — the fix task must add the inbound-only
+condition and the exclusions.
 
 ## 3. Total Messages — 86.3K / 90.3K
 
@@ -152,12 +216,17 @@ all statuses, counted org-wide for viewers with `analytics:read`.*
 
 **Reconciliation.** 86.3K vs 90.3K is **reconcilable** the same way as §2: a
 month-to-date count read at two different moments grows. It is not, on its own,
-evidence of a bug — but see the open question below.
+evidence of a bug — but see the decision below.
 
-**UNDEFINED — needs a product decision from the user.** Is "Total Messages" supposed
-to mix sent and received, or should the dashboard show them separately? And should
-revoked/failed messages count? The current query mixes everything; the product
-meaning was never written down.
+**DECIDED (best practice, 2026-11-22).** "Total Messages" is split into sent vs
+received — mixing the two directions hides what actually happened — and counts only
+*valid* messages: revoked and failed messages are excluded. The dashboard widget
+shows the total of valid messages, with the sent/received split available as the
+underlying definition. *Rationale: a total that mixes directions and dead messages
+has no single meaning; the split is the meaningful figure and the valid-only total
+is the honest headline.* This **differs from current behaviour**: the query today
+mixes all directions and all statuses — the fix task must add the split and the
+status exclusion.
 
 ## 4. Chat conversations — 86–87
 
@@ -177,23 +246,26 @@ rows:
   are `.length` of those computed arrays; `tabCount` in
   `frontend/src/composables/useChatContactsList.ts:306` renders them.
 
-**Definition: UNDEFINED — needs a product decision from the user.** The 86–87 figure
-cannot be reproduced from any single query: it depends on how many pages the viewer
-had loaded (infinite scroll appends in `loadMoreContacts`, `contacts.ts:674`), which
-tab was showing, and the viewer's scope. It is a count of *loaded rows*, capped by
-paging, not a count of conversations in the org.
+**Definition: DECIDED (best practice, 2026-11-22).** A "conversation" is a contact
+row with `last_message_at IS NOT NULL` — the `has_messages=true` filter the backend
+already supports. Server-side totals are canonical: tab badges must be server
+totals, not loaded-rows counts. *Rationale: loaded-rows counts are paging artefacts
+and unreproducible — a count must not change with how far the viewer scrolled.*
+This **differs from current behaviour**: today the 86–87 figure is a count of
+*loaded rows*, capped by paging, and the sidebar never displays the server total.
 
-**What "conversations" could mean (for the user to choose one):** (a) contact rows
-with `last_message_at IS NOT NULL` (the `has_messages=true` filter the backend
-already supports but the frontend never sends — `contacts.go:150` comment says this
-is what `/chat` is for); (b) the current `ListContacts` total (§1, includes
-never-messaged rows); (c) open (non-closed, non-internal) conversations only. Note
+**What was considered:** (a) contact rows with a message (chosen — the
+`has_messages=true` filter the backend already supports, and what `contacts.go:150`
+says `/chat` is for); (b) the current `ListContacts` total (§1, includes
+never-messaged rows — rejected: a row that never exchanged a message is not a
+conversation); (c) open (non-closed, non-internal) conversations only — rejected as
+the *definition* of "conversations" (openness is a tab filter, not the unit). Note
 also that (a) and the sidebar's client-side pending rule disagree: the server-side
 pending filter (`contacts.go:230–234`) requires `assigned_user_id IS NULL AND
 chat_status <> 'closed' AND last_message_at IS NOT NULL AND NOT internal`, while the
 client-side Pending tab (`contacts.ts:349`) requires only "unassigned and not closed"
-— so it also counts never-messaged unassigned contacts. Any fix must pick one
-pending rule and use it in both places.
+— so it also counts never-messaged unassigned contacts. The §5 decision picks the
+server rule for both places.
 
 ## 5. Pending tab — 27; Private tab — 39
 
@@ -201,8 +273,12 @@ pending rule and use it in both places.
 `chat_status=pending` (`contacts.go:230–234`, needs `last_message_at IS NOT NULL`,
 excludes internal) vs client-side "unassigned and not closed" (`contacts.ts:349`).
 The badge the user sees is the client-side one, computed over loaded rows only.
-**Definition: UNDEFINED — needs a product decision** (same decision as §4: which
-pending rule, and whether the badge is a server total or a loaded-rows count).
+**Definition: DECIDED (best practice, 2026-11-22).** One rule in both places — the
+server rule (`contacts.go:230–234`): unassigned, not closed, has a message, not
+internal. *Rationale: a never-messaged row is not a conversation awaiting a reply.*
+This **differs from current behaviour**: the badge the user sees today is the
+client-side rule over loaded rows only — the fix task must use the server rule and
+server totals in both places.
 
 **Private (39).** The Private tab does not list contact rows: it lists *merged pairs*
 of org accounts that messaged each other, from `ListInternalConversations`
@@ -210,14 +286,14 @@ of org accounts that messaged each other, from `ListInternalConversations`
 One pair = one row even though the underlying data is two contact rows (one per
 account's copy). Manually flagged contacts (`metadata.internal_chat`, `OnlyInternalContactsSQL`,
 `internal/models/internal_chat.go:44`) that are not part of any pair appear as extra
-rows. **Definition: UNDEFINED — needs a product decision for sign-off.** The
-sentence below describes only what the UI currently shows, not an agreed
-definition: *the number of merged org-account pairs plus unpaired
-manually-flagged internal contacts currently loaded for the viewer.* The
-*product* meaning of "39 private conversations" is **UNDEFINED — needs a
-product decision**: should the count be pairs, or the underlying contact rows (which
-would be up to ~2× the pair count)? The audit's 39 cannot be checked against the
-contact-row count without knowing which unit was intended.
+rows. **Definition: DECIDED (best practice, 2026-11-22).** *The number of merged
+org-account pairs plus unpaired manually-flagged internal contacts* — one logical
+conversation = one row; the underlying contact rows of a pair are never counted
+separately. *Rationale: the tab lists conversations, and a pair is one conversation;
+counting rows would double-count it.* This **matches current behaviour** for the
+unit (the UI already lists pairs); the audit's 39 is now checkable against the pair
+count. (The badge itself must still become a server total rather than a loaded-rows
+count, per the §4 decision.)
 
 **Related contradiction (flagged, not resolved).** `ExcludeInternalContactsSQL`
 (`internal_chat.go:36`) excludes internal chats from the Closed and Pending
@@ -289,16 +365,22 @@ the conversation's whole inbound history.*
   live check of that contact's `read_watermark_seq`, the viewer's
   `contact_read_states` row, and the message count above it.
   **Flagged as not reconcilable from the audit data alone.**
-- **Double-counting in the Private tab (flagged):** internal messages are stored
-  twice (once per account's copy). `ListInternalConversations` sums the two sides'
-  unread counts into the merged row (`internal_contacts.go:291`), so one logical
-  internal message can count **2×** in the Private tab badge. Whether that is
-  intended is **UNDEFINED — needs a product decision**.
+- **Double-counting in the Private tab (DECIDED, best practice, 2026-11-22):**
+  internal messages are stored twice (once per account's copy).
+  `ListInternalConversations` sums the two sides' unread counts into the merged row
+  (`internal_contacts.go:291`), so one logical internal message counts **2×** in the
+  Private tab badge. **Decided: it must NOT double-count** — one logical internal
+  message counts once, even though it is stored twice. *Rationale: a message stored
+  twice is still one message.* This differs from current behaviour; the fix task
+  must de-duplicate the merged unread count.
 - **Client-side drift (flagged):** the store also increments `unread_count` locally
   on incoming WebSocket events (`frontend/src/stores/contacts.ts:875`) and zeroes it
   on open; a badge can therefore disagree with the server count until the next
-  refetch. There is no single "unread total" definition to sign off — **UNDEFINED —
-  needs a product decision** if the user wants a total unread figure at all.
+  refetch. **DECIDED (best practice, 2026-11-22): no org-wide total-unread figure.**
+  The per-conversation badge is kept as the only unread number, and no total is
+  invented. *Rationale: per-viewer read state makes a single org-wide total
+  misleading — it would sum different viewers' unread states into a number that
+  belongs to nobody.*
 - The three audit badges (438/209/173) are per-conversation values; they were never
   a total, and no code sums them.
 
@@ -336,15 +418,22 @@ reconciled with a Templates-page total ≠ 1 from the same moment. Untested hypo
 explanations): different moments (templates created/deleted between readings), a
 search filter on one surface, or the audit's "1" referring to a filtered view that
 was not recorded.
-**Needs a user decision:** (a) should the campaign picker be filtered to the
-selected account's templates (presumably yes — that is what the UI code intends);
-(b) is the Templates-page total org-wide, or per-account? Until (a)/(b) are decided,
-the two surfaces cannot be made to agree.
+**DECIDED (best practice, 2026-11-22).** (a) The campaign picker **is** filtered to
+the selected account's templates — that is what the UI code intends, and the
+`whatsapp_account` vs `account` parameter mismatch is a bug for Task 4, not a
+decision. (b) The Templates-page total is org-wide. *Rationale: the picker chooses
+templates for one account's campaign, while the Templates page manages the org's
+whole template library.* This **differs from current behaviour** on (a): today the
+picker returns page 1 of all org templates unfiltered by account.
 
-**UNDEFINED — needs a product decision.** `ListTemplates` has no status/approval
-filter: a row in the local `templates` table is not necessarily an approved,
-sendable WhatsApp template on Meta's side. What "available" means (local row vs
-Meta-approved) is undecided.
+**DECIDED (best practice, 2026-11-22).** "Available" means Meta-approved / sendable —
+a local row that is not approved cannot be sent. *Rationale: only Meta's approval
+makes a template sendable; a local row alone proves nothing about sendability.*
+**Data gap for Task 4 (verified):** the local `templates` table carries no approval
+status — the `Template` model (`internal/models/models.go:463`) has no status or
+approval field at all, and `ListTemplates` has no status/approval filter. Until
+Task 4 records where approval status lives (Meta sync or a new column), "available"
+cannot be computed from local data alone.
 
 ## 8. `online_count` — Users page
 
@@ -377,14 +466,16 @@ least one live WebSocket connection to this org at the moment of the request,
 ignoring the list's search/role/page filters; 0 when the WebSocket hub is absent —
 for any caller in the org, at request time.*
 
-**UNDEFINED — needs a product decision from the user.** "Online" as a product concept
-is undecided: (a) live WebSocket connection (current behaviour — an open tab counts,
-even if the user is idle or away); (b) `is_available = true` (the availability flag
-toggled by `UpdateAvailability`, `users.go:1156` — a *different* thing: an away user
-with an open tab is "online" but not "available"); (c) recently active (last-seen
-timestamp — no such field is consulted anywhere). The fix task must not pick one.
-Also undecided: should `online_count` follow the list filters (so it matches the
-rows shown) or stay org-wide?
+**DECIDED (best practice, 2026-11-22).** "Online" means a live WebSocket connection
+(presence) — an open tab counts, even if the user is idle or away. `is_available`
+is a *separate* availability flag, not presence: an away user with an open tab is
+"online" but not "available". And `online_count` follows the list's filters, so the
+number agrees with the rows shown. *Rationale: presence and availability are
+different facts and must not share one number, and a count must agree with the
+rows shown.* This **differs from current behaviour** on the count: today
+`online_count` is org-wide regardless of the list's search/role/page filters — the
+fix task must scope it to the filtered list. (The recently-active option was
+rejected: no last-seen field is consulted anywhere.)
 
 ## 9. Break Time — Agent Analytics
 
@@ -427,18 +518,24 @@ minutes, of the parts of that agent's `is_available = false` availability-log
 intervals that overlap the period (an interval still open counts up to now), plus
 the number of such overlapping intervals.*
 
-**UNDEFINED — needs a product decision from the user.** (a) There is no defined
-"total / average break time for the org" — the summary card currently shows the
-viewer's own value in the all-agents view. The user must decide what the card
-should show (org total, org average, or the viewer's own). (b) Is *any* away period
-a "break", or only some away reasons? The log records no reason — only the flag
-flip.
+**DECIDED (best practice, 2026-11-22).** (a) In the all-agents view the summary card
+shows the **org total** — the sum of all agents' break minutes in the period.
+(b) Every away period counts as a break. *Rationale: the card is an org summary, so
+it must show the org's total, not the viewer's own; and the log records no reason —
+only the flag flip — so no finer distinction is possible.* This **differs from
+current behaviour**: today the card shows the viewer's own break time in the
+all-agents view (and `calculateSummaryStats` never computes break time at all) —
+the fix task must compute and show the org total. (The missing `organization_id`
+filter on the break-time query remains a scoping defect for the fix tasks, not a
+decision — see §9.)
 
 ## 10. Agent Analytics agent list — 12 listed, salama missing
 
 **Traced query.** The table rows come from `calculateAllAgentStats`,
 `internal/handlers/agent_analytics.go:191`. The GORM call at `:196–204` generates
-literally this SQL (not pseudo-SQL — `Find(&agents)` on `[]models.User`):
+SQL with the structure below — shown as a faithful unquoted rendering, not
+byte-literal GORM output (GORM emits quoted identifiers and `$1` placeholders).
+Query structure is unchanged:
 
 ```sql
 SELECT * FROM users WHERE users.organization_id = ?
@@ -450,12 +547,16 @@ AND ( users.id IN (SELECT team_members.user_id FROM team_members
 ```
 
 This does not contradict §8: `users` does have a home-organization column
-(`organization_id`, `internal/models/models.go:109`). `ListUsers` scopes by that
-column *plus* the `user_organizations` join (`users.go:207–208`), so it additionally
-includes cross-org members (guests whose home org differs). This query scopes by
-the home-org column only — so a cross-org member who is a team agent in this org
-is excluded from the analytics table. That is a scoping inconsistency recorded as
-a defect for the fix tasks, not a product-definition question.
+(`organization_id`, `internal/models/models.go:109`). `ListUsers` scopes by the
+`user_organizations` join only (`users.go:207–208`) — there is no
+`users.organization_id` condition in that query — so it includes cross-org members
+(guests whose home org differs). This query scopes by the home-org column only —
+so a cross-org member who is a team agent in this org is excluded from the
+analytics table. That is a scoping inconsistency recorded as a defect for the fix
+tasks, not a product-definition question. (Correction, Task 1b: an earlier version
+of this paragraph said `ListUsers` scopes by the home-org column *plus* the join;
+that was wrong — verified at `users.go:207–208` — but the defect conclusion is
+unaffected.)
 
 Membership is **period-independent** (anyone who ever closed a rated conversation
 appears forever; team membership is current). Crucially, `team_members.role` is a
@@ -489,13 +590,17 @@ produces a `chat_closure_ratings` row only if the close-rating cycle was rated).
 This was not verified against the live DB (read-only diagnosis from code); the
 mechanism, not the individual fact, is what is established here.
 
-**UNDEFINED — needs a product decision from the user.** Who counts as an "agent" for
-analytics? Candidates the user must choose between: (a) holders of the agent
-*role* (32 users); (b) team members with team-role `agent` (current table rule);
-(c) anyone who sent a message / closed a chat in the period. The table and the
-dropdown must then be built from the *same* population. Also undecided: should the
-table be limited to agents with activity in the selected period, or list all agents
-with zeros?
+**DECIDED (best practice, 2026-11-22).** An "agent" for analytics is a holder of the
+agent system role in the org. The table and the dropdown must be built from the
+*same* population (agent-role holders), and the table lists all agents including
+zero-activity ones. *Rationale: the system role is the one stable, org-wide
+definition of "agent" — team membership is a grouping, not an identity — and zeros
+are informative, not noise.* **Consequence: the current team-role / rated-closer
+rule is replaced for the table** — team members with team-role `agent` who do not
+hold the agent system role drop out, and agent-role holders with no team membership
+and no rated closure come in. The dropdown's page-1-of-50 hazard (it returns the
+first 50 users of any role) is fixed by the same change: it must list the same
+agent-role population.
 
 **Related permission split (for the record).** `GetAgentAnalytics` (`:50`) branches
 on `analytics:read`: without it, a user sees only their own `my_stats` (no table);
@@ -516,41 +621,42 @@ the window — but note this is *created in window*, not *currently existing*.
 Note: this section is supplementary to the Task 1 brief (which did not list the
 campaigns widget); it is included because the same widget machinery produces it.
 
-## Summary — what needs a user decision
+## Summary — decisions (best practice, approved 2026-11-22)
 
-The following are flagged **UNDEFINED — needs a product decision from the user** and
-were NOT resolved by guessing. The coordinator should bring this list to the user
-for sign-off before any fix task starts (Task 1, Step 3).
+All 11 items below are **DECIDED** — the user delegated them to best-practice
+decisions by Muse on 2026-11-22 (Task 1b), so no item is still awaiting a user
+decision. The one-line decision per item is here; the full decision + rationale
+lives in the cited section.
 
-1. **"Active Contacts" (§2):** any message in window (current) vs inbound-only vs
-   last-30-days vs excluding internal/group contacts.
-2. **"Total Messages" (§3):** mix sent+received (current) vs split, and whether
-   revoked/failed messages count.
-3. **"Conversations" in Chat (§4):** contacts with a message (`has_messages=true`)
-   vs all contact rows vs open non-internal only; and whether tab badges are server
-   totals or loaded-rows counts.
-4. **Pending tab (§5):** server rule (needs a message, excludes internal) vs
-   client rule (unassigned and not closed, includes never-messaged).
-5. **Private tab unit (§5):** merged org-account pairs (current) vs underlying
-   contact rows.
-6. **Unread (§6):** whether a total-unread figure should exist at all (none does);
-   whether the Private tab badge should double-count the two stored copies of one
+1. **"Active Contacts" (§2): DECIDED** — active = sent ≥1 *inbound* message inside
+   the selected window; internal/group/newsletter contacts excluded.
+2. **"Total Messages" (§3): DECIDED** — split sent vs received; count only valid
+   messages (revoked and failed excluded); widget shows the valid-message total.
+3. **"Conversations" in Chat (§4): DECIDED** — a conversation is a contact row with
+   `last_message_at IS NOT NULL` (`has_messages=true`); tab badges are server totals.
+4. **Pending tab (§5): DECIDED** — one rule in both places: the server rule
+   (unassigned, not closed, has a message, not internal).
+5. **Private tab unit (§5): DECIDED** — count merged org-account pairs (one logical
+   conversation = one row), not underlying contact rows.
+6. **Unread (§6): DECIDED** — keep the per-conversation badge; no org-wide
+   total-unread figure; the Private tab badge must NOT double-count one logical
    internal message.
-7. **Templates (§7):** campaign picker filtered by selected account (intended) vs
-   org-wide; Templates-page total org-wide vs per-account; what "available" means
-   (local row vs Meta-approved).
-8. **"Online" (§8):** live WebSocket connection (current) vs `is_available` flag vs
-   recently-active; and whether `online_count` should follow the list filters or
-   stay org-wide.
-9. **Break Time (§9):** what the summary card should show in the all-agents view
-   (org total / average / viewer's own); whether every away period is a "break".
+7. **Templates (§7): DECIDED** — campaign picker filtered to the selected account's
+   templates; Templates-page total is org-wide; "Available" means Meta-approved /
+   sendable (local table carries no approval status — data gap for Task 4).
+8. **"Online" (§8): DECIDED** — online = live WebSocket connection; `is_available`
+   is a separate availability flag; `online_count` follows the list's filters.
+9. **Break Time (§9): DECIDED** — the all-agents summary card shows the org total
+   (sum of all agents' break minutes in the period); every away period is a "break".
    (The missing `organization_id` filter on the break-time log query is a scoping
    defect for the fix tasks, not a product decision — see §9.)
-10. **Who is an "agent" for analytics (§10):** agent-role holders vs team-role
-    agents vs anyone active in the period; table and dropdown must use the same
-    population; whether zero-activity agents are listed.
-11. **Canonical contact total (§1, CONTRADICTION):** which of 29,803 / 30,641 is
-    canonical (viewer + moment + filters), to be settled by a live re-check.
+10. **Who is an "agent" for analytics (§10): DECIDED** — holders of the agent system
+    role in the org; table and dropdown built from the same population; all agents
+    listed, including zero-activity ones.
+11. **Canonical contact total (§1, CONTRADICTION): DECIDED (definition only)** — the
+    canonical *definition* is the scoped `ListContacts` total per §1; the 29,803 vs
+    30,641 values still need a live re-check with viewer/time/filters in Task 15
+    (after deploy) — neither figure is canonical as a value.
 
 ## Contradictions and unreconciled values (for the fix tasks)
 
@@ -568,10 +674,10 @@ for sign-off before any fix task starts (Task 1, Step 3).
 - **6.3K vs 6.5K active contacts and 86.3K vs 90.3K messages (§2–§3):** reconciled
   as month-to-date growth at different moments — not contradictions.
 - **12 agents listed, salama missing (§10):** consistent with the code's
-  team-role/rated-closer rule; not a contradiction, but the rule itself needs the
-  product decision in item 10 above.
+  team-role/rated-closer rule; not a contradiction, but the rule itself is replaced
+  by the DECIDED definition in item 10 above.
 - **86–87 Chat conversations (§4):** not a query result at all — a loaded-rows
-  count; no contradiction to resolve, but no definition to sign off either.
+  count; no contradiction to resolve. The definition is now decided in item 3 above.
 
 ## Method and limits
 
@@ -595,6 +701,11 @@ for sign-off before any fix task starts (Task 1, Step 3).
   in the same round: Private labelled UNDEFINED for sign-off (§5), the §8/§10
   definition sentences completed, the §7 "1 template" causes marked as untested
   hypotheses, and §11 noted as supplementary to the brief.
+- **Revision note (Task 1b, 2026-11-22):** all 11 items decided per best practice
+  (see "Decisions" section and the Summary); the §10 SQL block is now labelled as a
+  faithful unquoted rendering rather than literal GORM output, and the `ListUsers`
+  scoping sentence is corrected (join only, no home-org column) with the defect
+  conclusion unaffected (§10).
 - Incidental finding, recorded for the fix tasks (not fixed here): the campaign
   template picker sends `whatsapp_account` while `ListTemplates` reads `account`
   (§7).
