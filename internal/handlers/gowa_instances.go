@@ -517,9 +517,12 @@ func (a *App) ensureGowaAccountForDevice(orgID, userID uuid.UUID, opts ensureGow
 		GowaBaseURL:       opts.BaseURL,
 		GowaDeviceID:      opts.DeviceID,
 		GowaWebhookSecret: opts.WebhookSecret,
-		Status:            "active",
-		CreatedByID:       &userID,
-		UpdatedByID:       &userID,
+		// The device exists on GOWA with a session (a JID is known), so it
+		// starts Connected — the same claim the old "active" value made.
+		// The connection webhook corrects this on the next state change.
+		Status:      models.AccountStatusConnected,
+		CreatedByID: &userID,
+		UpdatedByID: &userID,
 	}
 	if err := a.encryptAccountSecrets(&account); err != nil {
 		return nil, fmt.Errorf("encrypt gowa webhook secret: %w", err)
@@ -1018,9 +1021,12 @@ func (a *App) cleanupGowaDeviceAccounts(orgID uuid.UUID, baseURL, deviceID strin
 // account bound to a GOWA device after an API-triggered lifecycle action
 // (logout / reconnect). The connection-webhook path does this in
 // processGowaConnection, but API actions that succeed without GOWA emitting
-// a webhook would otherwise leave a stale "active" status in the UI. Also
+// a webhook would otherwise leave a stale "Connected" status in the UI. Also
 // broadcasts the same gowa_connection event the webhook path sends.
 func (a *App) updateGowaDeviceAccountStatus(orgID uuid.UUID, baseURL, deviceID, newStatus string, connected bool) {
+	// Normalize: callers pass canonical values, but a legacy string must
+	// never reach the DB or the broadcast again.
+	newStatus = models.NormalizeAccountStatus(newStatus)
 	normalized := strings.TrimRight(baseURL, "/")
 	var accounts []models.WhatsAppAccount
 	if err := a.DB.Where("organization_id = ? AND gowa_device_id = ?", orgID, deviceID).Find(&accounts).Error; err != nil {
@@ -1204,7 +1210,7 @@ func (a *App) GowaInstanceDeviceLogout(r *fastglue.Request) error {
 	}
 	// GOWA may not emit a connection webhook for an API-triggered logout —
 	// sync the account status directly so the UI reflects the session ending.
-	a.updateGowaDeviceAccountStatus(orgID, bundle.instance.BaseURL, deviceID, "disconnected", false)
+	a.updateGowaDeviceAccountStatus(orgID, bundle.instance.BaseURL, deviceID, models.AccountStatusDisconnected, false)
 	a.logAudit(orgID, userID, "devices", uuid.Nil, models.AuditActionUpdated, nil, map[string]any{
 		"device_id": deviceID, "action": "logout",
 	})
@@ -1231,8 +1237,8 @@ func (a *App) GowaInstanceDeviceReconnect(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadGateway, "Failed to reconnect device on GOWA", nil, "")
 	}
 	// A reconnect is an attempt in progress — mark reconnecting now; the
-	// "active" status lands via the connection webhook once it completes.
-	a.updateGowaDeviceAccountStatus(orgID, bundle.instance.BaseURL, deviceID, "reconnecting", false)
+	// "Connected" status lands via the connection webhook once it completes.
+	a.updateGowaDeviceAccountStatus(orgID, bundle.instance.BaseURL, deviceID, models.AccountStatusReconnecting, false)
 	a.logAudit(orgID, userID, "devices", uuid.Nil, models.AuditActionUpdated, nil, map[string]any{
 		"device_id": deviceID, "action": "reconnect",
 	})

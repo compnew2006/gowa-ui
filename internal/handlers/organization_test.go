@@ -19,7 +19,7 @@ func TestApp_GetOrganizationSettings_Success(t *testing.T) {
 
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("get-settings")))
+	user := createAdminUser(t, app, org.ID)
 
 	// Set organization settings
 	org.Settings = models.JSONB{
@@ -56,7 +56,7 @@ func TestApp_GetOrganizationSettings_Defaults(t *testing.T) {
 
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("get-settings-defaults")))
+	user := createAdminUser(t, app, org.ID)
 
 	// Organization with nil settings should return defaults
 	req := testutil.NewGETRequest(t)
@@ -100,7 +100,7 @@ func TestApp_UpdateOrganizationSettings_Success(t *testing.T) {
 
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("update-settings")))
+	user := createAdminUser(t, app, org.ID)
 
 	maskEnabled := true
 	timezone := "America/New_York"
@@ -143,7 +143,7 @@ func TestApp_UpdateOrganizationSettings_PartialUpdate(t *testing.T) {
 
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("partial-update")))
+	user := createAdminUser(t, app, org.ID)
 
 	// Set initial settings
 	org.Settings = models.JSONB{
@@ -194,7 +194,7 @@ func TestApp_UpdateOrganizationSettings_EmptyNameIgnored(t *testing.T) {
 
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("empty-name")))
+	user := createAdminUser(t, app, org.ID)
 	originalName := org.Name
 
 	// Send an empty name -- should be ignored
@@ -218,7 +218,7 @@ func TestApp_UpdateOrganizationSettings_InvalidJSON(t *testing.T) {
 
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("invalid-json")))
+	user := createAdminUser(t, app, org.ID)
 
 	// Create a request with invalid JSON body
 	req := testutil.NewGETRequest(t)
@@ -230,4 +230,136 @@ func TestApp_UpdateOrganizationSettings_InvalidJSON(t *testing.T) {
 	err := app.UpdateOrganizationSettings(req)
 	require.NoError(t, err)
 	assert.Equal(t, fasthttp.StatusBadRequest, testutil.GetResponseStatusCode(req))
+}
+
+// --- Task 12: single source for org name / timezone ---
+
+func TestApp_UpdateOrganizationSettings_ReturnsUpdatedSettingsAndName(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := createAdminUser(t, app, org.ID)
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"timezone": "America/New_York",
+		"name":     "Renamed Organization",
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+
+	err := app.UpdateOrganizationSettings(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	// The write response is authoritative: it echoes the stored values so
+	// the UI never has to guess what the server kept.
+	var resp struct {
+		Data struct {
+			Message  string                        `json:"message"`
+			Settings handlers.OrganizationSettings `json:"settings"`
+			Name     string                        `json:"name"`
+		} `json:"data"`
+	}
+	err = json.Unmarshal(testutil.GetResponseBody(req), &resp)
+	require.NoError(t, err)
+	assert.Equal(t, "America/New_York", resp.Data.Settings.Timezone)
+	assert.Equal(t, "Renamed Organization", resp.Data.Name)
+
+	// GET shows the same values: one source (org.Name + settings["timezone"]).
+	getReq := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(getReq, org.ID, user.ID)
+	require.NoError(t, app.GetOrganizationSettings(getReq))
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(getReq))
+
+	var getResp struct {
+		Data struct {
+			Settings handlers.OrganizationSettings `json:"settings"`
+			Name     string                        `json:"name"`
+		} `json:"data"`
+	}
+	err = json.Unmarshal(testutil.GetResponseBody(getReq), &getResp)
+	require.NoError(t, err)
+	assert.Equal(t, "America/New_York", getResp.Data.Settings.Timezone)
+	assert.Equal(t, "Renamed Organization", getResp.Data.Name)
+
+	// The switcher source (my organizations) shows the same name.
+	myReq := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(myReq, org.ID, user.ID)
+	require.NoError(t, app.ListMyOrganizations(myReq))
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(myReq))
+
+	var myResp struct {
+		Data struct {
+			Organizations []struct {
+				Name string `json:"name"`
+			} `json:"organizations"`
+		} `json:"data"`
+	}
+	err = json.Unmarshal(testutil.GetResponseBody(myReq), &myResp)
+	require.NoError(t, err)
+	require.Len(t, myResp.Data.Organizations, 1)
+	assert.Equal(t, "Renamed Organization", myResp.Data.Organizations[0].Name)
+}
+
+func TestApp_UpdateOrganizationSettings_InvalidTimezone(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := createAdminUser(t, app, org.ID)
+
+	org.Settings = models.JSONB{"timezone": "UTC"}
+	require.NoError(t, app.DB.Save(org).Error)
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"timezone": "Not/AZone",
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+
+	err := app.UpdateOrganizationSettings(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusBadRequest, testutil.GetResponseStatusCode(req))
+
+	// Nothing was stored: the previous value is untouched.
+	var stored models.Organization
+	require.NoError(t, app.DB.Where("id = ?", org.ID).First(&stored).Error)
+	assert.Equal(t, "UTC", stored.Settings["timezone"])
+}
+
+func TestApp_UpdateOrganizationSettings_EmptyTimezoneNormalizesToUTC(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := createAdminUser(t, app, org.ID)
+
+	org.Settings = models.JSONB{"timezone": "America/New_York"}
+	require.NoError(t, app.DB.Save(org).Error)
+
+	// An empty timezone used to be stored as "" while reads showed the UTC
+	// default — a silent read/write divergence. It now normalizes to UTC.
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"timezone": "",
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+
+	err := app.UpdateOrganizationSettings(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var stored models.Organization
+	require.NoError(t, app.DB.Where("id = ?", org.ID).First(&stored).Error)
+	assert.Equal(t, "UTC", stored.Settings["timezone"])
+
+	getReq := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(getReq, org.ID, user.ID)
+	require.NoError(t, app.GetOrganizationSettings(getReq))
+
+	var getResp struct {
+		Data struct {
+			Settings handlers.OrganizationSettings `json:"settings"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(getReq), &getResp))
+	assert.Equal(t, "UTC", getResp.Data.Settings.Timezone)
 }

@@ -47,6 +47,17 @@ const currentOrgId = computed(() => {
   return authStore.user?.organization_id || ''
 })
 
+// The name of the currently active org, resolved from the same lists the
+// dropdown renders (organizations for super admins, myOrganizations
+// otherwise). The old collapsed title used selectedOrganization only, which
+// is null for non-super-admins — it showed "All Organizations" for a
+// single-org user.
+const currentOrgName = computed(() => {
+  const id = currentOrgId.value
+  if (!id) return ''
+  return orgList.value.find((org) => org.id === id)?.name || ''
+})
+
 onMounted(async () => {
   // Refresh the user object from the server first. The localStorage snapshot
   // may be stale (e.g. is_super_admin flipped server-side since last login),
@@ -180,7 +191,7 @@ const refreshOrgs = async () => {
         variant="ghost"
         size="icon"
         class="h-8 w-8"
-        :title="organizationsStore.selectedOrganization?.name || 'All Organizations'"
+        :title="currentOrgName || 'All Organizations'"
       >
         <Building2 class="h-4 w-4" />
       </Button>

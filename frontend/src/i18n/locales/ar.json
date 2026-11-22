@@ -1126,6 +1126,7 @@
     "connectionTestFailed": "فشل اختبار الاتصال",
     "connected": "متصل",
     "disconnected": "غير متصل",
+    "reconnecting": "جارٍ إعادة الاتصال",
     "connectionStatus": "حالة الاتصال",
     "configured": "مكون",
     "missing": "مفقود",

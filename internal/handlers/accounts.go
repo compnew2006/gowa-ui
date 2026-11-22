@@ -169,9 +169,12 @@ func (a *App) CreateAccount(r *fastglue.Request) error {
 		IsDefaultIncoming: req.IsDefaultIncoming,
 		IsDefaultOutgoing: req.IsDefaultOutgoing,
 		AutoReadReceipt:   req.AutoReadReceipt,
-		Status:            "active",
-		CreatedByID:       &userID,
-		UpdatedByID:       &userID,
+		// Task 12: a new account has no verified live session, so it starts
+		// Disconnected. The old "active" default claimed a connection that
+		// had never been observed (Arkan-6178 showed a bare "active").
+		Status:      models.AccountStatusDisconnected,
+		CreatedByID: &userID,
+		UpdatedByID: &userID,
 	}
 
 	if err := a.encryptAccountSecrets(&account); err != nil {
@@ -431,11 +434,14 @@ func accountToResponse(acc models.WhatsAppAccount) AccountResponse {
 		IsDefaultIncoming:    acc.IsDefaultIncoming,
 		IsDefaultOutgoing:    acc.IsDefaultOutgoing,
 		AutoReadReceipt:      acc.AutoReadReceipt,
-		Status:               acc.Status,
-		CreatedByID:          acc.CreatedByID,
-		UpdatedByID:          acc.UpdatedByID,
-		CreatedAt:            acc.CreatedAt.Format("2006-01-02T15:04:05Z"),
-		UpdatedAt:            acc.UpdatedAt.Format("2006-01-02T15:04:05Z"),
+		// Task 12: normalize on read so pre-existing rows carrying the legacy
+		// lowercase values ("active"/"reconnecting"/"disconnected") only ever
+		// emit the canonical enum. No row is dropped for its stored value.
+		Status:      models.NormalizeAccountStatus(acc.Status),
+		CreatedByID: acc.CreatedByID,
+		UpdatedByID: acc.UpdatedByID,
+		CreatedAt:   acc.CreatedAt.Format("2006-01-02T15:04:05Z"),
+		UpdatedAt:   acc.UpdatedAt.Format("2006-01-02T15:04:05Z"),
 	}
 	if acc.CreatedBy != nil {
 		resp.CreatedByName = acc.CreatedBy.FullName

@@ -39,11 +39,14 @@ func (a *App) notifyDeviceStatusChange(account *models.WhatsAppAccount, deviceID
 	if account == nil {
 		return
 	}
+	// Normalize defensively: legacy rows and older callers may still pass
+	// the old lowercase values ("active"/"disconnected").
+	newStatus = models.NormalizeAccountStatus(newStatus)
 	ctx := context.Background()
 	alertedKey := fmt.Sprintf("device_alerted:%s", account.ID)
 
 	switch newStatus {
-	case "disconnected":
+	case models.AccountStatusDisconnected:
 		if !a.claimDeviceAlertSlot(ctx, account.ID) {
 			return // cooldown active — already alerted recently
 		}
@@ -53,7 +56,7 @@ func (a *App) notifyDeviceStatusChange(account *models.WhatsAppAccount, deviceID
 			// non-fatal: worst case a recovery notice is skipped.
 			_ = a.Redis.Set(ctx, alertedKey, "1", 7*24*time.Hour).Err()
 		}
-	case "active":
+	case models.AccountStatusConnected:
 		// Recovery notice — only when an outage alert was actually delivered.
 		if a.Redis == nil {
 			return
@@ -83,9 +86,9 @@ func (a *App) claimDeviceAlertSlot(ctx context.Context, accountID uuid.UUID) boo
 
 // sendDeviceAlert delivers one alert through every configured surface.
 func (a *App) sendDeviceAlert(ctx context.Context, account *models.WhatsAppAccount, deviceID string, outage bool, reason string) {
-	status := "active"
+	status := models.AccountStatusConnected
 	if outage {
-		status = "disconnected"
+		status = models.AccountStatusDisconnected
 	}
 	var text string
 	if outage {

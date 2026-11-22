@@ -1374,6 +1374,7 @@
     "connectionTestFailed": "Connection test failed",
     "connected": "Connected",
     "disconnected": "Disconnected",
+    "reconnecting": "Reconnecting",
     "connectionStatus": "Connection Status",
     "configured": "Configured",
     "missing": "Missing",

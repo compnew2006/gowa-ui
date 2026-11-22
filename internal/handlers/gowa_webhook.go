@@ -875,15 +875,15 @@ func (a *App) processGowaConnection(account *models.WhatsAppAccount, envelope *g
 		return
 	}
 
-	// Map GOWA connection events to account status.
+	// Map GOWA connection events to the canonical account status.
 	var newStatus string
 	switch conn.Event {
 	case gowa.ConnectionConnected:
-		newStatus = "active"
+		newStatus = models.AccountStatusConnected
 	case gowa.ConnectionDisconnected, gowa.ConnectionConnecting:
-		newStatus = "reconnecting"
+		newStatus = models.AccountStatusReconnecting
 	case gowa.ConnectionLogout:
-		newStatus = "disconnected"
+		newStatus = models.AccountStatusDisconnected
 	default:
 		a.Log.Debug("Unhandled GOWA connection sub-event", "event", conn.Event, "device_id", envelope.DeviceID)
 		return

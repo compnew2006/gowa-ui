@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/handlers"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/test/testutil"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
@@ -165,7 +165,10 @@ func TestApp_CreateAccount_Success(t *testing.T) {
 	assert.Equal(t, "My WhatsApp Account", resp.Data.Name)
 	assert.Equal(t, "http://gowa.local:3000", resp.Data.GowaBaseURL)
 	assert.Equal(t, "device-abc", resp.Data.GowaDeviceID)
-	assert.Equal(t, "active", resp.Data.Status)
+	// Task 12: a newly created account has no verified live session, so it
+	// starts Disconnected — the old "active" default claimed a connection
+	// that had never been observed.
+	assert.Equal(t, "Disconnected", resp.Data.Status)
 	assert.True(t, resp.Data.HasGowaWebhookSecret) // auto-generated
 	assert.NotEqual(t, uuid.Nil, resp.Data.ID)
 }
@@ -300,7 +303,9 @@ func TestApp_GetAccount_Success(t *testing.T) {
 	assert.Equal(t, account.Name, resp.Data.Name)
 	assert.Equal(t, account.GowaBaseURL, resp.Data.GowaBaseURL)
 	assert.Equal(t, account.GowaDeviceID, resp.Data.GowaDeviceID)
-	assert.Equal(t, "active", resp.Data.Status)
+	// Task 12: the fixture stores the legacy lowercase "active"; the API
+	// normalizes it to the canonical enum on read.
+	assert.Equal(t, "Connected", resp.Data.Status)
 	assert.False(t, resp.Data.HasGowaWebhookSecret)
 }
 
@@ -806,4 +811,54 @@ func TestApp_DeleteAccount_RemovesAssignments(t *testing.T) {
 	app.DB.Model(&models.UserWhatsAppAccount{}).
 		Where("whats_app_account_id = ?", account.ID).Count(&count)
 	assert.Equal(t, int64(0), count)
+}
+
+// --- Task 12: canonical account status enum ---
+
+func TestApp_GetAccount_NormalizesLegacyStatus(t *testing.T) {
+	t.Parallel()
+
+	// Pre-existing rows may carry the old lowercase values ("active",
+	// "reconnecting", "disconnected") or junk. The API must only ever emit
+	// the canonical enum (Connected / Disconnected / Reconnecting) — never
+	// a raw stored value — and no row may be dropped or hidden because of it.
+	cases := []struct {
+		stored string
+		want   string
+	}{
+		{stored: "active", want: "Connected"},
+		{stored: "reconnecting", want: "Reconnecting"},
+		{stored: "disconnected", want: "Disconnected"},
+		{stored: "Connected", want: "Connected"},
+		{stored: "Disconnected", want: "Disconnected"},
+		{stored: "", want: "Disconnected"},
+		{stored: "bogus", want: "Disconnected"},
+	}
+
+	for _, tc := range cases {
+		t.Run("stored_"+tc.stored, func(t *testing.T) {
+			t.Parallel()
+
+			app := newTestApp(t)
+			org := testutil.CreateTestOrganization(t, app.DB)
+			user := createAdminUser(t, app, org.ID)
+			account := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+			require.NoError(t, app.DB.Model(account).Update("status", tc.stored).Error)
+
+			req := testutil.NewGETRequest(t)
+			testutil.SetAuthContext(req, org.ID, user.ID)
+			testutil.SetPathParam(req, "id", account.ID.String())
+
+			err := app.GetAccount(req)
+			require.NoError(t, err)
+			assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+			var resp struct {
+				Data handlers.AccountResponse `json:"data"`
+			}
+			err = json.Unmarshal(testutil.GetResponseBody(req), &resp)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, resp.Data.Status)
+		})
+	}
 }

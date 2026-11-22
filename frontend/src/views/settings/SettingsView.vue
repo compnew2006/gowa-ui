@@ -15,9 +15,11 @@ import { toast } from 'vue-sonner'
 import { Settings, Bell, Loader2, Globe } from 'lucide-vue-next'
 import { usersService, organizationService } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
+import { useOrganizationsStore } from '@/stores/organizations'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
+const organizationsStore = useOrganizationsStore()
 
 // The active org may be overridden by the X-Organization-ID header
 // (localStorage.selected_organization_id) when a super admin switches orgs.
@@ -31,13 +33,39 @@ const userID = computed(() => authStore.user?.id || '')
 
 const isSubmitting = ref(false)
 const isLoading = ref(true)
+const settingsLoadError = ref(false)
 
-// General Settings
+// General Settings.
+//
+// Task 12: the name and timezone have ONE source — the server response
+// (org.Name + settings["timezone"]). The initial values are empty, not
+// hardcoded "My Organization" / "UTC": the old defaults were rendered as if
+// they were the real values whenever the load failed, which is how the UI
+// showed "My Organization" while the switcher showed "Default Organization"
+// and "UTC" while the server stored America/New_York.
 const generalSettings = ref({
-  organization_name: 'My Organization',
-  default_timezone: 'UTC',
+  organization_name: '',
+  default_timezone: '',
   date_format: 'YYYY-MM-DD',
   mask_phone_numbers: false,
+})
+
+// Timezones offered in the dropdown. The stored value is always added as an
+// option when it is not one of these (e.g. Africa/Cairo), so the control can
+// display whatever the server stored instead of falling back to UTC.
+const staticTimezones = [
+  { value: 'UTC', label: 'UTC' },
+  { value: 'America/New_York', label: 'Eastern Time' },
+  { value: 'America/Los_Angeles', label: 'Pacific Time' },
+  { value: 'Europe/London', label: 'London' },
+  { value: 'Asia/Tokyo', label: 'Tokyo' },
+]
+const availableTimezones = computed(() => {
+  const tz = generalSettings.value.default_timezone
+  if (tz && !staticTimezones.some((entry) => entry.value === tz)) {
+    return [...staticTimezones, { value: tz, label: tz }]
+  }
+  return staticTimezones
 })
 
 // Notification Settings
@@ -61,25 +89,35 @@ function refreshActivityLog(key: typeof generalLogKey) {
   setTimeout(() => { key.value++ }, 500)
 }
 
-onMounted(async () => {
-  try {
-    const [orgResponse, userResponse] = await Promise.all([
-      organizationService.getSettings(),
-      usersService.me()
-    ])
-
-    // Organization settings
-    const orgData = orgResponse.data.data || orgResponse.data
+async function loadSettings() {
+  isLoading.value = true
+  settingsLoadError.value = false
+  // The two fetches are independent: a failure loading the user settings
+  // must not discard the organization settings (or vice versa). The old
+  // Promise.all let one failure leave the form showing the hardcoded
+  // defaults — "My Organization" / "UTC" — as if they were the real values.
+  const orgResult = await organizationService.getSettings().then(
+    (response) => ({ ok: true as const, data: response.data?.data || response.data }),
+    (error: unknown) => ({ ok: false as const, error }),
+  )
+  if (orgResult.ok) {
+    const orgData = orgResult.data
     if (orgData) {
       generalSettings.value = {
-        organization_name: orgData.name || 'My Organization',
-        default_timezone: orgData.settings?.timezone || 'UTC',
+        organization_name: orgData.name || '',
+        default_timezone: orgData.settings?.timezone || '',
         date_format: orgData.settings?.date_format || 'YYYY-MM-DD',
         mask_phone_numbers: orgData.settings?.mask_phone_numbers || false,
       }
     }
+  } else {
+    console.error('Failed to load organization settings:', orgResult.error)
+    settingsLoadError.value = true
+  }
 
-    // User notification settings
+  // User notification settings
+  try {
+    const userResponse = await usersService.me()
     const user = userResponse.data.data || userResponse.data
     if (user.settings) {
       notificationSettings.value = {
@@ -89,11 +127,13 @@ onMounted(async () => {
       }
     }
   } catch (error) {
-    console.error('Failed to load settings:', error)
+    console.error('Failed to load user settings:', error)
   } finally {
     isLoading.value = false
   }
-})
+}
+
+onMounted(loadSettings)
 
 async function saveGeneralSettings() {
   isSubmitting.value = true
@@ -104,7 +144,24 @@ async function saveGeneralSettings() {
       date_format: generalSettings.value.date_format,
       mask_phone_numbers: generalSettings.value.mask_phone_numbers
     }
-    await organizationService.updateSettings(payload)
+    const updateResponse = await organizationService.updateSettings(payload)
+    // The update response echoes the stored values (same shape as GET):
+    // sync the form from the server, never from the local input.
+    const saved = updateResponse.data?.data || updateResponse.data
+    if (saved) {
+      generalSettings.value = {
+        organization_name: saved.name ?? generalSettings.value.organization_name,
+        default_timezone: saved.settings?.timezone ?? generalSettings.value.default_timezone,
+        date_format: saved.settings?.date_format ?? generalSettings.value.date_format,
+        mask_phone_numbers: saved.settings?.mask_phone_numbers ?? generalSettings.value.mask_phone_numbers,
+      }
+      // The switcher reads org names from the organizations store: refresh
+      // it so it shows the renamed org instead of the stale cached name.
+      await organizationsStore.fetchMyOrganizations()
+      if (authStore.user?.is_super_admin) {
+        await organizationsStore.fetchOrganizations()
+      }
+    }
     toast.success(t('settings.generalSaved'))
     refreshActivityLog(generalLogKey)
   } catch (error) {
@@ -151,6 +208,15 @@ async function saveNotificationSettings() {
 
           <!-- General Settings Tab -->
           <TabsContent value="general">
+            <div v-if="isLoading" class="rounded-xl border border-white/[0.08] bg-white/[0.02] light:bg-white light:border-gray-200 p-6 text-sm text-white/40 light:text-gray-500">
+              {{ $t('common.loading', 'Loading...') }}
+            </div>
+            <div v-else-if="settingsLoadError" class="rounded-xl border border-white/[0.08] bg-white/[0.02] light:bg-white light:border-gray-200 p-6 space-y-3">
+              <p class="text-sm font-medium text-white light:text-gray-900">{{ $t('common.loadErrorTitle', 'Failed to load settings') }}</p>
+              <p class="text-sm text-white/40 light:text-gray-500">{{ $t('common.loadErrorDescription', 'Check your connection and try again.') }}</p>
+              <Button variant="outline" size="sm" class="bg-white/[0.04] border-white/[0.1] text-white/70 hover:bg-white/[0.08] hover:text-white light:bg-white light:border-gray-200 light:text-gray-700 light:hover:bg-gray-50" @click="loadSettings">{{ $t('common.retry', 'Retry') }}</Button>
+            </div>
+            <template v-else>
             <div class="rounded-xl border border-white/[0.08] bg-white/[0.02] light:bg-white light:border-gray-200">
               <div class="p-6 pb-3">
                 <h3 class="text-lg font-semibold text-white light:text-gray-900">{{ $t('settings.generalSettings') }}</h3>
@@ -173,11 +239,7 @@ async function saveNotificationSettings() {
                         <SelectValue :placeholder="$t('settings.selectTimezone')" />
                       </SelectTrigger>
                       <SelectContent class="bg-[#141414] border-white/[0.08] light:bg-white light:border-gray-200">
-                        <SelectItem value="UTC" class="text-white/70 focus:bg-white/[0.08] focus:text-white light:text-gray-700 light:focus:bg-gray-100">UTC</SelectItem>
-                        <SelectItem value="America/New_York" class="text-white/70 focus:bg-white/[0.08] focus:text-white light:text-gray-700 light:focus:bg-gray-100">Eastern Time</SelectItem>
-                        <SelectItem value="America/Los_Angeles" class="text-white/70 focus:bg-white/[0.08] focus:text-white light:text-gray-700 light:focus:bg-gray-100">Pacific Time</SelectItem>
-                        <SelectItem value="Europe/London" class="text-white/70 focus:bg-white/[0.08] focus:text-white light:text-gray-700 light:focus:bg-gray-100">London</SelectItem>
-                        <SelectItem value="Asia/Tokyo" class="text-white/70 focus:bg-white/[0.08] focus:text-white light:text-gray-700 light:focus:bg-gray-100">Tokyo</SelectItem>
+                        <SelectItem v-for="tz in availableTimezones" :key="tz.value" :value="tz.value" class="text-white/70 focus:bg-white/[0.08] focus:text-white light:text-gray-700 light:focus:bg-gray-100">{{ tz.label }}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -222,6 +284,7 @@ async function saveNotificationSettings() {
                 </div>
               </div>
             </div>
+            </template>
 
             <div v-if="orgID" class="mt-4">
               <AuditLogPanel :key="generalLogKey" resource-type="settings.general" :resource-id="orgID" />

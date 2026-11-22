@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"strings"
 	"time"
 
 	"github.com/compnew2006/gowa-ui/internal/accountaccess"
@@ -38,18 +39,11 @@ type OrganizationSettings struct {
 	EnforceSendAccountPolicy bool `json:"enforce_send_account_policy"`
 }
 
-// GetOrganizationSettings returns the organization settings
-func (a *App) GetOrganizationSettings(r *fastglue.Request) error {
-	orgID, _, err := a.requireAuth(r, models.ResourceSettingsGeneral, models.ActionRead)
-	if err != nil {
-		return nil
-	}
-
-	var org models.Organization
-	if err := a.DB.Where("id = ?", orgID).First(&org).Error; err != nil {
-		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Organization not found", nil, "")
-	}
-
+// organizationSettingsPayload builds the GET-shaped settings payload from an
+// organization row. Get and Update share it so the read path and the write
+// response can never disagree about the name or the timezone: one source
+// (org.Name + settings["timezone"], UTC when unset).
+func organizationSettingsPayload(org models.Organization) map[string]any {
 	// Parse settings from JSONB
 	policy := accountaccess.ParseSendPolicy(org.Settings)
 	settings := OrganizationSettings{
@@ -72,10 +66,41 @@ func (a *App) GetOrganizationSettings(r *fastglue.Request) error {
 		}
 	}
 
-	return r.SendEnvelope(map[string]any{
+	return map[string]any{
 		"settings": settings,
 		"name":     org.Name,
-	})
+	}
+}
+
+// normalizeTimezone validates a timezone submitted for storage. An empty
+// value normalizes to the documented default ("UTC") instead of being stored
+// as "" — storing "" used to make reads show UTC while the stored value was
+// empty, a silent read/write divergence. Anything else must be a valid IANA
+// name, the same rule the per-account chat-reset settings already enforce.
+func normalizeTimezone(value string) (string, bool) {
+	tz := strings.TrimSpace(value)
+	if tz == "" {
+		return "UTC", true
+	}
+	if _, err := time.LoadLocation(tz); err != nil {
+		return "", false
+	}
+	return tz, true
+}
+
+// GetOrganizationSettings returns the organization settings
+func (a *App) GetOrganizationSettings(r *fastglue.Request) error {
+	orgID, _, err := a.requireAuth(r, models.ResourceSettingsGeneral, models.ActionRead)
+	if err != nil {
+		return nil
+	}
+
+	var org models.Organization
+	if err := a.DB.Where("id = ?", orgID).First(&org).Error; err != nil {
+		return r.SendErrorEnvelope(fasthttp.StatusNotFound, "Organization not found", nil, "")
+	}
+
+	return r.SendEnvelope(organizationSettingsPayload(org))
 }
 
 // UpdateOrganizationSettings updates the organization settings
@@ -118,7 +143,11 @@ func (a *App) UpdateOrganizationSettings(r *fastglue.Request) error {
 		org.Settings["mask_phone_numbers"] = *req.MaskPhoneNumbers
 	}
 	if req.Timezone != nil {
-		org.Settings["timezone"] = *req.Timezone
+		tz, ok := normalizeTimezone(*req.Timezone)
+		if !ok {
+			return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "Invalid timezone", nil, "")
+		}
+		org.Settings["timezone"] = tz
 	}
 	if req.DateFormat != nil {
 		org.Settings["date_format"] = *req.DateFormat
@@ -146,9 +175,11 @@ func (a *App) UpdateOrganizationSettings(r *fastglue.Request) error {
 			models.ResourceSettingsGeneral, orgID, models.AuditActionUpdated, oldGeneral, newGeneral)
 	}
 
-	return r.SendEnvelope(map[string]any{
-		"message": "Settings updated successfully",
-	})
+	// Return the stored values (same shape as GET) so the caller can sync
+	// from the write response instead of trusting its own input.
+	payload := organizationSettingsPayload(org)
+	payload["message"] = "Settings updated successfully"
+	return r.SendEnvelope(payload)
 }
 
 // MaskContactFields conditionally masks a profile name and phone number

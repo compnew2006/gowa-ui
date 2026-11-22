@@ -17,6 +17,7 @@ import { useGowaServersStore } from '@/stores/gowaServers'
 import { toast } from 'vue-sonner'
 import { getErrorMessage } from '@/lib/api-utils'
 import { formatDate } from '@/lib/utils'
+import { accountStatusBadge, resolveAccountStatus } from '@/lib/accountStatus'
 import {
   Phone,
   Pencil,
@@ -67,10 +68,20 @@ const breadcrumbs = computed(() => [{ label: t('nav.settings'), href: '/settings
 const sortKey = ref('name')
 const sortDirection = ref<'asc' | 'desc'>('asc')
 
-// Inline connection-status summary (header icon + popover, no modal)
-const connectedCount = computed(() => accounts.value.filter(a => a.gowa_connected === true).length)
+// Inline connection-status summary (header icon + popover, no modal).
+// Counts use the same resolved status as the badges below (live probe when
+// known, normalized stored status otherwise), so the summary can never
+// disagree with the badges in the table.
+const connectedCount = computed(() => accounts.value.filter(a => resolveAccountStatus(a) === 'connected').length)
 const disconnectedCount = computed(() => accounts.value.length - connectedCount.value)
 const allConnected = computed(() => accounts.value.length > 0 && disconnectedCount.value === 0)
+
+// Badge metadata for one account, from the single canonical enum
+// (Connected / Disconnected / Reconnecting). The raw stored status is never
+// rendered: a legacy "active" shows as the Connected badge.
+function badgeFor(account: WhatsAppAccount) {
+  return accountStatusBadge(account)
+}
 
 const columns = computed<Column<WhatsAppAccount>[]>(() => [
   { key: 'account', label: t('accounts.account', 'Account Name'), width: 'w-[250px]', sortable: true, sortKey: 'name' },
@@ -187,21 +198,10 @@ async function confirmDelete() {
                     <span class="text-sm truncate">{{ account.name }}</span>
                   </div>
                   <Badge
-                    v-if="account.gowa_connected === true"
                     variant="outline"
-                    class="text-[10px] border-emerald-600 text-emerald-600 bg-emerald-500/10 shrink-0"
+                    :class="['text-[10px] shrink-0', badgeFor(account).toneClass]"
                   >
-                    {{ $t('accounts.connected', 'Connected') }}
-                  </Badge>
-                  <Badge
-                    v-else-if="account.gowa_connected === false"
-                    variant="outline"
-                    class="text-[10px] border-amber-600 text-amber-600 bg-amber-500/10 shrink-0"
-                  >
-                    {{ $t('accounts.disconnected', 'Disconnected') }}
-                  </Badge>
-                  <Badge v-else variant="outline" class="text-[10px] shrink-0">
-                    {{ account.status }}
+                    {{ $t(badgeFor(account).labelKey) }}
                   </Badge>
                 </div>
               </div>
@@ -346,14 +346,8 @@ async function confirmDelete() {
                   </template>
 
                   <template #cell-status="{ item: account }">
-                    <Badge v-if="account.gowa_connected === true" variant="outline" class="border-emerald-600 text-emerald-600 bg-emerald-500/10">
-                      <CheckCircle2 class="h-3 w-3 mr-1" /> Connected
-                    </Badge>
-                    <Badge v-else-if="account.gowa_connected === false" variant="outline" class="border-amber-600 text-amber-600 bg-amber-500/10">
-                      Disconnected
-                    </Badge>
-                    <Badge v-else variant="outline" :class="account.status === 'active' ? 'border-emerald-600 text-emerald-600' : ''">
-                      {{ account.status }}
+                    <Badge variant="outline" :class="badgeFor(account).toneClass">
+                      <CheckCircle2 v-if="badgeFor(account).status === 'connected'" class="h-3 w-3 mr-1" /> {{ $t(badgeFor(account).labelKey) }}
                     </Badge>
                   </template>
 
