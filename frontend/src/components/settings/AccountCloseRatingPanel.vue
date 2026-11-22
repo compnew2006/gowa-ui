@@ -352,7 +352,13 @@ async function saveRatingSettings() {
           </div>
         </div>
 
-        <ul v-else-if="responseItems.length > 0" class="divide-y divide-border/60">
+        <!-- The list is capped and scrolls internally: an account can hold
+             thousands of rating records, and an unbounded list stretched this
+             panel (and the whole Automation row) to thousands of pixels.
+             Plain overflow, not the Reka ScrollArea: a max-height does not
+             resolve against its percentage-height viewport. -->
+        <div v-else-if="responseItems.length > 0" class="max-h-[32rem] overflow-y-auto pe-1">
+          <ul class="divide-y divide-border/60">
           <li
             v-for="item in responseItems"
             :key="item.id"
@@ -405,7 +411,8 @@ async function saveRatingSettings() {
               </RouterLink>
             </div>
           </li>
-        </ul>
+          </ul>
+        </div>
 
         <p v-else-if="!responsesError" class="py-8 text-center text-sm text-muted-foreground">
           {{ $t('settings.ratingNoResponses') }}
