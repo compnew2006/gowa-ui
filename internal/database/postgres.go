@@ -1008,6 +1008,7 @@ func SeedDefaultWidgetsForOrg(db *gorm.DB, orgID, userID uuid.UUID) error {
 		Description  string
 		DataSource   string
 		DisplayType  string
+		ChartType    string
 		Color        string
 		Config       models.JSONB
 		DisplayOrder int
@@ -1016,11 +1017,15 @@ func SeedDefaultWidgetsForOrg(db *gorm.DB, orgID, userID uuid.UUID) error {
 		GridW        int
 		GridH        int
 	}{
-		{"Total Messages", "Total number of messages sent and received", "messages", "number", "blue", nil, 1, 0, 0, 3, 3},
-		{"Active Contacts", "Number of contacts with recent activity", "contacts", "number", "green", nil, 2, 3, 0, 3, 3},
-		{"Total Campaigns", "Number of bulk message campaigns", "campaigns", "number", "orange", nil, 4, 9, 0, 3, 3},
-		{"Recent Messages", "Latest conversations from your contacts", "messages", "table", "", nil, 5, 0, 3, 6, 8},
-		{"Quick Actions", "Common tasks and shortcuts", "shortcuts", "shortcuts", "", models.JSONB{"shortcuts": []any{"chat", "campaigns", "templates"}}, 6, 6, 3, 6, 8},
+		{"Total Messages", "Total number of messages sent and received", "messages", "number", "", "blue", nil, 1, 0, 0, 3, 3},
+		{"Active Contacts", "Number of contacts with recent activity", "contacts", "number", "", "green", nil, 2, 3, 0, 3, 3},
+		{"Total Campaigns", "Number of bulk message campaigns", "campaigns", "number", "", "orange", nil, 4, 9, 0, 3, 3},
+		{"Recent Messages", "Latest conversations from your contacts", "messages", "table", "", "", nil, 5, 0, 3, 6, 8},
+		{"Quick Actions", "Common tasks and shortcuts", "shortcuts", "shortcuts", "", "", models.JSONB{"shortcuts": []any{"chat", "campaigns", "templates"}}, 6, 6, 3, 6, 8},
+		// Task 8: one messages time-series chart (line, reusing the existing
+		// Chart.js setup) so the dashboard shows messages over the selected
+		// range without manual widget setup.
+		{"Messages Over Time", "Messages sent and received per day", "messages", "chart", "line", "blue", nil, 7, 0, 11, 6, 5},
 	}
 
 	for _, wd := range defaultWidgetsData {
@@ -1037,6 +1042,7 @@ func SeedDefaultWidgetsForOrg(db *gorm.DB, orgID, userID uuid.UUID) error {
 			DataSource:     wd.DataSource,
 			Metric:         "count",
 			DisplayType:    displayType,
+			ChartType:      wd.ChartType,
 			ShowChange:     displayType == "number",
 			Color:          wd.Color,
 			Size:           "small",

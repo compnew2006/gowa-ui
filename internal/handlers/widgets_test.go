@@ -3,11 +3,12 @@ package handlers_test
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/handlers"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/test/testutil"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
@@ -600,4 +601,86 @@ func TestApp_Widget_CrossOrg_CannotDelete(t *testing.T) {
 	var count int64
 	app.DB.Model(&models.Widget{}).Where("id = ?", widget1.ID).Count(&count)
 	assert.Equal(t, int64(1), count)
+}
+
+// --- Task 8: messages series counts valid messages only (Decision 2) ---
+
+// TestApp_GetAllWidgetsData_MessagesExcludeRevokedAndFailed pins the
+// Task 1b Decision 2 definition for the messages series: the Total Messages
+// headline and the messages time-series chart count only valid messages —
+// revoked and failed messages are excluded, in both directions.
+func TestApp_GetAllWidgetsData_MessagesExcludeRevokedAndFailed(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	perms := getAnalyticsPermissions(t, app)
+	role := testutil.CreateTestRoleExact(t, app.DB, org.ID, "Analytics User", false, false, perms)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithEmail(testutil.UniqueEmail("widgets-valid-msgs")), testutil.WithPassword("password"), testutil.WithRoleID(&role.ID))
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	now := time.Now().UTC()
+	seedMessage := func(status models.MessageStatus, direction models.Direction) {
+		msg := &models.Message{
+			BaseModel:       models.BaseModel{ID: uuid.New(), CreatedAt: now, UpdatedAt: now},
+			OrganizationID:  org.ID,
+			WhatsAppAccount: "test-account",
+			ContactID:       contact.ID,
+			Direction:       direction,
+			MessageType:     models.MessageTypeText,
+			Status:          status,
+			Content:         "hello",
+		}
+		require.NoError(t, app.DB.Create(msg).Error)
+	}
+	// 2 valid messages (one in, one out), 1 revoked, 1 failed.
+	seedMessage(models.MessageStatusReceived, models.DirectionIncoming)
+	seedMessage(models.MessageStatusSent, models.DirectionOutgoing)
+	seedMessage(models.MessageStatusRevoked, models.DirectionIncoming)
+	seedMessage(models.MessageStatusFailed, models.DirectionOutgoing)
+
+	numberWidget := createTestWidget(t, app, org.ID, &user.ID, "Total Messages", true, false)
+	chartWidget := &models.Widget{
+		BaseModel:      models.BaseModel{ID: uuid.New()},
+		OrganizationID: org.ID,
+		UserID:         &user.ID,
+		Name:           "Messages Over Time",
+		Description:    "Messages per day",
+		DataSource:     "messages",
+		Metric:         "count",
+		DisplayType:    "chart",
+		ChartType:      "line",
+		ShowChange:     false,
+		Color:          "blue",
+		Size:           "small",
+		DisplayOrder:   2,
+		IsShared:       true,
+	}
+	require.NoError(t, app.DB.Create(chartWidget).Error)
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetQueryParam(req, "from", now.AddDate(0, 0, -1).Format("2006-01-02"))
+	testutil.SetQueryParam(req, "to", now.Format("2006-01-02"))
+
+	err := app.GetAllWidgetsData(req)
+	require.NoError(t, err)
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp struct {
+		Data struct {
+			Data map[string]handlers.WidgetDataResponse `json:"data"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+
+	numberData, ok := resp.Data.Data[numberWidget.ID.String()]
+	require.True(t, ok, "number widget data missing")
+	assert.Equal(t, float64(2), numberData.Value, "Total Messages must count valid messages only")
+
+	chartData, ok := resp.Data.Data[chartWidget.ID.String()]
+	require.True(t, ok, "chart widget data missing")
+	var seriesTotal float64
+	for _, point := range chartData.ChartData {
+		seriesTotal += point.Value
+	}
+	assert.Equal(t, float64(2), seriesTotal, "messages time series must count valid messages only")
 }

@@ -396,6 +396,27 @@ func TestSeedDefaultWidgets_UsesConfiguredSuperAdmin(t *testing.T) {
 	assert.Positive(t, widgets, "custom bootstrap emails must receive default dashboard widgets")
 }
 
+// Task 8: the default widget set includes one messages time-series chart
+// ("Messages Over Time": messages source, chart display, line type) so the
+// dashboard shows messages over the selected range without manual setup.
+func TestSeedDefaultWidgets_IncludesMessagesOverTimeChart(t *testing.T) {
+	db := testutil.SetupTestDB(t)
+	cleanAll(t, db)
+	org := testutil.CreateTestOrganization(t, db)
+	admin := testutil.CreateTestUser(t, db, org.ID,
+		testutil.WithEmail("seed-chart-admin@example.com"),
+		testutil.WithPassword("seed-chart-password"),
+	)
+
+	require.NoError(t, database.SeedDefaultWidgetsForOrg(db, org.ID, admin.ID))
+
+	var chart models.Widget
+	err := db.Where("organization_id = ? AND data_source = ? AND display_type = ?", org.ID, "messages", "chart").First(&chart).Error
+	require.NoError(t, err, "expected a default messages chart widget to be seeded")
+	assert.Equal(t, "line", chart.ChartType)
+	assert.Equal(t, "Messages Over Time", chart.Name)
+}
+
 func TestCreateDefaultAdmin_Idempotent(t *testing.T) {
 	db := testutil.SetupTestDB(t)
 	cleanAll(t, db)

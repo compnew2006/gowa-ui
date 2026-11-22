@@ -857,7 +857,10 @@ func (a *App) executeWidgetQuery(orgID, viewerID uuid.UUID, widget models.Widget
 
 // Query helper functions for each data source
 func (a *App) queryMessages(orgID uuid.UUID, metric, field string, filters []FilterInput, start, end time.Time) float64 {
-	query := a.DB.Model(&models.Message{}).Where("organization_id = ? AND created_at >= ? AND created_at <= ?", orgID, start, end)
+	// Decision 2 (counting definitions, Task 1b): only valid messages count.
+	// Revoked and failed messages are excluded, in both directions.
+	query := a.DB.Model(&models.Message{}).Where("organization_id = ? AND created_at >= ? AND created_at <= ?", orgID, start, end).
+		Where("status NOT IN ?", []string{string(models.MessageStatusRevoked), string(models.MessageStatusFailed)})
 
 	// Apply filters
 	for _, f := range filters {
@@ -929,6 +932,13 @@ func (a *App) getChartData(orgID uuid.UUID, widget models.Widget, filters []Filt
 
 	args := []any{orgID, start, end}
 	query, args = appendFilterSQL(widget.DataSource, query, args, filters)
+
+	// Decision 2 (counting definitions, Task 1b): the messages time series
+	// counts valid messages only — revoked and failed messages are excluded.
+	// Same rule as queryMessages; other data sources have no such status.
+	if widget.DataSource == "messages" {
+		query += " AND status NOT IN ('revoked', 'failed')"
+	}
 
 	query += fmt.Sprintf(" GROUP BY DATE_TRUNC('day', %s) ORDER BY date ASC", dateField)
 

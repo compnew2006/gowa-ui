@@ -347,6 +347,20 @@ const getWidgetById = (id: string): DashboardWidget | undefined => {
   return widgets.value.find(w => w.id === id)
 }
 
+// Recent Messages (table widget): dedupe rows by message id, first
+// occurrence wins, server order preserved. The same message can arrive
+// twice (e.g. an internal message stored once per account copy), and
+// v-for would otherwise render the duplicate row.
+const getTableRows = (widget: DashboardWidget) => {
+  const rows = widgetData.value[widget.id]?.table_rows || []
+  const seen = new Set<string>()
+  return rows.filter((row) => {
+    if (seen.has(row.id)) return false
+    seen.add(row.id)
+    return true
+  })
+}
+
 const computeGridLayout = (widgetList: DashboardWidget[]) => {
   const layout: Array<{ i: string; x: number; y: number; w: number; h: number }> = []
 
@@ -956,11 +970,11 @@ onMounted(() => {
                     </tbody>
                   </table>
                 </template>
-                <!-- Row list (no group_by) -->
-                <template v-else-if="widgetData[item.i]?.table_rows?.length">
+                <!-- Row list (no group_by) — deduped by message id -->
+                <template v-else-if="getTableRows(getWidgetById(item.i)!).length">
                   <div class="space-y-3">
                     <div
-                      v-for="row in widgetData[item.i]?.table_rows"
+                      v-for="row in getTableRows(getWidgetById(item.i)!)"
                       :key="row.id"
                       class="flex items-start gap-3 p-3 rounded-lg hover:bg-white/[0.04] light:hover:bg-gray-50 transition-colors"
                     >
@@ -974,7 +988,7 @@ onMounted(() => {
                       </div>
                       <div class="flex-1 min-w-0">
                         <div class="flex items-center justify-between">
-                          <p class="text-sm font-medium truncate text-white light:text-gray-900">{{ row.label }}</p>
+                          <p class="text-sm font-medium truncate text-white light:text-gray-900" :title="row.label">{{ row.label }}</p>
                           <span class="text-xs text-white/40 light:text-gray-500 flex items-center gap-1 shrink-0">
                             <Clock class="h-3 w-3" />
                             {{ formatTime(row.created_at) }}
