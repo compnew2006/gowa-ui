@@ -67,6 +67,17 @@ const authStore = useAuthStore()
 // roles with the right permission should get the same view.
 const isAdminOrManager = computed(() => authStore.hasPermission('analytics.agents', 'read'))
 
+// Users with analytics:read (admin/manager) get agent_stats for all agents;
+// agents get only my_stats, so the table/filter/chart fall back to that
+// single own row (F9: without this the agent's table was always empty,
+// because the API deliberately withholds agent_stats from agents).
+const canViewAllAgents = computed(() => authStore.hasPermission('analytics', 'read'))
+const tableStats = computed<AgentPerformanceStats[]>(() => {
+  if (analytics.value?.agent_stats?.length) return analytics.value.agent_stats
+  if (analytics.value?.my_stats) return [analytics.value.my_stats]
+  return []
+})
+
 const analytics = ref<AgentAnalyticsResponse | null>(null)
 const isLoading = ref(true)
 const error = ref<string | null>(null)
@@ -117,12 +128,15 @@ const fetchAnalytics = async () => {
     const response = await agentAnalyticsService.getSummary(params)
     const data = response.data.data || response.data
     analytics.value = data
-    // The filter dropdown is built from the table's own population
-    // (agent_stats), so table and dropdown can never disagree (Decision 10).
-    // A single-agent response carries no agent_stats, so the list is left
-    // untouched there.
+    // The filter dropdown is built from the table's own population, so
+    // table and dropdown can never disagree (Decision 10). A single-agent
+    // response carries no agent_stats, so the list falls back to the
+    // viewing agent's own my_stats row (F9) — never to other agents.
     if (data.agent_stats?.length) {
       agents.value = (data.agent_stats as AgentPerformanceStats[]).map((a) => ({ id: a.agent_id, full_name: a.agent_name, role: 'agent' }))
+    } else if (!canViewAllAgents.value && data.my_stats) {
+      const me = data.my_stats as AgentPerformanceStats
+      agents.value = [{ id: me.agent_id, full_name: me.agent_name, role: 'agent' }]
     }
   } catch (err) {
     console.error('Failed to load agent analytics:', err)
@@ -155,7 +169,9 @@ onMounted(() => {
 // Messages sent: sum across agents when viewing all, else the selected agent's.
 const messagesSent = computed(() => {
   if (selectedAgentId.value === 'all') {
-    return (analytics.value?.agent_stats ?? []).reduce((sum, a) => sum + (a.messages_sent || 0), 0)
+    // tableStats is agent_stats for admins/managers and the single own
+    // row for agents, so this is the org total or the own count respectively.
+    return tableStats.value.reduce((sum, a) => sum + (a.messages_sent || 0), 0)
   }
   return analytics.value?.my_stats?.messages_sent ?? 0
 })
@@ -230,7 +246,10 @@ const trendChartOptions = {
 }
 
 const comparisonChartData = computed(() => {
-  if (!analytics.value?.agent_stats?.length) {
+  // tableStats is agent_stats for admins/managers and the single own row
+  // for agents, so an agent sees a one-bar comparison of themselves.
+  const stats = tableStats.value
+  if (!stats.length) {
     return {
       labels: [],
       datasets: []
@@ -238,16 +257,16 @@ const comparisonChartData = computed(() => {
   }
 
   return {
-    labels: analytics.value.agent_stats.map(a => a.agent_name || 'Unknown'),
+    labels: stats.map(a => a.agent_name || 'Unknown'),
     datasets: [
       {
         label: t('agentAnalytics.messagesSent'),
-        data: analytics.value.agent_stats.map(a => a.messages_sent),
+        data: stats.map(a => a.messages_sent),
         backgroundColor: 'rgba(16, 185, 129, 0.8)'
       },
       {
         label: t('agentAnalytics.customerRating'),
-        data: analytics.value.agent_stats.map(a => a.avg_rating),
+        data: stats.map(a => a.avg_rating),
         backgroundColor: 'rgba(234, 179, 8, 0.8)',
         yAxisID: 'y1'
       }
@@ -464,7 +483,7 @@ const comparisonChartOptions = {
               <template v-if="isLoading">
                 <Skeleton class="h-40 w-full" />
               </template>
-              <template v-else-if="analytics?.agent_stats?.length">
+              <template v-else-if="tableStats.length">
                 <table class="w-full text-sm">
                   <thead>
                     <tr class="border-b border-white/[0.08] light:border-gray-200 text-left rtl:text-right text-white/50 light:text-gray-500">
@@ -476,7 +495,7 @@ const comparisonChartOptions = {
                   </thead>
                   <tbody>
                     <tr
-                      v-for="agent in analytics.agent_stats"
+                      v-for="agent in tableStats"
                       :key="agent.agent_id"
                       class="border-b border-white/[0.04] light:border-gray-100 text-white light:text-gray-900"
                     >
