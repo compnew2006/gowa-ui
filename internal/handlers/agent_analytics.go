@@ -121,11 +121,19 @@ func (a *App) GetAgentAnalytics(r *fastglue.Request) error {
 func (a *App) calculateSummaryStats(orgID uuid.UUID, start, end time.Time, summary *AgentAnalyticsSummary) {
 	// Customer satisfaction from close-rating cycles (org-wide)
 	summary.AvgRating, summary.RatingsCount = a.calculateClosureRatingStats(orgID, nil, start, end)
+
+	// Break time: the org total across all agents in the period (Decision 9),
+	// not the viewing user's own break time.
+	for _, agent := range a.listAnalyticsAgents(orgID) {
+		mins, count := a.calculateBreakTime(orgID, agent.ID, start, end)
+		summary.TotalBreakTimeMins += mins
+		summary.BreakCount += count
+	}
 }
 
 func (a *App) calculateAgentSummaryStats(orgID, agentID uuid.UUID, start, end time.Time, summary *AgentAnalyticsSummary) {
 	// Calculate break time
-	summary.TotalBreakTimeMins, summary.BreakCount = a.calculateBreakTime(agentID, start, end)
+	summary.TotalBreakTimeMins, summary.BreakCount = a.calculateBreakTime(orgID, agentID, start, end)
 
 	// Customer satisfaction from close-rating cycles for this agent
 	summary.AvgRating, summary.RatingsCount = a.calculateClosureRatingStats(orgID, &agentID, start, end)
@@ -150,7 +158,7 @@ func (a *App) calculateAgentStats(orgID, agentID uuid.UUID, start, end time.Time
 		Count(&stats.MessagesSent)
 
 	// Calculate break time from availability logs
-	stats.TotalBreakTimeMins, stats.BreakCount = a.calculateBreakTime(agentID, start, end)
+	stats.TotalBreakTimeMins, stats.BreakCount = a.calculateBreakTime(orgID, agentID, start, end)
 
 	// Customer satisfaction from close-rating cycles closed by this agent
 	stats.AvgRating, stats.RatingsCount = a.calculateClosureRatingStats(orgID, &agentID, start, end)
@@ -158,7 +166,7 @@ func (a *App) calculateAgentStats(orgID, agentID uuid.UUID, start, end time.Time
 	// Check if currently on break and get break start time
 	if !stats.IsAvailable {
 		var currentBreak models.UserAvailabilityLog
-		if a.DB.Where("user_id = ? AND is_available = false AND ended_at IS NULL", agentID).
+		if a.DB.Where("user_id = ? AND organization_id = ? AND is_available = false AND ended_at IS NULL", agentID, orgID).
 			Order("started_at DESC").First(&currentBreak).Error == nil {
 			breakStart := currentBreak.StartedAt.Format(time.RFC3339)
 			stats.CurrentBreakStart = &breakStart
@@ -188,23 +196,27 @@ func (a *App) calculateClosureRatingStats(orgID uuid.UUID, agentID *uuid.UUID, s
 	return result.Avg, result.Count
 }
 
-func (a *App) calculateAllAgentStats(orgID uuid.UUID, start, end time.Time) []AgentPerformanceStats {
-	// List every user who acts as an agent in this org: team members with the
-	// agent role, plus anyone who closed rated conversations — so orgs that
-	// don't use teams still see their staff here.
+// listAnalyticsAgents returns every holder of the org's system "agent" role
+// (name "agent", is_system=true — the same lookup production uses to find
+// the default agent role), including agents with zero activity (Decision 10).
+// Team membership and rated closures do NOT define this population.
+func (a *App) listAnalyticsAgents(orgID uuid.UUID) []models.User {
 	var agents []models.User
 	if err := a.DB.
-		Where("users.organization_id = ?", orgID).
-		Where(`users.id IN (SELECT team_members.user_id FROM team_members
-				JOIN teams ON teams.id = team_members.team_id
-				WHERE teams.organization_id = ? AND team_members.role = ?)
-			OR users.id IN (SELECT closed_by_user_id FROM chat_closure_ratings
-				WHERE organization_id = ? AND closed_by_user_id IS NOT NULL)`,
-			orgID, models.TeamRoleAgent, orgID).
+		Select("users.*").
+		Joins("JOIN user_organizations ON user_organizations.user_id = users.id AND user_organizations.organization_id = ? AND user_organizations.deleted_at IS NULL", orgID).
+		Joins("JOIN custom_roles ON custom_roles.id = user_organizations.role_id AND custom_roles.organization_id = ? AND custom_roles.name = ? AND custom_roles.is_system = ?", orgID, "agent", true).
+		Where("users.deleted_at IS NULL").
+		Order("users.full_name ASC").
 		Find(&agents).Error; err != nil {
 		a.Log.Error("Failed to fetch agents for analytics", "error", err, "org_id", orgID)
-		return []AgentPerformanceStats{}
+		return []models.User{}
 	}
+	return agents
+}
+
+func (a *App) calculateAllAgentStats(orgID uuid.UUID, start, end time.Time) []AgentPerformanceStats {
+	agents := a.listAnalyticsAgents(orgID)
 
 	stats := make([]AgentPerformanceStats, 0, len(agents))
 	for _, agent := range agents {
@@ -216,11 +228,13 @@ func (a *App) calculateAllAgentStats(orgID uuid.UUID, start, end time.Time) []Ag
 }
 
 // calculateBreakTime calculates total break time and count for an agent within a time period
-func (a *App) calculateBreakTime(agentID uuid.UUID, start, end time.Time) (totalMins float64, count int64) {
-	// Get all "away" periods that overlap with the time range
+func (a *App) calculateBreakTime(orgID, agentID uuid.UUID, start, end time.Time) (totalMins float64, count int64) {
+	// Get all "away" periods that overlap with the time range, scoped to this
+	// organization: a user in two orgs must not have their breaks counted in
+	// both. Every away period counts as a break (Decision 9).
 	var logs []models.UserAvailabilityLog
-	if err := a.DB.Where("user_id = ? AND is_available = false AND started_at <= ? AND (ended_at >= ? OR ended_at IS NULL)",
-		agentID, end, start).
+	if err := a.DB.Where("user_id = ? AND organization_id = ? AND is_available = false AND started_at <= ? AND (ended_at >= ? OR ended_at IS NULL)",
+		agentID, orgID, end, start).
 		Find(&logs).Error; err != nil {
 		a.Log.Error("Failed to fetch availability logs for break time calculation", "error", err, "agent_id", agentID)
 		return 0, 0

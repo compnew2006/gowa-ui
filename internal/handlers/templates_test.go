@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/handlers"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/internal/templateutil"
 	"github.com/compnew2006/gowa-ui/test/testutil"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
@@ -316,4 +316,54 @@ func TestApp_GetTemplate_CrossOrgIsolation(t *testing.T) {
 	err := app.GetTemplate(req)
 	require.NoError(t, err)
 	testutil.AssertErrorResponse(t, req, fasthttp.StatusNotFound, "not found")
+}
+
+// --- Task 4: campaign picker account filter (Decision 7) ---
+
+// TestApp_ListTemplates_FilterByWhatsAppAccountParam pins that the campaign
+// picker parameter (whatsapp_account, sent by CampaignDetailView) filters to
+// the selected account's templates, while the unfiltered total stays org-wide.
+func TestApp_ListTemplates_FilterByWhatsAppAccountParam(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	user := testutil.CreateTestUser(t, app.DB, org.ID)
+	account1 := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+	account2 := testutil.CreateTestWhatsAppAccount(t, app.DB, org.ID)
+
+	createTestTemplateInDB(t, app, org.ID, account1.Name, "tmpl_a1")
+	createTestTemplateInDB(t, app, org.ID, account1.Name, "tmpl_a2")
+	createTestTemplateInDB(t, app, org.ID, account2.Name, "tmpl_b1")
+
+	list := func(params map[string]string) (templates []handlers.TemplateResponse, total int64) {
+		t.Helper()
+		req := testutil.NewGETRequest(t)
+		testutil.SetAuthContext(req, org.ID, user.ID)
+		for k, v := range params {
+			testutil.SetQueryParam(req, k, v)
+		}
+		require.NoError(t, app.ListTemplates(req))
+		assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+		var resp struct {
+			Data struct {
+				Templates []handlers.TemplateResponse `json:"templates"`
+				Total     int64                       `json:"total"`
+			} `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+		return resp.Data.Templates, resp.Data.Total
+	}
+
+	// Picker scope: only the selected account's templates.
+	pickerTemplates, pickerTotal := list(map[string]string{"whatsapp_account": account1.Name})
+	assert.Len(t, pickerTemplates, 2)
+	assert.Equal(t, int64(2), pickerTotal)
+	for _, tmpl := range pickerTemplates {
+		assert.Equal(t, account1.Name, tmpl.WhatsAppAccount)
+	}
+
+	// Page scope: the unfiltered total is org-wide.
+	_, orgTotal := list(nil)
+	assert.Equal(t, int64(3), orgTotal)
 }

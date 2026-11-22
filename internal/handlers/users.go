@@ -207,18 +207,25 @@ func (a *App) ListUsers(r *fastglue.Request) error {
 	// Query users via user_organizations to include cross-org members.
 	joinClause := "JOIN user_organizations ON user_organizations.user_id = users.id AND user_organizations.organization_id = ? AND user_organizations.deleted_at IS NULL"
 
-	countQuery := a.DB.Joins(joinClause, orgID).Where("users.deleted_at IS NULL")
-	dataQuery := a.DB.Joins(joinClause, orgID).Where("users.deleted_at IS NULL")
-	if search != "" {
-		countQuery = countQuery.Where("users.full_name ILIKE ? OR users.email ILIKE ?", "%"+search+"%", "%"+search+"%")
-		dataQuery = dataQuery.Where("users.full_name ILIKE ? OR users.email ILIKE ?", "%"+search+"%", "%"+search+"%")
-	}
-	if roleIDParam != "" {
-		if roleUUID, err := uuid.Parse(roleIDParam); err == nil {
-			countQuery = countQuery.Where("user_organizations.role_id = ?", roleUUID)
-			dataQuery = dataQuery.Where("user_organizations.role_id = ?", roleUUID)
+	// applyListFilters applies the search/role filters shared by the list,
+	// the total and the online count, so the numbers always agree.
+	applyListFilters := func(q *gorm.DB) *gorm.DB {
+		if search != "" {
+			q = q.Where("users.full_name ILIKE ? OR users.email ILIKE ?", "%"+search+"%", "%"+search+"%")
 		}
+		if roleIDParam != "" {
+			if roleUUID, err := uuid.Parse(roleIDParam); err == nil {
+				q = q.Where("user_organizations.role_id = ?", roleUUID)
+			}
+		}
+		return q
 	}
+	baseQuery := func() *gorm.DB {
+		return a.DB.Joins(joinClause, orgID).Where("users.deleted_at IS NULL")
+	}
+
+	countQuery := applyListFilters(baseQuery())
+	dataQuery := applyListFilters(baseQuery())
 	if onlineOnly {
 		if len(onlineIDs) == 0 {
 			return r.SendEnvelope(map[string]any{
@@ -235,6 +242,19 @@ func (a *App) ListUsers(r *fastglue.Request) error {
 
 	var total int64
 	countQuery.Model(&models.User{}).Count(&total)
+
+	// online_count follows the list's filters (Decision 8): it counts the
+	// online users among the users matching the search/role filters, so the
+	// number agrees with the rows shown. With online_only the list already
+	// contains only online users, so the count is the total itself.
+	var onlineCount int64
+	if onlineOnly {
+		onlineCount = total
+	} else if len(onlineIDs) > 0 {
+		applyListFilters(baseQuery()).
+			Where("users.id IN ?", onlineIDs).
+			Model(&models.User{}).Count(&onlineCount)
+	}
 
 	var users []models.User
 	if err := pg.Apply(dataQuery.Order("users.created_at DESC")).
@@ -285,7 +305,7 @@ func (a *App) ListUsers(r *fastglue.Request) error {
 		"total":        total,
 		"page":         pg.Page,
 		"limit":        pg.Limit,
-		"online_count": len(onlineIDs),
+		"online_count": onlineCount,
 	})
 }
 

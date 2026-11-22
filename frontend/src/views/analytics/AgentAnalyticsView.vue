@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { agentAnalyticsService } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
-import { useUsersStore } from '@/stores/users'
 import { PageHeader, ErrorState, DateRangePicker } from '@/components/shared'
 import {
   Command,
@@ -64,7 +63,6 @@ interface AgentAnalyticsResponse {
 
 const { t } = useI18n()
 const authStore = useAuthStore()
-const usersStore = useUsersStore()
 // Permission-driven (analytics.agents:read), not role-name based — custom
 // roles with the right permission should get the same view.
 const isAdminOrManager = computed(() => authStore.hasPermission('analytics.agents', 'read'))
@@ -107,17 +105,6 @@ const formatMinutes = (mins: number): string => {
   return remainingMins > 0 ? `${hours}h ${remainingMins}m` : `${hours}h`
 }
 
-const fetchAgents = async () => {
-  if (!isAdminOrManager.value) return
-  try {
-    await usersStore.fetchUsers()
-    agents.value = usersStore.users
-      .map((u) => ({ id: u.id, full_name: u.full_name, role: u.role?.name || '' }))
-  } catch (error) {
-    console.error('Failed to load agents:', error)
-  }
-}
-
 const fetchAnalytics = async () => {
   isLoading.value = true
   error.value = null
@@ -130,6 +117,13 @@ const fetchAnalytics = async () => {
     const response = await agentAnalyticsService.getSummary(params)
     const data = response.data.data || response.data
     analytics.value = data
+    // The filter dropdown is built from the table's own population
+    // (agent_stats), so table and dropdown can never disagree (Decision 10).
+    // A single-agent response carries no agent_stats, so the list is left
+    // untouched there.
+    if (data.agent_stats) {
+      agents.value = (data.agent_stats as AgentPerformanceStats[]).map((a) => ({ id: a.agent_id, full_name: a.agent_name, role: 'agent' }))
+    }
   } catch (err) {
     console.error('Failed to load agent analytics:', err)
     error.value = t('agentAnalytics.errorLoadingAnalytics')
@@ -155,7 +149,6 @@ watch(selectedAgentId, () => {
 })
 
 onMounted(() => {
-  fetchAgents()
   fetchAnalytics()
 })
 
@@ -176,6 +169,19 @@ const csatAvgRating = computed(() => {
 const csatRatingsCount = computed(() => {
   if (selectedAgentId.value === 'all') return analytics.value?.summary?.ratings_count ?? 0
   return analytics.value?.my_stats?.ratings_count ?? 0
+})
+
+// Break time for the stat card: the org total when viewing all agents,
+// per-agent otherwise (my_stats carries the filtered agent's numbers).
+// Previously this read my_stats first, so the all-agents card showed the
+// viewing user's own break time instead of the org total (Decision 9).
+const breakTimeMins = computed(() => {
+  if (selectedAgentId.value === 'all') return analytics.value?.summary?.total_break_time_mins ?? 0
+  return analytics.value?.my_stats?.total_break_time_mins ?? 0
+})
+const breakCount = computed(() => {
+  if (selectedAgentId.value === 'all') return analytics.value?.summary?.break_count ?? 0
+  return analytics.value?.my_stats?.break_count ?? 0
 })
 
 // Chart configurations
@@ -410,10 +416,10 @@ const comparisonChartOptions = {
               </div>
               <div class="pt-2">
                 <div class="text-3xl font-bold text-white light:text-gray-900">
-                  {{ formatMinutes(analytics.my_stats?.total_break_time_mins ?? analytics.summary?.total_break_time_mins ?? 0) }}
+                  {{ formatMinutes(breakTimeMins) }}
                 </div>
                 <p class="text-xs text-white/40 light:text-gray-500 mt-1">
-                  {{ $t('agentAnalytics.breaksTaken', { count: analytics.my_stats?.break_count ?? analytics.summary?.break_count ?? 0 }) }}
+                  {{ $t('agentAnalytics.breaksTaken', { count: breakCount }) }}
                 </p>
               </div>
             </div>

@@ -3,9 +3,11 @@ package handlers_test
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/compnew2006/gowa-ui/internal/handlers"
 	"github.com/compnew2006/gowa-ui/internal/models"
+	"github.com/compnew2006/gowa-ui/internal/websocket"
 	"github.com/compnew2006/gowa-ui/test/testutil"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -2002,4 +2004,83 @@ func TestApp_GetUser_IncludesAccountAssignments(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
 	assert.ElementsMatch(t, []uuid.UUID{acc.ID}, resp.Data.WhatsAppAccountIDs)
+}
+
+// --- Task 4: online_count follows the list's filters (Decision 8) ---
+
+// TestApp_ListUsers_OnlineCountFollowsFilters pins that online_count counts
+// the online users among the users matching the list's search/role filters —
+// not the whole org — while presence itself stays a live WebSocket connection.
+func TestApp_ListUsers_OnlineCountFollowsFilters(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	admin := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("online-admin")),
+		testutil.WithFullName("Online Admin"),
+		testutil.WithRoleID(&adminRole.ID),
+	)
+	agentRole := testutil.CreateAgentRole(t, app.DB, org.ID)
+	onlineAgent := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("online-alice")),
+		testutil.WithFullName("Online Alice"),
+		testutil.WithRoleID(&agentRole.ID),
+	)
+	testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("offline-bob")),
+		testutil.WithFullName("Offline Bob"),
+	)
+
+	// Presence: the requesting admin and the agent each hold a live
+	// WebSocket connection; Bob has none.
+	hub := websocket.NewHub(testutil.NopLogger())
+	go hub.Run()
+	app.WSHub = hub
+	hub.Register(websocket.NewClient(hub, nil, admin.ID, org.ID))
+	hub.Register(websocket.NewClient(hub, nil, onlineAgent.ID, org.ID))
+	require.Eventually(t, func() bool {
+		return hub.IsUserOnline(org.ID, admin.ID) && hub.IsUserOnline(org.ID, onlineAgent.ID)
+	}, 5*time.Second, 10*time.Millisecond, "expected admin and agent to register as online")
+
+	list := func(params map[string]string) (total, onlineCount int64) {
+		t.Helper()
+		req := testutil.NewGETRequest(t)
+		testutil.SetAuthContext(req, org.ID, admin.ID)
+		for k, v := range params {
+			testutil.SetQueryParam(req, k, v)
+		}
+		require.NoError(t, app.ListUsers(req))
+		assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+		var resp struct {
+			Data struct {
+				Users       []handlers.UserResponse `json:"users"`
+				Total       int64                   `json:"total"`
+				OnlineCount int64                   `json:"online_count"`
+			} `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+		return resp.Data.Total, resp.Data.OnlineCount
+	}
+
+	// No filter: both online users in the org count.
+	total, onlineCount := list(nil)
+	assert.Equal(t, int64(3), total)
+	assert.Equal(t, int64(2), onlineCount)
+
+	// Search narrows the count to the matching users: Alice is online, Bob is not.
+	_, onlineCount = list(map[string]string{"search": "Alice"})
+	assert.Equal(t, int64(1), onlineCount)
+	_, onlineCount = list(map[string]string{"search": "Bob"})
+	assert.Equal(t, int64(0), onlineCount)
+
+	// Role filter narrows the count the same way (agent role: only Alice).
+	_, onlineCount = list(map[string]string{"role_id": agentRole.ID.String()})
+	assert.Equal(t, int64(1), onlineCount)
+
+	// online_only lists exactly the online users, and the count agrees.
+	total, onlineCount = list(map[string]string{"online_only": "true"})
+	assert.Equal(t, int64(2), total)
+	assert.Equal(t, int64(2), onlineCount)
 }

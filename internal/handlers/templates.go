@@ -62,6 +62,12 @@ func (a *App) ListTemplates(r *fastglue.Request) error {
 
 	// Optional filters
 	accountName := string(r.RequestCtx.QueryArgs().Peek("account")) // Filter by account name
+	if accountName == "" {
+		// The campaign picker (CampaignDetailView.loadTemplates) sends the
+		// selected account as whatsapp_account; accept it as an alias so the
+		// picker is filtered to that account's templates (Decision 7).
+		accountName = string(r.RequestCtx.QueryArgs().Peek("whatsapp_account"))
+	}
 	category := string(r.RequestCtx.QueryArgs().Peek("category"))
 	search := string(r.RequestCtx.QueryArgs().Peek("search"))
 

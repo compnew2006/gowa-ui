@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/compnew2006/gowa-ui/internal/handlers"
 	"github.com/compnew2006/gowa-ui/internal/models"
 	"github.com/compnew2006/gowa-ui/test/testutil"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
@@ -104,6 +104,10 @@ func TestApp_GetAgentAnalytics_Success(t *testing.T) {
 
 	// Create a team and add user as agent so calculateAllAgentStats finds them
 	createTestTeamWithAgent(t, app, org.ID, user.ID)
+
+	// The table lists holders of the system agent role (Decision 10): the
+	// team membership above is not what puts anyone in the table.
+	createSystemAgent(t, app, org.ID, "Table Agent")
 
 	req := testutil.NewGETRequest(t)
 	testutil.SetAuthContext(req, org.ID, user.ID)
@@ -217,10 +221,9 @@ func createTestClosureRating(t *testing.T, app *handlers.App, orgID, contactID u
 func TestApp_GetAgentAnalytics_ClosureRatings(t *testing.T) {
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	perms := getAnalyticsPermissions(t, app)
-	role := testutil.CreateTestRoleExact(t, app.DB, org.ID, "Analytics Ratings", false, false, perms)
-	// NOTE: deliberately NOT a team member — the agent list must still include
-	// users who closed rated conversations (orgs without teams).
+	// The closing user holds the system agent role (Decision 10) plus
+	// analytics:read so they both view the table and appear in it.
+	role := systemAgentRole(t, app, org.ID, "analytics:read")
 	user := testutil.CreateTestUser(t, app.DB, org.ID,
 		testutil.WithEmail(testutil.UniqueEmail("agent-ratings")),
 		testutil.WithPassword("password"),
@@ -275,8 +278,8 @@ func TestApp_GetAgentAnalytics_ClosureRatings(t *testing.T) {
 func TestApp_GetAgentAnalytics_NoRatings(t *testing.T) {
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)
-	perms := getAnalyticsPermissions(t, app)
-	role := testutil.CreateTestRoleExact(t, app.DB, org.ID, "Analytics NoRatings", false, false, perms)
+	// The user holds the system agent role (Decision 10) plus analytics:read.
+	role := systemAgentRole(t, app, org.ID, "analytics:read")
 	user := testutil.CreateTestUser(t, app.DB, org.ID,
 		testutil.WithEmail(testutil.UniqueEmail("agent-noratings")),
 		testutil.WithPassword("password"),
@@ -301,4 +304,142 @@ func TestApp_GetAgentAnalytics_NoRatings(t *testing.T) {
 	require.Len(t, resp.Data.AgentStats, 1)
 	assert.Equal(t, int64(0), resp.Data.AgentStats[0].RatingsCount)
 	assert.Equal(t, float64(0), resp.Data.AgentStats[0].AvgRating)
+}
+
+// --- Task 4: break time org scope + org-total summary, agent population (Decisions 9, 10) ---
+
+func TestApp_GetAgentAnalytics_BreakTimeOrgTotal(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	otherOrg := testutil.CreateTestOrganization(t, app.DB)
+
+	// Viewer holds the system agent role plus analytics:read; two agents each
+	// take a 30-minute break inside the current month.
+	viewer := createSystemAgent(t, app, org.ID, "Break Viewer", "analytics:read")
+	agentA := createSystemAgent(t, app, org.ID, "Break Agent A")
+	agentB := createSystemAgent(t, app, org.ID, "Break Agent B")
+
+	now := time.Now().UTC()
+	createAvailabilityLog(t, app, org.ID, agentA.ID, false, now.Add(-60*time.Minute), now.Add(-30*time.Minute))
+	createAvailabilityLog(t, app, org.ID, agentB.ID, false, now.Add(-60*time.Minute), now.Add(-30*time.Minute))
+	// Same user, different org: must NOT leak into this org's numbers.
+	createAvailabilityLog(t, app, otherOrg.ID, agentA.ID, false, now.Add(-60*time.Minute), now.Add(-30*time.Minute))
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, viewer.ID)
+
+	require.NoError(t, app.GetAgentAnalytics(req))
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp struct {
+		Data handlers.AgentAnalyticsResponse `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+
+	// All-agents summary is the ORG TOTAL, not the viewer's own break time
+	// (the viewer took no break) and not inflated by the other org's log.
+	assert.InDelta(t, 60, resp.Data.Summary.TotalBreakTimeMins, 1.0)
+	assert.Equal(t, int64(2), resp.Data.Summary.BreakCount)
+
+	// Per-agent rows carry each agent's own break time.
+	byID := make(map[string]handlers.AgentPerformanceStats, len(resp.Data.AgentStats))
+	for _, s := range resp.Data.AgentStats {
+		byID[s.AgentID] = s
+	}
+	require.Contains(t, byID, agentA.ID.String())
+	require.Contains(t, byID, agentB.ID.String())
+	assert.InDelta(t, 30, byID[agentA.ID.String()].TotalBreakTimeMins, 1.0)
+	assert.InDelta(t, 30, byID[agentB.ID.String()].TotalBreakTimeMins, 1.0)
+}
+
+func TestApp_GetAgentAnalytics_BreakTimeOwnStatsOrgScoped(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	otherOrg := testutil.CreateTestOrganization(t, app.DB)
+
+	// Agent without analytics permission sees only their own stats.
+	agent := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("break-own")),
+		testutil.WithFullName("Break Own"),
+	)
+
+	now := time.Now().UTC()
+	createAvailabilityLog(t, app, org.ID, agent.ID, false, now.Add(-60*time.Minute), now.Add(-30*time.Minute))
+	// Same user, different org: must NOT count here.
+	createAvailabilityLog(t, app, otherOrg.ID, agent.ID, false, now.Add(-90*time.Minute), now.Add(-45*time.Minute))
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, agent.ID)
+
+	require.NoError(t, app.GetAgentAnalytics(req))
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp struct {
+		Data handlers.AgentAnalyticsResponse `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+
+	require.NotNil(t, resp.Data.MyStats)
+	assert.InDelta(t, 30, resp.Data.MyStats.TotalBreakTimeMins, 1.0)
+	assert.Equal(t, int64(1), resp.Data.MyStats.BreakCount)
+}
+
+func TestApp_GetAgentAnalytics_AgentPopulationIsSystemRoleHolders(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	// Viewer with analytics:read (not an agent).
+	perms := getAnalyticsPermissions(t, app)
+	viewerRole := testutil.CreateTestRoleExact(t, app.DB, org.ID, "Analytics Viewer", false, false, perms)
+	viewer := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("analytics-viewer")),
+		testutil.WithRoleID(&viewerRole.ID),
+	)
+
+	// Agent-role holders: one with zero activity of any kind, one team member.
+	zeroAgent := createSystemAgent(t, app, org.ID, "Zero Activity Agent")
+	teamAgent := createSystemAgent(t, app, org.ID, "Team Agent")
+	createTestTeamWithAgent(t, app, org.ID, teamAgent.ID)
+
+	// Team member with team-role agent but NO agent system role: must NOT appear.
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	teamOnly := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("team-only")),
+		testutil.WithFullName("Team Only User"),
+		testutil.WithRoleID(&adminRole.ID),
+	)
+	createTestTeamWithAgent(t, app, org.ID, teamOnly.ID)
+
+	// Rated closer with no agent system role and no team: must NOT appear.
+	closer := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("rated-closer")),
+		testutil.WithFullName("Rated Closer"),
+	)
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+	rating := 5
+	ratedAt := time.Now().UTC().Add(-1 * time.Hour)
+	createTestClosureRating(t, app, org.ID, contact.ID, &closer.ID, models.RatingStatusRated, &rating, &ratedAt)
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, viewer.ID)
+
+	require.NoError(t, app.GetAgentAnalytics(req))
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp struct {
+		Data handlers.AgentAnalyticsResponse `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+
+	// Table = agent system-role holders, including zero-activity ones.
+	require.Len(t, resp.Data.AgentStats, 2)
+	ids := []string{resp.Data.AgentStats[0].AgentID, resp.Data.AgentStats[1].AgentID}
+	assert.Contains(t, ids, zeroAgent.ID.String())
+	assert.Contains(t, ids, teamAgent.ID.String())
+	for _, s := range resp.Data.AgentStats {
+		if s.AgentID == zeroAgent.ID.String() {
+			assert.Equal(t, int64(0), s.MessagesSent)
+			assert.Equal(t, int64(0), s.RatingsCount)
+		}
+	}
 }
