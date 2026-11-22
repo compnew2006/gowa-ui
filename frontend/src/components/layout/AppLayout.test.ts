@@ -64,7 +64,15 @@ describe('AppLayout navigation skeleton', () => {
     expect(wrapper.text()).toContain('Home page')
 
     const pending = router.push('/slow')
-    await new Promise((resolve) => setTimeout(resolve, 250))
+    // Before the skeleton delay (150ms): no skeleton yet. This pins the
+    // delay as > 0ms — with a 0ms delay the skeleton would already show
+    // here, while the chunk is still loading (400ms).
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    await nextTick()
+    expect(wrapper.find('[data-testid="route-loading-skeleton"]').exists()).toBe(false)
+
+    // Past the skeleton delay (150ms), before the chunk resolves (400ms).
+    await new Promise((resolve) => setTimeout(resolve, 150))
     await nextTick()
     expect(wrapper.find('[data-testid="route-loading-skeleton"]').exists()).toBe(true)
 

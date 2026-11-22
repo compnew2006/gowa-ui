@@ -48,8 +48,15 @@ describe('useRouteLoading', () => {
     expect(wrapper.text()).toBe('false')
 
     const pending = router.push('/slow')
+    // Before the skeleton delay (150ms): the flag must still be off.
+    // This pins the delay as > 0ms — with a 0ms delay the flag would
+    // already be true here, while the chunk is still loading (400ms).
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    await nextTick()
+    expect(wrapper.text()).toBe('false')
+
     // Past the skeleton delay (150ms), before the chunk resolves (400ms).
-    await new Promise((resolve) => setTimeout(resolve, 250))
+    await new Promise((resolve) => setTimeout(resolve, 150))
     await nextTick()
     expect(wrapper.text()).toBe('true')
 
@@ -63,7 +70,19 @@ describe('useRouteLoading', () => {
     await router.push('/')
     await router.isReady()
     const wrapper: VueWrapper = mount(Host, { global: { plugins: [router] } })
-    await router.push('/fast')
+    // Sample the flag during the pending navigation, not only after it
+    // has resolved: with the delay removed the flag would flip on (or,
+    // if the timer were dropped for a synchronous set, already be on)
+    // before the navigation completes.
+    const pending = router.push('/fast')
+    await nextTick()
+    expect(wrapper.text()).toBe('false')
+    // Still inside the skeleton delay (150ms).
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    await nextTick()
+    expect(wrapper.text()).toBe('false')
+
+    await pending
     await nextTick()
     // Past the skeleton delay: the flag must never have flipped on.
     await new Promise((resolve) => setTimeout(resolve, 250))
