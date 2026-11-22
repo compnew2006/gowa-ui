@@ -10,12 +10,15 @@ import {
   ChevronLeft,
   ChevronRight,
   Menu,
+  Search,
   X
 } from 'lucide-vue-next'
 import { wsService } from '@/services/websocket'
 import { authService } from '@/services/api'
 import OrganizationSwitcher from './OrganizationSwitcher.vue'
 import UserMenu from './UserMenu.vue'
+import GlobalSearch from './GlobalSearch.vue'
+import { useGlobalSearch } from '@/composables/useGlobalSearch'
 import { ScrollToTop } from '@/components/shared'
 import { navigationSections, type NavSection } from './navigation'
 import NavItem from './NavItem.vue'
@@ -25,6 +28,7 @@ useI18n() // Enable $t() in template
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const globalSearch = useGlobalSearch()
 const isCollapsed = ref(true)
 const isMobileMenuOpen = ref(false)
 
@@ -125,17 +129,28 @@ const handleLogout = async () => {
         </div>
         <span class="font-semibold text-sm text-white light:text-gray-900">Gowa-UI</span>
       </RouterLink>
-      <Button
-        variant="ghost"
-        size="icon"
-        class="h-8 w-8 text-white/70 hover:text-white hover:bg-white/[0.08] light:text-gray-600 light:hover:text-gray-900 light:hover:bg-gray-100"
-        aria-label="Toggle menu"
-        :aria-expanded="isMobileMenuOpen"
-        @click="isMobileMenuOpen = !isMobileMenuOpen"
-      >
-        <X v-if="isMobileMenuOpen" class="h-5 w-5" />
-        <Menu v-else class="h-5 w-5" />
-      </Button>
+      <div class="flex items-center gap-1">
+        <Button
+          variant="ghost"
+          size="icon"
+          class="h-8 w-8 text-white/70 hover:text-white hover:bg-white/[0.08] light:text-gray-600 light:hover:text-gray-900 light:hover:bg-gray-100"
+          :aria-label="$t('globalSearch.openSearch')"
+          @click="globalSearch.openPalette()"
+        >
+          <Search class="h-5 w-5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          class="h-8 w-8 text-white/70 hover:text-white hover:bg-white/[0.08] light:text-gray-600 light:hover:text-gray-900 light:hover:bg-gray-100"
+          aria-label="Toggle menu"
+          :aria-expanded="isMobileMenuOpen"
+          @click="isMobileMenuOpen = !isMobileMenuOpen"
+        >
+          <X v-if="isMobileMenuOpen" class="h-5 w-5" />
+          <Menu v-else class="h-5 w-5" />
+        </Button>
+      </div>
     </header>
 
     <!-- Mobile menu overlay -->
@@ -184,6 +199,29 @@ const handleLogout = async () => {
       </div>
       <!-- Mobile logo spacer -->
       <div class="h-12 md:hidden" />
+
+      <!-- Global search trigger -->
+      <div class="px-2 pt-2">
+        <Button
+          variant="ghost"
+          :class="[
+            'w-full text-white/70 hover:text-white hover:bg-white/[0.08] light:text-gray-600 light:hover:text-gray-900 light:hover:bg-gray-100',
+            isCollapsed ? 'justify-center px-0' : 'justify-start gap-2'
+          ]"
+          :aria-label="$t('globalSearch.openSearch')"
+          :title="$t('globalSearch.openSearch')"
+          @click="globalSearch.openPalette()"
+        >
+          <Search class="h-4 w-4 shrink-0" />
+          <span v-if="!isCollapsed" class="flex-1 text-left text-sm">{{ $t('globalSearch.openSearch') }}</span>
+          <kbd
+            v-if="!isCollapsed"
+            class="rounded border border-white/[0.12] light:border-gray-300 px-1.5 py-0.5 text-[10px] font-medium text-white/50 light:text-gray-500"
+          >
+            {{ $t('globalSearch.shortcutHint') }}
+          </kbd>
+        </Button>
+      </div>
 
       <!-- Organization Switcher (Super Admin only) -->
       <OrganizationSwitcher :collapsed="isCollapsed" />
@@ -241,5 +279,8 @@ const handleLogout = async () => {
       </RouterView>
       <ScrollToTop />
     </main>
+
+    <!-- Global search palette (Ctrl+K / Cmd+K) -->
+    <GlobalSearch :search="globalSearch" />
   </div>
 </template>

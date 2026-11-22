@@ -260,6 +260,20 @@
     "collapseSidebar": "Collapse sidebar",
     "toggleMenu": "Toggle menu"
   },
+  "globalSearch": {
+    "title": "Search",
+    "placeholder": "Search contacts, conversations, settings…",
+    "openSearch": "Search",
+    "shortcutHint": "Ctrl+K",
+    "contacts": "Contacts",
+    "conversations": "Conversations",
+    "settingsPages": "Settings pages",
+    "scopeHint": "Searches contacts, conversations and settings pages",
+    "searching": "Searching…",
+    "noResultsTitle": "No results for “{query}”",
+    "noResultsDescription": "Try a contact name or phone number, or a settings page name such as Tags.",
+    "typeToSearch": "Type at least 2 characters to search"
+  },
   "userMenu": {
     "myAccount": "My Account",
     "status": "Status",

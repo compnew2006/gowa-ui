@@ -260,6 +260,20 @@
     "collapseSidebar": "طي الشريط الجانبي",
     "toggleMenu": "تبديل القائمة"
   },
+  "globalSearch": {
+    "title": "بحث",
+    "placeholder": "ابحث في جهات الاتصال والمحادثات والإعدادات…",
+    "openSearch": "بحث",
+    "shortcutHint": "Ctrl+K",
+    "contacts": "جهات الاتصال",
+    "conversations": "المحادثات",
+    "settingsPages": "صفحات الإعدادات",
+    "scopeHint": "يبحث في جهات الاتصال والمحادثات وصفحات الإعدادات",
+    "searching": "جارٍ البحث…",
+    "noResultsTitle": "لا توجد نتائج لـ “{query}”",
+    "noResultsDescription": "جرّب اسم جهة اتصال أو رقم هاتف، أو اسم صفحة إعدادات مثل الوسوم.",
+    "typeToSearch": "اكتب حرفين على الأقل للبحث"
+  },
   "userMenu": {
     "myAccount": "حسابي",
     "status": "الحالة",
