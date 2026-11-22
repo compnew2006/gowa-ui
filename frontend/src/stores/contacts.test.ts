@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
-const { list, listInternalConversations, get, messagesList, put } = vi.hoisted(() => ({
+const { list, listInternalConversations, get, messagesList, put, post, del } = vi.hoisted(() => ({
   list: vi.fn(),
   listInternalConversations: vi.fn(),
   get: vi.fn(),
   messagesList: vi.fn(),
   put: vi.fn(),
+  post: vi.fn(),
+  del: vi.fn(),
 }))
 
 vi.mock('@/services/api', () => ({
@@ -20,6 +22,8 @@ vi.mock('@/services/api', () => ({
   },
   api: {
     put,
+    post,
+    delete: del,
   },
 }))
 
@@ -504,5 +508,109 @@ describe('contacts store claim', () => {
     await claiming
     expect(store.pendingCount).toBe(29)
     expect(store.myCount).toBe(1)
+  })
+})
+
+describe('contacts store close (Task 7b)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    listInternalConversations.mockResolvedValue({ data: { data: { conversations: [] } } })
+    messagesList.mockResolvedValue({ data: { data: { messages: [], total: 0, has_more: false } } })
+    list.mockImplementation(() => page([], 0))
+  })
+
+  // Previously closed by Ramzy on 2026-11-16, now closed by the current user
+  // (Salama). The Contact Info panel renders metadata.closed_by, so the
+  // store must re-read the contact after the close — the optimistic local
+  // update only flips chat_status and leaves the old stamp in place.
+  function previouslyClosedByRamzy() {
+    return {
+      id: 'contact-1',
+      phone_number: '966561853319',
+      name: 'Contact',
+      chat_status: 'open',
+      assigned_user_id: 'user-1',
+      tags: [],
+      metadata: {
+        chat_status: 'open',
+        closed_by: { user_id: 'ramzy-id', name: 'Ramzy', closed_at: '2026-11-16T10:00:00Z' },
+      },
+    } as never
+  }
+
+  function closedBySalama() {
+    return {
+      id: 'contact-1',
+      phone_number: '966561853319',
+      name: 'Contact',
+      chat_status: 'closed',
+      tags: [],
+      metadata: {
+        chat_status: 'closed',
+        closed_by: { user_id: 'user-1', name: 'Salama', closed_at: '2026-11-21T12:00:00Z' },
+      },
+    }
+  }
+
+  it('closeChat re-reads the contact so Closed By shows the new closer, not the old one', async () => {
+    put.mockResolvedValue({ data: { data: { status: 'success' } } })
+    get.mockResolvedValue({ data: { data: closedBySalama() } })
+
+    const store = useContactsStore()
+    store.setCurrentContact(previouslyClosedByRamzy())
+
+    await store.closeChat('contact-1')
+
+    expect(get).toHaveBeenCalledWith('contact-1')
+    expect(store.currentContact?.chat_status).toBe('closed')
+    const closedBy = (store.currentContact?.metadata as any)?.closed_by
+    expect(closedBy?.name).toBe('Salama')
+    expect(closedBy?.user_id).toBe('user-1')
+    expect(closedBy?.closed_at).toBe('2026-11-21T12:00:00Z')
+  })
+
+  it('bulkCloseChats re-reads the current contact when it was closed in the batch', async () => {
+    post.mockResolvedValue({ data: { data: { closed_ids: ['contact-1'], failed: [], requested: 1 } } })
+    get.mockResolvedValue({ data: { data: closedBySalama() } })
+
+    const store = useContactsStore()
+    store.setCurrentContact(previouslyClosedByRamzy())
+
+    const result = await store.bulkCloseChats(['contact-1'])
+
+    expect(result.closed).toBe(1)
+    expect(get).toHaveBeenCalledWith('contact-1')
+    const closedBy = (store.currentContact?.metadata as any)?.closed_by
+    expect(closedBy?.name).toBe('Salama')
+    expect(closedBy?.user_id).toBe('user-1')
+  })
+
+  it('leaveChat re-reads the contact when leaving closed the conversation', async () => {
+    del.mockResolvedValue({ data: { data: { left: true, closed: true } } })
+    get.mockResolvedValue({ data: { data: closedBySalama() } })
+
+    const store = useContactsStore()
+    store.setCurrentContact(previouslyClosedByRamzy())
+
+    await store.leaveChat('contact-1')
+
+    expect(get).toHaveBeenCalledWith('contact-1')
+    expect(store.currentContact?.chat_status).toBe('closed')
+    const closedBy = (store.currentContact?.metadata as any)?.closed_by
+    expect(closedBy?.name).toBe('Salama')
+    expect(closedBy?.user_id).toBe('user-1')
+  })
+
+  it('leaveChat does not re-read the contact when leaving did not close it', async () => {
+    del.mockResolvedValue({ data: { data: { left: true } } })
+
+    const store = useContactsStore()
+    store.setCurrentContact(previouslyClosedByRamzy())
+
+    await store.leaveChat('contact-1')
+
+    expect(get).not.toHaveBeenCalled()
+    expect(store.currentContact?.chat_status).toBe('open')
   })
 })

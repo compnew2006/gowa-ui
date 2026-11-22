@@ -1263,6 +1263,9 @@ export const useContactsStore = defineStore('contacts', () => {
           currentContact.value.assigned_user_id = undefined
           currentContact.value.assigned_user_name = undefined
           currentContact.value.collaborators = []
+          // Re-read the contact so metadata.closed_by comes from the server
+          // (Task 7b — same stale-closer gap as closeChat).
+          await fetchContact(id)
           // Re-fetch messages to show the system message immediately
           await fetchMessages(id)
         }
@@ -1287,7 +1290,8 @@ export const useContactsStore = defineStore('contacts', () => {
   }
 
   async function leaveChat(contactId: string) {
-    await api.delete(`/contacts/${contactId}/join`)
+    const response = await api.delete(`/contacts/${contactId}/join`)
+    const data = response.data.data || response.data
     // Remove self from collaborators locally
     const userId = authStore.user?.id
     if (currentContact.value?.id === contactId && currentContact.value.collaborators) {
@@ -1298,6 +1302,28 @@ export const useContactsStore = defineStore('contacts', () => {
     const contact = contacts.value.find(c => c.id === contactId)
     if (contact?.collaborators) {
       contact.collaborators = contact.collaborators.filter(c => c.user_id !== userId)
+    }
+    // Leaving as the last participant closed the conversation server-side
+    // (Service.Leave stamps metadata.closed_by with the leaver). Mirror the
+    // closed state locally and re-read the contact, like closeChat does —
+    // otherwise the Contact Info panel keeps showing the previous closer.
+    if (data?.closed) {
+      if (contact) {
+        contact.chat_status = 'closed'
+        contact.assigned_user_id = undefined
+        contact.assigned_user_name = undefined
+        contact.collaborators = []
+      }
+      if (currentContact.value?.id === contactId) {
+        currentContact.value.chat_status = 'closed'
+        currentContact.value.assigned_user_id = undefined
+        currentContact.value.assigned_user_name = undefined
+        currentContact.value.collaborators = []
+        // Re-read the contact so metadata.closed_by comes from the server,
+        // then re-fetch messages to show the system message immediately.
+        await fetchContact(contactId)
+        await fetchMessages(contactId)
+      }
     }
   }
 
@@ -1319,6 +1345,13 @@ export const useContactsStore = defineStore('contacts', () => {
       currentContact.value.assigned_user_id = undefined
       currentContact.value.assigned_user_name = undefined
       currentContact.value.collaborators = []
+      // Re-read the contact so metadata.closed_by comes from the server:
+      // the backend stamps the new closer on close (Service.Close), but the
+      // optimistic update above only flips chat_status — without this the
+      // Contact Info panel keeps showing the previous closer (Task 7b: the
+      // live 2026-11-21 close still showed Ramzy after Salama closed).
+      // Same shape as claimChat's post-mutation re-read.
+      await fetchContact(contactId)
       // Re-fetch messages to show the system message immediately
       await fetchMessages(contactId)
     }

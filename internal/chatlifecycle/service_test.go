@@ -420,6 +420,11 @@ func TestService_Leave_OwnerLastParticipant_ClosesChat(t *testing.T) {
 	require.NoError(t, db.First(&updated, "id = ?", contact.ID).Error)
 	assert.Equal(t, models.ChatStatusClosed, updated.EffectiveStatus())
 	assert.Nil(t, updated.AssignedUserID)
+	// Leave-as-last-participant is a close path: it must stamp
+	// metadata.closed_by with the leaver (Task 7b — the Contact Info panel
+	// reads this stamp, so every close path has to write it).
+	assert.Equal(t, owner.ID.String(), updated.ClosedByUserID(),
+		"leaving as last participant must stamp metadata.closed_by with the leaver")
 }
 
 // TestService_Leave_GhostExit_NoStateChange: an admin who isn't a participant
