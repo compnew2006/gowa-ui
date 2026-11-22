@@ -1272,6 +1272,10 @@
     "goBack": "Go Back",
     "goHome": "Go Home"
   },
+  "router": {
+    "permissionDeniedTitle": "You don't have access to {page}",
+    "permissionDeniedDescription": "Ask an admin if you need access to {page}."
+  },
   "profile": {
     "chatPreferencesFailed": "Failed to save chat preferences",
     "chatPreferencesSaved": "Chat preferences saved",

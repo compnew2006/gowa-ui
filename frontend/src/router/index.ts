@@ -1,6 +1,8 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { navigationSections } from '@/components/layout/navigation'
+import { useAppToast } from '@/composables/useAppToast'
+import { i18n } from '@/i18n'
 
 // Permission-based route meta type
 declare module 'vue-router' {
@@ -280,6 +282,51 @@ function getFirstAccessibleRoute(authStore: ReturnType<typeof useAuthStore>): st
   return '/profile'
 }
 
+// Sidebar entries (items + children) the denied page's name comes from,
+// so the notice names the page exactly as the sidebar does.
+const navigationLabels = navigationSections.flatMap((section) =>
+  section.items.flatMap((item) => [
+    { path: item.path, name: item.name },
+    ...(item.children?.map((child) => ({ path: child.path, name: child.name })) ?? []),
+  ]),
+)
+
+/**
+ * Display name of the page a route points at, for the permission-denied
+ * notice. Matches the longest sidebar entry that is the route's path or
+ * its parent (so /settings/users/:id reads as "Users"), then falls back
+ * to the route title and finally the raw path.
+ */
+export function resolveDeniedPageLabel(to: { path: string; meta?: { title?: string } }): string {
+  let best: { path: string; name: string } | undefined
+  for (const entry of navigationLabels) {
+    if (to.path === entry.path || to.path.startsWith(entry.path + '/')) {
+      if (!best || entry.path.length > best.path.length) best = entry
+    }
+  }
+  if (best) return i18n.global.t(best.name)
+  return to.meta?.title ?? to.path
+}
+
+/**
+ * Explicit permission-denied notice (toast) naming the page the user tried
+ * to open. Best-effort only: when no notice can render, the caller still
+ * redirects (the redirect is the fallback), and navigation must never
+ * break over a toast.
+ */
+function showPermissionDeniedNotice(to: { path: string; meta?: { title?: string } }): void {
+  try {
+    const page = resolveDeniedPageLabel(to)
+    const { error } = useAppToast()
+    error(
+      i18n.global.t('router.permissionDeniedTitle', { page }),
+      i18n.global.t('router.permissionDeniedDescription', { page }),
+    )
+  } catch {
+    // The redirect below stays the fallback when no notice can render.
+  }
+}
+
 // Navigation guard
 router.beforeEach(async (to, _from, next) => {
   const authStore = useAuthStore()
@@ -298,7 +345,8 @@ router.beforeEach(async (to, _from, next) => {
     const requiredPermission = to.meta.permission
     if (requiredPermission) {
       if (!authStore.hasPermission(requiredPermission, 'read')) {
-        // Redirect to first accessible page
+        // Explicit notice first; the redirect stays as the fallback.
+        showPermissionDeniedNotice(to)
         return next({ path: getFirstAccessibleRoute(authStore) })
       }
     }

@@ -1016,6 +1016,10 @@
     "goBack": "رجوع",
     "goHome": "الرئيسية"
   },
+  "router": {
+    "permissionDeniedTitle": "ليس لديك صلاحية للوصول إلى {page}",
+    "permissionDeniedDescription": "اطلب من المسؤول إذا كنت تحتاج الوصول إلى {page}."
+  },
   "profile": {
     "chatPreferencesFailed": "فشل حفظ تفضيلات المحادثات",
     "chatPreferencesSaved": "تم حفظ تفضيلات المحادثات",
