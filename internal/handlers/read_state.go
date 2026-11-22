@@ -21,6 +21,13 @@ import (
 // unreadMessagesQuery selects the incoming messages of contactIDs still
 // unread for userID. Terminal statuses (revoked/failed) never count: the read
 // sweep deliberately skips them, so counting them would pin the badge forever.
+//
+// The threshold is "above BOTH the viewer's read position and the
+// conversation watermark". PostgreSQL GREATEST ignores NULL arguments (NULL
+// only when every argument is NULL — verified on PostgreSQL 16), so a
+// missing watermark or a missing read-state row simply drops out of the max
+// and the COALESCE covers the both-missing case with 0: there is no
+// NULL-collapse to guard against.
 func (a *App) unreadMessagesQuery(orgID, userID uuid.UUID, contactIDs []uuid.UUID) *gorm.DB {
 	return a.DB.Table("messages AS m").
 		Joins("JOIN contacts c ON c.id = m.contact_id").

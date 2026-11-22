@@ -236,16 +236,18 @@ func (a *App) internalConversations(orgID, userID uuid.UUID) ([]InternalConversa
 	}
 
 	type unreadRow struct {
-		ContactID       uuid.UUID
-		WhatsAppAccount string
-		UnreadCount     int
+		ContactID         uuid.UUID
+		WhatsAppAccount   string
+		WhatsAppMessageID string `gorm:"column:whats_app_message_id"`
 	}
 	var unreadRows []unreadRow
-	// Unread counts are per viewer (read_state.go).
+	// Unread rows are per viewer (read_state.go). One row per unread
+	// incoming message, not a count: the merged conversation must count one
+	// logical message once even when both of its copies are incoming (they
+	// share the WhatsApp message ID), so the de-duplication needs the IDs.
 	if err := a.unreadMessagesQuery(orgID, userID, contactIDs).
-		Select("m.contact_id, m.whats_app_account, COUNT(*) AS unread_count").
+		Select("m.contact_id, m.whats_app_account, m.whats_app_message_id").
 		Where("m.whats_app_account IN ?", accountNames).
-		Group("m.contact_id, m.whats_app_account").
 		Scan(&unreadRows).Error; err != nil {
 		return nil, err
 	}
@@ -254,8 +256,37 @@ func (a *App) internalConversations(orgID, userID uuid.UUID) ([]InternalConversa
 		account   string
 	}
 	unread := make(map[sideKey]int, len(unreadRows))
+	// pairUnread counts logical messages per merged pair: distinct non-empty
+	// WhatsApp message IDs (one logical message, stored twice, counts once)
+	// plus rows without an ID, which cannot be de-duplicated and are counted
+	// one by one as before.
+	pairUnread := make(map[string]int)
+	seenWamid := make(map[string]map[string]struct{})
 	for _, row := range unreadRows {
-		unread[sideKey{row.ContactID, row.WhatsAppAccount}] = row.UnreadCount
+		unread[sideKey{row.ContactID, row.WhatsAppAccount}]++
+		peer := peerByContact[row.ContactID]
+		if peer == "" || peer == row.WhatsAppAccount {
+			continue // an account messaging its own number is not a pair
+		}
+		pair := [2]string{row.WhatsAppAccount, peer}
+		if pair[0] > pair[1] {
+			pair[0], pair[1] = pair[1], pair[0]
+		}
+		key := pair[0] + "|" + pair[1]
+		if row.WhatsAppMessageID == "" {
+			pairUnread[key]++
+			continue
+		}
+		seen := seenWamid[key]
+		if seen == nil {
+			seen = make(map[string]struct{})
+			seenWamid[key] = seen
+		}
+		if _, ok := seen[row.WhatsAppMessageID]; ok {
+			continue
+		}
+		seen[row.WhatsAppMessageID] = struct{}{}
+		pairUnread[key]++
 	}
 
 	byKey := map[string]*InternalConversation{}
@@ -288,7 +319,6 @@ func (a *App) internalConversations(orgID, userID uuid.UUID) ([]InternalConversa
 			byKey[key] = conv
 		}
 		conv.Sides = append(conv.Sides, side)
-		conv.UnreadCount += side.UnreadCount
 		if conv.LastMessageAt == nil || at.After(*conv.LastMessageAt) {
 			conv.LastMessageAt = &at
 			conv.LastMessagePreview = side.LastMessagePreview
@@ -296,6 +326,11 @@ func (a *App) internalConversations(orgID, userID uuid.UUID) ([]InternalConversa
 	}
 
 	for _, conv := range byKey {
+		// The merged badge counts logical messages, not stored copies:
+		// pairUnread de-duplicates the two copies of one message by its
+		// WhatsApp message ID (see above). The per-side counts stay
+		// per-copy — the sidebar opens the side holding unread messages.
+		conv.UnreadCount = pairUnread[conv.Key]
 		sort.Slice(conv.Sides, func(i, j int) bool { return conv.Sides[i].Account < conv.Sides[j].Account })
 		convs = append(convs, *conv)
 	}

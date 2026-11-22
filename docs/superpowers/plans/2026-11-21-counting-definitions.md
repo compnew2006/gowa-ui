@@ -324,22 +324,28 @@ GROUP BY m.contact_id
 `m.read_seq > COALESCE(GREATEST(c.read_watermark_seq, r.last_read_seq), 0)`
 (`read_state.go:30`).
 
-**NULL-collapse defect (recorded for the fix tasks, not a definition question).**
-In PostgreSQL `GREATEST` returns NULL if any argument is NULL, so the
-"whichever is greater" reading holds only when both values exist. Either value can
-be NULL: `r.last_read_seq` is NULL when the LEFT JOIN finds no
+**NULL-collapse — checked and NOT a defect (correction, Task 3, 2026-11-22).**
+An earlier version of this paragraph claimed PostgreSQL `GREATEST` returns NULL
+if any argument is NULL. That is wrong for PostgreSQL (it is the Oracle/MySQL
+behaviour): PostgreSQL `GREATEST` ignores NULL arguments and returns NULL only
+when every argument is NULL — verified directly on PostgreSQL 16.15
+(`GREATEST(NULL, 101) = 101`, `GREATEST(50, NULL) = 50`,
+`GREATEST(NULL, NULL) = NULL`) and by the Task 3 threshold tests
+(`TestApp_UnreadCount_ReadThreshold`), which pin the behaviour through the
+endpoint. Either value can still be NULL: `r.last_read_seq` is NULL when the
+LEFT JOIN finds no
 `contact_read_states` row for that viewer and contact (the viewer has never opened
 the conversation — the column itself is `NOT NULL DEFAULT 0`,
 `internal/models/contact_read_state.go:22–28`, but an absent row still yields NULL
 from the join), and `c.read_watermark_seq` is a nullable `BIGINT` with no NOT NULL
 or default (`internal/database/postgres.go:509` adds the column; the migration at
-`:510–514` sets it only for contacts that had a read incoming message). When either
-is NULL, `GREATEST(...)` is NULL, `COALESCE(NULL, 0)` is 0, and the badge counts
-**all** incoming, non-revoked, non-failed messages in the conversation — the
-watermark and the viewer's read position are both discarded. That contradicts the
-intended semantics stated in the model's own comment ("a message is unread for a
-user when its `read_seq` is above both `LastReadSeq` and the conversation's shared
-`read_watermark_seq`", `contact_read_state.go:9–20`).
+`:510–514` sets it only for contacts that had a read incoming message). When one
+is NULL the other still sets the threshold; only when both are missing does
+`COALESCE(..., 0)` make the threshold 0. The threshold therefore already
+implements the intended semantics stated in the model's own comment ("a message
+is unread for a user when its `read_seq` is above both `LastReadSeq` and the
+conversation's shared `read_watermark_seq`", `contact_read_state.go:9–20`) — no
+query change was needed, and `read_state.go` now carries a comment saying so.
 user's `contact_read_states.last_read_seq` (`markReadForUser`, `:57`); the
 conversation-wide floor `contacts.read_watermark_seq` advances only for automated
 handling (`markReadForEveryone`, `:72`). Rendered raw, with no cap
@@ -350,17 +356,17 @@ There is **no org-wide "total unread" number anywhere** in the code.
 **Definition (DEFINED, per contact — as the code actually behaves).** *For one
 viewer and one conversation: the number of incoming, non-revoked, non-failed,
 non-deleted messages whose `read_seq` is past the greater of that viewer's read
-position and the conversation-wide watermark — but only when both values exist;
-when either is missing (no `contact_read_states` row for the viewer, or no
-watermark set on the contact) the threshold collapses to 0 and the badge counts
+position and the conversation-wide watermark; a missing value counts as 0 inside
+the max, so only when both are missing (viewer never opened the conversation
+and no watermark was ever set) does the threshold become 0 and the badge count
 the conversation's whole inbound history.*
 
 **Reconciliation / flags.**
 
 - A badge as large as 3427 **is producible by this query** (e.g. a conversation the
   viewer has never opened, so there is no `contact_read_states` row) — the query
-  has no cap and no time window, and the NULL-collapse above means such a viewer
-  gets the conversation's entire inbound history, watermark included. Whether 3427
+  has no cap and no time window, and when no watermark was ever set for that
+  conversation such a viewer gets its entire inbound history. Whether 3427
   is *correct* for that conversation cannot be settled from code alone; it needs a
   live check of that contact's `read_watermark_seq`, the viewer's
   `contact_read_states` row, and the message count above it.
@@ -371,8 +377,14 @@ the conversation's whole inbound history.*
   (`internal_contacts.go:291`), so one logical internal message counts **2×** in the
   Private tab badge. **Decided: it must NOT double-count** — one logical internal
   message counts once, even though it is stored twice. *Rationale: a message stored
-  twice is still one message.* This differs from current behaviour; the fix task
-  must de-duplicate the merged unread count.
+  twice is still one message.* Fixed in Task 3 (2026-11-22): the merged count now
+  de-duplicates by WhatsApp message ID — one logical message counts once even
+  when both of its copies are incoming; rows without an ID are counted one by
+  one. Note the fix only bites when a logical message has an incoming copy on
+  both sides; under the current ingest paths each logical message normally has
+  exactly one incoming copy (the sender's copy is outgoing), so the old sum was
+  already right for fresh data — the de-duplication hardens the invariant for
+  legacy/synced rows where both copies are incoming.
 - **Client-side drift (flagged):** the store also increments `unread_count` locally
   on incoming WebSocket events (`frontend/src/stores/contacts.ts:875`) and zeroes it
   on open; a badge can therefore disagree with the server count until the next
@@ -668,8 +680,9 @@ lives in the cited section.
   mismatch (`whatsapp_account` sent, `account` read) that makes the picker
   unfiltered by account.
 - **Unread badge up to 3427 (§6):** producible by the query but not verifiable from
-  audit data alone; the NULL-collapse defect (§6) now partly explains it — a viewer
-  with no read-state row gets the whole inbound history. Still needs a live check
+  audit data alone; a viewer with no read-state row gets the whole inbound
+  history only when no watermark was ever set for that conversation — when a
+  watermark exists it still bounds the count. Still needs a live check
   of read positions for that conversation.
 - **6.3K vs 6.5K active contacts and 86.3K vs 90.3K messages (§2–§3):** reconciled
   as month-to-date growth at different moments — not contradictions.

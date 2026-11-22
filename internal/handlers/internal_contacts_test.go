@@ -184,15 +184,26 @@ func orgContactsReader(t *testing.T, app *App, orgID uuid.UUID) *models.User {
 func saveInternalCopy(t *testing.T, app *App, orgID uuid.UUID, account string, contactID uuid.UUID,
 	dir models.Direction, status models.MessageStatus, body string, at time.Time) {
 	t.Helper()
+	saveInternalCopyWamid(t, app, orgID, account, contactID, dir, status, body, at, "")
+}
+
+// saveInternalCopyWamid is saveInternalCopy with an explicit WhatsApp message
+// ID, so a test can store the two copies of one logical message under the
+// same wamid (the production shape: the sender's and the recipient's copies
+// share the wamid).
+func saveInternalCopyWamid(t *testing.T, app *App, orgID uuid.UUID, account string, contactID uuid.UUID,
+	dir models.Direction, status models.MessageStatus, body string, at time.Time, wamid string) {
+	t.Helper()
 	require.NoError(t, app.DB.Create(&models.Message{
-		BaseModel:       models.BaseModel{ID: uuid.New(), CreatedAt: at},
-		OrganizationID:  orgID,
-		WhatsAppAccount: account,
-		ContactID:       contactID,
-		Direction:       dir,
-		MessageType:     models.MessageTypeText,
-		Content:         body,
-		Status:          status,
+		BaseModel:         models.BaseModel{ID: uuid.New(), CreatedAt: at},
+		OrganizationID:    orgID,
+		WhatsAppAccount:   account,
+		ContactID:         contactID,
+		WhatsAppMessageID: wamid,
+		Direction:         dir,
+		MessageType:       models.MessageTypeText,
+		Content:           body,
+		Status:            status,
 	}).Error)
 }
 
@@ -251,6 +262,32 @@ func TestInternalConversations_MergesBothSidesIntoOnePair(t *testing.T) {
 	require.Len(t, cairoPair.Sides, 1, "a pair with only one synced side still lists once")
 	assert.Equal(t, cairoC.ID, cairoPair.Sides[0].ContactID)
 	assert.Equal(t, 0, cairoPair.UnreadCount)
+}
+
+func TestInternalConversations_UnreadCountsEachLogicalMessageOnce(t *testing.T) {
+	app := newProcessorTestApp(t)
+	f := newInternalChatFixture(t, app)
+	adminRole := testutil.CreateAdminRole(t, app.DB, f.org.ID)
+	admin := testutil.CreateTestUser(t, app.DB, f.org.ID, testutil.WithRoleID(&adminRole.ID))
+
+	saudiC := testutil.CreateTestContactWith(t, app.DB, f.org.ID, testutil.WithPhoneNumber(f.saudiPhone))
+	egyptC := testutil.CreateTestContactWith(t, app.DB, f.org.ID, testutil.WithPhoneNumber(f.egyptPhone))
+
+	t0 := time.Now().Add(-time.Hour).UTC().Truncate(time.Second)
+	// One logical message, Saudi → Egypt, whose BOTH copies are stored
+	// incoming under the same wamid (the double-incoming shape: e.g. a
+	// history-synced copy whose sender side was never marked outgoing).
+	// One logical message is one unread message, not two.
+	saveInternalCopyWamid(t, app, f.org.ID, f.egypt.Name, saudiC.ID, models.DirectionIncoming, models.MessageStatusDelivered, "hi", t0, "WAMID-DOUBLE-1")
+	saveInternalCopyWamid(t, app, f.org.ID, f.saudi.Name, egyptC.ID, models.DirectionIncoming, models.MessageStatusDelivered, "hi", t0, "WAMID-DOUBLE-1")
+	// A second logical message, Egypt → Saudi, incoming on one side only.
+	saveInternalCopyWamid(t, app, f.org.ID, f.saudi.Name, egyptC.ID, models.DirectionIncoming, models.MessageStatusDelivered, "reply", t0.Add(time.Minute), "WAMID-SINGLE-2")
+
+	convs, err := app.internalConversations(f.org.ID, admin.ID)
+	require.NoError(t, err)
+	require.Len(t, convs, 1)
+	assert.Equal(t, 2, convs[0].UnreadCount,
+		"one logical internal message counts once even when stored twice")
 }
 
 func TestInternalConversations_NeedsTwoConnectedAccounts(t *testing.T) {
