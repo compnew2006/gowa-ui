@@ -148,7 +148,7 @@ async function confirmDelete() {
             <CardContent>
               <DataTable :items="teams" :columns="columns" :is-loading="isLoading" :empty-icon="Users" :empty-title="searchQuery ? $t('teams.noMatchingTeams') : $t('teams.noTeamsYet')" :empty-description="searchQuery ? $t('teams.noMatchingTeamsDesc') : $t('teams.noTeamsYetDesc')" v-model:sort-key="sortKey" v-model:sort-direction="sortDirection" server-pagination :current-page="currentPage" :total-items="totalItems" :page-size="pageSize" item-name="teams" @page-change="handlePageChange">
                 <template #empty-action>
-                  <RouterLink v-if="canWriteTeams" to="/settings/teams/new"><Button variant="outline" size="sm"><Plus class="h-4 w-4 mr-2" />{{ $t('teams.addTeam') }}</Button></RouterLink>
+                  <RouterLink v-if="canWriteTeams && !searchQuery" to="/settings/teams/new"><Button variant="outline" size="sm"><Plus class="h-4 w-4 mr-2" />{{ $t('teams.addTeam') }}</Button></RouterLink>
                 </template>
                 <template #cell-team="{ item: team }">
                   <RouterLink :to="`/settings/teams/${team.id}`" class="flex items-center gap-3 text-inherit no-underline hover:opacity-80">

@@ -192,7 +192,7 @@ onMounted(() => fetchWebhooks())
                   </div>
                 </template>
                 <template #empty-action>
-                  <RouterLink v-if="canWrite" to="/settings/webhooks/new">
+                  <RouterLink v-if="canWrite && !searchQuery" to="/settings/webhooks/new">
                     <Button variant="outline" size="sm"><Plus class="h-4 w-4 mr-2" />{{ $t('webhooks.addWebhook') }}</Button>
                   </RouterLink>
                 </template>

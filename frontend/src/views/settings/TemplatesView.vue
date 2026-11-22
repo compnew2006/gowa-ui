@@ -250,7 +250,7 @@ const categoryBadgeClass = (category: string): string => {
                     </IconButton>
                   </div>
                 </template>
-                <template v-if="canWriteTemplates" #empty-action>
+                <template v-if="canWriteTemplates && !searchQuery" #empty-action>
                   <Button variant="outline" size="sm" @click="openCreateDialog">
                     <Plus class="h-4 w-4 mr-2" />
                     {{ $t('templates.addTemplate') }}

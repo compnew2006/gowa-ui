@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { PageHeader, ConfirmDialog, ErrorState } from '@/components/shared'
+import { EmptyState } from '@/components/ui/empty-state'
 import { toast } from 'vue-sonner'
 import { ShieldCheck, Settings2, ExternalLink, Info, Copy, Check, Loader2 } from 'lucide-vue-next'
 import { getErrorMessage } from '@/lib/api-utils'
@@ -263,6 +264,24 @@ onMounted(() => {
           </CardContent>
         </Card>
 
+        <!-- Teaching empty state: with no provider configured yet, say
+             what SSO is for and offer one action — setting up the first
+             provider through the existing setup dialog. The provider grid
+             below stays visible so all 5 providers show configured vs not. -->
+        <EmptyState
+          v-if="!isLoading && !fetchError && providers.length === 0"
+          :icon="ShieldCheck"
+          :title="$t('sso.noProvidersYet')"
+          :description="$t('sso.noProvidersYetDesc')"
+        >
+          <template #action>
+            <Button variant="outline" size="sm" @click="openEditDialog('google')">
+              <Settings2 class="h-4 w-4 mr-2" />
+              {{ $t('sso.setUpFirstProvider') }}
+            </Button>
+          </template>
+        </EmptyState>
+
         <!-- Provider Cards -->
         <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           <Card
@@ -290,6 +309,9 @@ onMounted(() => {
                   :variant="getConfiguredProvider(key)?.is_enabled ? 'default' : 'secondary'"
                 >
                   {{ getConfiguredProvider(key)?.is_enabled ? $t('sso.enabled') : $t('sso.disabled') }}
+                </Badge>
+                <Badge v-else variant="secondary">
+                  {{ $t('sso.notConfigured') }}
                 </Badge>
               </div>
             </CardHeader>

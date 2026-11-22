@@ -192,7 +192,7 @@ function getColorLabel(color: string): string {
                     </IconButton>
                   </div>
                 </template>
-                <template v-if="canWriteTags" #empty-action>
+                <template v-if="canWriteTags && !searchQuery" #empty-action>
                   <Button variant="outline" size="sm" @click="openCreateDialog">
                     <Plus class="h-4 w-4 mr-2" />
                     {{ $t('tags.addTag') }}

@@ -159,7 +159,7 @@ onMounted(() => fetchItems())
                   </div>
                 </template>
                 <template #empty-action>
-                  <RouterLink v-if="canWrite" to="/settings/api-keys/new">
+                  <RouterLink v-if="canWrite && !searchQuery" to="/settings/api-keys/new">
                     <Button variant="outline" size="sm"><Plus class="h-4 w-4 mr-2" />{{ $t('apiKeys.createApiKey') }}</Button>
                   </RouterLink>
                 </template>

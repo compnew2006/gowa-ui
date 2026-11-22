@@ -233,7 +233,7 @@ onMounted(() => fetchActions())
                     <IconButton :icon="Trash2" :label="$t('common.delete')" class="h-8 w-8 text-destructive" @click="actionToDelete = action; isDeleteDialogOpen = true" />
                   </div>
                 </template>
-                <template #empty-action>
+                <template v-if="!searchQuery" #empty-action>
                   <Button variant="outline" size="sm" @click="openCreateDialog"><Plus class="h-4 w-4 mr-2" />{{ $t('customActions.addAction') }}</Button>
                 </template>
               </DataTable>

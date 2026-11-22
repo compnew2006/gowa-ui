@@ -146,8 +146,8 @@ function getCategoryLabel(category: string): string { return getLabelFromValue(C
                 :columns="columns"
                 :is-loading="isLoading"
                 :empty-icon="MessageSquareText"
-                :empty-title="$t('cannedResponses.noResponsesFound')"
-                :empty-description="$t('cannedResponses.noResponsesFoundDesc')"
+                :empty-title="searchQuery || selectedCategory !== 'all' ? $t('cannedResponses.noMatchingResponses') : $t('cannedResponses.noResponsesFound')"
+                :empty-description="searchQuery || selectedCategory !== 'all' ? $t('cannedResponses.noMatchingResponsesDesc') : $t('cannedResponses.noResponsesFoundDesc')"
                 v-model:sort-key="sortKey"
                 v-model:sort-direction="sortDirection"
                 server-pagination
@@ -203,7 +203,7 @@ function getCategoryLabel(category: string): string { return getLabelFromValue(C
                     />
                   </div>
                 </template>
-                <template v-if="canWrite" #empty-action>
+                <template v-if="canWrite && !searchQuery && selectedCategory === 'all'" #empty-action>
                   <Button variant="outline" size="sm" @click="openCreate">
                     <Plus class="h-4 w-4 mr-2" />{{ $t('cannedResponses.addResponse') }}
                   </Button>
