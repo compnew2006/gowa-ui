@@ -121,7 +121,7 @@ const fetchAnalytics = async () => {
     // (agent_stats), so table and dropdown can never disagree (Decision 10).
     // A single-agent response carries no agent_stats, so the list is left
     // untouched there.
-    if (data.agent_stats) {
+    if (data.agent_stats?.length) {
       agents.value = (data.agent_stats as AgentPerformanceStats[]).map((a) => ({ id: a.agent_id, full_name: a.agent_name, role: 'agent' }))
     }
   } catch (err) {

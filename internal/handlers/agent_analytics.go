@@ -200,12 +200,18 @@ func (a *App) calculateClosureRatingStats(orgID uuid.UUID, agentID *uuid.UUID, s
 // (name "agent", is_system=true — the same lookup production uses to find
 // the default agent role), including agents with zero activity (Decision 10).
 // Team membership and rated closures do NOT define this population.
+// DISTINCT is defense-in-depth against duplicate membership rows (a partial
+// unique index on user_organizations(user_id, organization_id) WHERE
+// deleted_at IS NULL already forbids two ACTIVE rows per user/org), and the
+// custom_roles join excludes soft-deleted roles, so holders of a deleted
+// agent role do not appear.
 func (a *App) listAnalyticsAgents(orgID uuid.UUID) []models.User {
 	var agents []models.User
 	if err := a.DB.
+		Distinct().
 		Select("users.*").
 		Joins("JOIN user_organizations ON user_organizations.user_id = users.id AND user_organizations.organization_id = ? AND user_organizations.deleted_at IS NULL", orgID).
-		Joins("JOIN custom_roles ON custom_roles.id = user_organizations.role_id AND custom_roles.organization_id = ? AND custom_roles.name = ? AND custom_roles.is_system = ?", orgID, "agent", true).
+		Joins("JOIN custom_roles ON custom_roles.id = user_organizations.role_id AND custom_roles.organization_id = ? AND custom_roles.name = ? AND custom_roles.is_system = ? AND custom_roles.deleted_at IS NULL", orgID, "agent", true).
 		Where("users.deleted_at IS NULL").
 		Order("users.full_name ASC").
 		Find(&agents).Error; err != nil {

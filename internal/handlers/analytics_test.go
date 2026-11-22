@@ -1,7 +1,10 @@
 package handlers_test
 
 import (
+	"context"
 	"encoding/json"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -12,6 +15,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 // --- Helper functions ---
@@ -342,6 +347,7 @@ func TestApp_GetAgentAnalytics_BreakTimeOrgTotal(t *testing.T) {
 	assert.Equal(t, int64(2), resp.Data.Summary.BreakCount)
 
 	// Per-agent rows carry each agent's own break time.
+	require.Len(t, resp.Data.AgentStats, 3) // viewer + A + B, no duplicates
 	byID := make(map[string]handlers.AgentPerformanceStats, len(resp.Data.AgentStats))
 	for _, s := range resp.Data.AgentStats {
 		byID[s.AgentID] = s
@@ -420,6 +426,17 @@ func TestApp_GetAgentAnalytics_AgentPopulationIsSystemRoleHolders(t *testing.T) 
 	ratedAt := time.Now().UTC().Add(-1 * time.Hour)
 	createTestClosureRating(t, app, org.ID, contact.ID, &closer.ID, models.RatingStatusRated, &rating, &ratedAt)
 
+	// NOTE (fix round 1): no duplicate-membership row is constructed here
+	// because none is constructible. The partial index
+	// idx_user_org_unique on user_organizations(user_id, organization_id)
+	// WHERE deleted_at IS NULL forbids two ACTIVE rows, and the model tag's
+	// non-partial uniqueIndex idx_user_org on the same columns (applied by
+	// AutoMigrate, verified present in the test DB alongside the partial
+	// one) forbids even a soft-deleted second row — an insert attempt fails
+	// with a 23505 violation on idx_user_org. So DISTINCT in
+	// listAnalyticsAgents is defense-in-depth only, and is pinned at the
+	// query level instead: see TestApp_GetAgentAnalytics_ListQueryIsDistinct.
+
 	req := testutil.NewGETRequest(t)
 	testutil.SetAuthContext(req, org.ID, viewer.ID)
 
@@ -442,4 +459,107 @@ func TestApp_GetAgentAnalytics_AgentPopulationIsSystemRoleHolders(t *testing.T) 
 			assert.Equal(t, int64(0), s.RatingsCount)
 		}
 	}
+}
+
+// TestApp_GetAgentAnalytics_DeletedAgentRoleHoldersExcluded pins that the
+// custom_roles join in listAnalyticsAgents excludes soft-deleted roles:
+// a user whose only agent role was soft-deleted must not appear in the
+// table (and must not inflate the org-total break time).
+func TestApp_GetAgentAnalytics_DeletedAgentRoleHoldersExcluded(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	// Viewer with analytics:read (not an agent).
+	perms := getAnalyticsPermissions(t, app)
+	viewerRole := testutil.CreateTestRoleExact(t, app.DB, org.ID, "Analytics Viewer", false, false, perms)
+	viewer := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("analytics-viewer")),
+		testutil.WithRoleID(&viewerRole.ID),
+	)
+
+	// Agent-role holder, then soft-delete the org's agent role itself.
+	agent := createSystemAgent(t, app, org.ID, "Deleted Role Agent")
+	role := systemAgentRole(t, app, org.ID)
+	require.NoError(t, app.DB.Delete(role).Error)
+
+	// The agent took a break before the role was deleted: it must not leak
+	// into the org total via a stale holder row.
+	now := time.Now().UTC()
+	createAvailabilityLog(t, app, org.ID, agent.ID, false, now.Add(-60*time.Minute), now.Add(-30*time.Minute))
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, viewer.ID)
+
+	require.NoError(t, app.GetAgentAnalytics(req))
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var resp struct {
+		Data handlers.AgentAnalyticsResponse `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+
+	require.Len(t, resp.Data.AgentStats, 0)
+	assert.InDelta(t, 0, resp.Data.Summary.TotalBreakTimeMins, 0.0)
+	assert.Equal(t, int64(0), resp.Data.Summary.BreakCount)
+}
+
+// queryCaptureLogger records every SQL statement executed through a GORM
+// session. Used to pin the shape of a query the handler actually runs,
+// where the behaviour the query guards against cannot be constructed
+// (see the note in TestApp_GetAgentAnalytics_AgentPopulationIsSystemRoleHolders).
+type queryCaptureLogger struct {
+	mu      sync.Mutex
+	queries []string
+}
+
+func (l *queryCaptureLogger) LogMode(logger.LogLevel) logger.Interface      { return l }
+func (l *queryCaptureLogger) Info(context.Context, string, ...interface{})  {}
+func (l *queryCaptureLogger) Warn(context.Context, string, ...interface{})  {}
+func (l *queryCaptureLogger) Error(context.Context, string, ...interface{}) {}
+func (l *queryCaptureLogger) Trace(_ context.Context, _ time.Time, fc func() (string, int64), _ error) {
+	sql, _ := fc()
+	l.mu.Lock()
+	l.queries = append(l.queries, sql)
+	l.mu.Unlock()
+}
+
+// TestApp_GetAgentAnalytics_ListQueryIsDistinct pins the hardening in
+// listAnalyticsAgents at the query level: the agent-population query the
+// endpoint actually runs must SELECT DISTINCT over users and must exclude
+// soft-deleted rows on both joins. A duplicate membership row cannot be
+// constructed (see the note in the population test), so no behavioural
+// test can exercise the DISTINCT — this assertion is the pin.
+func TestApp_GetAgentAnalytics_ListQueryIsDistinct(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+
+	perms := getAnalyticsPermissions(t, app)
+	viewerRole := testutil.CreateTestRoleExact(t, app.DB, org.ID, "Analytics Viewer", false, false, perms)
+	viewer := testutil.CreateTestUser(t, app.DB, org.ID,
+		testutil.WithEmail(testutil.UniqueEmail("analytics-viewer")),
+		testutil.WithRoleID(&viewerRole.ID),
+	)
+	createSystemAgent(t, app, org.ID, "Distinct Agent")
+
+	capture := &queryCaptureLogger{}
+	origDB := app.DB
+	app.DB = app.DB.Session(&gorm.Session{Logger: capture})
+	t.Cleanup(func() { app.DB = origDB })
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, viewer.ID)
+	require.NoError(t, app.GetAgentAnalytics(req))
+	assert.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	var found string
+	for _, sql := range capture.queries {
+		if strings.Contains(sql, "user_organizations") && strings.Contains(sql, "custom_roles") {
+			found = sql
+			break
+		}
+	}
+	require.NotEmpty(t, found, "expected the agent-population query to run; captured: %v", capture.queries)
+	assert.Contains(t, found, "DISTINCT")
+	assert.Contains(t, found, "custom_roles.deleted_at IS NULL")
+	assert.Contains(t, found, "user_organizations.deleted_at IS NULL")
 }
