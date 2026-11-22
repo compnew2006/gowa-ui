@@ -178,6 +178,22 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "chat_status must be 'closed', 'pending' or 'internal'", nil, "")
 	}
 
+	// assigned narrows to assigned conversations: "me" is the viewer, "any"
+	// is any assignee (the supervisors' Me tab, which watches every agent's
+	// queue). It does not imply open — combine with exclude_closed for the
+	// Me tab, since legacy closed-but-assigned rows stay assigned.
+	assignedParam := string(r.RequestCtx.QueryArgs().Peek("assigned"))
+	switch assignedParam {
+	case "", "me", "any":
+	default:
+		return r.SendErrorEnvelope(fasthttp.StatusBadRequest, "assigned must be 'me' or 'any'", nil, "")
+	}
+	// exclude_internal drops Private-tab conversations, so the All/Me tab
+	// totals count customer conversations only. exclude_closed drops closed
+	// chats (a row with no chat_status counts as open).
+	excludeInternal := string(r.RequestCtx.QueryArgs().Peek("exclude_internal"))
+	excludeClosed := string(r.RequestCtx.QueryArgs().Peek("exclude_closed"))
+
 	// Server-side sorting across the whole result set (not just the current
 	// page). Allowed column names map to physical columns; the whatsapp_account
 	// key maps to GORM's default column name whats_app_account.
@@ -195,6 +211,23 @@ func (a *App) ListContacts(r *fastglue.Request) error {
 	// least one message. /chat uses this by default; /settings/contacts shows all.
 	if hasMessages == "true" || hasMessages == "1" {
 		query = query.Where("last_message_at IS NOT NULL")
+	}
+
+	// Assignment filter for the Me tab's server total (Decision 3): the tab
+	// badges must be server totals, not loaded-rows counts, and there was no
+	// way to ask the server for "my conversations" before.
+	switch assignedParam {
+	case "me":
+		query = query.Where("assigned_user_id = ?", userID)
+	case "any":
+		query = query.Where("assigned_user_id IS NOT NULL")
+	}
+
+	if excludeInternal == "true" || excludeInternal == "1" {
+		query = query.Where(models.ExcludeInternalContactsSQL)
+	}
+	if excludeClosed == "true" || excludeClosed == "1" {
+		query = query.Where("COALESCE(metadata->>'chat_status', '') <> ?", string(models.ChatStatusClosed))
 	}
 
 	// Scope to a single WhatsApp account when requested. The Contact model's

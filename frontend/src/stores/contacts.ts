@@ -344,7 +344,10 @@ export const useContactsStore = defineStore('contacts', () => {
   //   internal → conversations between the org's own numbers, one merged row
   //             per pair of accounts (any status). They live ONLY in this tab:
   //             the other tabs list customer conversations.
-  const customerContacts = computed(() => sortedContacts.value.filter(c => !c.is_internal))
+  // The virtual Status entry is pinned to the top of every tab by
+  // displayedContacts below, but it is not a conversation (no contact row,
+  // no messages) — so it must not inflate the tab membership counts.
+  const customerContacts = computed(() => sortedContacts.value.filter(c => !c.is_internal && c.id !== STATUS_CONTACT_ID))
   const pendingContacts = computed(() =>
     customerContacts.value.filter(c => !c.assigned_user_id && c.chat_status !== 'closed')
   )
@@ -384,10 +387,20 @@ export const useContactsStore = defineStore('contacts', () => {
     const time = (c: Contact) => (c.last_message_at ? new Date(c.last_message_at).getTime() : 0)
     return [...rows, ...leftovers].sort((a, b) => time(b) - time(a))
   })
-  const pendingCount = computed(() => pendingContacts.value.length)
-  const myCount = computed(() => myContacts.value.length)
-  const closedCount = computed(() => closedContacts.value.length)
-  const allCount = computed(() => allContacts.value.length)
+  // Server totals for the Chat tab badges (Decision 3): a badge must be the
+  // server total for its tab under the current filters, not the length of the
+  // loaded (paged) rows — a count must not change with how far the viewer
+  // scrolled. Null means "no server total yet (or its request failed)", and
+  // the badge falls back to the loaded rows instead of showing 0.
+  const serverAllTotal = ref<number | null>(null)
+  const serverPendingTotal = ref<number | null>(null)
+  const serverMyTotal = ref<number | null>(null)
+  const pendingCount = computed(() => serverPendingTotal.value ?? pendingContacts.value.length)
+  const myCount = computed(() => serverMyTotal.value ?? myContacts.value.length)
+  // The Closed tab already pages straight from the server, so its total is
+  // the server total for chat_status=closed.
+  const closedCount = computed(() => closedTotal.value)
+  const allCount = computed(() => serverAllTotal.value ?? allContacts.value.length)
   const internalCount = computed(() => internalContacts.value.length)
 
   // The list to render in the sidebar for the active tab.
@@ -547,18 +560,26 @@ export const useContactsStore = defineStore('contacts', () => {
 
   async function fetchContacts(params?: { search?: string; page?: number; limit?: number; tags?: string }) {
     isLoading.value = true
+    // The badges drop back to loaded-rows counts until the new server totals
+    // land, so a stale total from the previous search/filter is never shown.
+    serverAllTotal.value = null
+    serverPendingTotal.value = null
+    serverMyTotal.value = null
     try {
       // Refreshes that pass no search (websocket events, lifecycle actions,
       // tag toggles) keep the query still shown in the search box, like
       // loadMoreContacts and listClosedPage do.
       const search = params?.search ?? (normalizeContactSearch(searchQuery.value) || undefined)
-      const [response, closedResponse] = await Promise.all([
+      const [response, closedResponse, tabTotals] = await Promise.all([
         contactsService.list({
           page: 1,
           limit: contactsLimit.value,
           ...listFilterParams(),
           ...params,
-          search
+          search,
+          // Chat lists conversations, not contacts: a synced row that never
+          // exchanged a message is a contact (Settings), not a conversation.
+          has_messages: true,
         }),
         // First closed page alongside, so the Closed tab (and its count) is
         // populated however far down the closed chats rank.
@@ -568,6 +589,7 @@ export const useContactsStore = defineStore('contacts', () => {
               return null
             })
           : Promise.resolve(null),
+        fetchTabTotals(search),
         fetchInternalConversations(),
       ])
       // API returns { status: "success", data: { contacts: [...], total: number } }
@@ -579,10 +601,50 @@ export const useContactsStore = defineStore('contacts', () => {
       closedTotal.value = 0
       listGeneration++
       if (closedResponse) applyClosedPage(closedResponse, 1)
+      if (tabTotals.all !== null) serverAllTotal.value = tabTotals.all
+      if (tabTotals.pending !== null) serverPendingTotal.value = tabTotals.pending
+      if (tabTotals.me !== null) serverMyTotal.value = tabTotals.me
     } catch (error) {
       console.error('Failed to fetch contacts:', error)
     } finally {
       isLoading.value = false
+    }
+  }
+
+  // Server totals for the Chat tab badges (Decision 3). Each tab's total is
+  // the server total for that tab's own definition under the current
+  // search/tags/accounts filters, asked for with limit=1 (one row is enough —
+  // only `total` is read). The pending total uses the server pending rule
+  // (chat_status=pending: unassigned, has a message, not closed, not
+  // internal); the Me total uses the viewer's rule — supervisors watch every
+  // assigned conversation, agents only their own.
+  async function fetchTabTotals(search?: string) {
+    const base = { ...listFilterParams(), search, limit: 1 }
+    const [all, pending, me] = await Promise.all([
+      totalOf(contactsService.list({ ...base, has_messages: true, exclude_internal: true })),
+      totalOf(contactsService.list({ ...base, chat_status: 'pending' })),
+      totalOf(contactsService.list({
+        ...base,
+        has_messages: true,
+        exclude_internal: true,
+        exclude_closed: true,
+        assigned: canSeeSupervisorTabs.value ? 'any' : 'me',
+      })),
+    ])
+    return { all, pending, me }
+  }
+
+  // Reads the `total` off a list response, or null when the request failed or
+  // the payload has no usable total — the caller keeps the loaded-rows
+  // fallback instead of showing 0.
+  async function totalOf(promise: Promise<{ data: any }>): Promise<number | null> {
+    try {
+      const response = await promise
+      const data = response.data.data || response.data
+      return typeof data.total === 'number' ? data.total : null
+    } catch (error) {
+      console.error('Failed to fetch tab total:', error)
+      return null
     }
   }
 
@@ -635,6 +697,8 @@ export const useContactsStore = defineStore('contacts', () => {
       ...listFilterParams(),
       search: search ?? (normalizeContactSearch(searchQuery.value) || undefined),
       chat_status: 'closed',
+      // Closed conversations are conversations: never-messaged rows are not.
+      has_messages: true,
     })
   }
 
@@ -669,7 +733,9 @@ export const useContactsStore = defineStore('contacts', () => {
         page: nextPage,
         limit: contactsLimit.value,
         ...listFilterParams(),
-        search
+        search,
+        // Page 2+ must stay conversations, like page 1 (fetchContacts).
+        has_messages: true,
       })
       // A fetchContacts that landed meanwhile replaced the list; this page
       // belongs to the old one.

@@ -226,7 +226,7 @@ export interface TransferTarget {
 export const contactsService = {
   // `accounts` (comma-separated account names) lists conversations on any of
   // those accounts; `account` is the strict owning-account match.
-  list: (params?: { search?: string; page?: number; limit?: number; tags?: string; account?: string; accounts?: string; exclude_groups?: boolean; sort?: string; sort_dir?: 'asc' | 'desc'; chat_status?: ContactChatStatusFilter }) =>
+  list: (params?: { search?: string; page?: number; limit?: number; tags?: string; account?: string; accounts?: string; exclude_groups?: boolean; has_messages?: boolean; assigned?: 'me' | 'any'; exclude_internal?: boolean; exclude_closed?: boolean; sort?: string; sort_dir?: 'asc' | 'desc'; chat_status?: ContactChatStatusFilter }) =>
     api.get('/contacts', { params }),
   get: (id: string) => api.get(`/contacts/${id}`),
   create: (data: any) => api.post('/contacts', data),

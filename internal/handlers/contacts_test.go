@@ -2128,3 +2128,147 @@ func TestApp_ListContacts_ChatStatusPendingAndInternal(t *testing.T) {
 		assert.Contains(t, string(testutil.GetResponseBody(req)), "chat_status must be 'closed', 'pending' or 'internal'")
 	}
 }
+
+// TestApp_ListContacts_ActiveCountMatchesChatConversations pins Decision 3
+// (counting definitions, §4): a "conversation" is a contact row with
+// last_message_at IS NOT NULL (has_messages=true), while the plain contacts
+// total (§1) counts every scoped contact row, including never-messaged ones.
+// The two numbers are correctly different — Chat must count conversations,
+// Settings must count contacts — so each surface needs the server total for
+// its own definition, under the same org scope. The tab totals below are the
+// server-side counts the Chat badges must show instead of loaded-row lengths:
+//   - all:     has_messages + exclude_internal (customer conversations)
+//   - me:      assigned=me|any + has_messages + exclude_internal + exclude_closed
+//     (legacy closed-but-assigned rows are assigned but not open)
+//   - pending: chat_status=pending (server rule: unassigned, has a message,
+//     not closed, not internal)
+//   - closed:  chat_status=closed
+func TestApp_ListContacts_ActiveCountMatchesChatConversations(t *testing.T) {
+	t.Parallel()
+
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	otherUser := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+
+	recent := time.Now().UTC()
+	withState := func(c *models.Contact, updates map[string]any) *models.Contact {
+		require.NoError(t, app.DB.Model(c).Updates(updates).Error)
+		return c
+	}
+	newContact := func(opts ...testutil.ContactOption) *models.Contact {
+		return testutil.CreateTestContactWith(t, app.DB, org.ID, opts...)
+	}
+	messaged := map[string]any{"last_message_at": recent}
+
+	openUnassigned1 := withState(newContact(), messaged)
+	openUnassigned2 := withState(newContact(), messaged)
+	assignedMine := withState(newContact(testutil.WithAssignee(user.ID)), messaged)
+	assignedOther := withState(newContact(testutil.WithAssignee(otherUser.ID)), messaged)
+	closedConv := withState(newContact(), map[string]any{
+		"last_message_at": recent,
+		"metadata":        models.JSONB{"chat_status": "closed"},
+	})
+	// Legacy row from before Close released the assignment: still assigned,
+	// but closed, so it belongs to Closed — never to Me.
+	legacyClosedAssigned := withState(newContact(testutil.WithAssignee(user.ID)), map[string]any{
+		"last_message_at": recent,
+		"metadata":        models.JSONB{"chat_status": "closed"},
+	})
+	neverMessaged := newContact() // last_message_at stays NULL: a contact, not a conversation
+	internalConv := withState(newContact(), map[string]any{
+		"last_message_at": recent,
+		"metadata":        models.JSONB{models.MetaInternalChat: true},
+	})
+	// Another org's conversation must never leak into this org's totals.
+	otherOrg := testutil.CreateTestOrganization(t, app.DB)
+	withState(testutil.CreateTestContactWith(t, app.DB, otherOrg.ID), messaged)
+
+	total := func(userID uuid.UUID, params map[string]string) (int64, int) {
+		ids, n := listContactIDs(t, app, org.ID, userID, params)
+		return n, len(ids)
+	}
+
+	// Plain contacts total (§1): every scoped contact row, including the
+	// never-messaged contact, the internal conversation and closed chats.
+	n, pageLen := total(user.ID, map[string]string{})
+	assert.Equal(t, int64(8), n, "contacts total counts all scoped rows")
+	assert.Equal(t, 8, pageLen)
+
+	// Conversations (Decision 3): only rows with a message.
+	n, _ = total(user.ID, map[string]string{"has_messages": "true"})
+	assert.Equal(t, int64(7), n, "has_messages excludes the never-messaged contact only")
+	ids, _ := listContactIDs(t, app, org.ID, user.ID, map[string]string{"has_messages": "true"})
+	assert.NotContains(t, ids, neverMessaged.ID)
+
+	// All tab: customer conversations — internal conversations live in Private.
+	n, _ = total(user.ID, map[string]string{"has_messages": "true", "exclude_internal": "true"})
+	assert.Equal(t, int64(6), n, "All tab excludes internal conversations")
+	ids, _ = listContactIDs(t, app, org.ID, user.ID, map[string]string{"has_messages": "true", "exclude_internal": "true"})
+	assert.NotContains(t, ids, internalConv.ID)
+
+	// All tab, open only: closed conversations are not open ones.
+	n, _ = total(user.ID, map[string]string{"has_messages": "true", "exclude_internal": "true", "exclude_closed": "true"})
+	assert.Equal(t, int64(4), n, "open customer conversations exclude both closed chats")
+	ids, _ = listContactIDs(t, app, org.ID, user.ID, map[string]string{"has_messages": "true", "exclude_internal": "true", "exclude_closed": "true"})
+	assert.NotContains(t, ids, closedConv.ID)
+	assert.NotContains(t, ids, legacyClosedAssigned.ID)
+
+	// Me tab: assigned to the viewer, open, customer, with a message.
+	n, _ = total(user.ID, map[string]string{
+		"assigned": "me", "has_messages": "true", "exclude_internal": "true", "exclude_closed": "true",
+	})
+	assert.Equal(t, int64(1), n, "Me tab counts only the viewer's own open conversations")
+	ids, _ = listContactIDs(t, app, org.ID, user.ID, map[string]string{
+		"assigned": "me", "has_messages": "true", "exclude_internal": "true", "exclude_closed": "true",
+	})
+	assert.ElementsMatch(t, []uuid.UUID{assignedMine.ID}, ids)
+
+	// assigned=me is viewer-relative: the other user sees their own chat.
+	n, _ = total(otherUser.ID, map[string]string{
+		"assigned": "me", "has_messages": "true", "exclude_internal": "true", "exclude_closed": "true",
+	})
+	assert.Equal(t, int64(1), n, "assigned=me follows the viewer, not a fixed user")
+	ids, _ = listContactIDs(t, app, org.ID, otherUser.ID, map[string]string{
+		"assigned": "me", "has_messages": "true", "exclude_internal": "true", "exclude_closed": "true",
+	})
+	assert.ElementsMatch(t, []uuid.UUID{assignedOther.ID}, ids)
+
+	// assigned=any (supervisors' Me tab): every assigned conversation.
+	n, _ = total(user.ID, map[string]string{"assigned": "any"})
+	assert.Equal(t, int64(3), n, "assigned=any counts all assigned rows, closed included")
+	n, _ = total(user.ID, map[string]string{"assigned": "any", "exclude_closed": "true"})
+	assert.Equal(t, int64(2), n, "assigned=any minus closed leaves the two open assignments")
+	ids, _ = listContactIDs(t, app, org.ID, user.ID, map[string]string{"assigned": "any", "exclude_closed": "true"})
+	assert.ElementsMatch(t, []uuid.UUID{assignedMine.ID, assignedOther.ID}, ids)
+
+	// Pending tab (server rule): unassigned, has a message, not closed, not internal.
+	n, _ = total(user.ID, map[string]string{"chat_status": "pending"})
+	assert.Equal(t, int64(2), n, "Pending counts only unassigned open conversations with messages")
+	ids, _ = listContactIDs(t, app, org.ID, user.ID, map[string]string{"chat_status": "pending"})
+	assert.ElementsMatch(t, []uuid.UUID{openUnassigned1.ID, openUnassigned2.ID}, ids)
+	n, _ = total(user.ID, map[string]string{"chat_status": "pending", "has_messages": "true"})
+	assert.Equal(t, int64(2), n, "pending already implies has_messages")
+
+	// Closed tab: both closed chats, including the legacy assigned one.
+	n, _ = total(user.ID, map[string]string{"chat_status": "closed"})
+	assert.Equal(t, int64(2), n, "Closed counts every closed customer conversation")
+	ids, _ = listContactIDs(t, app, org.ID, user.ID, map[string]string{"chat_status": "closed"})
+	assert.ElementsMatch(t, []uuid.UUID{closedConv.ID, legacyClosedAssigned.ID}, ids)
+	n, _ = total(user.ID, map[string]string{"chat_status": "closed", "has_messages": "true"})
+	assert.Equal(t, int64(2), n, "closed conversations are conversations")
+
+	// Unknown assigned values are rejected, like unknown chat_status values.
+	for _, bad := range []string{"bogus", "all", ""} {
+		if bad == "" {
+			continue // empty means "no filter", not an error
+		}
+		req := testutil.NewGETRequest(t)
+		testutil.SetAuthContext(req, org.ID, user.ID)
+		testutil.SetQueryParam(req, "assigned", bad)
+		require.NoError(t, app.ListContacts(req))
+		assert.Equal(t, fasthttp.StatusBadRequest, testutil.GetResponseStatusCode(req), "assigned=%s", bad)
+		assert.Contains(t, string(testutil.GetResponseBody(req)), "assigned must be 'me' or 'any'")
+	}
+}
