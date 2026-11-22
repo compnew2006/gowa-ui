@@ -193,9 +193,11 @@ func (s *Service) ReleaseWithDB(ctx context.Context, db *gorm.DB, orgID, userID 
 	// Audit: the extraChanges safeguard is load-bearing — audit.LogAudit
 	// silently no-ops when action=updated AND the computed diff is empty, and
 	// status lives in JSONB which the differ does not deeply compare. The
-	// explicit old→new map forces the entry to persist.
+	// explicit old→new map forces the entry to persist. old/new are nil on
+	// purpose: passing the full contact here dumped every field into the row
+	// (audit-log flooding) — only the explicit changes below are recorded.
 	if err := audit.LogAuditSync(db, orgID, userID, agentName,
-		"contact", contact.ID, models.AuditActionUpdated, nil, contact,
+		"contact", contact.ID, models.AuditActionUpdated, nil, nil,
 		map[string]any{
 			"chat_status":      map[string]any{"old": oldStatus, "new": string(models.ChatStatusPending)},
 			"assigned_user_id": map[string]any{"old": oldAssigned, "new": nil},
@@ -299,7 +301,7 @@ func (s *Service) Assign(ctx context.Context, orgID, adminID uuid.UUID, contact 
 			return fmt.Errorf("failed to create assignment system message: %w", err)
 		}
 		return audit.LogAuditSync(tx, orgID, adminID, adminName,
-			"contact", contact.ID, models.AuditActionUpdated, nil, contact,
+			"contact", contact.ID, models.AuditActionUpdated, nil, nil,
 			map[string]any{
 				"chat_status":      map[string]any{"old": oldStatus, "new": string(models.ChatStatusOpen)},
 				"assigned_user_id": map[string]any{"old": oldAssigned, "new": targetID},
@@ -628,9 +630,11 @@ func (s *Service) Claim(ctx context.Context, orgID, userID uuid.UUID, contact *m
 	}
 
 	// Audit extraChanges safeguard — load-bearing for the same reason as in
-	// Release (JSONB status, audit.LogAudit no-ops on empty diff).
+	// Release (JSONB status, audit.LogAudit no-ops on empty diff). old/new
+	// are nil: only the explicit changes below are recorded, not a
+	// full-contact dump (see Release).
 	audit.LogAudit(s.db, orgID, userID, agentName,
-		"contact", contact.ID, models.AuditActionUpdated, nil, contact,
+		"contact", contact.ID, models.AuditActionUpdated, nil, nil,
 		map[string]any{
 			"chat_status":      map[string]any{"old": oldStatus, "new": string(models.ChatStatusOpen)},
 			"assigned_user_id": map[string]any{"old": oldAssigned, "new": &userID},
@@ -1009,9 +1013,11 @@ func (s *Service) Close(ctx context.Context, orgID, userID uuid.UUID, contact *m
 		models.JSONB{"system_type": "chat_closed", "agent_id": userID.String()})
 
 	// Audit with explicit old→new (audit.LogAudit no-ops on an empty diff and
-	// the differ does not deeply compare JSONB — see Release).
+	// the differ does not deeply compare JSONB — see Release). old/new are
+	// nil: only the explicit changes below are recorded, not a
+	// full-contact dump.
 	audit.LogAudit(s.db, orgID, userID, agentName,
-		"contact", contact.ID, models.AuditActionUpdated, nil, contact,
+		"contact", contact.ID, models.AuditActionUpdated, nil, nil,
 		map[string]any{
 			"chat_status":      map[string]any{"old": oldStatus, "new": string(models.ChatStatusClosed)},
 			"assigned_user_id": map[string]any{"old": oldAssigned, "new": nil},

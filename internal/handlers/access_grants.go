@@ -146,6 +146,11 @@ func (a *App) RevokeAccessGrant(r *fastglue.Request) error {
 	// for the conversation (safe but confusing direction).
 	revoked := false
 	assigneeReleased := false
+	// releaseAudited is true only when ReleaseWithDB actually wrote its
+	// release row (open-chat assignee case). The closed-chat branch below
+	// clears the assignee directly and writes no row, so the grant row
+	// stays the only audit record there.
+	releaseAudited := false
 	txErr := a.DB.WithContext(r.RequestCtx).Transaction(func(tx *gorm.DB) error {
 		now := time.Now()
 		res := tx.Model(&models.ContactAssignmentAccessGrant{}).
@@ -175,12 +180,20 @@ func (a *App) RevokeAccessGrant(r *fastglue.Request) error {
 					return rerr
 				}
 				assigneeReleased = released
+				releaseAudited = released
 			}
 		}
-		if revoked || assigneeReleased {
+		// One action, one audit row: when ReleaseWithDB already wrote the
+		// release row, a second row here duplicated the same action (and,
+		// with the full contact as newData, a full-contact dump on top).
+		// The grant row is still written when only a grant was revoked, or
+		// when the release wrote no row (closed chat) — the revocation
+		// itself must stay in the audit trail. old/new are nil: only the
+		// explicit access_grant_released change is recorded.
+		if revoked && !releaseAudited {
 			actorName := audit.GetUserName(tx, userID)
 			if err := audit.LogAuditSync(tx, orgID, userID, actorName,
-				"contact", contact.ID, models.AuditActionUpdated, nil, contact,
+				"contact", contact.ID, models.AuditActionUpdated, nil, nil,
 				map[string]any{
 					"access_grant_released": map[string]any{
 						"user_id":          targetID.String(),

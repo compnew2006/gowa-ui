@@ -884,6 +884,7 @@ export const auditLogsService = {
     resource_id?: string
     user_id?: string
     action?: string
+    hide_contact_updates?: boolean
     from?: string
     to?: string
     page?: number

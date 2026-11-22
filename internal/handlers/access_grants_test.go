@@ -3,6 +3,7 @@ package handlers_test
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/compnew2006/gowa-ui/internal/handlers"
 	"github.com/compnew2006/gowa-ui/internal/models"
@@ -11,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
+	"gorm.io/gorm"
 )
 
 // Assignment access-grant tests: direct admin assignment creates a permanent
@@ -338,6 +340,87 @@ func TestRevokeAccessGrant_ClosedAssignee(t *testing.T) {
 	assert.Equal(t, f.agent.ID.String(), fresh.ClosedByUserID(), "closed_by stamp preserved")
 	assert.Nil(t, fresh.AssignedUserID)
 	assert.EqualValues(t, 0, f.activeGrantCount(t, f.agent.ID))
+}
+
+// countAuditRowsWithChange counts audit rows for the contact that record
+// the given change field (flat "field" entries and nested extraChanges
+// maps alike).
+func countAuditRowsWithChange(t *testing.T, db *gorm.DB, contactID uuid.UUID, field string) int {
+	t.Helper()
+	var logs []models.AuditLog
+	require.NoError(t, db.Where("resource_type = ? AND resource_id = ?", "contact", contactID).
+		Find(&logs).Error)
+	n := 0
+	for _, l := range logs {
+		for _, c := range l.Changes {
+			m, ok := c.(map[string]any)
+			if !ok {
+				continue
+			}
+			if _, ok := m[field]; ok {
+				n++
+				break
+			}
+			if f, _ := m["field"].(string); f == field {
+				n++
+				break
+			}
+		}
+	}
+	return n
+}
+
+// TestRevokeAccessGrant_OpenAssignee_WritesSingleAuditRow: releasing the
+// current assignee of an open conversation is ONE action, so it must write
+// ONE audit row. Before the fix ReleaseWithDB wrote the release row and
+// RevokeAccessGrant wrote a second, near-identical "Updated Contact" row
+// (full-contact dump + access_grant_released).
+func TestRevokeAccessGrant_OpenAssignee_WritesSingleAuditRow(t *testing.T) {
+	f := newGrantFixture(t)
+	f.assignViaAPI(t, f.agent) // 1 audit row (Assign, synchronous)
+
+	req := testutil.NewRequest(t)
+	req.RequestCtx.Request.Header.SetMethod("DELETE")
+	testutil.SetAuthContext(req, f.org.ID, f.admin.ID)
+	testutil.SetPathParam(req, "id", f.contact.ID.String())
+	testutil.SetPathParam(req, "target_user_id", f.agent.ID.String())
+	require.NoError(t, f.app.RevokeAccessGrant(req))
+	require.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	// All three writes are synchronous, so the count is exact with no
+	// polling: assign (1) + release (1). The extra grant row is gone.
+	assert.EqualValues(t, 2, countContactAuditLogs(t, f.app.DB, f.contact.ID),
+		"assign + revoke must write exactly 2 audit rows, not 3")
+}
+
+// TestRevokeAccessGrant_ClosedAssignee_StillAuditsGrantRevocation: the
+// dedupe above must not drop the audit trail when the release itself writes
+// no row — for a closed chat ReleaseWithDB is never called, so the grant row
+// is the only record of the revocation.
+func TestRevokeAccessGrant_ClosedAssignee_StillAuditsGrantRevocation(t *testing.T) {
+	f := newGrantFixture(t)
+	f.assignViaAPI(t, f.agent)
+
+	closeReq := newPUTRequest(t)
+	testutil.SetAuthContext(closeReq, f.org.ID, f.agent.ID)
+	testutil.SetPathParam(closeReq, "id", f.contact.ID.String())
+	require.NoError(t, f.app.CloseChat(closeReq))
+	require.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(closeReq))
+
+	req := testutil.NewRequest(t)
+	req.RequestCtx.Request.Header.SetMethod("DELETE")
+	testutil.SetAuthContext(req, f.org.ID, f.admin.ID)
+	testutil.SetPathParam(req, "id", f.contact.ID.String())
+	testutil.SetPathParam(req, "target_user_id", f.agent.ID.String())
+	require.NoError(t, f.app.RevokeAccessGrant(req))
+	require.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	// CloseChat audits asynchronously, so poll for the grant row rather
+	// than asserting a total.
+	require.Eventually(t, func() bool {
+		return countAuditRowsWithChange(t, f.app.DB, f.contact.ID, "access_grant_released") == 1
+	}, 2*time.Second, 50*time.Millisecond,
+		"revoking a closed chat's assignee must still leave exactly one grant-revocation audit row")
 }
 
 // TestRevokeAccessGrant_OtherAssignee: when assigned to someone else, only

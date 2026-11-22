@@ -929,7 +929,8 @@
     "noChanges": "لم يتم تسجيل أي تغييرات على مستوى الحقول.",
     "detailDesc": "تاريخ التغيير الكامل لهذا المورد.",
     "resourceType": "نوع المورد",
-    "viewResource": "عرض المورد"
+    "viewResource": "عرض المورد",
+    "hideContactUpdates": "إخفاء تحديثات جهات الاتصال"
   },
   "customActions": {
     "title": "الإجراءات المخصصة",

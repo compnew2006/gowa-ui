@@ -24,7 +24,9 @@ type AuditLogResponse struct {
 }
 
 // ListAuditLogs returns audit logs with optional filters.
-// Supported query params: resource_type (comma-separated allowed), resource_id, user_id, action, from, to, page, limit.
+// Supported query params: resource_type (comma-separated allowed), resource_id, user_id, action, hide_contact_updates, from, to, page, limit.
+// hide_contact_updates=1 excludes routine contact updates (resource_type=contact AND action=updated) so the log
+// stays readable; history is never deleted — the rows are only filtered out of this listing.
 func (a *App) ListAuditLogs(r *fastglue.Request) error {
 	orgID, _, err := a.requireAuth(r, models.ResourceAuditLogs, models.ActionRead)
 	if err != nil {
@@ -74,6 +76,10 @@ func (a *App) ListAuditLogs(r *fastglue.Request) error {
 
 	if v := string(r.RequestCtx.QueryArgs().Peek("action")); v != "" {
 		baseQuery = baseQuery.Where("action = ?", v)
+	}
+
+	if v := string(r.RequestCtx.QueryArgs().Peek("hide_contact_updates")); v == "1" || strings.EqualFold(v, "true") {
+		baseQuery = baseQuery.Where("NOT (resource_type = ? AND action = ?)", "contact", models.AuditActionUpdated)
 	}
 
 	if v := string(r.RequestCtx.QueryArgs().Peek("from")); v != "" {

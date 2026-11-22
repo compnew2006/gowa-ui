@@ -1032,8 +1032,13 @@ func (a *App) UpdateContact(r *fastglue.Request) error {
 		a.DB.First(contact, contactID)
 	}
 
-	a.logAudit(orgID, userID,
-		"contact", contact.ID, models.AuditActionUpdated, &oldContact, contact)
+	// Assignment-only PUTs are already audited by ChatLifecycle.Assign above —
+	// writing a second row here duplicated the same action in the log. Field
+	// edits still get their own row (Assign's row carries no field diff).
+	if len(updates) > 0 {
+		a.logAudit(orgID, userID,
+			"contact", contact.ID, models.AuditActionUpdated, &oldContact, contact)
+	}
 
 	return r.SendEnvelope(a.buildContactResponse(contact, orgID, userID))
 }

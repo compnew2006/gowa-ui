@@ -140,6 +140,128 @@ func TestApp_ListAuditLogs_FilterByResourceTypeMulti(t *testing.T) {
 	assert.True(t, types["settings.call_auto_reject"])
 }
 
+func TestApp_ListAuditLogs_HideContactUpdates(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	role := auditLogsRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&role.ID))
+
+	now := time.Now()
+	// The flood: routine contact updates. These must be hideable without
+	// hiding creates/deletes or other resources' updates.
+	makeAuditLog(t, app.DB, org.ID, user.ID, uuid.New(), "contact", models.AuditActionUpdated, now.Add(-2*time.Hour))
+	makeAuditLog(t, app.DB, org.ID, user.ID, uuid.New(), "contact", models.AuditActionCreated, now.Add(-1*time.Hour))
+	makeAuditLog(t, app.DB, org.ID, user.ID, uuid.New(), "user", models.AuditActionUpdated, now)
+
+	req := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetQueryParam(req, "hide_contact_updates", "1")
+
+	require.NoError(t, app.ListAuditLogs(req))
+	var resp struct {
+		Data struct {
+			AuditLogs []handlers.AuditLogResponse `json:"audit_logs"`
+			Total     int                         `json:"total"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req), &resp))
+	assert.Equal(t, 2, resp.Data.Total, "hide_contact_updates must filter out routine contact updates")
+	for _, l := range resp.Data.AuditLogs {
+		assert.False(t, l.ResourceType == "contact" && l.Action == models.AuditActionUpdated,
+			"no routine contact update may survive the filter")
+	}
+
+	// Without the flag the full history is still listed (nothing is deleted
+	// or hidden by default).
+	req2 := testutil.NewGETRequest(t)
+	testutil.SetAuthContext(req2, org.ID, user.ID)
+	require.NoError(t, app.ListAuditLogs(req2))
+	var resp2 struct {
+		Data struct {
+			Total int `json:"total"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(testutil.GetResponseBody(req2), &resp2))
+	assert.Equal(t, 3, resp2.Data.Total, "without the flag all rows must be listed")
+}
+
+// countContactAuditLogs returns the number of audit rows for one contact.
+func countContactAuditLogs(t *testing.T, db *gorm.DB, contactID uuid.UUID) int64 {
+	t.Helper()
+	var n int64
+	require.NoError(t, db.Model(&models.AuditLog{}).
+		Where("resource_type = ? AND resource_id = ?", "contact", contactID).
+		Count(&n).Error)
+	return n
+}
+
+// assertNoExtraAuditRows fails as soon as more than max audit rows appear
+// for the contact, polling briefly because UpdateContact's own audit write
+// is async (audit.LogAudit runs in a detached goroutine).
+func assertNoExtraAuditRows(t *testing.T, db *gorm.DB, contactID uuid.UUID, max int64) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if n := countContactAuditLogs(t, db, contactID); n > max {
+			t.Fatalf("one action wrote %d audit rows for the contact, want at most %d", n, max)
+		}
+		if time.Now().After(deadline) {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// TestApp_UpdateContact_AssignmentOnly_WritesSingleAuditRow: one PUT that
+// only changes the assignee must produce exactly one audit row. Before the
+// fix ChatLifecycle.Assign wrote one row and UpdateContact wrote a second,
+// near-identical "Updated Contact" row for the same action.
+func TestApp_UpdateContact_AssignmentOnly_WritesSingleAuditRow(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	assignee := testutil.CreateTestUser(t, app.DB, org.ID)
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"assigned_user_id": assignee.ID.String(),
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	require.NoError(t, app.UpdateContact(req))
+	require.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	assertNoExtraAuditRows(t, app.DB, contact.ID, 1)
+}
+
+// TestApp_UpdateContact_FieldUpdate_StillAudited: the dedupe above must not
+// swallow genuine field edits — a name change with no assignment change
+// still writes exactly one audit row.
+func TestApp_UpdateContact_FieldUpdate_StillAudited(t *testing.T) {
+	app := newTestApp(t)
+	org := testutil.CreateTestOrganization(t, app.DB)
+	adminRole := testutil.CreateAdminRole(t, app.DB, org.ID)
+	user := testutil.CreateTestUser(t, app.DB, org.ID, testutil.WithRoleID(&adminRole.ID))
+	contact := testutil.CreateTestContact(t, app.DB, org.ID)
+
+	req := testutil.NewJSONRequest(t, map[string]any{
+		"profile_name": "Renamed Contact",
+	})
+	testutil.SetAuthContext(req, org.ID, user.ID)
+	testutil.SetPathParam(req, "id", contact.ID.String())
+
+	require.NoError(t, app.UpdateContact(req))
+	require.Equal(t, fasthttp.StatusOK, testutil.GetResponseStatusCode(req))
+
+	// The async audit write must land exactly once.
+	require.Eventually(t, func() bool {
+		return countContactAuditLogs(t, app.DB, contact.ID) == 1
+	}, 2*time.Second, 50*time.Millisecond, "a field update must write exactly one audit row")
+	assertNoExtraAuditRows(t, app.DB, contact.ID, 1)
+}
+
 func TestApp_ListAuditLogs_FilterByAction(t *testing.T) {
 	app := newTestApp(t)
 	org := testutil.CreateTestOrganization(t, app.DB)

@@ -3,6 +3,7 @@ import { ref, onMounted, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Select,
@@ -37,6 +38,10 @@ const sortDirection = ref<'asc' | 'desc'>('desc')
 const filterUser = ref('all')
 const filterAction = ref('all')
 const filterResourceType = ref('all')
+// Hides routine contact updates (claim/release/assign/close + contact edits)
+// so the log stays readable; off by default — no history is hidden unless
+// the user asks for it.
+const hideContactUpdates = ref(false)
 
 // Date range
 const {
@@ -74,6 +79,7 @@ async function fetchLogs() {
     if (filterUser.value && filterUser.value !== 'all') params.user_id = filterUser.value
     if (filterAction.value && filterAction.value !== 'all') params.action = filterAction.value
     if (filterResourceType.value && filterResourceType.value !== 'all') params.resource_type = filterResourceType.value
+    if (hideContactUpdates.value) params.hide_contact_updates = true
 
     const response = await auditLogsService.list(params)
     const data = (response.data as any).data || response.data
@@ -177,6 +183,13 @@ onMounted(async () => {
                     :format-date-range-display="formatDateRangeDisplay"
                     @apply-custom="applyCustomRange"
                   />
+                  <label class="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer select-none">
+                    <Checkbox
+                      :checked="hideContactUpdates"
+                      @update:checked="(v: boolean | 'indeterminate') => { hideContactUpdates = v === true; applyFilter() }"
+                    />
+                    {{ t('auditLogs.hideContactUpdates') }}
+                  </label>
                 </div>
               </div>
             </CardHeader>

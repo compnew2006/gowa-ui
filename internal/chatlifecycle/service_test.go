@@ -2,6 +2,7 @@ package chatlifecycle_test
 
 import (
 	"context"
+	"sort"
 	"testing"
 	"time"
 
@@ -77,6 +78,64 @@ func auditCountIs(t *testing.T, db *gorm.DB, contactID uuid.UUID, expected int64
 // test TestApp_ReleaseChat_Assignee_Success, but exercises the service with
 // no *App, no Redis, no HTTP. This is the regression contract for the
 // extracted state machine.
+// auditChangeFields returns the sorted set of change-field names recorded
+// on the audit rows for one contact. Flat entries carry a "field" key;
+// explicit extraChanges are nested single-key maps ({chat_status: {old,
+// new}}) — both shapes count, mirroring normalizeAuditChanges on the
+// frontend.
+func auditChangeFields(t *testing.T, db *gorm.DB, contactID uuid.UUID) []string {
+	t.Helper()
+	var logs []models.AuditLog
+	require.NoError(t, db.Where("resource_type = ? AND resource_id = ?", "contact", contactID).
+		Find(&logs).Error)
+	fields := map[string]bool{}
+	for _, l := range logs {
+		for _, c := range l.Changes {
+			m, ok := c.(map[string]any)
+			if !ok {
+				continue
+			}
+			if f, ok := m["field"].(string); ok && f != "" {
+				fields[f] = true
+				continue
+			}
+			for k := range m {
+				fields[k] = true
+			}
+		}
+	}
+	out := make([]string, 0, len(fields))
+	for f := range fields {
+		out = append(out, f)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// TestService_Release_AuditRowContainsOnlyMeaningfulChanges: a lifecycle
+// action must not dump the whole contact into the audit row. Before the fix
+// Release passed the full contact as newData with nil oldData, so
+// ComputeChanges recorded every field (profile_name, phone_number, tags,
+// metadata, last_message_at, ...) as "changed" — the flood that made the
+// Audit Logs page unreadable. Only the real change (chat_status,
+// assigned_user_id) may appear.
+func TestService_Release_AuditRowContainsOnlyMeaningfulChanges(t *testing.T) {
+	svc, db, org := newService(t)
+	agent := testutil.CreateTestUser(t, db, org.ID, testutil.WithFullName("Test Agent"))
+
+	contact := testutil.CreateTestContact(t, db, org.ID)
+	claimForTest(t, db, contact, agent.ID)
+
+	released, err := svc.Release(context.Background(), org.ID, agent.ID, contact, true, false)
+	require.NoError(t, err)
+	require.True(t, released)
+
+	auditCountIs(t, db, contact.ID, 1, "release must persist exactly one audit entry")
+	assert.Equal(t, []string{"assigned_user_id", "chat_status"},
+		auditChangeFields(t, db, contact.ID),
+		"the release audit row must record only the meaningful change, not a full-contact dump")
+}
+
 func TestService_Release_Assignee_Success(t *testing.T) {
 	svc, db, org := newService(t)
 	agent := testutil.CreateTestUser(t, db, org.ID, testutil.WithFullName("Test Agent"))
