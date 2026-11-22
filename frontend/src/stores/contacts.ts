@@ -648,6 +648,26 @@ export const useContactsStore = defineStore('contacts', () => {
     }
   }
 
+  // Re-read the server tab totals after a lifecycle action that moves a
+  // conversation between tabs (claim). The badges read these totals first
+  // (Decision 3), so the local assignment update in claimChat alone leaves
+  // them showing the pre-claim numbers until the next full list fetch.
+  // Only the totals are re-fetched (three limit=1 requests) — no list
+  // reload, no page reset. Never throws: a failed totals request keeps the
+  // previous totals (or the loaded-rows fallback) instead of breaking the
+  // action that triggered it.
+  async function refreshTabTotals() {
+    try {
+      const search = normalizeContactSearch(searchQuery.value) || undefined
+      const tabTotals = await fetchTabTotals(search)
+      if (tabTotals.all !== null) serverAllTotal.value = tabTotals.all
+      if (tabTotals.pending !== null) serverPendingTotal.value = tabTotals.pending
+      if (tabTotals.me !== null) serverMyTotal.value = tabTotals.me
+    } catch (error) {
+      console.error('Failed to refresh tab totals:', error)
+    }
+  }
+
   // Never throws: the Internal tab is secondary to the main contact list.
   async function fetchInternalConversations() {
     try {
@@ -1131,6 +1151,9 @@ export const useContactsStore = defineStore('contacts', () => {
       // Re-fetch messages to show the system message immediately
       await fetchMessages(contactId)
     }
+    // The badges read the server totals, not the local lists — re-read the
+    // totals so Pending drops by one and Me gains one without a reload.
+    await refreshTabTotals()
     return data
   }
 

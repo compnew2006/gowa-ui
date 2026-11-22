@@ -347,6 +347,9 @@ describe('contacts store claim', () => {
     setActivePinia(createPinia())
     listInternalConversations.mockResolvedValue({ data: { data: { conversations: [] } } })
     messagesList.mockResolvedValue({ data: { data: { messages: [], total: 0, has_more: false } } })
+    // claimChat re-reads the tab totals (Task 7a), so the list mock must
+    // answer the limit=1 count requests instead of returning undefined.
+    list.mockImplementation(() => page([], 0))
   })
 
   it('re-reads the claimed conversation so its access mode comes from the server', async () => {
@@ -371,5 +374,69 @@ describe('contacts store claim', () => {
     expect(get).toHaveBeenCalledWith('contact-1')
     expect(store.currentContact?.access_mode).toBe('current_assignee')
     expect(store.currentContact?.can_reply).toBe(true)
+  })
+
+  it('claiming a pending conversation moves the tab counters from pending to me without a reload (Task 7a)', async () => {
+    // Live 2026-11-21: after salama claimed, the badges stayed "Pending 30"
+    // and "My conversations 0". The badges read the server totals first
+    // (Decision 3), so the local assignment update alone is not enough —
+    // the claim must re-read the totals. The mock server totals move when
+    // the claim PUT lands, like the real backend does.
+    let serverPending = 30
+    let serverMe = 0
+    const serverAll = 31
+    list.mockImplementation((params: ListParams) => {
+      if (params.limit === 1) {
+        if (params.chat_status === 'pending') return page([], serverPending)
+        if (params.assigned) return page([], serverMe)
+        return page([], serverAll)
+      }
+      if (params.chat_status === 'closed') return page([], 0)
+      return Promise.resolve({ data: { data: {
+        contacts: [
+          { id: 'contact-1', phone_number: '1', name: 'Contact', chat_status: 'pending', last_message_at: '2026-11-21T00:00:00Z', tags: [] },
+        ],
+        total: 31,
+      } } })
+    })
+    put.mockImplementation(async () => {
+      serverPending = 29
+      serverMe = 1
+      return { data: { data: { status: 'success' } } }
+    })
+    get.mockResolvedValue({
+      data: { data: { id: 'contact-1', assigned_user_id: 'user-1', chat_status: 'open', access_mode: 'current_assignee', can_reply: true } },
+    })
+
+    const store = useContactsStore()
+    await store.fetchContacts()
+
+    // Badges show the server totals, not the 1 loaded row.
+    expect(store.pendingCount).toBe(30)
+    expect(store.myCount).toBe(0)
+    expect(store.allCount).toBe(31)
+
+    store.setCurrentContact({
+      id: 'contact-1',
+      phone_number: '1',
+      name: 'Contact',
+      chat_status: 'pending',
+      access_mode: 'restricted',
+      can_reply: false,
+      tags: [],
+    } as never)
+
+    await store.claimChat('contact-1')
+
+    // The conversation moved tabs locally …
+    expect(store.pendingContacts).toHaveLength(0)
+    expect(store.myContacts).toHaveLength(1)
+    // … and the badges the user sees moved with it, without a reload.
+    expect(store.pendingCount).toBe(29)
+    expect(store.myCount).toBe(1)
+    expect(store.allCount).toBe(31)
+    // The claim re-asked the server for the totals (3 count requests on top
+    // of the 3 from the initial fetch).
+    expect(list.mock.calls.map(([p]) => p).filter(p => p.limit === 1)).toHaveLength(6)
   })
 })
