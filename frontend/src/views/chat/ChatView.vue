@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { reactive, ref, watch, onMounted, onUnmounted, nextTick, computed, defineAsyncComponent } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute, useRouter, RouterLink } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useContactsStore, type Contact, type Message } from '@/stores/contacts'
 import type { InternalConversationSide } from '@/lib/internalConversations'
@@ -1131,8 +1131,19 @@ onUnmounted(() => {
                 <!-- Tags -->
                 <div class="space-y-1">
                   <p class="px-1 text-xs font-medium text-white/60 light:text-gray-600">{{ $t('chat.filterTags') }}</p>
-                  <div v-if="tagsStore.tags.length === 0" class="py-2 text-center text-sm text-muted-foreground">
-                    {{ $t('chat.noTagsAvailable') }}
+                  <!-- Teaching empty state: an org with no tags yet is the
+                       normal first-use state, not an error — say so and point
+                       at where tags are created. The link needs tags:read
+                       (the Tags settings route guards on it); without it the
+                       hint is plain text. -->
+                  <div v-if="tagsStore.tags.length === 0" class="py-2 px-1 text-center text-sm text-muted-foreground">
+                    <p>{{ $t('chat.noTagsYet') }}</p>
+                    <RouterLink
+                      v-if="authStore.hasPermission('tags', 'read')"
+                      :to="{ name: 'tags' }"
+                      class="text-emerald-400 hover:underline light:text-emerald-600"
+                    >{{ $t('chat.createTagInSettings') }}</RouterLink>
+                    <span v-else>{{ $t('chat.createTagInSettings') }}</span>
                   </div>
                   <div v-else class="space-y-1 max-h-48 overflow-y-auto">
                     <button
@@ -1309,6 +1320,12 @@ onUnmounted(() => {
                   <Badge v-if="contact.is_internal && !contact.internal_conversation_key" class="ml-1 h-4 text-[9px] align-middle bg-cyan-500/20 text-cyan-400 light:bg-cyan-100 light:text-cyan-700">
                     {{ $t('chat.internal') }}
                   </Badge>
+                  <!-- Status is a virtual conversation, not a contact: label
+                       it so it is never mistaken for a customer chat. It is
+                       the only path to post a text Status, so it stays. -->
+                  <Badge v-if="isStatusContact(contact.id)" class="ml-1 h-4 text-[9px] align-middle bg-emerald-500/20 text-emerald-400 light:bg-emerald-100 light:text-emerald-700">
+                    {{ $t('chat.statusLabel') }}
+                  </Badge>
                 </p>
                 <span class="flex-shrink-0 text-[11px] text-white/40 light:text-gray-500 tabular-nums">
                   {{ formatContactTime(contact.last_message_at) }}
@@ -1431,6 +1448,11 @@ onUnmounted(() => {
                 <Badge v-if="contactsStore.currentContact?.is_internal"
                        class="text-[10px] h-5 bg-cyan-500/20 text-cyan-400 light:bg-cyan-100 light:text-cyan-700">
                   {{ $t('chat.internal') }}<template v-if="contactsStore.currentContact.internal_account_name && (currentInternalConversation?.sides.length ?? 0) < 2"> · {{ contactsStore.currentContact.internal_account_name }}</template>
+                </Badge>
+                <!-- Virtual Status conversation, not a customer chat. -->
+                <Badge v-if="isStatusContact(contactsStore.currentContact?.id)"
+                       class="text-[10px] h-5 bg-emerald-500/20 text-emerald-400 light:bg-emerald-100 light:text-emerald-700">
+                  {{ $t('chat.statusLabel') }}
                 </Badge>
                 <!-- Send-as toggle: each side of an internal conversation is
                      one account's copy; switching sides switches the sender. -->
@@ -2026,6 +2048,7 @@ onUnmounted(() => {
                     variant="ghost"
                     size="icon"
                     class="h-6 w-6"
+                    :aria-label="$t('chat.reply')"
                     :title="$t('chat.reply')"
                     @click="replyToMessage(message)"
                   >
@@ -2036,6 +2059,7 @@ onUnmounted(() => {
                     size="icon"
                     class="h-6 w-6"
                     :disabled="isMediaDownloading || isCompletingAlbum"
+                    :aria-label="$t('chat.downloadSeparately')"
                     :title="$t('chat.downloadSeparately')"
                     data-album-sep
                     @click="downloadAlbumSeparately(getAlbum(message))"
@@ -2048,6 +2072,7 @@ onUnmounted(() => {
                     size="icon"
                     class="h-6 w-6"
                     :disabled="isMediaDownloading || isCompletingAlbum"
+                    :aria-label="$t('chat.downloadZip')"
                     :title="$t('chat.downloadZip')"
                     data-album-zip
                     @click="downloadAlbumZip(getAlbum(message))"
@@ -2476,7 +2501,7 @@ onUnmounted(() => {
               <div class="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity self-center ml-1">
                 <Popover :open="reactionPickerMessageId === message.id" @update:open="(open: boolean) => reactionPickerMessageId = open ? message.id : null">
                   <PopoverTrigger as-child>
-                    <Button variant="ghost" size="icon" class="h-6 w-6">
+                    <Button variant="ghost" size="icon" class="h-6 w-6" :aria-label="$t('chat.addReaction')" :title="$t('chat.addReaction')">
                       <SmilePlus class="h-3 w-3" />
                     </Button>
                   </PopoverTrigger>
@@ -2497,6 +2522,8 @@ onUnmounted(() => {
                   variant="ghost"
                   size="icon"
                   class="h-6 w-6"
+                  :aria-label="$t('chat.reply')"
+                  :title="$t('chat.reply')"
                   @click="replyToMessage(message)"
                 >
                   <Reply class="h-3 w-3" />
@@ -2507,6 +2534,7 @@ onUnmounted(() => {
                   variant="ghost"
                   size="icon"
                   class="h-6 w-6"
+                  :aria-label="$t('common.copy')"
                   :title="$t('common.copy')"
                   @click="copyMessageText(message)"
                 >
@@ -2521,6 +2549,7 @@ onUnmounted(() => {
                   size="icon"
                   class="h-6 w-6"
                   :disabled="isDownloadingMedia(message)"
+                  :aria-label="$t('common.download')"
                   :title="$t('common.download')"
                   @click="downloadMessageFile(message)"
                 >
@@ -2533,8 +2562,9 @@ onUnmounted(() => {
                   size="icon"
                   class="h-6 w-6 text-destructive hover:text-destructive"
                   :disabled="retryingMessageId === message.id"
+                  :aria-label="$t('chat.retry')"
+                  :title="$t('chat.retry')"
                   @click="retryMessage(message)"
-                  title="Retry sending"
                 >
                   <Loader2 v-if="retryingMessageId === message.id" class="h-3 w-3 animate-spin" />
                   <RotateCw v-else class="h-3 w-3" />
@@ -2549,6 +2579,7 @@ onUnmounted(() => {
                   size="icon"
                   class="h-6 w-6 text-muted-foreground hover:text-destructive"
                   :disabled="revokingMessageId === message.id"
+                  :aria-label="$t('chat.revoke')"
                   :title="$t('chat.revoke')"
                   @click="requestRevoke(message)"
                 >
@@ -2584,7 +2615,7 @@ onUnmounted(() => {
               {{ getMessageContent(contactsStore.replyingTo) || '[Media]' }}
             </p>
           </div>
-          <button class="w-6 h-6 rounded hover:bg-white/[0.08] light:hover:bg-gray-200 flex items-center justify-center shrink-0 transition-colors" @click="contactsStore.clearReplyingTo">
+          <button class="w-6 h-6 rounded hover:bg-white/[0.08] light:hover:bg-gray-200 flex items-center justify-center shrink-0 transition-colors" :aria-label="$t('chat.cancelReply')" :title="$t('chat.cancelReply')" @click="contactsStore.clearReplyingTo">
             <X class="h-4 w-4 text-white/50 light:text-gray-500" />
           </button>
         </div>
