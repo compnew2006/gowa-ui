@@ -801,6 +801,16 @@ export const useContactsStore = defineStore('contacts', () => {
       // API returns { status: "success", data: { ... } }
       const data = response.data.data || response.data
       currentContact.value = data
+      // Sync the sidebar list row's metadata from the re-read (Task 7b fix
+      // round): the close paths only flipped chat_status on the row, so its
+      // metadata.closed_by kept the old closer — and selectContact reuses
+      // the list row without a re-read, resurfacing Ramzy when navigating
+      // away and back. This also benefits claimChat/joinChat, which re-read
+      // through fetchContact too.
+      if (data.metadata) {
+        const row = contacts.value.find(c => c.id === id)
+        if (row) row.metadata = data.metadata
+      }
       return data
     } catch (error) {
       console.error('Failed to fetch contact:', error)

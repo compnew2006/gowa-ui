@@ -527,7 +527,7 @@ describe('contacts store close (Task 7b)', () => {
   function previouslyClosedByRamzy() {
     return {
       id: 'contact-1',
-      phone_number: '966561853319',
+      phone_number: '966500000001',
       name: 'Contact',
       chat_status: 'open',
       assigned_user_id: 'user-1',
@@ -542,7 +542,7 @@ describe('contacts store close (Task 7b)', () => {
   function closedBySalama() {
     return {
       id: 'contact-1',
-      phone_number: '966561853319',
+      phone_number: '966500000001',
       name: 'Contact',
       chat_status: 'closed',
       tags: [],
@@ -600,6 +600,26 @@ describe('contacts store close (Task 7b)', () => {
     const closedBy = (store.currentContact?.metadata as any)?.closed_by
     expect(closedBy?.name).toBe('Salama')
     expect(closedBy?.user_id).toBe('user-1')
+  })
+
+  it('closeChat syncs the list row metadata.closed_by so re-selecting from the list keeps the new closer', async () => {
+    put.mockResolvedValue({ data: { data: { status: 'success' } } })
+    get.mockResolvedValue({ data: { data: closedBySalama() } })
+
+    const store = useContactsStore()
+    // The sidebar list row still carries the old closer (Ramzy).
+    store.contacts = [previouslyClosedByRamzy()]
+    store.setCurrentContact(store.contacts[0])
+
+    await store.closeChat('contact-1')
+
+    const row = store.contacts.find(c => c.id === 'contact-1')
+    expect((row?.metadata as any)?.closed_by?.name).toBe('Salama')
+    expect((row?.metadata as any)?.closed_by?.user_id).toBe('user-1')
+    // Re-selecting from the list row — what selectContact does when the row
+    // exists, without a re-read — must keep the new closer, not resurface Ramzy.
+    store.setCurrentContact(row as never)
+    expect((store.currentContact?.metadata as any)?.closed_by?.name).toBe('Salama')
   })
 
   it('leaveChat does not re-read the contact when leaving did not close it', async () => {
